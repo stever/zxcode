@@ -35,6 +35,8 @@ export default function ProjectList() {
                 return 'Pasmo';
             case 'basic':
                 return 'zmakebas';
+            case 'bas2tap':
+                return 'bas2tap';
             case 'c':
                 return 'z88dk zcc';
             case 'sdcc':

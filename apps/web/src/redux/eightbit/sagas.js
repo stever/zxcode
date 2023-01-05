@@ -2,6 +2,7 @@ import {takeLatest, select, call, put, take} from "redux-saga/effects";
 import {eventChannel} from "redux-saga";
 import gql from "graphql-tag";
 import getZmakebasTap from "zmakebas";
+import getBas2Tap from "bas2tap";
 import getPasmoTap, {bin2tap} from "pasmo";
 import {gqlFetch} from "../../graphql_fetch";
 import {store} from "../store";
@@ -164,9 +165,21 @@ function* handleGetProjectTapActions(_) {
                 }
                 break;
             case 'basic':
-                // Sinclair BASIC
+                // Sinclair BASIC (zmakebas)
                 try {
                     tap = yield call(getZmakebasTap, code);
+                    yield put(followTapAction(tap));
+                    yield put(setFollowTapAction(undefined));
+                } catch (errorItems) {
+                    yield put(setErrorItems(errorItems));
+                } finally {
+                    dashboardUnlock();
+                }
+                break;
+            case 'bas2tap':
+                // Sinclair BASIC (bas2tap)
+                try {
+                    tap = yield call(getBas2Tap, code);
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {

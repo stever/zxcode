@@ -105,6 +105,14 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
         }
     };
 
+    const newBas2Tap = {
+        label: 'Sinclair (bas2tap)',
+        command: () => {
+            dispatch(pause());
+            navigate('/new/bas2tap');
+        }
+    };
+
     const newZ88dk = {
         label: 'z88dk zcc',
         command: () => {
@@ -135,6 +143,7 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
     };
 
     basicMenu.items.push(newBasic);
+    basicMenu.items.push(newBas2Tap);
 
     // NOTE: Boriel ZX Basic projects are supported by an API which is not currently provided in production.
     if (Constants.isDev) basicMenu.items.push(newBoriel);

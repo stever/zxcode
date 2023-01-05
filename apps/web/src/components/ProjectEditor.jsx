@@ -30,6 +30,9 @@ export function ProjectEditor() {
         case 'basic':
             mode = 'text/x-zmakebas';
             break;
+        case 'bas2tap':
+            mode = 'text/x-zmakebas';
+            break;
         case 'c':
             mode = 'text/x-z88dk-csrc';
             break;

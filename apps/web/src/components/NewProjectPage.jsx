@@ -25,6 +25,9 @@ export default function NewProjectPage(props) {
         case 'basic':
             lang = 'Sinclair BASIC (zmakebas)';
             break;
+        case 'bas2tap':
+            lang = 'Sinclair BASIC (bas2tap)';
+            break;
         case 'c':
             lang = 'C (z88dk)';
             break;

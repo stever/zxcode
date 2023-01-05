@@ -50,7 +50,10 @@ export default function ProjectPage() {
             editorTitle = 'Z80 (Pasmo)';
             break;
         case 'basic':
-            editorTitle = 'Sinclair BASIC';
+            editorTitle = 'Sinclair BASIC (zmakebas)';
+            break;
+        case 'bas2tap':
+            editorTitle = 'Sinclair BASIC (bas2tap)';
             break;
         case 'c':
             editorTitle = 'z88dk scc';

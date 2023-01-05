@@ -56,6 +56,7 @@ export default function App() {
                             <Route exact path="/legal/terms-of-use" element={<MaxWidth><TermsOfUsePage/></MaxWidth>}/>
                             <Route exact path="/new/asm" element={<MaxWidth><NewProjectPage type="asm"/></MaxWidth>}/>
                             <Route exact path="/new/basic" element={<MaxWidth><NewProjectPage type="basic"/></MaxWidth>}/>
+                            <Route exact path="/new/bas2tap" element={<MaxWidth><NewProjectPage type="bas2tap"/></MaxWidth>}/>
                             <Route exact path="/new/c" element={<MaxWidth><NewProjectPage type="c"/></MaxWidth>}/>
                             <Route exact path="/new/sdcc" element={<MaxWidth><NewProjectPage type="sdcc"/></MaxWidth>}/>
                             <Route exact path="/new/zmac" element={<MaxWidth><NewProjectPage type="zmac"/></MaxWidth>}/>
