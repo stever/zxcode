@@ -1,5 +1,5 @@
 import {takeLatest, select, put, call} from "redux-saga/effects";
-import getZmakebasTap from "zmakebas";
+import getBasicTap from "bas2tap";
 import getPasmoTap from "pasmo";
 import {actionTypes, setSelectedTabIndex} from "./actions";
 import {loadTap, pause} from "../jsspeccy/actions";
@@ -51,7 +51,7 @@ function* handleRunAssemblyActions(_) {
 function* handleRunSinclairBasicActions(_) {
     try {
         const code = yield select((state) => state.demo.sinclairBasicCode);
-        const tap = yield call(getZmakebasTap, code);
+        const tap = yield call(getBasicTap, code);
         yield put(loadTap(tap));
         yield put(setSelectedTabIndex(0));
     } catch (e) {

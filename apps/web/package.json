@@ -33,6 +33,7 @@
   "dependencies": {
     "@lagunovsky/redux-react-router": "^4.3.0",
     "axios": "^1.2.1",
+    "bas2tap": "^0.0.1-alpha.4",
     "codemirror": "^5.65.11",
     "date-fns": "^2.29.3",
     "file-dialog": "^0.0.8",
