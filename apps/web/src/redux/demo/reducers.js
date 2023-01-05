@@ -6,23 +6,14 @@ import {actionTypes} from "./actions";
 
 const initialState = {
     selectedTabIndex: 0,
-    asmCode: `    org 30000
+    asmCode: `org 30000
 
-tv_flag    equ 5C3Ch
+start:
+\tpush bc
+    ld hl, hello
 
-start
-    ; Directs rst 10h output to main screen.
-    xor a
-    ld (tv_flag),a
-
-    ld b, 50
-
-another
-
-    push bc
-
-    ld hl,hello
-again    ld a,(hl)
+again:
+\tld a,(hl)
     cp 0
     jr z, exit
     push hl
@@ -31,14 +22,15 @@ again    ld a,(hl)
     inc hl
     jr again
 
-exit
+exit:
     pop bc
-    djnz another
+    djnz start
     ret
 
-hello    db "Hello, world.", 0Dh, 0
+hello:
+\tdb "Hello, world.", 0Dh, 0
 
-    end start`,
+end start`,
     sinclairBasicCode: `10 PRINT "Hello, world."\n20 GO TO 10`,
     zxBasicCode: `REM From the ZX Spectrum 48K Manual
 
