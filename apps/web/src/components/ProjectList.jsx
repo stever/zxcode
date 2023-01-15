@@ -25,7 +25,7 @@ export default function ProjectList() {
         }
     }, [dispatch]);
 
-    function linkName(data) {
+    function formatLinkName(data) {
         return (
             <Link to={`/projects/${data['project_id']}`}>
                 {data['title']}
@@ -56,12 +56,12 @@ export default function ProjectList() {
 
     const now = new Date();
 
-    function created(data) {
+    function formatCreated(data) {
         const date = new Date(data['created_at']);
         return formatDistance(date, now, {addSuffix: true});
     }
 
-    function updated(data) {
+    function formatUpdated(data) {
         const date = new Date(data['updated_at']);
         return formatDistance(date, now, {addSuffix: true});
     }
@@ -96,9 +96,18 @@ export default function ProjectList() {
         }
     };
 
+    if (projects) {
+        // Add language title to support sorting.
+        for (let i = 0; i < projects.length; i++) {
+            const project = projects[i];
+            project['lang_title'] = lang(project);
+        }
+    }
+
     return (
         <DataTable
             value={projects}
+            removableSort
             paginator
             paginatorTemplate={paginatorTemplate}
             first={first}
@@ -110,26 +119,29 @@ export default function ProjectList() {
             <Column
                 field="title"
                 header="Project Title"
-                body={linkName}
+                body={formatLinkName}
                 style={{width: '34%'}}
+                sortable
             />
             <Column
-                field="lang"
+                field="lang_title"
                 header="Compiler"
-                body={lang}
                 style={{width: '22%'}}
+                sortable
             />
             <Column
                 field="created_at"
                 header="Created"
-                body={created}
+                body={formatCreated}
                 style={{width: '22%'}}
+                sortable
             />
             <Column
                 field="updated_at"
                 header="Updated"
-                body={updated}
+                body={formatUpdated}
                 style={{width: '22%'}}
+                sortable
             />
         </DataTable>
     )
