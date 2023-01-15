@@ -14,7 +14,7 @@ export default function AboutPage() {
                 </p>
                 <p>
                     This site is a work in progress.
-                    Source available <a href="https://github.com/stever/zxplay" target="_blank">here</a>.
+                    Source available <a href="https://github.com/stever/zxcoder" target="_blank">here</a>.
                 </p>
                 <p>
                     Please read <Link to="/legal/privacy-policy">privacy policy</Link>
