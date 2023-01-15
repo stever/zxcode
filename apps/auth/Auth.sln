@@ -7,7 +7,6 @@ ProjectSection(SolutionItems) = preProject
 	Dockerfile = Dockerfile
 	.dockerignore = .dockerignore
 	README.md = README.md
-	.drone.yml = .drone.yml
 	.gitignore = .gitignore
 EndProjectSection
 EndProject
