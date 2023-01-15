@@ -1,4 +1,4 @@
-# ZX Play
+# ZX Coder
 
 A ZX Spectrum emulator & programming environment for the browser.
 
@@ -76,12 +76,12 @@ Configured using URL parameters.
 
 #### Example URL
 
-https://zxplay.org/?k=-W-P,ASDe,123456789M&m=48&u=https://davidprograma.github.io/ytc/09-ZxSpectrum/snake-1.01.tap
+https://zxcoder.org/?k=-W-P,ASDe,123456789M&m=48&u=https://davidprograma.github.io/ytc/09-ZxSpectrum/snake-1.01.tap
 
 The URL can be decomposed in these parts:
 - Main part:
 ```
-https://zxplay.org/
+https://zxcoder.org/
 ```
 - Soft keys:
 ```

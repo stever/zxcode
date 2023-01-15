@@ -35,7 +35,7 @@ export default function App() {
     const externalLoad = typeof parsed.u !== 'undefined';
 
     return (
-        <Titled title={() => 'ZX Play'}>
+        <Titled title={() => 'ZX Coder'}>
             <RenderEmulator/>
             <LoadingScreen/>
             <LockScreen/>

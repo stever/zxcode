@@ -67,7 +67,7 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
     };
 
     const homeButton = {
-        label: 'ZX Play',
+        label: 'ZX Coder',
         command: () => {
             navigate('/');
         }
@@ -255,7 +255,7 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
                 }
             },
             {
-                label: 'Linking To ZX Play',
+                label: 'Linking To ZX Coder',
                 icon: 'pi pi-fw pi-link',
                 command: () => {
                     navigate('/info/linking');

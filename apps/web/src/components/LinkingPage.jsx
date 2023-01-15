@@ -12,16 +12,16 @@ export default function LinkingPage() {
     return (
         <Titled title={(s) => `Linking ${sep} ${s}`}>
             <Card className="m-2">
-                <h1>Linking To ZX Play</h1>
+                <h1>Linking To ZX Coder</h1>
                 <p>
-                    You can link directly to ZX Play using URL parameters to load
+                    You can link directly to ZX Coder using URL parameters to load
                     a program or game tape image from another URL.
                 </p>
                 <p>Example:</p>
                 <p><a href={href}>{href}</a></p>
                 <p>The URL can be decomposed in these parts:</p>
                 <ul>
-                    <li><b>Main part: </b><code>https://zxplay.org/</code></li>
+                    <li><b>Main part: </b><code>https://zxcoder.org/</code></li>
                     <li><b>Soft keys: </b><code>?k=-W-P,ASDe,123456789M</code></li>
                     <li><b>Machine type (48, 128, 5 for pentagon): </b><code>&m=48</code></li>
                     <li>

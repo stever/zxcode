@@ -7,7 +7,7 @@ module.exports = (env, _) => {
     let hostname;
     let protocol;
     if (isProduction) {
-        hostname = "zxplay.org";
+        hostname = "zxcoder.org";
         protocol = "https";
     } else if (env && env.codespace && env.domain) {
         hostname = `${env.codespace}-8080.${env.domain}`;
