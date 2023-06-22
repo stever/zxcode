@@ -41,8 +41,7 @@ function* handleRunAssemblyActions(_) {
         yield put(loadTap(tap));
         yield put(setSelectedTabIndex(0));
     } catch (e) {
-        if (e.type) yield put(setErrorItems(e));
-        else handleException(e);
+        yield put(setErrorItems(e));
     } finally {
         dashboardUnlock();
     }
@@ -55,8 +54,7 @@ function* handleRunSinclairBasicActions(_) {
         yield put(loadTap(tap));
         yield put(setSelectedTabIndex(0));
     } catch (e) {
-        if (e.type) yield put(setErrorItems(e));
-        else handleException(e);
+        yield put(setErrorItems(e));
     } finally {
         dashboardUnlock();
     }
