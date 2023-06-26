@@ -255,13 +255,6 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
                 }
             },
             {
-                label: 'Linking To ZX Coder',
-                icon: 'pi pi-fw pi-link',
-                command: () => {
-                    navigate('/info/linking');
-                }
-            },
-            {
                 label: 'Privacy Policy',
                 icon: 'pi pi-fw pi-eye',
                 command: () => {

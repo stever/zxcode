@@ -15,7 +15,6 @@ import Nav from "./Nav";
 import HomePage from "./HomePage";
 import MaxWidth from "./MaxWidth";
 import AboutPage from "./AboutPage";
-import LinkingPage from "./LinkingPage";
 import PrivacyPolicyPage from "./PrivacyPolicyPage";
 import TermsOfUsePage from "./TermsOfUsePage";
 import NewProjectPage from "./NewProjectPage";
@@ -51,7 +50,6 @@ export default function App() {
                         <Routes>
                             <Route exact path="/" element={<HomePage/>}/>
                             <Route exact path="/about" element={<MaxWidth><AboutPage/></MaxWidth>}/>
-                            <Route exact path="/info/linking" element={<MaxWidth><LinkingPage/></MaxWidth>}/>
                             <Route exact path="/legal/privacy-policy" element={<MaxWidth><PrivacyPolicyPage/></MaxWidth>}/>
                             <Route exact path="/legal/terms-of-use" element={<MaxWidth><TermsOfUsePage/></MaxWidth>}/>
                             <Route exact path="/new/asm" element={<MaxWidth><NewProjectPage type="asm"/></MaxWidth>}/>
