@@ -19,7 +19,6 @@ import PrivacyPolicyPage from "./PrivacyPolicyPage";
 import TermsOfUsePage from "./TermsOfUsePage";
 import NewProjectPage from "./NewProjectPage";
 import ProjectPage from "./ProjectPage";
-import SearchPage from "./SearchPage";
 import YourProfilePage from "./YourProfilePage";
 import YourProjectsPage from "./YourProjectsPage";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
@@ -60,7 +59,6 @@ export default function App() {
                             <Route exact path="/new/zmac" element={<MaxWidth><NewProjectPage type="zmac"/></MaxWidth>}/>
                             <Route exact path="/new/zxbasic" element={<MaxWidth><NewProjectPage type="zxbasic"/></MaxWidth>}/>
                             <Route exact path="/projects/:id" element={<ProjectPage/>}/>
-                            <Route path="/search" element={<SearchPage/>}/>
                             <Route exact path="/u/:id" element={<YourProfilePage/>}/>
                             <Route exact path="/u/:id/projects" element={<YourProjectsPage/>}/>
                             <Route path="*" element={<ErrorNotFoundPage/>}/>

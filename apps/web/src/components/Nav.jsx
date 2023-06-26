@@ -1,7 +1,6 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect} from "react";
 import {useDispatch, useSelector} from "react-redux";
 import {useNavigate} from "react-router-dom";
-import {InputText} from "primereact/inputtext";
 import {Menubar} from "primereact/menubar";
 import {
     pause,
@@ -18,27 +17,12 @@ export default function Nav() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
 
-    const [searchInput, setSearchInput] = useState('');
-
     const pathname = useSelector(state => state?.router.location.pathname);
     const selectedDemoTab = useSelector(state => state?.demo.selectedTabIndex);
     const userId = useSelector(state => state?.identity.userId);
     const lang = useSelector(state => state?.project.lang);
 
     const emuVisible = (pathname === '/' && selectedDemoTab === 0) || pathname.startsWith('/projects/');
-
-    const start = <img alt="logo" src="/logo.png" height={"40"} className="mr-2"/>;
-    const end = (
-        <InputText
-            placeholder="Search"
-            type="text"
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter' && searchInput) {
-                    navigate(`/search?q=${searchInput}`);
-                }
-        }}/>
-    );
 
     useEffect(() => {
         dispatch(getUserInfo());
@@ -50,8 +34,7 @@ export default function Nav() {
         <div className="px-2 pt-2">
             <Menubar
                 model={items}
-                start={start}
-                end={end}
+                start={<img alt="logo" src="/logo.png" height={"40"} className="mr-2"/>}
                 style={{
                     borderRadius: '5px',
                     borderColor: '#1E1E1E'
