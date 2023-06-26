@@ -47,7 +47,7 @@ Remove docker compose deployment to start over:
 
 ```bash
 docker compose stop && docker compose rm -f
-docker volume rm zxplay_pg_data
+docker volume rm zxcoder_pg_data
 ```
 
 Refresh and restart docker-compose deployment:
