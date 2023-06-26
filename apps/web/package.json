@@ -58,7 +58,7 @@
     "redux": "^4.2.0",
     "redux-saga": "^1.2.2",
     "sass": "^1.57.1",
-    "zmakebas": "0.0.1-alpha.3"
+    "zmakebas": "0.0.1-alpha.4"
   },
   "devDependencies": {
     "@babel/cli": "^7.20.7",
