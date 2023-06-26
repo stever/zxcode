@@ -2,17 +2,44 @@
 
 A ZX Spectrum emulator & programming environment for the browser.
 
-## Fresh Start
+## Development Notes
 
-These steps assume that you are working in GitHub Codespaces using the Dev Container in this repository.
+### Local Development
 
 ```bash
-npm run dev # ctrl-c to quit
+# Create .env files from example .env-dist files
+cp .env-dist .env
+cp apps/proxy/.env-dist apps/proxy/.env
+
+# Set env vars before starting containers
+export HASURA_GRAPHQL_ADMIN_SECRET=hasurapassword
+
+# Start up containers
+docker compose up --build -d
+
+# Wait for Hasura to start
+bash -c 'while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:4000/healthz)" != "200" ]]; do sleep 5; done'
+```
+
+```bash
+npm install
+npm run dev
 ```
 
 Launch the URL for the proxied web server on port 8080 (http://localhost:8080).
 
-## Development Notes
+### GitHub Codespaces
+
+This repository is configured to work with GitHub Codespaces. To use it, click the "Code" button and select 
+"Open with Codespaces". This will create a new Codespace for you to work in. Once the Codespace is ready, 
+you can open a terminal and run the following commands to start the development server.
+
+```bash
+npm install
+npm run dev
+```
+
+Launch the URL for the proxied web server on port 8080 (http://localhost:8080).
 
 ### Docker Commands
 
