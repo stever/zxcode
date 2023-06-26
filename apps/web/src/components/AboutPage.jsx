@@ -13,8 +13,9 @@ export default function AboutPage() {
                     A ZX Spectrum emulator & programming environment for the browser.
                 </p>
                 <p>
-                    This site is a work in progress.
-                    Source available <a href="https://github.com/stever/zxcoder" target="_blank">here</a>.
+                    An alternative website, related to this one,
+                    is available at <a href="https://zxplay.org/" target="_blank">zxplay.org</a>.
+                    ZX Play is focussed on providing a mobile-friendly ZX Spectrum emulator, for games.
                 </p>
                 <p>
                     Please read <Link to="/legal/privacy-policy">privacy policy</Link>
