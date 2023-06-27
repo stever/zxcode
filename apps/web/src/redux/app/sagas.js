@@ -88,8 +88,8 @@ function* handleRequestTermsOfUseActions(_) {
         const response = yield call(gqlFetch, userId, query, variables);
         console.assert(response?.data?.text, response);
         console.assert(response?.data?.text.length === 1, response);
-        console.assert(response?.data?.text[0].text, response);
-        yield put(receiveTermsOfUse(response.data.text[0].text));
+        console.assert(response?.data?.text[0]?.text, response);
+        yield put(receiveTermsOfUse(response?.data?.text[0]?.text || '# Terms of Use\n\nTODO'));
     } catch (e) {
         handleException(e);
     }
@@ -110,8 +110,8 @@ function* handleRequestPrivacyPolicyActions(_) {
         const response = yield call(gqlFetch, userId, query, variables);
         console.assert(response?.data?.text, response);
         console.assert(response?.data?.text.length === 1, response);
-        console.assert(response?.data?.text[0].text, response);
-        yield put(receivePrivacyPolicy(response.data.text[0].text));
+        console.assert(response?.data?.text[0]?.text, response);
+        yield put(receivePrivacyPolicy(response?.data?.text[0]?.text || '# Privacy Policy\n\nTODO'));
     } catch (e) {
         handleException(e);
     }
