@@ -23,6 +23,10 @@ code {
     white-space: pre !important;
 }
 
+.p-menubar {
+    padding: 0 !important;
+}
+
 .p-card h1,
 .p-card h2,
 .p-card h3,

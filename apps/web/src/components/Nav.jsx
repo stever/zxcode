@@ -34,7 +34,7 @@ export default function Nav() {
         <div className="px-2 pt-2">
             <Menubar
                 model={items}
-                start={<img alt="logo" src="/logo.png" height={"40"} className="mr-2"/>}
+                start={<img alt="logo" src="/logo.png" height={"40"} className="mx-2"/>}
                 style={{
                     borderRadius: '5px',
                     borderColor: '#1E1E1E'
