@@ -1,6 +1,5 @@
 import React, {useEffect, useRef} from "react";
 import {useDispatch, useSelector} from "react-redux";
-import queryString from "query-string";
 import {TabPanel, TabView} from "primereact/tabview";
 import {Toast} from "primereact/toast";
 import {DemoSinclairBasicEditor} from "./DemoSinclairBasicEditor";
@@ -15,17 +14,12 @@ export default function HomePage() {
     const dispatch = useDispatch();
 
     const activeIndex = useSelector(state => state?.demo.selectedTabIndex);
-    const search = useSelector(state => state?.router.location.search);
     const errorItems = useSelector(state => state?.project.errorItems);
 
     const toast = useRef(null);
 
     const zoom = 2;
     const width = zoom * 320;
-
-    // Hide tabs when loading external tape files.
-    const parsed = queryString.parse(search);
-    const externalLoad = typeof parsed.u !== 'undefined';
 
     useEffect(() => {
         dispatch(resetProject());
@@ -51,24 +45,19 @@ export default function HomePage() {
 
                 </div>
                 <div className="col-fixed p-0 pt-1" style={{width: `${width}px`}}>
-                    {externalLoad &&
-                        <Emulator zoom={zoom} width={width}/>
-                    }
-                    {!externalLoad &&
-                        <TabView
-                            activeIndex={activeIndex}
-                            onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
-                            <TabPanel header="Emulator">
-                                <Emulator zoom={zoom} width={width}/>
-                            </TabPanel>
-                            <TabPanel header="Sinclair BASIC">
-                                <DemoSinclairBasicEditor/>
-                            </TabPanel>
-                            <TabPanel header="Z80 Assembly">
-                                <DemoAssemblyEditor/>
-                            </TabPanel>
-                        </TabView>
-                    }
+                    <TabView
+                        activeIndex={activeIndex}
+                        onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
+                        <TabPanel header="Emulator">
+                            <Emulator zoom={zoom} width={width}/>
+                        </TabPanel>
+                        <TabPanel header="Sinclair BASIC">
+                            <DemoSinclairBasicEditor/>
+                        </TabPanel>
+                        <TabPanel header="Z80 Assembly">
+                            <DemoAssemblyEditor/>
+                        </TabPanel>
+                    </TabView>
                 </div>
                 <div className="col" style={{padding: 0}}>
 
