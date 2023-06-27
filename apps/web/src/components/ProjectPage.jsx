@@ -16,7 +16,7 @@ export default function ProjectPage() {
     const dispatch = useDispatch();
 
     const userId = useSelector(state => state?.identity.userId);
-    const tab = useSelector(state => state?.project.selectedTabIndex);
+    const activeIndex = useSelector(state => state?.project.selectedTabIndex);
     const lang = useSelector(state => state?.project.lang);
     let title = useSelector(state => state?.project.title);
     const errorItems = useSelector(state => state?.project.errorItems);
@@ -78,7 +78,7 @@ export default function ProjectPage() {
                 <div className="grid" style={{width: "100%", padding: 0, margin: 0}}>
                     <div className="col p-0 mr-2" style={{maxWidth: `calc(100vw - ${width + 41}px`}}>
                         <TabView
-                            activeIndex={tab}
+                            activeIndex={activeIndex}
                             onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
                             <TabPanel header={editorTitle}>
                                 <ProjectEditor id={id}/>
