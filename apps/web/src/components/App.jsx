@@ -2,7 +2,6 @@ import React from "react";
 import {useSelector} from "react-redux";
 import {Route, Routes} from "react-router-dom";
 import {Titled} from "react-titled";
-import queryString from "query-string";
 import "primereact/resources/themes/md-dark-indigo/theme.css";
 import "primereact/resources/primereact.min.css";
 import "primeicons/primeicons.css";
@@ -27,20 +26,13 @@ import ErrorPage from "./ErrorPage";
 export default function App() {
     const err = useSelector(state => state?.error.msg);
 
-    // Hide tabs when loading external tape files.
-    const search = useSelector(state => state?.router.location.search);
-    const parsed = queryString.parse(search);
-    const externalLoad = typeof parsed.u !== 'undefined';
-
     return (
         <Titled title={() => 'ZX Coder'}>
             <RenderEmulator/>
             <LoadingScreen/>
             <LockScreen/>
             <div className="pb-1">
-                {!externalLoad &&
-                    <Nav/>
-                }
+                <Nav/>
                 {err &&
                     <ErrorPage msg={err}/>
                 }
