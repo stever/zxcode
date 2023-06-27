@@ -39,7 +39,6 @@ function* handleRunAssemblyActions(_) {
         const code = yield select((state) => state.demo.asmCode);
         const tap = yield call(getPasmoTap, code);
         yield put(loadTap(tap));
-        yield put(setSelectedTabIndex(0));
     } catch (e) {
         yield put(setErrorItems(e));
     } finally {
@@ -52,7 +51,6 @@ function* handleRunSinclairBasicActions(_) {
         const code = yield select((state) => state.demo.sinclairBasicCode);
         const tap = yield call(getZmakebasTap, code);
         yield put(loadTap(tap));
-        yield put(setSelectedTabIndex(0));
     } catch (e) {
         yield put(setErrorItems(e));
     } finally {
