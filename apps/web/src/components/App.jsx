@@ -49,8 +49,8 @@ export default function App() {
                         <Routes>
                             <Route exact path="/" element={<HomePage/>}/>
                             <Route exact path="/about" element={<MaxWidth><AboutPage/></MaxWidth>}/>
-                            <Route exact path="/legal/privacy-policy" element={<MaxWidth><PrivacyPolicyPage/></MaxWidth>}/>
-                            <Route exact path="/legal/terms-of-use" element={<MaxWidth><TermsOfUsePage/></MaxWidth>}/>
+                            <Route exact path="/privacy-policy" element={<MaxWidth><PrivacyPolicyPage/></MaxWidth>}/>
+                            <Route exact path="/terms-of-use" element={<MaxWidth><TermsOfUsePage/></MaxWidth>}/>
                             <Route exact path="/new/asm" element={<MaxWidth><NewProjectPage type="asm"/></MaxWidth>}/>
                             <Route exact path="/new/basic" element={<MaxWidth><NewProjectPage type="basic"/></MaxWidth>}/>
                             <Route exact path="/new/bas2tap" element={<MaxWidth><NewProjectPage type="bas2tap"/></MaxWidth>}/>

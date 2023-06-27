@@ -241,14 +241,14 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
                 label: 'Privacy Policy',
                 icon: 'pi pi-fw pi-eye',
                 command: () => {
-                    navigate('/legal/privacy-policy');
+                    navigate('/privacy-policy');
                 }
             },
             {
                 label: 'Terms of Use',
                 icon: 'pi pi-fw pi-info-circle',
                 command: () => {
-                    navigate('/legal/terms-of-use');
+                    navigate('/terms-of-use');
                 }
             }
         ]

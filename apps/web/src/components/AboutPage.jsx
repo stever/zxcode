@@ -19,8 +19,8 @@ export default function AboutPage() {
                     ZX Play is focussed on providing a mobile-friendly ZX Spectrum emulator, for games.
                 </p>
                 <p>
-                    Please read <Link to="/legal/privacy-policy">privacy policy</Link>
-                    {' '}and <Link to="/legal/terms-of-use">terms of use</Link>.
+                    Please read <Link to="/privacy-policy">privacy policy</Link>
+                    {' '}and <Link to="/terms-of-use">terms of use</Link>.
                 </p>
                 <h2>Create Projects</h2>
                 <p>
