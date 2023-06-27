@@ -16,11 +16,11 @@ export default function AboutPage() {
                 <p>
                     An alternative website, related to this one,
                     is available at <a href="https://zxplay.org/" target="_blank">zxplay.org</a>.
-                    ZX Play is focussed on providing a mobile-friendly ZX Spectrum emulator, for games.
+                    ZX Play is a mobile-friendly ZX Spectrum emulator, for games.
                 </p>
                 <p>
                     Please read <Link to="/privacy-policy">privacy policy</Link>
-                    {' '}and <Link to="/terms-of-use">terms of use</Link>.
+                    {' '}and <Link to="/terms-of-use">terms of use</Link>, for this website.
                 </p>
                 <h2>Create Projects</h2>
                 <p>
