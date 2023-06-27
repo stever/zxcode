@@ -7,7 +7,6 @@ import {
     receivePrivacyPolicy,
     receiveTermsOfUse
 } from "./actions";
-import {setSelectedTabIndex as setDemoTabIndex} from "../demo/actions";
 import {reset} from "../jsspeccy/actions";
 import {handleException} from "../../errors";
 
@@ -47,7 +46,6 @@ function* handleShowActiveEmulatorActions(_) {
         if (isProject) {
             history.push(`/projects/${projectId}`);
         } else {
-            yield put(setDemoTabIndex(0));
             history.push('/');
         }
     } catch (e) {
@@ -64,7 +62,6 @@ function* handleResetEmulatorActions(_) {
             history.push(`/projects/${projectId}`);
             yield put(reset());
         } else {
-            yield put(setDemoTabIndex(0));
             history.push('/');
             yield put(reset());
         }

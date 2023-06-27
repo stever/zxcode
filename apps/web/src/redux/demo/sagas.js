@@ -1,10 +1,9 @@
 import {takeLatest, select, put, call} from "redux-saga/effects";
 import getZmakebasTap from "zmakebas";
 import getPasmoTap from "pasmo";
-import {actionTypes, setSelectedTabIndex} from "./actions";
+import {actionTypes} from "./actions";
 import {loadTap, pause} from "../jsspeccy/actions";
 import {setErrorItems} from "../project/actions";
-import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
 // -----------------------------------------------------------------------------
