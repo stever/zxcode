@@ -11,6 +11,7 @@ export default function AboutPage() {
                 <h1>About This Site</h1>
                 <p>
                     A ZX Spectrum emulator & programming environment for the browser.
+                    Source available <a href="https://github.com/zxplay/zxcoder" target="_blank">here</a>.
                 </p>
                 <p>
                     An alternative website, related to this one,
