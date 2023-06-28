@@ -2,7 +2,7 @@ import {takeLatest, put, select, call} from "redux-saga/effects";
 import gql from "graphql-tag";
 import {history} from "../store";
 import {gqlFetch} from "../../graphql_fetch";
-import {actionTypes, reset, receiveLoadedProject, setSavedCode} from "./actions";
+import {actionTypes, reset, receiveLoadedProject, setSavedCode, setSelectedTabIndex} from "./actions";
 import {pause, reset as resetMachine} from "../jsspeccy/actions";
 import {handleException} from "../../errors";
 
@@ -109,6 +109,11 @@ function* handleLoadProjectActions(action) {
         }
 
         yield put(receiveLoadedProject(action.id, proj.title, proj.lang, proj.code));
+
+        // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
+        const isMobile = yield select((state) => state.window.isMobile);
+        console.log('handleRunProjectCodeActions', isMobile);
+        if (isMobile) yield put(setSelectedTabIndex(1));
     } catch (e) {
         handleException(e);
     }
