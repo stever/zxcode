@@ -8,6 +8,7 @@ export const actionTypes = {
     setSavedCode: 'project/setSavedCode',
     saveCodeChanges: 'project/saveCodeChanges',
     deleteProject: 'project/deleteProject',
+    renameProject: 'project/renameProject',
     setErrorItems: 'project/setErrorItems',
 };
 
@@ -51,6 +52,10 @@ export const saveCodeChanges = () => ({
 
 export const deleteProject = () => ({
     type: actionTypes.deleteProject
+});
+
+export const renameProject = () => ({
+    type: actionTypes.renameProject
 });
 
 export const setErrorItems = (errorItems) => ({
