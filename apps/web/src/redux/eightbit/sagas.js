@@ -17,7 +17,7 @@ import {
     setFollowTapAction
 } from "./actions";
 import {loadTap} from "../jsspeccy/actions";
-import {setErrorItems} from "../project/actions";
+import {setErrorItems, setSelectedTabIndex} from "../project/actions";
 import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
@@ -137,6 +137,11 @@ function* handleWorkerMessageActions(action) {
 function* handleRunProjectCodeActions(_) {
     yield put(setFollowTapAction(runTap));
     yield put(getProjectTap());
+
+    // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
+    const isMobile = yield select((state) => state.window.isMobile);
+    console.log('handleRunProjectCodeActions', isMobile);
+    if (isMobile) yield put(setSelectedTabIndex(0));
 }
 
 function* handleDownloadProjectTapActions(_) {

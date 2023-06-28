@@ -16,7 +16,7 @@ export default function ProjectPage() {
     const dispatch = useDispatch();
 
     const userId = useSelector(state => state?.identity.userId);
-    const activeIndex = useSelector(state => state?.project.selectedTabIndex);
+    const selectedTabIndex = useSelector(state => state?.project.selectedTabIndex);
     const lang = useSelector(state => state?.project.lang);
     let title = useSelector(state => state?.project.title);
     const errorItems = useSelector(state => state?.project.errorItems);
@@ -79,21 +79,47 @@ export default function ProjectPage() {
             <Toast ref={toast}/>
             <div className={className}>
                 <div className="grid" style={{width: "100%", padding: 0, margin: 0}}>
-                    <div className="col p-0 mr-2" style={{maxWidth: `calc(100vw - ${width + 41}px`}}>
-                        <TabView
-                            activeIndex={activeIndex}
-                            onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
-                            <TabPanel header={editorTitle}>
-                                <ProjectEditor id={id}/>
-                            </TabPanel>
-                        </TabView>
-                    </div>
-                    <div className="col-fixed p-0 pt-1" style={{width: `${width}px`}}>
-                        <div style={{height: '53px'}} className="pt-3 pl-1">
-                            <h3>{title ? `Project: ${title}` : ''}</h3>
-                        </div>
-                        <Emulator zoom={zoom} width={width}/>
-                    </div>
+                    {isMobile && (
+                        <>
+                            <div className="col" style={{padding: 0}}>
+
+                            </div>
+                            <div className="col-fixed p-0" style={{width: `${width}px`}}>
+                                <TabView
+                                    activeIndex={selectedTabIndex}
+                                    onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
+                                    <TabPanel header="Emulator">
+                                        <Emulator zoom={zoom} width={width}/>
+                                    </TabPanel>
+                                    <TabPanel header={editorTitle}>
+                                        <ProjectEditor id={id}/>
+                                    </TabPanel>
+                                </TabView>
+                            </div>
+                            <div className="col" style={{padding: 0}}>
+
+                            </div>
+                        </>
+                    )}
+                    {!isMobile && (
+                        <>
+                            <div className="col p-0 mr-2" style={{maxWidth: `calc(100vw - ${width + 41}px`}}>
+                                <TabView
+                                    activeIndex={selectedTabIndex}
+                                    onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
+                                    <TabPanel header={editorTitle}>
+                                        <ProjectEditor id={id}/>
+                                    </TabPanel>
+                                </TabView>
+                            </div>
+                            <div className="col-fixed p-0 pt-1" style={{width: `${width}px`}}>
+                                <div style={{height: '53px'}} className="pt-3 pl-1">
+                                    <h3>{title ? `Project: ${title}` : ''}</h3>
+                                </div>
+                                <Emulator zoom={zoom} width={width}/>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </Titled>

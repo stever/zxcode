@@ -13,7 +13,7 @@ import {showToastsForErrorItems} from "../errors";
 export default function HomePage() {
     const dispatch = useDispatch();
 
-    const activeIndex = useSelector(state => state?.demo.selectedTabIndex);
+    const selectedTabIndex = useSelector(state => state?.demo.selectedTabIndex);
     const errorItems = useSelector(state => state?.project.errorItems);
     const isMobile = useSelector(state => state?.window.isMobile);
 
@@ -52,7 +52,7 @@ export default function HomePage() {
                             </div>
                             <div className="col-fixed p-0" style={{width: `${width}px`}}>
                                 <TabView
-                                    activeIndex={activeIndex}
+                                    activeIndex={selectedTabIndex}
                                     onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
                                     <TabPanel header="Emulator">
                                         <Emulator zoom={zoom} width={width}/>
@@ -74,7 +74,7 @@ export default function HomePage() {
                         <>
                             <div className="col p-0 mr-2" style={{maxWidth: `calc(100vw - ${width + 41}px`}}>
                                 <TabView
-                                    activeIndex={activeIndex}
+                                    activeIndex={selectedTabIndex}
                                     onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
                                     <TabPanel header="Sinclair BASIC">
                                         <DemoSinclairBasicEditor/>
