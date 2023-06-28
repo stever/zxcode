@@ -70,6 +70,13 @@ function setErrorItems(state, action) {
     };
 }
 
+function setProjectTitle(state, action) {
+    return {
+        ...state,
+        title: action.title,
+    };
+}
+
 // -----------------------------------------------------------------------------
 // Reducer
 // -----------------------------------------------------------------------------
@@ -83,6 +90,7 @@ const actionsMap = {
     [actionTypes.setCode]: setCode,
     [actionTypes.setSavedCode]: setSavedCode,
     [actionTypes.setErrorItems]: setErrorItems,
+    [actionTypes.setProjectTitle]: setProjectTitle,
 };
 
 export default function reducer(state = initialState, action) {

@@ -24,7 +24,7 @@ export function ProjectEditor() {
     const renameInputReference = useRef(null);
 
     const [renameDialogVisible, setRenameDialogVisible] = useState(false);
-    const [newProjectName, setNewProjectName] = useState(undefined);
+    const [newProjectName, setNewProjectName] = useState('');
 
     const lang = useSelector(state => state?.project.lang);
     const code = useSelector(state => state?.project.code);
@@ -139,7 +139,7 @@ export function ProjectEditor() {
                             label="Cancel"
                             icon="pi pi-times"
                             onClick={() => {
-                                setNewProjectName(undefined);
+                                setNewProjectName('');
                                 setRenameDialogVisible(false);
                             }}
                             className="p-button-text"
@@ -149,7 +149,7 @@ export function ProjectEditor() {
                             icon="pi pi-check"
                             onClick={() => {
                                 dispatch(renameProject(newProjectName));
-                                setNewProjectName(undefined);
+                                setNewProjectName('');
                                 setRenameDialogVisible(false);
                             }}
                             autoFocus
@@ -168,7 +168,7 @@ export function ProjectEditor() {
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                                 dispatch(renameProject(newProjectName));
-                                setNewProjectName(undefined);
+                                setNewProjectName('');
                                 setRenameDialogVisible(false);
                             }
                         }}

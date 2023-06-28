@@ -2,7 +2,7 @@ import {takeLatest, put, select, call} from "redux-saga/effects";
 import gql from "graphql-tag";
 import {history} from "../store";
 import {gqlFetch} from "../../graphql_fetch";
-import {actionTypes, reset, receiveLoadedProject, setSavedCode, setSelectedTabIndex} from "./actions";
+import {actionTypes, reset, receiveLoadedProject, setSavedCode, setSelectedTabIndex, setProjectTitle} from "./actions";
 import {pause, reset as resetMachine} from "../jsspeccy/actions";
 import {handleException} from "../../errors";
 
@@ -33,6 +33,11 @@ export function* watchForSaveCodeChangesActions() {
 // noinspection JSUnusedGlobalSymbols
 export function* watchForDeleteProjectActions() {
     yield takeLatest(actionTypes.deleteProject, handleDeleteProjectActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchForRenameProjectActions() {
+    yield takeLatest(actionTypes.renameProject, handleRenameProjectActions);
 }
 
 // -----------------------------------------------------------------------------
@@ -176,6 +181,36 @@ function* handleDeleteProjectActions(_) {
         yield put(reset());
         yield put(resetMachine());
         history.push(`/u/${userId}/projects`);
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleRenameProjectActions(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+        const projectId = yield select((state) => state.project.id);
+
+        const query = gql`
+            mutation ($project_id: uuid!, $title: String!) {
+                update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {title: $title}) {
+                    project_id
+                }
+            }
+        `;
+
+        const variables = {
+            'project_id': projectId,
+            'title': action.title
+        };
+
+        // noinspection JSCheckFunctionSignatures
+        const response = yield call(gqlFetch, userId, query, variables);
+
+        // noinspection JSUnresolvedVariable
+        console.assert(response?.data?.update_project_by_pk?.project_id, response);
+
+        yield put(setProjectTitle(action.title));
     } catch (e) {
         handleException(e);
     }
