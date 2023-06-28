@@ -38,12 +38,12 @@ export default function HomePage() {
         return () => {};
     }, [errorItems, toast.current]);
 
-    const mainClassName = isMobile ? '' : 'mx-2 my-1';
+    const className = isMobile ? '' : 'mx-2 my-1';
 
     return (
         <>
             <Toast ref={toast}/>
-            <div className={mainClassName}>
+            <div className={className}>
                 <div className="grid" style={{width: "100%", padding: 0, margin: 0}}>
                     {isMobile && (
                         <>

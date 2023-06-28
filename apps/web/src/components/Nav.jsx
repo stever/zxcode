@@ -31,10 +31,10 @@ export default function Nav() {
 
     const items = getMenuItems(navigate, userId, dispatch, lang, emuVisible);
 
-    const mainClassName = isMobile ? '' : 'mx-2 my-1';
+    const className = isMobile ? '' : 'px-2 pt-2';
 
     return (
-        <div className={mainClassName}>
+        <div className={className}>
             <Menubar
                 model={items}
                 start={<img alt="logo" src="/logo.png" height={"40"} className="mx-2"/>}
