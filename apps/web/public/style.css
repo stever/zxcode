@@ -107,11 +107,15 @@ code {
     font-size: 16px !important;
     height: calc(100vh - 177px) !important;
     max-height: 736px !important;
-    border: 1px solid #5B5B5B;
 }
 
 .desktop .CodeMirror {
+    border: 1px solid #5B5B5B;
     border-radius: 5px;
+}
+
+.mobile .CodeMirror {
+    border: 0 !important;
 }
 
 .CodeMirror-scrollbar-filler {
@@ -124,4 +128,12 @@ code {
 
 .p-submenu-list {
     z-index: 100 !important;
+}
+
+.mobile .p-tabview-nav {
+    border: 0 !important;
+}
+
+.mobile .p-tabview-panels {
+    padding: 0 !important;
 }

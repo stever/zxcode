@@ -50,7 +50,7 @@ export default function HomePage() {
                             <div className="col" style={{padding: 0}}>
 
                             </div>
-                            <div className="col-fixed p-0 pt-1" style={{width: `${width}px`}}>
+                            <div className="col-fixed p-0" style={{width: `${width}px`}}>
                                 <TabView
                                     activeIndex={activeIndex}
                                     onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
