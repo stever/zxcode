@@ -14,6 +14,7 @@ import identityReducer from "./identity/reducers";
 import projectReducer from "./project/reducers";
 import projectListReducer from "./projectList/reducers";
 import subscriberReducer from "./subscriber/reducers";
+import windowReducer from "./window/reducers";
 
 // Sagas
 import * as appSagas from "./app/sagas";
@@ -24,6 +25,7 @@ import * as jsspeccySagas from "./jsspeccy/sagas";
 import * as projectSagas from "./project/sagas";
 import * as projectListSagas from "./projectList/sagas";
 import * as subscriberSagas from "./subscriber/sagas";
+import * as windowSagas from "./window/sagas";
 
 const loggingMiddleware = (store) => {
     return (next) => {
@@ -63,7 +65,8 @@ const rootReducer = combineReducers({
     identity: identityReducer,
     project: projectReducer,
     projectList: projectListReducer,
-    subscriber:subscriberReducer,
+    subscriber: subscriberReducer,
+    window: windowReducer,
 });
 
 export const store = createStore(
@@ -91,6 +94,7 @@ collectSagas(jsspeccySagas);
 collectSagas(projectSagas);
 collectSagas(projectListSagas);
 collectSagas(subscriberSagas);
+collectSagas(windowSagas);
 
 function* rootSaga() {
     yield all(sagas);

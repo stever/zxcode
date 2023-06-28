@@ -15,6 +15,7 @@ export default function HomePage() {
 
     const activeIndex = useSelector(state => state?.demo.selectedTabIndex);
     const errorItems = useSelector(state => state?.project.errorItems);
+    const isMobile = useSelector(state => state?.window.isMobile);
 
     const toast = useRef(null);
 
@@ -42,24 +43,53 @@ export default function HomePage() {
             <Toast ref={toast}/>
             <div className="mx-2 my-1">
                 <div className="grid" style={{width: "100%", padding: 0, margin: 0}}>
-                    <div className="col p-0 mr-2" style={{maxWidth: `calc(100vw - ${width + 41}px`}}>
-                        <TabView
-                            activeIndex={activeIndex}
-                            onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
-                            <TabPanel header="Sinclair BASIC">
-                                <DemoSinclairBasicEditor/>
-                            </TabPanel>
-                            <TabPanel header="Z80 Assembly">
-                                <DemoAssemblyEditor/>
-                            </TabPanel>
-                        </TabView>
-                    </div>
-                    <div className="col-fixed p-0 pt-1" style={{width: `${width}px`}}>
-                        <div style={{height: '53px'}} className="pt-3 pl-1">
+                    {isMobile && (
+                        <>
+                            <div className="col" style={{padding: 0}}>
 
-                        </div>
-                        <Emulator zoom={zoom} width={width}/>
-                    </div>
+                            </div>
+                            <div className="col-fixed p-0 pt-1" style={{width: `${width}px`}}>
+                                <TabView
+                                    activeIndex={activeIndex}
+                                    onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
+                                    <TabPanel header="Emulator">
+                                        <Emulator zoom={zoom} width={width}/>
+                                    </TabPanel>
+                                    <TabPanel header="Sinclair BASIC">
+                                        <DemoSinclairBasicEditor/>
+                                    </TabPanel>
+                                    <TabPanel header="Z80 Assembly">
+                                        <DemoAssemblyEditor/>
+                                    </TabPanel>
+                                </TabView>
+                            </div>
+                            <div className="col" style={{padding: 0}}>
+
+                            </div>
+                        </>
+                    )}
+                    {!isMobile && (
+                        <>
+                            <div className="col p-0 mr-2" style={{maxWidth: `calc(100vw - ${width + 41}px`}}>
+                                <TabView
+                                    activeIndex={activeIndex}
+                                    onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
+                                    <TabPanel header="Sinclair BASIC">
+                                        <DemoSinclairBasicEditor/>
+                                    </TabPanel>
+                                    <TabPanel header="Z80 Assembly">
+                                        <DemoAssemblyEditor/>
+                                    </TabPanel>
+                                </TabView>
+                            </div>
+                            <div className="col-fixed p-0 pt-1" style={{width: `${width}px`}}>
+                                <div style={{height: '53px'}} className="pt-3 pl-1">
+
+                                </div>
+                                <Emulator zoom={zoom} width={width}/>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </>

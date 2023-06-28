@@ -7,6 +7,7 @@ import {
     receivePrivacyPolicy,
     receiveTermsOfUse
 } from "./actions";
+import {setSelectedTabIndex as setDemoTabIndex} from "../demo/actions";
 import {reset} from "../jsspeccy/actions";
 import {handleException} from "../../errors";
 
@@ -46,6 +47,10 @@ function* handleShowActiveEmulatorActions(_) {
         if (isProject) {
             history.push(`/projects/${projectId}`);
         } else {
+
+            // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
+            const isMobile = yield select((state) => state.window.isMobile);
+            if (isMobile) yield put(setDemoTabIndex(0));
             history.push('/');
         }
     } catch (e) {
@@ -57,11 +62,14 @@ function* handleResetEmulatorActions(_) {
     try {
         const projectId = yield select((state) => state.project.id);
         const isProject = typeof projectId !== 'undefined';
-
         if (isProject) {
             history.push(`/projects/${projectId}`);
             yield put(reset());
         } else {
+
+            // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
+            const isMobile = yield select((state) => state.window.isMobile);
+            if (isMobile) yield put(setDemoTabIndex(0));
             history.push('/');
             yield put(reset());
         }
