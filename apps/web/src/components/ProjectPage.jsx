@@ -20,6 +20,7 @@ export default function ProjectPage() {
     const lang = useSelector(state => state?.project.lang);
     let title = useSelector(state => state?.project.title);
     const errorItems = useSelector(state => state?.project.errorItems);
+    const isMobile = useSelector(state => state?.window.isMobile);
 
     const toast = useRef(null);
 
@@ -71,10 +72,12 @@ export default function ProjectPage() {
             throw `unexpected case: ${lang}`;
     }
 
+    const mainClassName = isMobile ? '' : 'mx-2 my-1';
+
     return (
         <Titled title={(s) => `${title} ${sep} Project ${sep} ${s}`}>
             <Toast ref={toast}/>
-            <div className="mx-2 my-1">
+            <div className={mainClassName}>
                 <div className="grid" style={{width: "100%", padding: 0, margin: 0}}>
                     <div className="col p-0 mr-2" style={{maxWidth: `calc(100vw - ${width + 41}px`}}>
                         <TabView

@@ -77,15 +77,15 @@ code {
     align-items: center;
 }
 
-.p-tabview,
-.p-tabview > .p-tabview-nav-container,
-.p-tabview > .p-tabview-nav-container > .p-tabview-nav-content,
-.p-tabview > .p-tabview-nav-container > .p-tabview-nav-content > .p-tabview-nav,
-.p-tabview > .p-tabview-nav-container > .p-tabview-nav-content > .p-tabview-nav > .p-tabview-selected,
-.p-tabview > .p-tabview-nav-container > .p-tabview-nav-content > .p-tabview-nav > .p-tabview-selected > a,
-#jsspeccy-screen > div,
-#jsspeccy-screen > div > div,
-#jsspeccy-screen > div > div > canvas {
+.desktop .p-tabview,
+.desktop .p-tabview > .p-tabview-nav-container,
+.desktop .p-tabview > .p-tabview-nav-container > .p-tabview-nav-content,
+.desktop .p-tabview > .p-tabview-nav-container > .p-tabview-nav-content > .p-tabview-nav,
+.desktop .p-tabview > .p-tabview-nav-container > .p-tabview-nav-content > .p-tabview-nav > .p-tabview-selected,
+.desktop .p-tabview > .p-tabview-nav-container > .p-tabview-nav-content > .p-tabview-nav > .p-tabview-selected > a,
+.desktop #jsspeccy-screen > div,
+.desktop #jsspeccy-screen > div > div,
+.desktop #jsspeccy-screen > div > div > canvas {
     border-radius: 5px 5px 0 0;
 }
 
@@ -102,12 +102,7 @@ code {
     image-rendering: crisp-edges;
 }
 
-#virtkeys {
-    border-radius: 0 0 5px 5px;
-}
-
 .CodeMirror {
-    border-radius: 5px;
     font-family: monospace !important;
     font-size: 16px !important;
     height: calc(100vh - 177px) !important;
@@ -115,11 +110,15 @@ code {
     border: 1px solid #5B5B5B;
 }
 
+.desktop .CodeMirror {
+    border-radius: 5px;
+}
+
 .CodeMirror-scrollbar-filler {
     background-color: #424242 !important;
 }
 
-.p-button {
+.desktop .p-button {
     border-radius: 5px !important;
 }
 

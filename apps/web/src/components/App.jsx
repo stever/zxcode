@@ -22,16 +22,19 @@ import YourProfilePage from "./YourProfilePage";
 import YourProjectsPage from "./YourProjectsPage";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
+import clsx from "clsx";
 
 export default function App() {
     const err = useSelector(state => state?.error.msg);
+    const isMobile = useSelector(state => state?.window.isMobile);
+    const className = clsx('pb-1', isMobile ? 'mobile' : 'desktop');
 
     return (
         <Titled title={() => 'ZX Coder'}>
             <RenderEmulator/>
             <LoadingScreen/>
             <LockScreen/>
-            <div className="pb-1">
+            <div className={className}>
                 <Nav/>
                 {err &&
                     <ErrorPage msg={err}/>

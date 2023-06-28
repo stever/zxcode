@@ -21,6 +21,7 @@ export default function Nav() {
     const selectedDemoTab = useSelector(state => state?.demo.selectedTabIndex);
     const userId = useSelector(state => state?.identity.userId);
     const lang = useSelector(state => state?.project.lang);
+    const isMobile = useSelector(state => state?.window.isMobile);
 
     const emuVisible = (pathname === '/' && selectedDemoTab === 0) || pathname.startsWith('/projects/');
 
@@ -30,13 +31,15 @@ export default function Nav() {
 
     const items = getMenuItems(navigate, userId, dispatch, lang, emuVisible);
 
+    const mainClassName = isMobile ? '' : 'mx-2 my-1';
+
     return (
-        <div className="px-2 pt-2">
+        <div className={mainClassName}>
             <Menubar
                 model={items}
                 start={<img alt="logo" src="/logo.png" height={"40"} className="mx-2"/>}
                 style={{
-                    borderRadius: '5px',
+                    borderRadius: isMobile ? 0 : '5px',
                     borderColor: '#1E1E1E'
                 }}
             />

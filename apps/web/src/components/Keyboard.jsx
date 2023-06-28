@@ -1,6 +1,7 @@
 import React, {useEffect} from "react";
 import PropTypes from "prop-types";
 import {ImageButton, SingleWindow} from "../lib/canvasgui";
+import {useSelector} from "react-redux";
 
 Keyboard.propTypes = {
     width: PropTypes.number
@@ -8,22 +9,31 @@ Keyboard.propTypes = {
 
 export function Keyboard(props) {
     const width = props.width || 960;
+    const isMobile = useSelector(state => state?.window.isMobile);
 
     useEffect(() => {
         renderKeyboard(width);
     }, []);
+
+    let style = {
+        imageRendering: 'auto'
+    };
+
+    if (!isMobile) {
+        style.borderRadius = '0 0 5px 5px';
+    }
 
     return (
         <div id="guiparent" style={{
             width: `${width}px`,
             margin: 0,
             backgroundColor: "#444",
-            padding: 0
+            padding: 0,
         }}>
             <canvas
                 id="virtkeys"
                 width={width}
-                style={{imageRendering: "auto"}}
+                style={style}
             />
         </div>
     )
