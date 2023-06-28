@@ -14,6 +14,7 @@ import "../lib/syntax/z88dk-c";
 import "../lib/syntax/sdcc";
 import "../lib/syntax/zxbasic";
 import {dashboardLock} from "../dashboard_lock";
+import clsx from "clsx";
 
 export function ProjectEditor() {
     const dispatch = useDispatch();
@@ -21,6 +22,7 @@ export function ProjectEditor() {
     const lang = useSelector(state => state?.project.lang);
     const code = useSelector(state => state?.project.code);
     const savedCode = useSelector(state => state?.project.savedCode);
+    const isMobile = useSelector(state => state?.window.isMobile);
 
     let mode;
     switch (lang) {
@@ -86,7 +88,7 @@ export function ProjectEditor() {
             <Button
                 label="Run"
                 icon="pi pi-play"
-                className="mt-2 mr-2"
+                className={clsx('mt-2 mr-2', isMobile && 'ml-2')}
                 onClick={() => {
                     dashboardLock();
                     dispatch(runProjectCode());

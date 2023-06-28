@@ -105,16 +105,17 @@ code {
 .CodeMirror {
     font-family: monospace !important;
     font-size: 16px !important;
-    height: calc(100vh - 177px) !important;
     max-height: 736px !important;
 }
 
 .desktop .CodeMirror {
+    height: calc(100vh - 177px) !important;
     border: 1px solid #5B5B5B;
     border-radius: 5px;
 }
 
 .mobile .CodeMirror {
+    height: calc(100vh - 152px) !important;
     border: 0 !important;
 }
 
