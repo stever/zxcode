@@ -14,6 +14,7 @@ export default function ProjectList() {
     const dispatch = useDispatch();
 
     const projects = useSelector(state => state?.projectList.projectList);
+    const isMobile = useSelector(state => state?.window.isMobile);
 
     const [first, setFirst] = useState(0);
     const [rows, setRows] = useState(10);
@@ -120,27 +121,31 @@ export default function ProjectList() {
                 field="title"
                 header="Project Title"
                 body={formatLinkName}
-                style={{width: '34%'}}
+                style={{width: !isMobile ? '34%' : '70%'}}
                 sortable
             />
-            <Column
-                field="lang_title"
-                header="Compiler"
-                style={{width: '22%'}}
-                sortable
-            />
-            <Column
-                field="created_at"
-                header="Created"
-                body={formatCreated}
-                style={{width: '22%'}}
-                sortable
-            />
+            {!isMobile && (
+                <Column
+                    field="lang_title"
+                    header="Compiler"
+                    style={{width: '22%'}}
+                    sortable
+                />
+            )}
+            {!isMobile && (
+                <Column
+                    field="created_at"
+                    header="Created"
+                    body={formatCreated}
+                    style={{width: '22%'}}
+                    sortable
+                />
+            )}
             <Column
                 field="updated_at"
                 header="Updated"
                 body={formatUpdated}
-                style={{width: '22%'}}
+                style={{width: !isMobile ? '22%' : '30%'}}
                 sortable
             />
         </DataTable>
