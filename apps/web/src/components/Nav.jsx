@@ -19,25 +19,24 @@ export default function Nav() {
 
     const pathname = useSelector(state => state?.router.location.pathname);
     const selectedDemoTab = useSelector(state => state?.demo.selectedTabIndex);
+    const emuVisible = (pathname === '/' && selectedDemoTab === 0) || pathname.startsWith('/projects/');
+
     const userId = useSelector(state => state?.identity.userId);
     const lang = useSelector(state => state?.project.lang);
-    const isMobile = useSelector(state => state?.window.isMobile);
+    const items = getMenuItems(navigate, userId, dispatch, lang, emuVisible);
 
-    const emuVisible = (pathname === '/' && selectedDemoTab === 0) || pathname.startsWith('/projects/');
+    const isMobile = useSelector(state => state?.window.isMobile);
+    const className = isMobile ? '' : 'px-2 pt-2';
 
     useEffect(() => {
         dispatch(getUserInfo());
     }, []);
 
-    const items = getMenuItems(navigate, userId, dispatch, lang, emuVisible);
-
-    const className = isMobile ? '' : 'px-2 pt-2';
-
     return (
         <div className={className}>
             <Menubar
                 model={items}
-                start={<img alt="logo" src="/logo.png" height={"40"} className="mx-2"/>}
+                start={<img alt="logo" src="/logo.png" height={"40"} className="mx-1"/>}
                 style={{
                     borderRadius: isMobile ? 0 : '5px',
                     borderColor: '#1E1E1E'
