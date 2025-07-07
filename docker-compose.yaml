@@ -1,4 +1,3 @@
-version: '3'
 services:
 
   postgres:
@@ -42,13 +41,13 @@ services:
       - graphql-engine
       - serve
 
-  z88dk:
-    image: ghcr.io/zxplay/zxcoder-api-z88dk
-    restart: always
-
-  zxbasic:
-    image: ghcr.io/zxplay/zxcoder-api-zxbasic
-    restart: always
+#  z88dk:
+#    image: ghcr.io/zxplay/zxcoder-api-z88dk
+#    restart: always
+#
+#  zxbasic:
+#    image: ghcr.io/zxplay/zxcoder-api-zxbasic
+#    restart: always
 
 volumes:
   pg_data:
