@@ -20,13 +20,13 @@ jobs:
         include:
           - context: ./
             dockerfile: ./apps/web/Dockerfile
-            image: ghcr.io/zxplay/zxcoder
+            image: ghcr.io/stever/zxcoder
           - context: ./apps/proxy/
             dockerfile: ./apps/proxy/Dockerfile
-            image: ghcr.io/zxplay/zxcoder-proxy
+            image: ghcr.io/stever/zxcoder-proxy
           - context: ./apps/auth/
             dockerfile: ./apps/auth/Dockerfile
-            image: ghcr.io/zxplay/zxcoder-auth
+            image: ghcr.io/stever/zxcoder-auth
     permissions:
       contents: read
       packages: write
