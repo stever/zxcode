@@ -28,19 +28,6 @@ npm run dev
 
 Launch the URL for the proxied web server on port 8080 (http://localhost:8080).
 
-### GitHub Codespaces
-
-This repository is configured to work with GitHub Codespaces. To use it, click the "Code" button and select 
-"Open with Codespaces". This will create a new Codespace for you to work in. Once the Codespace is ready, 
-you can open a terminal and run the following commands to start the development server.
-
-```bash
-npm install
-npm run dev
-```
-
-Launch the URL for the proxied web server on port 8080 (http://localhost:8080).
-
 ### Docker Commands
 
 Remove docker compose deployment to start over:
