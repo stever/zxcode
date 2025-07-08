@@ -1,6 +1,7 @@
 {
   "name": "zxcoder",
   "private": true,
+  "packageManager": "npm@11.2.0",
   "scripts": {
     "dev": "turbo run dev",
     "test": "turbo run test",
@@ -12,6 +13,6 @@
     "apps/*"
   ],
   "devDependencies": {
-    "turbo": "^1.4.5"
+    "turbo": "^2.5.4"
   }
 }
