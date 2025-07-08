@@ -30,11 +30,21 @@ internal class SessionTokenCookieReader
     public string? GetAuthToken()
     {
         if (_token == null) return null;
-        dynamic props = _token.Payload["props"];
-        if (props == null) return null;
-        var authToken = props.auth;
-        if (authToken == null) return null;
-        string str = authToken.ToString();
-        return str.Trim('"');
+        
+        if (!_token.Payload.TryGetValue("props", out var propsObj))
+            return null;
+            
+        if (propsObj is System.Text.Json.JsonElement jsonElement)
+        {
+            if (jsonElement.ValueKind == System.Text.Json.JsonValueKind.Null)
+                return null;
+                
+            if (jsonElement.TryGetProperty("auth", out var authProperty))
+            {
+                return authProperty.GetString();
+            }
+        }
+        
+        return null;
     }
 }

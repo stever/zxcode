@@ -131,7 +131,7 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
     basicMenu.items.push(newBas2Tap);
 
     // NOTE: Boriel ZX Basic projects are supported by an API which is not currently provided in production.
-    if (Constants.isDev) basicMenu.items.push(newBoriel);
+    if (Constants.enableBoriel) basicMenu.items.push(newBoriel);
 
     const cMenu = {
         label: 'C',
@@ -141,7 +141,7 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
     cMenu.items.push(newSdcc);
 
     // NOTE: Z88DK projects are supported by an API which is not currently provided in production.
-    if (Constants.isDev) cMenu.items.push(newZ88dk);
+    if (Constants.enableZ88dk) cMenu.items.push(newZ88dk);
 
     const projectMenu = {
         label: 'Project',
@@ -225,7 +225,7 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
 
     // NOTE: Projects not implemented so menu item is only shown in development.
     if (Constants.isDev) viewMenu.items.push(viewProfileMenuItem);
-    
+
     viewMenu.items.push(viewProjectsMenuItem);
 
     const infoMenu = {

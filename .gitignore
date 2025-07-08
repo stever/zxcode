@@ -4,3 +4,5 @@ node_modules/
 .graphqlconfig
 .env
 /apps/web/es5/
+
+apps/auth/appsettings.Development.json
