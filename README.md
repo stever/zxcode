@@ -52,12 +52,12 @@ docker compose up --build -d
 
 ### HTTP Local Ports Used
 
-| Port | Purpose             | Protocol |
-| ---- | ------------------- | -------- |
-| 4000 | Hasura GraphQL      | HTTP     |
-| 5000 | Auth                | HTTP     |
-| 8000 | React               | HTTP     |
-| 8080 | Proxy               | HTTP     |
+| Port | Purpose        | Protocol |
+|------|----------------|----------|
+| 4000 | Hasura GraphQL | HTTP     |
+| 5000 | Auth           | HTTP     |
+| 8000 | React          | HTTP     |
+| 8080 | Proxy          | HTTP     |
 
 ## JSSpeccy3 Core
 
