@@ -13,6 +13,7 @@
     "apps/*"
   ],
   "devDependencies": {
+    "nodemon": "^3.1.10",
     "turbo": "^2.5.4"
   }
 }
