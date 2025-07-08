@@ -2,7 +2,7 @@
     redir /auth /auth/
     handle /auth/* {
         uri strip_prefix /auth
-        reverse_proxy auth:80
+        reverse_proxy auth:8080
     }
 
     redir /api /api/
