@@ -4,7 +4,7 @@ COPY apps/web/Caddyfile /etc/caddy/Caddyfile
 FROM node:19 AS npmbuild
 WORKDIR /project
 COPY . .
-RUN npm install
+RUN npm install --legacy-peer-deps
 RUN npm run build
 
 FROM base AS final
