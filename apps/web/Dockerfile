@@ -1,7 +1,7 @@
 FROM caddy:2 AS base
 COPY apps/web/Caddyfile /etc/caddy/Caddyfile
 
-FROM node:20 AS npmbuild
+FROM node:22 AS npmbuild
 WORKDIR /project
 COPY . .
 RUN npm install --legacy-peer-deps
