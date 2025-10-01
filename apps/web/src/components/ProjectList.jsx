@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from "react";
 import {useDispatch, useSelector} from "react-redux";
 import {Link} from "react-router-dom";
-import formatDistance from "date-fns/formatDistance";
+import { formatDistance } from "date-fns";
 import {DataTable} from "primereact/datatable";
 import {Column} from "primereact/column";
 import {
