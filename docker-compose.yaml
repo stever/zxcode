@@ -43,7 +43,7 @@ services:
       - serve
 
   z88dk:
-    image: ghcr.io/zxplay/zxcoder-api-z88dk
+    image: ghcr.io/stever/zxcoder-api-z88dk
     restart: always
 
   zxbasic:
