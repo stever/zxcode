@@ -17,6 +17,8 @@ import {dashboardLock} from "../dashboard_lock";
 import clsx from "clsx";
 import {Dialog} from "primereact/dialog";
 import {InputText} from "primereact/inputtext";
+import {Divider} from "primereact/divider";
+import ProjectVisibilityToggle from "./ProjectVisibilityToggle";
 
 export function ProjectEditor() {
     const dispatch = useDispatch();
@@ -31,6 +33,10 @@ export function ProjectEditor() {
     const savedCode = useSelector(state => state?.project.savedCode);
     const isMobile = useSelector(state => state?.window.isMobile);
     const projectName = useSelector(state => state?.project.title);
+    const projectId = useSelector(state => state?.project.id);
+    const isPublic = useSelector(state => state?.project.isPublic);
+    const projectSlug = useSelector(state => state?.project.slug);
+    const userId = useSelector(state => state?.identity.userId);
 
     let mode;
     switch (lang) {
@@ -124,9 +130,24 @@ export function ProjectEditor() {
             <Button
                 label="Delete"
                 icon="pi pi-times"
-                className="p-button-outlined p-button-danger mt-2"
+                className="p-button-outlined p-button-danger mt-2 mr-2"
                 onClick={(e) => deleteConfirm(e)}
             />
+            {userId && projectId && (
+                <>
+                    <Divider layout="vertical" className="hidden md:inline-flex" />
+                    <div className="mt-2 inline-flex">
+                        <ProjectVisibilityToggle
+                            project={{
+                                project_id: projectId,
+                                is_public: isPublic,
+                                slug: projectSlug
+                            }}
+                            userId={userId}
+                        />
+                    </div>
+                </>
+            )}
             <ConfirmPopup/>
             <Dialog
                 header="Rename Project"

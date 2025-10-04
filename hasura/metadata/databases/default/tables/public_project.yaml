@@ -15,6 +15,8 @@ insert_permissions:
         - code
         - lang
         - title
+        - slug
+        - is_public
 select_permissions:
   - role: public
     permission:
@@ -27,6 +29,7 @@ select_permissions:
         - created_at
         - lang
         - is_public
+        - slug
       filter:
         is_public:
           _eq: true
@@ -40,6 +43,8 @@ select_permissions:
         - project_id
         - title
         - updated_at
+        - is_public
+        - slug
       filter:
         owner_user_id:
           _eq: X-Hasura-User-Id
@@ -50,6 +55,8 @@ update_permissions:
       columns:
         - code
         - title
+        - is_public
+        - slug
       filter:
         owner_user_id:
           _eq: X-Hasura-User-Id
