@@ -4,6 +4,7 @@ export const actionTypes = {
     subscribeToProjectListCallback: 'projectList/subscribeToProjectListCallback',
     unsubscribeFromProjectList: 'projectList/unsubscribeFromProjectList',
     receiveprojectListQueryResult: 'projectList/receiveprojectListQueryResult',
+    setProjectListPreferences: 'projectList/setProjectListPreferences',
 };
 
 export const reset = () => ({
@@ -26,4 +27,9 @@ export const unsubscribeFromProjectList = () => ({
 export const receiveprojectListQueryResult = (result) => ({
     type: actionTypes.receiveprojectListQueryResult,
     result
+});
+
+export const setProjectListPreferences = (preferences) => ({
+    type: actionTypes.setProjectListPreferences,
+    preferences
 });

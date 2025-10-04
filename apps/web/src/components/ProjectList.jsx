@@ -6,7 +6,8 @@ import {DataTable} from "primereact/datatable";
 import {Column} from "primereact/column";
 import {
     subscribeToProjectList,
-    unsubscribeFromProjectList
+    unsubscribeFromProjectList,
+    setProjectListPreferences
 } from "../redux/projectList/actions";
 import {Dropdown} from "primereact/dropdown";
 
@@ -18,8 +19,16 @@ export default function ProjectList() {
     const userSlug = useSelector(state => state?.identity.userSlug);
     const userId = useSelector(state => state?.identity.userId);
 
-    const [first, setFirst] = useState(0);
-    const [rows, setRows] = useState(10);
+    // Get preferences from Redux store
+    const storedRowsPerPage = useSelector(state => state?.projectList.rowsPerPage);
+    const storedCurrentPage = useSelector(state => state?.projectList.currentPage);
+    const storedSortField = useSelector(state => state?.projectList.sortField);
+    const storedSortOrder = useSelector(state => state?.projectList.sortOrder);
+
+    const [first, setFirst] = useState(storedCurrentPage);
+    const [rows, setRows] = useState(storedRowsPerPage);
+    const [sortField, setSortField] = useState(storedSortField);
+    const [sortOrder, setSortOrder] = useState(storedSortOrder);
 
     useEffect(() => {
         dispatch(subscribeToProjectList());
@@ -77,6 +86,21 @@ export default function ProjectList() {
     const onPage = (event) => {
         setFirst(event.first);
         setRows(event.rows);
+        // Save preferences to Redux
+        dispatch(setProjectListPreferences({
+            currentPage: event.first,
+            rowsPerPage: event.rows
+        }));
+    }
+
+    const onSort = (event) => {
+        setSortField(event.sortField);
+        setSortOrder(event.sortOrder);
+        // Save preferences to Redux
+        dispatch(setProjectListPreferences({
+            sortField: event.sortField,
+            sortOrder: event.sortOrder
+        }));
     }
 
     const paginatorTemplate = {
@@ -121,6 +145,9 @@ export default function ProjectList() {
             first={first}
             rows={rows}
             onPage={onPage}
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onSort={onSort}
             paginatorClassName="justify-content-end"
             className="mt-6"
             responsiveLayout="scroll">
