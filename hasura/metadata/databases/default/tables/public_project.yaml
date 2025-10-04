@@ -49,8 +49,11 @@ select_permissions:
         - is_public
         - slug
       filter:
-        owner_user_id:
-          _eq: X-Hasura-User-Id
+        _or:
+          - owner_user_id:
+              _eq: X-Hasura-User-Id
+          - is_public:
+              _eq: true
       allow_aggregations: true
 update_permissions:
   - role: zxplay-user
