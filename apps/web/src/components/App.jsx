@@ -1,7 +1,7 @@
 import React from "react";
-import {useSelector} from "react-redux";
-import {Route, Routes} from "react-router-dom";
-import {Titled} from "react-titled";
+import { useSelector } from "react-redux";
+import { Route, Routes } from "react-router-dom";
+import { Titled } from "react-titled";
 import "primereact/resources/themes/md-dark-indigo/theme.css";
 import "primereact/resources/primereact.min.css";
 import "primeicons/primeicons.css";
@@ -25,42 +25,124 @@ import ErrorPage from "./ErrorPage";
 import clsx from "clsx";
 
 export default function App() {
-    const err = useSelector(state => state?.error.msg);
-    const isMobile = useSelector(state => state?.window.isMobile);
-    const className = clsx('pb-1', isMobile ? 'mobile' : 'desktop');
+  const err = useSelector((state) => state?.error.msg);
+  const isMobile = useSelector((state) => state?.window.isMobile);
+  const className = clsx("pb-1", isMobile ? "mobile" : "desktop");
 
-    return (
-        <Titled title={() => 'ZX Coder'}>
-            <RenderEmulator/>
-            <LoadingScreen/>
-            <LockScreen/>
-            <div className={className}>
-                <Nav/>
-                {err &&
-                    <ErrorPage msg={err}/>
+  return (
+    <Titled title={() => "ZX Code"}>
+      <RenderEmulator />
+      <LoadingScreen />
+      <LockScreen />
+      <div className={className}>
+        <Nav />
+        {err && <ErrorPage msg={err} />}
+        {!err && (
+          <ErrorBoundary>
+            <Routes>
+              <Route exact path="/" element={<HomePage />} />
+              <Route
+                exact
+                path="/about"
+                element={
+                  <MaxWidth>
+                    <AboutPage />
+                  </MaxWidth>
                 }
-                {!err &&
-                    <ErrorBoundary>
-                        <Routes>
-                            <Route exact path="/" element={<HomePage/>}/>
-                            <Route exact path="/about" element={<MaxWidth><AboutPage/></MaxWidth>}/>
-                            <Route exact path="/privacy-policy" element={<MaxWidth><PrivacyPolicyPage/></MaxWidth>}/>
-                            <Route exact path="/terms-of-use" element={<MaxWidth><TermsOfUsePage/></MaxWidth>}/>
-                            <Route exact path="/new/asm" element={<MaxWidth><NewProjectPage type="asm"/></MaxWidth>}/>
-                            <Route exact path="/new/basic" element={<MaxWidth><NewProjectPage type="basic"/></MaxWidth>}/>
-                            <Route exact path="/new/bas2tap" element={<MaxWidth><NewProjectPage type="bas2tap"/></MaxWidth>}/>
-                            <Route exact path="/new/c" element={<MaxWidth><NewProjectPage type="c"/></MaxWidth>}/>
-                            <Route exact path="/new/sdcc" element={<MaxWidth><NewProjectPage type="sdcc"/></MaxWidth>}/>
-                            <Route exact path="/new/zmac" element={<MaxWidth><NewProjectPage type="zmac"/></MaxWidth>}/>
-                            <Route exact path="/new/zxbasic" element={<MaxWidth><NewProjectPage type="zxbasic"/></MaxWidth>}/>
-                            <Route exact path="/projects/:id" element={<ProjectPage/>}/>
-                            <Route exact path="/u/:id" element={<YourProfilePage/>}/>
-                            <Route exact path="/u/:id/projects" element={<YourProjectsPage/>}/>
-                            <Route path="*" element={<ErrorNotFoundPage/>}/>
-                        </Routes>
-                    </ErrorBoundary>
+              />
+              <Route
+                exact
+                path="/privacy-policy"
+                element={
+                  <MaxWidth>
+                    <PrivacyPolicyPage />
+                  </MaxWidth>
                 }
-            </div>
-        </Titled>
-    )
+              />
+              <Route
+                exact
+                path="/terms-of-use"
+                element={
+                  <MaxWidth>
+                    <TermsOfUsePage />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
+                path="/new/asm"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="asm" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
+                path="/new/basic"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="basic" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
+                path="/new/bas2tap"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="bas2tap" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
+                path="/new/c"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="c" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
+                path="/new/sdcc"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="sdcc" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
+                path="/new/zmac"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="zmac" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
+                path="/new/zxbasic"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="zxbasic" />
+                  </MaxWidth>
+                }
+              />
+              <Route exact path="/projects/:id" element={<ProjectPage />} />
+              <Route exact path="/u/:id" element={<YourProfilePage />} />
+              <Route
+                exact
+                path="/u/:id/projects"
+                element={<YourProjectsPage />}
+              />
+              <Route path="*" element={<ErrorNotFoundPage />} />
+            </Routes>
+          </ErrorBoundary>
+        )}
+      </div>
+    </Titled>
+  );
 }
