@@ -27,6 +27,7 @@ export function ProjectEditor() {
 
     const [renameDialogVisible, setRenameDialogVisible] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
+    const [newProjectSlug, setNewProjectSlug] = useState('');
 
     const lang = useSelector(state => state?.project.lang);
     const code = useSelector(state => state?.project.code);
@@ -120,9 +121,9 @@ export function ProjectEditor() {
                 icon="pi pi-eraser"
                 className="p-button-outlined mt-2 mr-2"
                 onClick={() => {
-                    if (!newProjectName) {
-                        setNewProjectName(projectName);
-                    }
+                    // Always set to current values when opening
+                    setNewProjectName(projectName || '');
+                    setNewProjectSlug(projectSlug || '');
                     setRenameDialogVisible(true);
                     setTimeout(() => renameInputReference.current.focus(), 100);
                 }}
@@ -161,6 +162,7 @@ export function ProjectEditor() {
                             icon="pi pi-times"
                             onClick={() => {
                                 setNewProjectName('');
+                                setNewProjectSlug('');
                                 setRenameDialogVisible(false);
                             }}
                             className="p-button-text"
@@ -169,8 +171,9 @@ export function ProjectEditor() {
                             label="OK"
                             icon="pi pi-check"
                             onClick={() => {
-                                dispatch(renameProject(newProjectName));
+                                dispatch(renameProject(newProjectName, newProjectSlug));
                                 setNewProjectName('');
+                                setNewProjectSlug('');
                                 setRenameDialogVisible(false);
                             }}
                             autoFocus
@@ -178,26 +181,50 @@ export function ProjectEditor() {
                     </>
                 )}
             >
-                <div className="flex flex-column gap-2">
-                    <label htmlFor="project-name">Project Name</label>
-                    <InputText
-                        id="project-name"
-                        aria-describedby="project-name-help"
-                        value={newProjectName}
-                        onChange={(e) => setNewProjectName(e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                dispatch(renameProject(newProjectName));
-                                setNewProjectName('');
-                                setRenameDialogVisible(false);
-                            }
-                        }}
-                        ref={renameInputReference}
-                    />
-                    <small id="project-name-help">
-                        Update or enter text to rename the project.
-                    </small>
+                <div className="flex flex-column gap-3">
+                    <div className="flex flex-column gap-2">
+                        <label htmlFor="project-name">Project Name</label>
+                        <InputText
+                            id="project-name"
+                            aria-describedby="project-name-help"
+                            value={newProjectName}
+                            onChange={(e) => setNewProjectName(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    dispatch(renameProject(newProjectName, newProjectSlug));
+                                    setNewProjectName('');
+                                    setNewProjectSlug('');
+                                    setRenameDialogVisible(false);
+                                }
+                            }}
+                            ref={renameInputReference}
+                        />
+                        <small id="project-name-help">
+                            Update or enter text to rename the project.
+                        </small>
+                    </div>
+                    <div className="flex flex-column gap-2">
+                        <label htmlFor="project-slug">URL Slug</label>
+                        <InputText
+                            id="project-slug"
+                            aria-describedby="project-slug-help"
+                            value={newProjectSlug}
+                            onChange={(e) => setNewProjectSlug(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    dispatch(renameProject(newProjectName, newProjectSlug));
+                                    setNewProjectName('');
+                                    setNewProjectSlug('');
+                                    setRenameDialogVisible(false);
+                                }
+                            }}
+                        />
+                        <small id="project-slug-help">
+                            Optional: Custom URL slug for the project. Leave empty to auto-generate from title.
+                        </small>
+                    </div>
                 </div>
             </Dialog>
         </>

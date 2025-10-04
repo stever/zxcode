@@ -54,7 +54,37 @@ function* handleCreateNewProjectActions(action) {
         const userId = yield select((state) => state.identity.userId);
 
         // Generate slug from the title
-        const slug = generateSlug(action.title);
+        let slug = generateSlug(action.title);
+
+        // Check if slug already exists and find a unique one
+        const checkSlugQuery = gql`
+            query CheckProjectSlug($slug: String!) {
+                project(where: {slug: {_eq: $slug}}) {
+                    slug
+                }
+            }
+        `;
+
+        // Keep checking and incrementing until we find a unique slug
+        let finalSlug = slug;
+        let counter = 1;
+
+        while (true) {
+            const checkResponse = yield call(gqlFetch, userId, checkSlugQuery, {
+                slug: finalSlug
+            });
+
+            // If no project exists with this slug, we can use it
+            if (!checkResponse?.data?.project?.length) {
+                break;
+            }
+
+            // Otherwise, try with a suffix
+            finalSlug = `${slug}-${counter}`;
+            counter++;
+        }
+
+        slug = finalSlug;
 
         const query = gql`
             mutation ($title: String!, $lang: String!, $slug: String!) {
@@ -83,13 +113,9 @@ function* handleCreateNewProjectActions(action) {
 
         yield put(receiveLoadedProject(id, action.title, action.lang, '', false, projectSlug));
 
-        // Use slug-based URL if both user and project slugs are available
-        const userSlug = yield select((state) => state?.identity.userSlug);
-        if (userSlug && projectSlug) {
-            history.push(`/u/${userSlug}/${projectSlug}`);
-        } else {
-            history.push(`/projects/${id}`);
-        }
+        // For newly created projects, use the UUID URL to avoid race conditions
+        // The project might not be immediately queryable through the slug-based nested query
+        history.push(`/projects/${id}`);
     } catch (e) {
         handleException(e);
     }
@@ -208,9 +234,89 @@ function* handleRenameProjectActions(action) {
     try {
         const userId = yield select((state) => state.identity.userId);
         const projectId = yield select((state) => state.project.id);
+        const currentSlug = yield select((state) => state.project.slug);
 
-        // Generate new slug from the new title
-        const slug = generateSlug(action.title);
+        console.log('Rename project action:', {
+            title: action.title,
+            providedSlug: action.slug,
+            currentSlug: currentSlug
+        });
+
+        // Determine the desired slug:
+        // - If slug is provided and not empty, use it (run through generateSlug to sanitize)
+        // - Otherwise, generate from title
+        let slug;
+        if (action.slug && action.slug.trim()) {
+            // User provided a custom slug
+            slug = generateSlug(action.slug);
+        } else {
+            // No slug provided, generate from title
+            slug = generateSlug(action.title);
+        }
+
+        console.log('Generated slug:', slug);
+
+        // If the slug hasn't changed, skip the uniqueness check
+        if (slug === currentSlug) {
+            // Only update the title, keep the same slug
+            const query = gql`
+                mutation ($project_id: uuid!, $title: String!) {
+                    update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {title: $title}) {
+                        project_id
+                        slug
+                    }
+                }
+            `;
+
+            const variables = {
+                'project_id': projectId,
+                'title': action.title
+            };
+
+            const response = yield call(gqlFetch, userId, query, variables);
+            console.assert(response?.data?.update_project_by_pk?.project_id, response);
+
+            yield put(setProjectTitle(action.title));
+            const lang = yield select((state) => state.project.lang);
+            const code = yield select((state) => state.project.code);
+            const isPublic = yield select((state) => state.project.isPublic);
+            yield put(receiveLoadedProject(projectId, action.title, lang, code, isPublic, currentSlug));
+            return;
+        }
+
+        // Check if slug already exists for other projects (not this one)
+        const checkSlugQuery = gql`
+            query CheckProjectSlugForRename($slug: String!, $project_id: uuid!) {
+                project(where: {
+                    slug: {_eq: $slug},
+                    project_id: {_neq: $project_id}
+                }) {
+                    slug
+                }
+            }
+        `;
+
+        // Keep checking and incrementing until we find a unique slug
+        let finalSlug = slug;
+        let counter = 1;
+
+        while (true) {
+            const checkResponse = yield call(gqlFetch, userId, checkSlugQuery, {
+                slug: finalSlug,
+                project_id: projectId
+            });
+
+            // If no other project exists with this slug, we can use it
+            if (!checkResponse?.data?.project?.length) {
+                break;
+            }
+
+            // Otherwise, try with a suffix
+            finalSlug = `${slug}-${counter}`;
+            counter++;
+        }
+
+        slug = finalSlug;
 
         const query = gql`
             mutation ($project_id: uuid!, $title: String!, $slug: String!) {
@@ -227,13 +333,28 @@ function* handleRenameProjectActions(action) {
             'slug': slug
         };
 
+        console.log('Updating project with variables:', variables);
+
         // noinspection JSCheckFunctionSignatures
         const response = yield call(gqlFetch, userId, query, variables);
+
+        console.log('Update response:', response?.data);
+
+        if (!response?.data?.update_project_by_pk) {
+            console.error('Failed to update project:', response);
+            throw new Error('Failed to update project');
+        }
 
         // noinspection JSUnresolvedVariable
         console.assert(response?.data?.update_project_by_pk?.project_id, response);
 
         const newSlug = response?.data?.update_project_by_pk?.slug;
+        console.log('New slug from response:', newSlug);
+
+        // Verify the slug was actually updated
+        if (slug !== currentSlug && newSlug !== slug) {
+            console.error('Slug was not updated! Requested:', slug, 'Got:', newSlug);
+        }
         yield put(setProjectTitle(action.title));
 
         // Update project with new slug
@@ -241,6 +362,19 @@ function* handleRenameProjectActions(action) {
         const code = yield select((state) => state.project.code);
         const isPublic = yield select((state) => state.project.isPublic);
         yield put(receiveLoadedProject(projectId, action.title, lang, code, isPublic, newSlug));
+
+        // If the slug changed, update the URL
+        if (newSlug !== currentSlug) {
+            const userSlug = yield select((state) => state?.identity.userSlug);
+            const currentPath = yield select((state) => state?.router?.location?.pathname);
+
+            // Only update URL if we're currently on a slug-based URL
+            if (currentPath && currentPath.includes(`/${currentSlug}`)) {
+                const newPath = `/u/${userSlug}/${newSlug}`;
+                console.log('Updating URL from', currentPath, 'to', newPath);
+                history.replace(newPath);
+            }
+        }
     } catch (e) {
         handleException(e);
     }
