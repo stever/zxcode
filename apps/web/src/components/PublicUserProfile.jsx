@@ -35,6 +35,7 @@ import {
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { getLanguageLabel } from "../lib/lang";
 
 const UPDATE_PROJECT_ORDER = gql`
   mutation UpdateProjectOrder($projectId: uuid!, $displayOrder: Int!) {
@@ -168,7 +169,10 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
           }}
           title="Drag to reorder"
         >
-          <i className="pi pi-arrows-alt" style={{ fontSize: "12px", color: "#aaa" }} />
+          <i
+            className="pi pi-arrows-alt"
+            style={{ fontSize: "12px", color: "#aaa" }}
+          />
         </div>
         <div className="flex flex-column h-full relative">
           <div
@@ -217,19 +221,6 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
       </Card>
     </div>
   );
-}
-
-function getLanguageLabel(lang) {
-  const labels = {
-    asm: "Z80 Assembly",
-    basic: "Sinclair BASIC",
-    bas2tap: "Sinclair BASIC",
-    c: "C (z88dk)",
-    sdcc: "SDCC",
-    zmac: "Z80 (zmac)",
-    zxbasic: "Boriel ZX BASIC",
-  };
-  return labels[lang] || lang;
 }
 
 function getLanguageColor(lang) {
@@ -535,7 +526,11 @@ export default function PublicUserProfile() {
               <div className="flex align-items-center justify-content-between">
                 <span>Public Projects ({projects?.length || 0})</span>
                 {isOwnProfile && isSaving && (
-                  <Tag severity="info" value="Saving order..." icon="pi pi-spin pi-spinner" />
+                  <Tag
+                    severity="info"
+                    value="Saving order..."
+                    icon="pi pi-spin pi-spinner"
+                  />
                 )}
               </div>
             }

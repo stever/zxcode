@@ -9,20 +9,8 @@ import { Message } from "primereact/message";
 import { Paginator } from "primereact/paginator";
 import { formatDistanceToNow } from "date-fns";
 import { fetchActivityFeed } from "../redux/social/actions";
+import { getLanguageLabel } from "../lib/lang";
 import { sep } from "../constants";
-
-function getLanguageLabel(lang) {
-  const labels = {
-    asm: "Z80 Assembly",
-    basic: "Sinclair BASIC",
-    bas2tap: "Sinclair BASIC",
-    c: "C (z88dk)",
-    sdcc: "SDCC",
-    zmac: "Z80 (zmac)",
-    zxbasic: "Boriel ZX BASIC",
-  };
-  return labels[lang] || lang;
-}
 
 function getLanguageColor(lang) {
   const colors = {
@@ -44,7 +32,9 @@ export default function ActivityFeed() {
   const activityFeed = useSelector((state) => state?.social.activityFeed || []);
   const feedLoading = useSelector((state) => state?.social.feedLoading);
   const feedPage = useSelector((state) => state?.social.feedPage || 0);
-  const feedTotalCount = useSelector((state) => state?.social.feedTotalCount || 0);
+  const feedTotalCount = useSelector(
+    (state) => state?.social.feedTotalCount || 0
+  );
   const feedPageSize = useSelector((state) => state?.social.feedPageSize || 20);
 
   useEffect(() => {
@@ -60,7 +50,10 @@ export default function ActivityFeed() {
   if (!currentUserId) {
     return (
       <Card className="m-2">
-        <Message severity="info" text="Please log in to view your activity feed" />
+        <Message
+          severity="info"
+          text="Please log in to view your activity feed"
+        />
       </Card>
     );
   }
@@ -84,7 +77,9 @@ export default function ActivityFeed() {
             Recent projects from users you follow
             {feedTotalCount > 0 && (
               <span className="ml-2">
-                (showing {feedPage * feedPageSize + 1} - {Math.min((feedPage + 1) * feedPageSize, feedTotalCount)} of {feedTotalCount})
+                (showing {feedPage * feedPageSize + 1} -{" "}
+                {Math.min((feedPage + 1) * feedPageSize, feedTotalCount)} of{" "}
+                {feedTotalCount})
               </span>
             )}
           </p>
@@ -94,9 +89,10 @@ export default function ActivityFeed() {
               <div className="flex flex-wrap gap-3">
                 {activityFeed.map((project) => {
                   const userSlug = project.owner?.slug;
-                  const projectUrl = project.slug && userSlug
-                    ? `/u/${userSlug}/${project.slug}`
-                    : `/projects/${project.project_id}`;
+                  const projectUrl =
+                    project.slug && userSlug
+                      ? `/u/${userSlug}/${project.slug}`
+                      : `/projects/${project.project_id}`;
 
                   return (
                     <div
@@ -155,7 +151,10 @@ export default function ActivityFeed() {
 
                             <div className="mt-auto text-400 text-sm relative z-1">
                               <div>
-                                by @{userSlug || project.owner?.greeting_name || "unknown"}
+                                by @
+                                {userSlug ||
+                                  project.owner?.greeting_name ||
+                                  "unknown"}
                               </div>
                               <div>
                                 Updated{" "}
