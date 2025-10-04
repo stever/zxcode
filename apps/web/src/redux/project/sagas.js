@@ -167,6 +167,7 @@ function* handleSaveCodeChangesActions(_) {
 function* handleDeleteProjectActions(_) {
     try {
         const userId = yield select((state) => state.identity.userId);
+        const userSlug = yield select((state) => state.identity.userSlug);
         const projectId = yield select((state) => state.project.id);
 
         const query = gql`
@@ -189,7 +190,8 @@ function* handleDeleteProjectActions(_) {
 
         yield put(reset());
         yield put(resetMachine());
-        history.push(`/u/${userId}/projects`);
+        // Use slug if available, otherwise fallback to userId
+        history.push(`/u/${userSlug || userId}/projects`);
     } catch (e) {
         handleException(e);
     }
