@@ -149,9 +149,11 @@ function* handleFetchFollowingActions(action) {
     }
 }
 
-function* handleFetchActivityFeedActions() {
+function* handleFetchActivityFeedActions(action) {
     try {
         const currentUserId = yield select((state) => state.identity.userId);
+        const pageSize = yield select((state) => state.social.feedPageSize);
+        const page = action.page !== undefined ? action.page : 0;
 
         // First get the list of users the current user is following
         const followingQuery = gql`
@@ -169,20 +171,31 @@ function* handleFetchActivityFeedActions() {
         const followingIds = followingResponse?.data?.user_follows?.map(f => f.following_id) || [];
 
         if (followingIds.length === 0) {
-            yield put(setActivityFeed([]));
+            yield put(setActivityFeed([], 0, page));
             return;
         }
 
-        // Then fetch projects from those users
+        // Then fetch projects from those users with pagination
         const query = gql`
-            query GetActivityFeed($user_ids: [uuid!]) {
+            query GetActivityFeed($user_ids: [uuid!], $limit: Int!, $offset: Int!) {
+                project_aggregate(
+                    where: {
+                        owner_user_id: {_in: $user_ids},
+                        is_public: {_eq: true}
+                    }
+                ) {
+                    aggregate {
+                        count
+                    }
+                }
                 project(
                     where: {
                         owner_user_id: {_in: $user_ids},
                         is_public: {_eq: true}
                     },
                     order_by: {updated_at: desc},
-                    limit: 50
+                    limit: $limit,
+                    offset: $offset
                 ) {
                     project_id
                     title
@@ -201,11 +214,14 @@ function* handleFetchActivityFeedActions() {
         `;
 
         const response = yield call(gqlFetch, currentUserId, query, {
-            user_ids: followingIds
+            user_ids: followingIds,
+            limit: pageSize,
+            offset: page * pageSize
         });
 
         const activities = response?.data?.project || [];
-        yield put(setActivityFeed(activities));
+        const totalCount = response?.data?.project_aggregate?.aggregate?.count || 0;
+        yield put(setActivityFeed(activities, totalCount, page));
     } catch (e) {
         handleException(e);
     }
