@@ -205,6 +205,15 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
     },
   };
 
+  const profileSettingsMenuItem = {
+    label: "Profile Settings",
+    icon: "pi pi-fw pi-cog",
+    disabled: !userId,
+    command: () => {
+      navigate(`/settings/profile`);
+    },
+  };
+
   const viewProjectsMenuItem = {
     label: "Your Projects",
     icon: "pi pi-fw pi-folder",
@@ -222,11 +231,9 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
 
   viewMenu.items.push(viewFullScreenMenuItem);
   viewMenu.items.push(sep);
-
-  // NOTE: Projects not implemented so menu item is only shown in development.
-  if (Constants.isDev) viewMenu.items.push(viewProfileMenuItem);
-
+  viewMenu.items.push(viewProfileMenuItem);
   viewMenu.items.push(viewProjectsMenuItem);
+  viewMenu.items.push(profileSettingsMenuItem);
 
   const infoMenu = {
     label: "Info",

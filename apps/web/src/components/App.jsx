@@ -18,7 +18,9 @@ import PrivacyPolicyPage from "./PrivacyPolicyPage";
 import TermsOfUsePage from "./TermsOfUsePage";
 import NewProjectPage from "./NewProjectPage";
 import ProjectPage from "./ProjectPage";
-import YourProfilePage from "./YourProfilePage";
+import PublicUserProfile from "./PublicUserProfile";
+import PublicProjectPage from "./PublicProjectPage";
+import UserProfileSettings from "./UserProfileSettings";
 import YourProjectsPage from "./YourProjectsPage";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
@@ -132,11 +134,21 @@ export default function App() {
                 }
               />
               <Route exact path="/projects/:id" element={<ProjectPage />} />
-              <Route exact path="/u/:id" element={<YourProfilePage />} />
+              <Route exact path="/u/:id" element={<PublicUserProfile />} />
+              <Route exact path="/u/:userSlug/:projectSlug" element={<PublicProjectPage />} />
               <Route
                 exact
                 path="/u/:id/projects"
                 element={<YourProjectsPage />}
+              />
+              <Route
+                exact
+                path="/settings/profile"
+                element={
+                  <MaxWidth>
+                    <UserProfileSettings />
+                  </MaxWidth>
+                }
               />
               <Route path="*" element={<ErrorNotFoundPage />} />
             </Routes>
