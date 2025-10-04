@@ -94,7 +94,7 @@ export function ProjectEditor() {
                 onChange={(cm, _) => dispatch(setCode(cm.getValue()))}
             />
             <Button
-                label="Run"
+                label="Play"
                 icon="pi pi-play"
                 className={clsx('mt-2 mr-2', isMobile && 'ml-2')}
                 onClick={() => {

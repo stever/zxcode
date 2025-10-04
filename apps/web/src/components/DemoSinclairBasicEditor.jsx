@@ -36,7 +36,7 @@ export function DemoSinclairBasicEditor() {
                 onChange={(cm, _) => dispatch(setSinclairBasicCode(cm.getValue()))}
             />
             <Button
-                label="Run"
+                label="Play"
                 icon="pi pi-play"
                 style={{marginTop: "8px"}}
                 onClick={() => {
