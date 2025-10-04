@@ -56,7 +56,7 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
   };
 
   const homeButton = {
-    label: "ZX Coder",
+    label: "ZX Code",
     command: () => {
       navigate("/");
     },
