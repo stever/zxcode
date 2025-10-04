@@ -5,6 +5,9 @@ object_relationships:
   - name: user
     using:
       foreign_key_constraint_on: owner_user_id
+  - name: owner
+    using:
+      foreign_key_constraint_on: owner_user_id
 insert_permissions:
   - role: zxplay-user
     permission:

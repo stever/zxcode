@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { Titled } from "react-titled";
 import { Card } from "primereact/card";
 import { Avatar } from "primereact/avatar";
@@ -13,6 +13,12 @@ import gql from "graphql-tag";
 import { gqlFetch } from "../graphql_fetch";
 import { sep } from "../constants";
 import { formatDistanceToNow } from "date-fns";
+import {
+  followUser,
+  unfollowUser,
+  setFollowingStatus,
+  setFollowCounts
+} from "../redux/social/actions";
 
 const GET_USER_BY_SLUG = gql`
   query GetUserBySlug($slug: String!) {
@@ -33,6 +39,15 @@ const GET_USER_BY_SLUG = gql`
         lang
         updated_at
         created_at
+      }
+      followers {
+        follower_id
+      }
+      following {
+        following_id
+      }
+      followers {
+        follower_id
       }
     }
   }
@@ -57,6 +72,15 @@ const GET_USER_BY_ID = gql`
         lang
         updated_at
         created_at
+      }
+      followers {
+        follower_id
+      }
+      following {
+        following_id
+      }
+      followers {
+        follower_id
       }
     }
   }
@@ -91,10 +115,14 @@ function getLanguageColor(lang) {
 export default function PublicUserProfile() {
   const { id } = useParams(); // This could be either slug or UUID
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
 
   const currentUserId = useSelector((state) => state?.identity.userId);
   const currentUserSlug = useSelector((state) => state?.identity.userSlug);
@@ -118,18 +146,38 @@ export default function PublicUserProfile() {
 
         let response;
         if (isUuid) {
-          response = await gqlFetch(null, GET_USER_BY_ID, { user_id: id });
+          response = await gqlFetch(null, GET_USER_BY_ID, {
+            user_id: id
+          });
           const userData = response?.data?.user_by_pk;
           setUser(userData);
+
+          // Set follow status and counts
+          if (userData) {
+            const isCurrentUserFollowing = userData.followers?.some(f => f.follower_id === currentUserId) || false;
+            setIsFollowing(isCurrentUserFollowing);
+            setFollowersCount(userData.followers?.length || 0);
+            setFollowingCount(userData.following?.length || 0);
+          }
 
           // If we have a slug, redirect to the slug-based URL
           if (userData?.slug) {
             navigate(`/u/${userData.slug}`, { replace: true });
           }
         } else {
-          response = await gqlFetch(null, GET_USER_BY_SLUG, { slug: id });
+          response = await gqlFetch(null, GET_USER_BY_SLUG, {
+            slug: id
+          });
           const userData = response?.data?.user?.[0] || null;
           setUser(userData);
+
+          // Set follow status and counts
+          if (userData) {
+            const isCurrentUserFollowing = userData.followers?.some(f => f.follower_id === currentUserId) || false;
+            setIsFollowing(isCurrentUserFollowing);
+            setFollowersCount(userData.followers?.length || 0);
+            setFollowingCount(userData.following?.length || 0);
+          }
 
           // If viewing own profile with outdated slug, redirect to new slug
           if (
@@ -151,6 +199,20 @@ export default function PublicUserProfile() {
 
     fetchUserProfile();
   }, [id, currentUserSlug, currentUserId, navigate]);
+
+  const handleFollowToggle = () => {
+    if (!currentUserId || !user) return;
+
+    if (isFollowing) {
+      dispatch(unfollowUser(user.user_id));
+      setIsFollowing(false);
+      setFollowersCount(prev => Math.max(0, prev - 1));
+    } else {
+      dispatch(followUser(user.user_id));
+      setIsFollowing(true);
+      setFollowersCount(prev => prev + 1);
+    }
+  };
 
   if (loading) {
     return (
@@ -225,7 +287,28 @@ export default function PublicUserProfile() {
                   <span className="text-500">Public projects:</span>
                   <span>{user.projects?.length || 0}</span>
                 </div>
+                <div className="flex justify-content-between mb-2">
+                  <span className="text-500">Followers:</span>
+                  <span>{followersCount}</span>
+                </div>
+                <div className="flex justify-content-between mb-2">
+                  <span className="text-500">Following:</span>
+                  <span>{followingCount}</span>
+                </div>
               </div>
+
+              {!isOwnProfile && currentUserId && (
+                <>
+                  <Divider />
+                  <Button
+                    label={isFollowing ? "Unfollow" : "Follow"}
+                    icon={isFollowing ? "pi pi-user-minus" : "pi pi-user-plus"}
+                    className="w-full"
+                    onClick={handleFollowToggle}
+                    severity={isFollowing ? "secondary" : "primary"}
+                  />
+                </>
+              )}
 
               {isOwnProfile && (
                 <>
