@@ -74,7 +74,7 @@ function* handleCreateNewProjectActions(action) {
         // noinspection JSUnresolvedVariable
         const id = response?.data?.insert_project_one?.project_id;
 
-        yield put(receiveLoadedProject(id, action.title, action.lang, ''));
+        yield put(receiveLoadedProject(id, action.title, action.lang, '', false, null));
         history.push(`/projects/${id}`);
     } catch (e) {
         handleException(e);
@@ -91,6 +91,8 @@ function* handleLoadProjectActions(action) {
                     title
                     lang
                     code
+                    is_public
+                    slug
                 }
             }
         `;
@@ -113,7 +115,7 @@ function* handleLoadProjectActions(action) {
             return;
         }
 
-        yield put(receiveLoadedProject(action.id, proj.title, proj.lang, proj.code));
+        yield put(receiveLoadedProject(action.id, proj.title, proj.lang, proj.code, proj.is_public, proj.slug));
 
         // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
         const isMobile = yield select((state) => state.window.isMobile);

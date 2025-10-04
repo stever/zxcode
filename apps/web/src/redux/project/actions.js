@@ -32,9 +32,9 @@ export const loadProject = (id) => ({
     id
 });
 
-export const receiveLoadedProject = (id, title, lang, code) => ({
+export const receiveLoadedProject = (id, title, lang, code, isPublic = false, slug = null) => ({
     type: actionTypes.receiveLoadedProject,
-    id, title, lang, code
+    id, title, lang, code, isPublic, slug
 });
 
 export const setCode = (code) => ({

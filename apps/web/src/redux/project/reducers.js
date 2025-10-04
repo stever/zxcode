@@ -11,7 +11,9 @@ const initialState = {
     title: undefined,
     code: '',
     savedCode: '',
-    errorItems: undefined
+    errorItems: undefined,
+    isPublic: false,
+    slug: undefined
 };
 
 // -----------------------------------------------------------------------------
@@ -45,7 +47,9 @@ function receiveLoadedProject(state, action) {
         lang: action.lang,
         code: action.code,
         savedCode: action.code,
-        selectedTabIndex: 0
+        selectedTabIndex: 0,
+        isPublic: action.isPublic,
+        slug: action.slug
     };
 }
 

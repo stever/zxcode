@@ -23,3 +23,48 @@ array_relationships:
         table:
           name: user_role
           schema: public
+select_permissions:
+  - role: public
+    permission:
+      columns:
+        - user_id
+        - username
+        - greeting_name
+        - created_at
+        - slug
+        - bio
+        - profile_is_public
+      filter:
+        profile_is_public:
+          _eq: true
+  - role: zxplay-user
+    permission:
+      columns:
+        - user_id
+        - username
+        - greeting_name
+        - full_name
+        - email_address
+        - created_at
+        - slug
+        - bio
+        - profile_is_public
+      filter:
+        _or:
+          - user_id:
+              _eq: X-Hasura-User-Id
+          - profile_is_public:
+              _eq: true
+update_permissions:
+  - role: zxplay-user
+    permission:
+      columns:
+        - greeting_name
+        - full_name
+        - email_address
+        - bio
+        - profile_is_public
+      filter:
+        user_id:
+          _eq: X-Hasura-User-Id
+      check: null
