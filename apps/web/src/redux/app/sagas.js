@@ -43,20 +43,24 @@ function* handleShowActiveEmulatorActions(_) {
     try {
         const projectId = yield select((state) => state.project.id);
         const projectSlug = yield select((state) => state.project.slug);
-        const userSlug = yield select((state) => state?.identity.userSlug);
+        const ownerSlug = yield select((state) => state.project.ownerSlug);
+        const currentUserSlug = yield select((state) => state?.identity.userSlug);
         const isProject = typeof projectId !== 'undefined';
         const currentPath = yield select((state) => state?.router?.location?.pathname);
 
         if (isProject) {
             // Don't change the URL if we're already on a project page
+            // Check if we're on ANY project page (with any user slug)
             const isOnProjectPage = currentPath?.includes(`/projects/${projectId}`) ||
-                                   (userSlug && projectSlug && currentPath?.includes(`/u/${userSlug}/${projectSlug}`));
+                                   (projectSlug && currentPath?.includes(`/${projectSlug}`));
 
             if (!isOnProjectPage) {
                 // We're not on a project page, navigate to one
                 let targetPath;
-                if (userSlug && projectSlug) {
-                    targetPath = `/u/${userSlug}/${projectSlug}`;
+                // Use the owner's slug if available, otherwise use current user's slug, otherwise use UUID
+                const effectiveUserSlug = ownerSlug || currentUserSlug;
+                if (effectiveUserSlug && projectSlug) {
+                    targetPath = `/u/${effectiveUserSlug}/${projectSlug}`;
                 } else {
                     targetPath = `/projects/${projectId}`;
                 }

@@ -155,7 +155,7 @@ function* handleLoadProjectActions(action) {
             return;
         }
 
-        yield put(receiveLoadedProject(action.id, proj.title, proj.lang, proj.code, proj.is_public, proj.slug));
+        yield put(receiveLoadedProject(action.id, proj.title, proj.lang, proj.code, proj.is_public, proj.slug, action.ownerSlug));
 
         // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
         const isMobile = yield select((state) => state.window.isMobile);
