@@ -20,8 +20,8 @@ export default function ProjectList() {
     const userId = useSelector(state => state?.identity.userId);
 
     // Get preferences from Redux store
-    const storedRowsPerPage = useSelector(state => state?.projectList.rowsPerPage);
-    const storedCurrentPage = useSelector(state => state?.projectList.currentPage);
+    const storedRowsPerPage = useSelector(state => state?.projectList.rowsPerPage) || 10;
+    const storedCurrentPage = useSelector(state => state?.projectList.currentPage) || 0;
     const storedSortField = useSelector(state => state?.projectList.sortField);
     const storedSortOrder = useSelector(state => state?.projectList.sortOrder);
 
@@ -29,6 +29,14 @@ export default function ProjectList() {
     const [rows, setRows] = useState(storedRowsPerPage);
     const [sortField, setSortField] = useState(storedSortField);
     const [sortOrder, setSortOrder] = useState(storedSortOrder);
+
+    // Update local state when Redux state changes (e.g., from localStorage on mount)
+    useEffect(() => {
+        setFirst(storedCurrentPage);
+        setRows(storedRowsPerPage);
+        setSortField(storedSortField);
+        setSortOrder(storedSortOrder);
+    }, [storedCurrentPage, storedRowsPerPage, storedSortField, storedSortOrder]);
 
     useEffect(() => {
         dispatch(subscribeToProjectList());
