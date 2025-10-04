@@ -55,9 +55,10 @@ export const deleteProject = () => ({
     type: actionTypes.deleteProject
 });
 
-export const renameProject = (title) => ({
+export const renameProject = (title, slug = null) => ({
     type: actionTypes.renameProject,
-    title
+    title,
+    slug
 });
 
 export const setProjectTitle = (title) => ({

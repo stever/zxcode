@@ -9,20 +9,17 @@ import { gqlFetch } from "../graphql_fetch";
 import { loadProject } from "../redux/project/actions";
 import ProjectPage from "./ProjectPage";
 
-const GET_PROJECT_BY_SLUGS = gql`
-  query GetProjectBySlugs($userSlug: String!, $projectSlug: String!) {
-    user(where: { slug: { _eq: $userSlug } }, limit: 1) {
-      user_id
+// Simple query to get project by slug
+// Hasura's RLS will handle filtering to only show projects the current user can access
+const GET_PROJECT_BY_SLUG = gql`
+  query GetProjectBySlug($projectSlug: String!) {
+    project(where: { slug: { _eq: $projectSlug } }, limit: 1) {
+      project_id
+      title
       slug
-      profile_is_public
-      projects(where: { slug: { _eq: $projectSlug } }, limit: 1) {
-        project_id
-        title
-        slug
-        is_public
-        lang
-        code
-      }
+      is_public
+      lang
+      code
     }
   }
 `;
@@ -39,43 +36,41 @@ export default function PublicProjectPage() {
   const currentUserId = useSelector(state => state?.identity.userId);
 
   useEffect(() => {
-    fetchProject();
-  }, [userSlug, projectSlug]);
+    // Wait a moment for auth to initialize if needed
+    if (currentUserId === undefined) {
+      const timer = setTimeout(() => {
+        fetchProject();
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      fetchProject();
+    }
+  }, [userSlug, projectSlug, currentUserId]);
 
   const fetchProject = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await gqlFetch(null, GET_PROJECT_BY_SLUGS, {
-        userSlug,
+      // Fetch the specific project by slug
+      const response = await gqlFetch(currentUserId || null, GET_PROJECT_BY_SLUG, {
         projectSlug
       });
 
-      const user = response?.data?.user?.[0];
-      const project = user?.projects?.[0];
-
-      if (!user) {
-        setError("User not found");
-        return;
-      }
+      const project = response?.data?.project?.[0];
 
       if (!project) {
-        setError("Project not found");
+        if (!currentUserId) {
+          setError("Please log in to view this project");
+        } else {
+          setError("Project not found");
+        }
         return;
       }
 
-      // Check if project is public or user owns it
-      const isOwner = currentUserId && user.user_id === currentUserId;
-      if (!project.is_public && !isOwner) {
-        setError("This project is private");
-        return;
-      }
-
-      // Load the project and set the ID
+      // Load the project
       dispatch(loadProject(project.project_id));
       setProjectId(project.project_id);
-      setLoading(false);
 
     } catch (err) {
       console.error("Failed to fetch project:", err);
