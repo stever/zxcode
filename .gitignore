@@ -1,8 +1,8 @@
+.env
+.graphqlconfig
 .idea/
 .turbo/
-node_modules/
-.graphqlconfig
-.env
+/apps/auth/appsettings.Development.json
 /apps/web/es5/
-
-apps/auth/appsettings.Development.json
+CLAUDE.md
+node_modules/
