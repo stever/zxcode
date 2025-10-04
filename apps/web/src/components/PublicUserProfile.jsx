@@ -19,6 +19,34 @@ import {
   setFollowingStatus,
   setFollowCounts,
 } from "../redux/social/actions";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+const UPDATE_PROJECT_ORDER = gql`
+  mutation UpdateProjectOrder($projectId: uuid!, $displayOrder: Int!) {
+    update_project_by_pk(
+      pk_columns: { project_id: $projectId }
+      _set: { display_order: $displayOrder }
+    ) {
+      project_id
+      display_order
+    }
+  }
+`;
 
 const GET_USER_BY_SLUG = gql`
   query GetUserBySlug($slug: String!) {
@@ -31,7 +59,7 @@ const GET_USER_BY_SLUG = gql`
       slug
       projects(
         where: { is_public: { _eq: true } }
-        order_by: { updated_at: desc }
+        order_by: [{ display_order: asc }, { updated_at: desc }]
       ) {
         project_id
         title
@@ -39,6 +67,7 @@ const GET_USER_BY_SLUG = gql`
         lang
         updated_at
         created_at
+        display_order
       }
       followers {
         follower_id
@@ -64,7 +93,7 @@ const GET_USER_BY_ID = gql`
       slug
       projects(
         where: { is_public: { _eq: true } }
-        order_by: { updated_at: desc }
+        order_by: [{ display_order: asc }, { updated_at: desc }]
       ) {
         project_id
         title
@@ -72,6 +101,7 @@ const GET_USER_BY_ID = gql`
         lang
         updated_at
         created_at
+        display_order
       }
       followers {
         follower_id
@@ -85,6 +115,86 @@ const GET_USER_BY_ID = gql`
     }
   }
 `;
+
+// Sortable project card component for drag and drop
+function SortableProjectCard({ project, projectUrl, isDragging }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging: isSortableDragging,
+  } = useSortable({ id: project.project_id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    flexBasis: "448px",
+    flexGrow: 0,
+    flexShrink: 0,
+    opacity: isSortableDragging ? 0.5 : 1,
+    cursor: isDragging ? "grabbing" : "grab",
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <Card
+        className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden"
+        style={{
+          border: "none",
+          backgroundColor: "#2c2c2c",
+          pointerEvents: isSortableDragging ? "none" : "auto",
+        }}
+      >
+        <div className="flex flex-column h-full relative">
+          <div
+            className="absolute"
+            style={{
+              top: "-5px",
+              right: "-5px",
+              width: "120px",
+              height: "120px",
+              background: "#000",
+              borderRadius: "20px",
+              transform: "rotate(12deg)",
+              overflow: "hidden",
+              opacity: 0.7,
+            }}
+          >
+            <img
+              src="/assets/images/zx-square.png"
+              alt=""
+              style={{
+                width: "94%",
+                height: "94%",
+                objectFit: "cover",
+                margin: "3%",
+              }}
+            />
+          </div>
+
+          <Link to={projectUrl} className="no-underline" style={{ pointerEvents: isSortableDragging ? "none" : "auto" }}>
+            <h4 className="mb-2 text-white relative z-1">{project.title}</h4>
+          </Link>
+
+          <Tag
+            value={getLanguageLabel(project.lang)}
+            severity={getLanguageColor(project.lang)}
+            className="align-self-start mb-3 relative z-1"
+          />
+
+          <div className="mt-auto text-400 text-sm relative z-1">
+            Updated{" "}
+            {formatDistanceToNow(new Date(project.updated_at), {
+              addSuffix: true,
+            })}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
 
 function getLanguageLabel(lang) {
   const labels = {
@@ -123,10 +233,20 @@ export default function PublicUserProfile() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+  const [projects, setProjects] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const currentUserId = useSelector((state) => state?.identity.userId);
   const currentUserSlug = useSelector((state) => state?.identity.userSlug);
   const isOwnProfile = currentUserId && user?.user_id === currentUserId;
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     // Clear old data when ID changes or when current user's slug updates
@@ -151,6 +271,7 @@ export default function PublicUserProfile() {
           });
           const userData = response?.data?.user_by_pk;
           setUser(userData);
+          setProjects(userData?.projects || []);
 
           // Set follow status and counts
           if (userData) {
@@ -173,6 +294,7 @@ export default function PublicUserProfile() {
           });
           const userData = response?.data?.user?.[0] || null;
           setUser(userData);
+          setProjects(userData?.projects || []);
 
           // Set follow status and counts
           if (userData) {
@@ -217,6 +339,38 @@ export default function PublicUserProfile() {
       dispatch(followUser(user.user_id));
       setIsFollowing(true);
       setFollowersCount((prev) => prev + 1);
+    }
+  };
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+
+    if (active.id !== over.id) {
+      const oldIndex = projects.findIndex((p) => p.project_id === active.id);
+      const newIndex = projects.findIndex((p) => p.project_id === over.id);
+
+      const newProjects = arrayMove(projects, oldIndex, newIndex);
+
+      // Update local state immediately for responsiveness
+      setProjects(newProjects);
+
+      try {
+        setIsSaving(true);
+        // Update each project's display order
+        const updatePromises = newProjects.map((project, index) =>
+          gqlFetch(currentUserId, UPDATE_PROJECT_ORDER, {
+            projectId: project.project_id,
+            displayOrder: index,
+          })
+        );
+        await Promise.all(updatePromises);
+      } catch (error) {
+        console.error("Failed to update project order:", error);
+        // Revert on error
+        setProjects(projects);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -353,83 +507,121 @@ export default function PublicUserProfile() {
         </div>
 
         <div className="col-12 lg:col-9 pt-2">
-          <Card title={`Public Projects (${user.projects?.length || 0})`}>
-            {user.projects && user.projects.length > 0 ? (
-              <div className="flex flex-wrap gap-3">
-                {user.projects.map((project) => {
-                  const projectUrl = project.slug
-                    ? `/u/${user.slug}/${project.slug}`
-                    : `/projects/${project.project_id}`;
-
-                  return (
-                    <div
-                      key={project.project_id}
-                      style={{
-                        flexBasis: "448px",
-                        flexGrow: 0,
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Link to={projectUrl} className="no-underline">
-                        <Card
-                          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden"
-                          style={{
-                            border: "none",
-                            backgroundColor: "#2c2c2c",
-                          }}
-                        >
-                          <div className="flex flex-column h-full relative">
-                            {/* Background icon in corner */}
-                            <div
-                              className="absolute"
-                              style={{
-                                top: "-5px",
-                                right: "-5px",
-                                width: "120px",
-                                height: "120px",
-                                background: "#000",
-                                borderRadius: "20px",
-                                transform: "rotate(12deg)",
-                                overflow: "hidden",
-                                opacity: 0.7,
-                              }}
-                            >
-                              <img
-                                src="/assets/images/zx-square.png"
-                                alt=""
-                                style={{
-                                  width: "94%",
-                                  height: "94%",
-                                  objectFit: "cover",
-                                  margin: "3%",
-                                }}
-                              />
-                            </div>
-
-                            <h4 className="mb-2 text-white relative z-1">
-                              {project.title}
-                            </h4>
-
-                            <Tag
-                              value={getLanguageLabel(project.lang)}
-                              severity={getLanguageColor(project.lang)}
-                              className="align-self-start mb-3 relative z-1"
-                            />
-
-                            <div className="mt-auto text-400 text-sm relative z-1">
-                              Updated{" "}
-                              {formatDistanceToNow(
-                                new Date(project.updated_at),
-                                { addSuffix: true }
-                              )}
-                            </div>
-                          </div>
-                        </Card>
-                      </Link>
-                    </div>
-                  );
-                })}
+          <Card
+            title={
+              <div className="flex align-items-center justify-content-between">
+                <span>Public Projects ({projects?.length || 0})</span>
+                {isOwnProfile && isSaving && (
+                  <Tag severity="info" value="Saving order..." icon="pi pi-spin pi-spinner" />
+                )}
               </div>
+            }
+          >
+            {projects && projects.length > 0 ? (
+              isOwnProfile ? (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={projects.map((p) => p.project_id)}
+                    strategy={rectSortingStrategy}
+                  >
+                    <div className="flex flex-wrap gap-3">
+                      {projects.map((project) => {
+                        const projectUrl = project.slug
+                          ? `/u/${user.slug}/${project.slug}`
+                          : `/projects/${project.project_id}`;
+                        return (
+                          <SortableProjectCard
+                            key={project.project_id}
+                            project={project}
+                            projectUrl={projectUrl}
+                            isDragging={false}
+                          />
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {projects.map((project) => {
+                    const projectUrl = project.slug
+                      ? `/u/${user.slug}/${project.slug}`
+                      : `/projects/${project.project_id}`;
+
+                    return (
+                      <div
+                        key={project.project_id}
+                        style={{
+                          flexBasis: "448px",
+                          flexGrow: 0,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Link to={projectUrl} className="no-underline">
+                          <Card
+                            className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden"
+                            style={{
+                              border: "none",
+                              backgroundColor: "#2c2c2c",
+                            }}
+                          >
+                            <div className="flex flex-column h-full relative">
+                              {/* Background icon in corner */}
+                              <div
+                                className="absolute"
+                                style={{
+                                  top: "-5px",
+                                  right: "-5px",
+                                  width: "120px",
+                                  height: "120px",
+                                  background: "#000",
+                                  borderRadius: "20px",
+                                  transform: "rotate(12deg)",
+                                  overflow: "hidden",
+                                  opacity: 0.7,
+                                }}
+                              >
+                                <img
+                                  src="/assets/images/zx-square.png"
+                                  alt=""
+                                  style={{
+                                    width: "94%",
+                                    height: "94%",
+                                    objectFit: "cover",
+                                    margin: "3%",
+                                  }}
+                                />
+                              </div>
+
+                              <h4 className="mb-2 text-white relative z-1">
+                                {project.title}
+                              </h4>
+
+                              <Tag
+                                value={getLanguageLabel(project.lang)}
+                                severity={getLanguageColor(project.lang)}
+                                className="align-self-start mb-3 relative z-1"
+                              />
+
+                              <div className="mt-auto text-400 text-sm relative z-1">
+                                Updated{" "}
+                                {formatDistanceToNow(
+                                  new Date(project.updated_at),
+                                  { addSuffix: true }
+                                )}
+                              </div>
+                            </div>
+                          </Card>
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             ) : (
               <div className="text-center py-4">
                 <i className="pi pi-inbox text-4xl text-300 mb-3" />
