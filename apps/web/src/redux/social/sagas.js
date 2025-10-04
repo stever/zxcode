@@ -60,9 +60,6 @@ function* handleFollowUserActions(action) {
         });
 
         yield put(setFollowingStatus(action.userId, true));
-
-        // Update follow counts
-        yield call(fetchUserFollowCounts, action.userId);
     } catch (e) {
         handleException(e);
     }
@@ -89,9 +86,6 @@ function* handleUnfollowUserActions(action) {
         });
 
         yield put(setFollowingStatus(action.userId, false));
-
-        // Update follow counts
-        yield call(fetchUserFollowCounts, action.userId);
     } catch (e) {
         handleException(e);
     }
@@ -217,35 +211,3 @@ function* handleFetchActivityFeedActions() {
     }
 }
 
-// Helper function to fetch follow counts for a user
-function* fetchUserFollowCounts(userId) {
-    try {
-        const currentUserId = yield select((state) => state.identity.userId);
-
-        const query = gql`
-            query GetFollowCounts($user_id: uuid!) {
-                followers: user_follows_aggregate(where: {following_id: {_eq: $user_id}}) {
-                    aggregate {
-                        count
-                    }
-                }
-                following: user_follows_aggregate(where: {follower_id: {_eq: $user_id}}) {
-                    aggregate {
-                        count
-                    }
-                }
-            }
-        `;
-
-        const response = yield call(gqlFetch, currentUserId, query, {
-            user_id: userId
-        });
-
-        const followersCount = response?.data?.followers?.aggregate?.count || 0;
-        const followingCount = response?.data?.following?.aggregate?.count || 0;
-
-        yield put(setFollowCounts(userId, followersCount, followingCount));
-    } catch (e) {
-        handleException(e);
-    }
-}
