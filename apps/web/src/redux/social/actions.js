@@ -14,6 +14,8 @@ export const actionTypes = {
     fetchActivityFeed: 'social/fetchActivityFeed',
     setActivityFeed: 'social/setActivityFeed',
     refreshActivityFeed: 'social/refreshActivityFeed',
+    setFeedPage: 'social/setFeedPage',
+    setFeedLoading: 'social/setFeedLoading',
 
     // Counts
     setFollowCounts: 'social/setFollowCounts',
@@ -58,17 +60,30 @@ export const setFollowing = (following) => ({
 });
 
 // Activity feed
-export const fetchActivityFeed = () => ({
-    type: actionTypes.fetchActivityFeed
+export const fetchActivityFeed = (page = 0) => ({
+    type: actionTypes.fetchActivityFeed,
+    page
 });
 
-export const setActivityFeed = (activities) => ({
+export const setActivityFeed = (activities, totalCount, page) => ({
     type: actionTypes.setActivityFeed,
-    activities
+    activities,
+    totalCount,
+    page
 });
 
 export const refreshActivityFeed = () => ({
     type: actionTypes.refreshActivityFeed
+});
+
+export const setFeedPage = (page) => ({
+    type: actionTypes.setFeedPage,
+    page
+});
+
+export const setFeedLoading = (loading) => ({
+    type: actionTypes.setFeedLoading,
+    loading
 });
 
 // Counts

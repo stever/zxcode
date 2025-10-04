@@ -18,6 +18,9 @@ const initialState = {
     // Activity feed
     activityFeed: [],
     feedLoading: false,
+    feedPage: 0,
+    feedTotalCount: 0,
+    feedPageSize: 20,
 };
 
 // -----------------------------------------------------------------------------
@@ -52,7 +55,9 @@ function setActivityFeed(state, action) {
     return {
         ...state,
         activityFeed: action.activities,
-        feedLoading: false
+        feedLoading: false,
+        feedTotalCount: action.totalCount || 0,
+        feedPage: action.page !== undefined ? action.page : state.feedPage
     };
 }
 
@@ -69,6 +74,20 @@ function setFollowCounts(state, action) {
     };
 }
 
+function setFeedPage(state, action) {
+    return {
+        ...state,
+        feedPage: action.page
+    };
+}
+
+function setFeedLoading(state, action) {
+    return {
+        ...state,
+        feedLoading: action.loading
+    };
+}
+
 // -----------------------------------------------------------------------------
 // Reducer
 // -----------------------------------------------------------------------------
@@ -79,6 +98,9 @@ const actionsMap = {
     [actionTypes.setFollowing]: setFollowing,
     [actionTypes.setActivityFeed]: setActivityFeed,
     [actionTypes.setFollowCounts]: setFollowCounts,
+    [actionTypes.setFeedPage]: setFeedPage,
+    [actionTypes.setFeedLoading]: setFeedLoading,
+    [actionTypes.fetchActivityFeed]: (state) => ({ ...state, feedLoading: true }),
 };
 
 export default function reducer(state = initialState, action) {
