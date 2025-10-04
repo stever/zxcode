@@ -27,14 +27,15 @@ export const createNewProject = (lang, title) => ({
     lang, title
 });
 
-export const loadProject = (id) => ({
+export const loadProject = (id, ownerSlug = null) => ({
     type: actionTypes.loadProject,
-    id
+    id,
+    ownerSlug
 });
 
-export const receiveLoadedProject = (id, title, lang, code, isPublic = false, slug = null) => ({
+export const receiveLoadedProject = (id, title, lang, code, isPublic = false, slug = null, ownerSlug = null) => ({
     type: actionTypes.receiveLoadedProject,
-    id, title, lang, code, isPublic, slug
+    id, title, lang, code, isPublic, slug, ownerSlug
 });
 
 export const setCode = (code) => ({

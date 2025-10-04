@@ -13,7 +13,8 @@ const initialState = {
     savedCode: '',
     errorItems: undefined,
     isPublic: false,
-    slug: undefined
+    slug: undefined,
+    ownerSlug: undefined
 };
 
 // -----------------------------------------------------------------------------
@@ -49,7 +50,8 @@ function receiveLoadedProject(state, action) {
         savedCode: action.code,
         selectedTabIndex: 0,
         isPublic: action.isPublic,
-        slug: action.slug
+        slug: action.slug,
+        ownerSlug: action.ownerSlug
     };
 }
 

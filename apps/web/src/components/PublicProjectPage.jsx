@@ -68,8 +68,8 @@ export default function PublicProjectPage() {
         return;
       }
 
-      // Load the project
-      dispatch(loadProject(project.project_id));
+      // Load the project with owner's slug from URL
+      dispatch(loadProject(project.project_id, userSlug));
       setProjectId(project.project_id);
 
     } catch (err) {
