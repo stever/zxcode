@@ -27,7 +27,14 @@ export default function Nav() {
   const userSlug = useSelector((state) => state?.identity.userSlug);
   const lang = useSelector((state) => state?.project.lang);
 
-  const items = getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible);
+  const items = getMenuItems(
+    navigate,
+    userId,
+    userSlug,
+    dispatch,
+    lang,
+    emuVisible
+  );
 
   const isMobile = useSelector((state) => state?.window.isMobile);
   const className = isMobile ? "" : "px-2 pt-2";
@@ -65,7 +72,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newPasmo = {
-    label: "Pasmo",
+    label: "Pasmo (Z80 Assembly)",
     command: () => {
       dispatch(pause());
       navigate("/new/asm");
@@ -73,7 +80,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newZmac = {
-    label: "zmac",
+    label: "zmac (Z80 Assembly)",
     command: () => {
       dispatch(pause());
       navigate("/new/zmac");
@@ -81,7 +88,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newBoriel = {
-    label: "Boriel ZX",
+    label: "Boriel ZX BASIC",
     command: () => {
       dispatch(pause());
       navigate("/new/zxbasic");
@@ -89,7 +96,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newBasic = {
-    label: "Sinclair (zmakebas)",
+    label: "zmakebas (BASIC)",
     command: () => {
       dispatch(pause());
       navigate("/new/basic");
@@ -97,7 +104,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newBas2Tap = {
-    label: "Sinclair (bas2tap)",
+    label: "bas2tap (BASIC)",
     command: () => {
       dispatch(pause());
       navigate("/new/bas2tap");
@@ -105,7 +112,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newZ88dk = {
-    label: "z88dk zcc",
+    label: "z88dk zcc (C)",
     command: () => {
       dispatch(pause());
       navigate("/new/c");
@@ -113,41 +120,24 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newSdcc = {
-    label: "SDCC",
+    label: "SDCC (C)",
     command: () => {
       dispatch(pause());
       navigate("/new/sdcc");
     },
   };
 
-  const z80Menu = {
-    label: "Z80 Assembly",
-    items: [],
-  };
+  const otherMenu = { label: "Other", items: [] };
+  otherMenu.items.push(newBasic);
+  otherMenu.items.push(newBas2Tap);
+  otherMenu.items.push(newZmac);
+  if (Constants.enableZ88dk) otherMenu.items.push(newZ88dk);
+  otherMenu.items.push(newSdcc);
 
-  z80Menu.items.push(newPasmo);
-  z80Menu.items.push(newZmac);
-
-  const basicMenu = {
-    label: "BASIC",
-    items: [],
-  };
-
-  basicMenu.items.push(newBasic);
-  basicMenu.items.push(newBas2Tap);
-
-  // NOTE: Boriel ZX Basic projects are supported by an API which is not currently provided in production.
-  if (Constants.enableBoriel) basicMenu.items.push(newBoriel);
-
-  const cMenu = {
-    label: "C",
-    items: [],
-  };
-
-  cMenu.items.push(newSdcc);
-
-  // NOTE: Z88DK projects are supported by an API which is not currently provided in production.
-  if (Constants.enableZ88dk) cMenu.items.push(newZ88dk);
+  const newProjectItems = [];
+  if (Constants.enableBoriel) newProjectItems.push(newBoriel);
+  newProjectItems.push(newPasmo);
+  newProjectItems.push(otherMenu);
 
   const projectMenu = {
     label: "Project",
@@ -157,7 +147,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
         label: "New Project",
         icon: "pi pi-fw pi-plus",
         disabled: !userId,
-        items: [basicMenu, z80Menu, cMenu],
+        items: newProjectItems,
       },
       {
         label: "Open Project",
