@@ -355,7 +355,7 @@ export default function PublicUserProfile() {
         <div className="col-12 lg:col-9 pt-2">
           <Card title={`Public Projects (${user.projects?.length || 0})`}>
             {user.projects && user.projects.length > 0 ? (
-              <div className="grid">
+              <div className="flex flex-wrap gap-3">
                 {user.projects.map((project) => {
                   const projectUrl = project.slug
                     ? `/u/${user.slug}/${project.slug}`
@@ -364,7 +364,11 @@ export default function PublicUserProfile() {
                   return (
                     <div
                       key={project.project_id}
-                      className="col-12 md:col-6 lg:col-4"
+                      style={{
+                        flexBasis: "448px",
+                        flexGrow: 0,
+                        flexShrink: 0,
+                      }}
                     >
                       <Link to={projectUrl} className="no-underline">
                         <Card
