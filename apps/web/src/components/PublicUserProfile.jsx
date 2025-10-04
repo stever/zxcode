@@ -134,19 +134,42 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
     flexGrow: 0,
     flexShrink: 0,
     opacity: isSortableDragging ? 0.5 : 1,
-    cursor: isDragging ? "grabbing" : "grab",
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style}>
       <Card
-        className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden"
+        className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer"
         style={{
           border: "none",
           backgroundColor: "#2c2c2c",
-          pointerEvents: isSortableDragging ? "none" : "auto",
+          position: "relative",
+          overflow: "visible",
         }}
       >
+        {/* Drag handle in absolute top-right corner */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute"
+          style={{
+            top: "-10px",
+            right: "-10px",
+            cursor: isSortableDragging ? "grabbing" : "grab",
+            backgroundColor: "#1a1a1a",
+            borderRadius: "50%",
+            width: "28px",
+            height: "28px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10,
+            border: "2px solid #3a3a3a",
+          }}
+          title="Drag to reorder"
+        >
+          <i className="pi pi-arrows-alt" style={{ fontSize: "12px", color: "#aaa" }} />
+        </div>
         <div className="flex flex-column h-full relative">
           <div
             className="absolute"
@@ -174,7 +197,7 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
             />
           </div>
 
-          <Link to={projectUrl} className="no-underline" style={{ pointerEvents: isSortableDragging ? "none" : "auto" }}>
+          <Link to={projectUrl} className="no-underline">
             <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
           </Link>
 
