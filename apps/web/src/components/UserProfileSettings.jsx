@@ -237,7 +237,7 @@ export default function UserProfileSettings() {
   return (
     <Titled title={s => `Profile Settings ${sep} ${s}`}>
       <Card className="m-2">
-        <h2>Profile Settings</h2>
+        <h1>Profile Settings</h1>
 
         {saveMessage && (
           <Message
@@ -362,6 +362,7 @@ export default function UserProfileSettings() {
                 disabled={!hasChanges || !!slugError}
                 loading={saving}
                 onClick={handleSave}
+                style={{ whiteSpace: "nowrap", minWidth: "160px" }}
               />
             </div>
           </div>
