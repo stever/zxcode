@@ -91,7 +91,7 @@ export default function ActivityFeed() {
 
           {activityFeed.length > 0 ? (
             <>
-              <div className="grid">
+              <div className="flex flex-wrap gap-3">
                 {activityFeed.map((project) => {
                   const userSlug = project.owner?.slug;
                   const projectUrl = project.slug && userSlug
@@ -101,15 +101,18 @@ export default function ActivityFeed() {
                   return (
                     <div
                       key={project.project_id}
-                      className="col-12 md:col-6 lg:col-4"
+                      style={{
+                        flexBasis: "448px",
+                        flexGrow: 0,
+                        flexShrink: 0,
+                      }}
                     >
                       <Link to={projectUrl} className="no-underline">
                         <Card
                           className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden"
                           style={{
                             border: "none",
-                            background:
-                              "linear-gradient(135deg, rgba(30, 30, 30, 0.9) 0%, rgba(20, 20, 20, 0.9) 100%)",
+                            backgroundColor: "#2c2c2c",
                           }}
                         >
                           <div className="flex flex-column h-full relative">
@@ -140,13 +143,9 @@ export default function ActivityFeed() {
                               />
                             </div>
 
-                            <h4 className="mb-2 text-white relative z-1">
+                            <h3 className="mb-2 text-white relative z-1">
                               {project.title}
-                            </h4>
-
-                            <p className="text-400 text-sm mb-2 relative z-1">
-                              by @{userSlug || project.owner?.greeting_name || "unknown"}
-                            </p>
+                            </h3>
 
                             <Tag
                               value={getLanguageLabel(project.lang)}
@@ -155,11 +154,16 @@ export default function ActivityFeed() {
                             />
 
                             <div className="mt-auto text-400 text-sm relative z-1">
-                              Updated{" "}
-                              {formatDistanceToNow(
-                                new Date(project.updated_at),
-                                { addSuffix: true }
-                              )}
+                              <div>
+                                by @{userSlug || project.owner?.greeting_name || "unknown"}
+                              </div>
+                              <div>
+                                Updated{" "}
+                                {formatDistanceToNow(
+                                  new Date(project.updated_at),
+                                  { addSuffix: true }
+                                )}
+                              </div>
                             </div>
                           </div>
                         </Card>
