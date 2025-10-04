@@ -17,7 +17,7 @@ import {
   followUser,
   unfollowUser,
   setFollowingStatus,
-  setFollowCounts
+  setFollowCounts,
 } from "../redux/social/actions";
 
 const GET_USER_BY_SLUG = gql`
@@ -147,14 +147,17 @@ export default function PublicUserProfile() {
         let response;
         if (isUuid) {
           response = await gqlFetch(null, GET_USER_BY_ID, {
-            user_id: id
+            user_id: id,
           });
           const userData = response?.data?.user_by_pk;
           setUser(userData);
 
           // Set follow status and counts
           if (userData) {
-            const isCurrentUserFollowing = userData.followers?.some(f => f.follower_id === currentUserId) || false;
+            const isCurrentUserFollowing =
+              userData.followers?.some(
+                (f) => f.follower_id === currentUserId
+              ) || false;
             setIsFollowing(isCurrentUserFollowing);
             setFollowersCount(userData.followers?.length || 0);
             setFollowingCount(userData.following?.length || 0);
@@ -166,14 +169,17 @@ export default function PublicUserProfile() {
           }
         } else {
           response = await gqlFetch(null, GET_USER_BY_SLUG, {
-            slug: id
+            slug: id,
           });
           const userData = response?.data?.user?.[0] || null;
           setUser(userData);
 
           // Set follow status and counts
           if (userData) {
-            const isCurrentUserFollowing = userData.followers?.some(f => f.follower_id === currentUserId) || false;
+            const isCurrentUserFollowing =
+              userData.followers?.some(
+                (f) => f.follower_id === currentUserId
+              ) || false;
             setIsFollowing(isCurrentUserFollowing);
             setFollowersCount(userData.followers?.length || 0);
             setFollowingCount(userData.following?.length || 0);
@@ -206,11 +212,11 @@ export default function PublicUserProfile() {
     if (isFollowing) {
       dispatch(unfollowUser(user.user_id));
       setIsFollowing(false);
-      setFollowersCount(prev => Math.max(0, prev - 1));
+      setFollowersCount((prev) => Math.max(0, prev - 1));
     } else {
       dispatch(followUser(user.user_id));
       setIsFollowing(true);
-      setFollowersCount(prev => prev + 1);
+      setFollowersCount((prev) => prev + 1);
     }
   };
 
@@ -256,8 +262,8 @@ export default function PublicUserProfile() {
 
   return (
     <Titled title={(s) => `${displayName} ${sep} ${s}`}>
-      <div className="grid m-2">
-        <div className="col-12 lg:col-3">
+      <div className="grid m-0">
+        <div className="col-12 lg:col-3 pr-0">
           <Card>
             <div className="flex flex-column align-items-center text-center">
               <Avatar
@@ -287,21 +293,23 @@ export default function PublicUserProfile() {
 
               {!isOwnProfile && currentUserId && (
                 <>
-                  <Divider />
                   <Button
                     label={isFollowing ? "Unfollow" : "Follow"}
                     icon={isFollowing ? "pi pi-user-minus" : "pi pi-user-plus"}
-                    className="w-full mb-2"
+                    className="w-full mb-2 mt-4"
                     onClick={handleFollowToggle}
                     severity={isFollowing ? "secondary" : "primary"}
                     outlined={isFollowing}
-                    style={isFollowing ? { color: '#6c757d', borderColor: '#6c757d' } : {}}
+                    style={
+                      isFollowing
+                        ? { color: "#6c757d", borderColor: "#6c757d" }
+                        : {}
+                    }
                   />
                 </>
               )}
 
-              <Divider />
-              <div className="flex gap-2">
+              <div className="flex gap-2 mt-4">
                 <button
                   className="flex-1 p-button p-component p-button-outlined p-button-secondary p-button-sm flex flex-column align-items-center py-2"
                   onClick={() => navigate(`/u/${user.slug}/followers`)}
@@ -344,8 +352,11 @@ export default function PublicUserProfile() {
           </Card>
         </div>
 
-        <div className="col-12 lg:col-9">
-          <Card title={`Public Projects (${user.projects?.length || 0})`}>
+        <div className="col-12 lg:col-9 pt-2">
+          <Card
+            title={`Public Projects (${user.projects?.length || 0})`}
+            style={{ backgroundColor: "#2c2c2c" }}
+          >
             {user.projects && user.projects.length > 0 ? (
               <div className="grid">
                 {user.projects.map((project) => {
