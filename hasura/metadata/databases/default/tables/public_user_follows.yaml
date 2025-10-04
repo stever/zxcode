@@ -25,6 +25,7 @@ select_permissions:
         - following_id
         - created_at
       filter: {}
+      allow_aggregations: true
   - role: public
     permission:
       columns:
@@ -32,6 +33,7 @@ select_permissions:
         - following_id
         - created_at
       filter: {}
+      allow_aggregations: true
 delete_permissions:
   - role: zxplay-user
     permission:

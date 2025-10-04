@@ -294,6 +294,8 @@ export default function PublicUserProfile() {
                     className="w-full mb-2"
                     onClick={handleFollowToggle}
                     severity={isFollowing ? "secondary" : "primary"}
+                    outlined={isFollowing}
+                    style={isFollowing ? { color: '#6c757d', borderColor: '#6c757d' } : {}}
                   />
                 </>
               )}
