@@ -7,6 +7,7 @@ import { Card } from "primereact/card";
 import gql from "graphql-tag";
 import { gqlFetch } from "../graphql_fetch";
 import { loadProject } from "../redux/project/actions";
+import ProjectPage from "./ProjectPage";
 
 const GET_PROJECT_BY_SLUGS = gql`
   query GetProjectBySlugs($userSlug: String!, $projectSlug: String!) {
@@ -33,6 +34,7 @@ export default function PublicProjectPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [projectId, setProjectId] = useState(null);
 
   const currentUserId = useSelector(state => state?.identity.userId);
 
@@ -70,10 +72,10 @@ export default function PublicProjectPage() {
         return;
       }
 
-      // Redirect to the main project page which will load the project
-      // This ensures all the project functionality works correctly
+      // Load the project and set the ID
       dispatch(loadProject(project.project_id));
-      navigate(`/projects/${project.project_id}`, { replace: true });
+      setProjectId(project.project_id);
+      setLoading(false);
 
     } catch (err) {
       console.error("Failed to fetch project:", err);
@@ -99,5 +101,10 @@ export default function PublicProjectPage() {
     );
   }
 
-  return null; // Will redirect before reaching here
+  // Render the ProjectPage with the loaded project ID
+  if (projectId) {
+    return <ProjectPage projectId={projectId} />;
+  }
+
+  return null;
 }
