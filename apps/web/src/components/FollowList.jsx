@@ -16,7 +16,13 @@ import { formatDistanceToNow } from "date-fns";
 import { followUser, unfollowUser } from "../redux/social/actions";
 
 const GET_USER_WITH_FOLLOWS = gql`
-  query GetUserWithFollows($slug: String!, $followersLimit: Int!, $followersOffset: Int!, $followingLimit: Int!, $followingOffset: Int!) {
+  query GetUserWithFollows(
+    $slug: String!
+    $followersLimit: Int!
+    $followersOffset: Int!
+    $followingLimit: Int!
+    $followingOffset: Int!
+  ) {
     user(where: { slug: { _eq: $slug } }, limit: 1) {
       user_id
       greeting_name
@@ -31,7 +37,11 @@ const GET_USER_WITH_FOLLOWS = gql`
           count
         }
       }
-      followers(limit: $followersLimit, offset: $followersOffset, order_by: {created_at: desc}) {
+      followers(
+        limit: $followersLimit
+        offset: $followersOffset
+        order_by: { created_at: desc }
+      ) {
         follower {
           user_id
           greeting_name
@@ -40,7 +50,11 @@ const GET_USER_WITH_FOLLOWS = gql`
           created_at
         }
       }
-      following(limit: $followingLimit, offset: $followingOffset, order_by: {created_at: desc}) {
+      following(
+        limit: $followingLimit
+        offset: $followingOffset
+        order_by: { created_at: desc }
+      ) {
         following {
           user_id
           greeting_name
@@ -55,10 +69,12 @@ const GET_USER_WITH_FOLLOWS = gql`
 
 const CHECK_FOLLOWING_STATUS = gql`
   query CheckFollowingStatus($follower_id: uuid!, $user_ids: [uuid!]) {
-    user_follows(where: {
-      follower_id: {_eq: $follower_id},
-      following_id: {_in: $user_ids}
-    }) {
+    user_follows(
+      where: {
+        follower_id: { _eq: $follower_id }
+        following_id: { _in: $user_ids }
+      }
+    ) {
       following_id
     }
   }
@@ -69,7 +85,7 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
   const isOwnProfile = currentUserId === user.user_id;
 
   return (
-    <Card className="mb-3">
+    <Card className="mb-3" style={{ backgroundColor: "#2c2c2c" }}>
       <div className="flex align-items-center justify-content-between">
         <div className="flex align-items-center">
           <Avatar
@@ -101,11 +117,16 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
               severity={isFollowing ? "secondary" : "primary"}
               outlined={isFollowing}
               size="small"
-              style={isFollowing ? { color: '#6c757d', borderColor: '#6c757d' } : {}}
+              style={
+                isFollowing ? { color: "#6c757d", borderColor: "#6c757d" } : {}
+              }
             />
           )}
           <span className="text-400 text-sm mt-2">
-            Joined {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+            Joined{" "}
+            {formatDistanceToNow(new Date(user.created_at), {
+              addSuffix: true,
+            })}
           </span>
         </div>
       </div>
@@ -119,7 +140,9 @@ export default function FollowList() {
   const dispatch = useDispatch();
 
   // Determine the type from the URL path
-  const type = window.location.pathname.includes('/following') ? 'following' : 'followers';
+  const type = window.location.pathname.includes("/following")
+    ? "following"
+    : "followers";
 
   const [user, setUser] = useState(null);
   const [followers, setFollowers] = useState([]);
@@ -153,7 +176,7 @@ export default function FollowList() {
           followersLimit: rowsPerPage,
           followersOffset: followersPage * rowsPerPage,
           followingLimit: rowsPerPage,
-          followingOffset: followingPage * rowsPerPage
+          followingOffset: followingPage * rowsPerPage,
         });
         const userData = response?.data?.user?.[0];
 
@@ -163,16 +186,16 @@ export default function FollowList() {
         }
 
         setUser(userData);
-        setFollowers(userData.followers?.map(f => f.follower) || []);
-        setFollowing(userData.following?.map(f => f.following) || []);
+        setFollowers(userData.followers?.map((f) => f.follower) || []);
+        setFollowing(userData.following?.map((f) => f.following) || []);
         setTotalFollowers(userData.followers_aggregate?.aggregate?.count || 0);
         setTotalFollowing(userData.following_aggregate?.aggregate?.count || 0);
 
         // Check following status for all users if logged in
         if (currentUserId) {
           const allUserIds = [
-            ...userData.followers?.map(f => f.follower.user_id) || [],
-            ...userData.following?.map(f => f.following.user_id) || []
+            ...(userData.followers?.map((f) => f.follower.user_id) || []),
+            ...(userData.following?.map((f) => f.following.user_id) || []),
           ];
 
           if (allUserIds.length > 0) {
@@ -181,13 +204,15 @@ export default function FollowList() {
               CHECK_FOLLOWING_STATUS,
               {
                 follower_id: currentUserId,
-                user_ids: [...new Set(allUserIds)]
+                user_ids: [...new Set(allUserIds)],
               }
             );
 
-            const followingIds = statusResponse?.data?.user_follows?.map(f => f.following_id) || [];
+            const followingIds =
+              statusResponse?.data?.user_follows?.map((f) => f.following_id) ||
+              [];
             const statusMap = {};
-            followingIds.forEach(id => {
+            followingIds.forEach((id) => {
               statusMap[id] = true;
             });
             setFollowingStatus(statusMap);
@@ -209,9 +234,9 @@ export default function FollowList() {
     const isCurrentlyFollowing = followingStatus[userId];
 
     // Optimistic update
-    setFollowingStatus(prev => ({
+    setFollowingStatus((prev) => ({
       ...prev,
-      [userId]: !isCurrentlyFollowing
+      [userId]: !isCurrentlyFollowing,
     }));
 
     // Dispatch action
@@ -250,7 +275,9 @@ export default function FollowList() {
   const displayName = user.greeting_name || "User";
 
   return (
-    <Titled title={(s) => `${displayName}'s ${type || 'Followers'} ${sep} ${s}`}>
+    <Titled
+      title={(s) => `${displayName}'s ${type || "Followers"} ${sep} ${s}`}
+    >
       <div className="m-2">
         <Card>
           <div className="mb-4">
@@ -313,7 +340,9 @@ export default function FollowList() {
                       <UserCard
                         key={followedUser.user_id}
                         user={followedUser}
-                        isFollowing={followingStatus[followedUser.user_id] || false}
+                        isFollowing={
+                          followingStatus[followedUser.user_id] || false
+                        }
                         onFollowToggle={handleFollowToggle}
                         currentUserId={currentUserId}
                       />

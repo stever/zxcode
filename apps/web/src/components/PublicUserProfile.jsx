@@ -353,10 +353,7 @@ export default function PublicUserProfile() {
         </div>
 
         <div className="col-12 lg:col-9 pt-2">
-          <Card
-            title={`Public Projects (${user.projects?.length || 0})`}
-            style={{ backgroundColor: "#2c2c2c" }}
-          >
+          <Card title={`Public Projects (${user.projects?.length || 0})`}>
             {user.projects && user.projects.length > 0 ? (
               <div className="grid">
                 {user.projects.map((project) => {
@@ -374,8 +371,7 @@ export default function PublicUserProfile() {
                           className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden"
                           style={{
                             border: "none",
-                            background:
-                              "linear-gradient(135deg, rgba(30, 30, 30, 0.9) 0%, rgba(20, 20, 20, 0.9) 100%)",
+                            backgroundColor: "#2c2c2c",
                           }}
                         >
                           <div className="flex flex-column h-full relative">
