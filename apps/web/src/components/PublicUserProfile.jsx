@@ -64,28 +64,28 @@ const GET_USER_BY_ID = gql`
 
 function getLanguageLabel(lang) {
   const labels = {
-    'asm': 'Z80 Assembly',
-    'basic': 'Sinclair BASIC',
-    'bas2tap': 'Sinclair BASIC',
-    'c': 'C (z88dk)',
-    'sdcc': 'SDCC',
-    'zmac': 'Z80 (zmac)',
-    'zxbasic': 'Boriel ZX BASIC'
+    asm: "Z80 Assembly",
+    basic: "Sinclair BASIC",
+    bas2tap: "Sinclair BASIC",
+    c: "C (z88dk)",
+    sdcc: "SDCC",
+    zmac: "Z80 (zmac)",
+    zxbasic: "Boriel ZX BASIC",
   };
   return labels[lang] || lang;
 }
 
 function getLanguageColor(lang) {
   const colors = {
-    'asm': 'purple',
-    'basic': 'blue',
-    'bas2tap': 'blue',
-    'c': 'orange',
-    'sdcc': 'orange',
-    'zmac': 'purple',
-    'zxbasic': 'green'
+    asm: "purple",
+    basic: "blue",
+    bas2tap: "blue",
+    c: "orange",
+    sdcc: "orange",
+    zmac: "purple",
+    zxbasic: "green",
   };
-  return colors[lang] || 'gray';
+  return colors[lang] || "gray";
 }
 
 export default function PublicUserProfile() {
@@ -96,8 +96,8 @@ export default function PublicUserProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const currentUserId = useSelector(state => state?.identity.userId);
-  const currentUserSlug = useSelector(state => state?.identity.userSlug);
+  const currentUserId = useSelector((state) => state?.identity.userId);
+  const currentUserSlug = useSelector((state) => state?.identity.userSlug);
   const isOwnProfile = currentUserId && user?.user_id === currentUserId;
 
   useEffect(() => {
@@ -111,7 +111,10 @@ export default function PublicUserProfile() {
         setError(null);
 
         // Determine if ID is a UUID or slug
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            id
+          );
 
         let response;
         if (isUuid) {
@@ -129,7 +132,12 @@ export default function PublicUserProfile() {
           setUser(userData);
 
           // If viewing own profile with outdated slug, redirect to new slug
-          if (userData && currentUserId === userData.user_id && currentUserSlug && currentUserSlug !== id) {
+          if (
+            userData &&
+            currentUserId === userData.user_id &&
+            currentUserSlug &&
+            currentUserSlug !== id
+          ) {
             navigate(`/u/${currentUserSlug}`, { replace: true });
           }
         }
@@ -146,7 +154,10 @@ export default function PublicUserProfile() {
 
   if (loading) {
     return (
-      <div className="flex justify-content-center align-items-center" style={{ minHeight: "400px" }}>
+      <div
+        className="flex justify-content-center align-items-center"
+        style={{ minHeight: "400px" }}
+      >
         <ProgressSpinner />
       </div>
     );
@@ -177,10 +188,12 @@ export default function PublicUserProfile() {
   }
 
   const displayName = user.greeting_name || "User";
-  const memberSince = formatDistanceToNow(new Date(user.created_at), { addSuffix: true });
+  const memberSince = formatDistanceToNow(new Date(user.created_at), {
+    addSuffix: true,
+  });
 
   return (
-    <Titled title={s => `${displayName} ${sep} ${s}`}>
+    <Titled title={(s) => `${displayName} ${sep} ${s}`}>
       <div className="grid m-2">
         <div className="col-12 lg:col-3">
           <Card>
@@ -190,14 +203,16 @@ export default function PublicUserProfile() {
                 size="xlarge"
                 shape="circle"
                 className="mb-3"
-                style={{ backgroundColor: '#6366f1', color: 'white', fontSize: '2rem' }}
+                style={{
+                  backgroundColor: "#6366f1",
+                  color: "white",
+                  fontSize: "2rem",
+                }}
               />
               <h2 className="m-0">{displayName}</h2>
               <p className="text-500 mb-3">@{user.slug}</p>
 
-              {user.bio && (
-                <p className="line-height-3">{user.bio}</p>
-              )}
+              {user.bio && <p className="line-height-3">{user.bio}</p>}
 
               <Divider />
 
@@ -220,7 +235,7 @@ export default function PublicUserProfile() {
                       label="Edit Profile"
                       icon="pi pi-pencil"
                       className="w-full mb-2"
-                      onClick={() => navigate('/settings/profile')}
+                      onClick={() => navigate("/settings/profile")}
                     />
                     {!user.profile_is_public && (
                       <Message
@@ -240,35 +255,73 @@ export default function PublicUserProfile() {
           <Card title="Public Projects">
             {user.projects && user.projects.length > 0 ? (
               <div className="grid">
-                {user.projects.map(project => {
+                {user.projects.map((project) => {
                   const projectUrl = project.slug
                     ? `/u/${user.slug}/${project.slug}`
                     : `/projects/${project.project_id}`;
 
                   return (
-                    <div key={project.project_id} className="col-12 md:col-6 lg:col-4">
-                      <Card className="h-full hover:shadow-3 transition-all transition-duration-200">
-                        <div className="flex flex-column h-full">
-                          <h4 className="mb-2">
-                            <Link
-                              to={projectUrl}
-                              className="text-color no-underline hover:text-primary"
+                    <div
+                      key={project.project_id}
+                      className="col-12 md:col-6 lg:col-4"
+                    >
+                      <Link to={projectUrl} className="no-underline">
+                        <Card
+                          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden"
+                          style={{
+                            border: "none",
+                            background:
+                              "linear-gradient(135deg, rgba(30, 30, 30, 0.9) 0%, rgba(20, 20, 20, 0.9) 100%)",
+                          }}
+                        >
+                          <div className="flex flex-column h-full relative">
+                            {/* Background icon in corner */}
+                            <div
+                              className="absolute"
+                              style={{
+                                top: "-5px",
+                                right: "-5px",
+                                width: "120px",
+                                height: "120px",
+                                background: "#000",
+                                borderRadius: "20px",
+                                transform: "rotate(12deg)",
+                                overflow: "hidden",
+                                opacity: 0.7,
+                              }}
                             >
+                              <img
+                                src="/assets/images/zx-square.png"
+                                alt=""
+                                style={{
+                                  width: "94%",
+                                  height: "94%",
+                                  objectFit: "cover",
+                                  margin: "3%",
+                                }}
+                              />
+                            </div>
+
+                            <h4 className="mb-2 text-white relative z-1">
                               {project.title}
-                            </Link>
-                          </h4>
+                            </h4>
 
-                          <Tag
-                            value={getLanguageLabel(project.lang)}
-                            severity={getLanguageColor(project.lang)}
-                            className="align-self-start mb-3"
-                          />
+                            <Tag
+                              value={getLanguageLabel(project.lang)}
+                              severity={getLanguageColor(project.lang)}
+                              className="align-self-start mb-3 relative z-1"
+                            />
 
-                          <div className="mt-auto text-500 text-sm">
-                            Updated {formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })}
+                            <div className="mt-auto text-400 text-sm relative z-1">
+                              Updated{" "}
+                              {formatDistanceToNow(
+                                new Date(project.updated_at),
+                                { addSuffix: true }
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </Card>
+                        </Card>
+                      </Link>
                     </div>
                   );
                 })}
