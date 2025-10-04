@@ -5,7 +5,13 @@ import {actionTypes} from "./actions";
 // -----------------------------------------------------------------------------
 
 const initialState = {
-    projectList: undefined
+    projectList: undefined,
+    // Pagination preferences
+    rowsPerPage: 10,
+    currentPage: 0,
+    // Sorting preferences
+    sortField: null,
+    sortOrder: null
 };
 
 // -----------------------------------------------------------------------------
@@ -23,6 +29,13 @@ function receiveprojectListQueryResult(state, action) {
     }
 }
 
+function setProjectListPreferences(state, action) {
+    return {
+        ...state,
+        ...action.preferences
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Reducer
 // -----------------------------------------------------------------------------
@@ -30,6 +43,7 @@ function receiveprojectListQueryResult(state, action) {
 const actionsMap = {
     [actionTypes.reset]: reset,
     [actionTypes.receiveprojectListQueryResult]: receiveprojectListQueryResult,
+    [actionTypes.setProjectListPreferences]: setProjectListPreferences,
 };
 
 export default function reducer(state = initialState, action) {
