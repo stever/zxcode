@@ -289,11 +289,19 @@ export default function PublicUserProfile() {
                 </div>
                 <div className="flex justify-content-between mb-2">
                   <span className="text-500">Followers:</span>
-                  <span>{followersCount}</span>
+                  <Link to={`/u/${user.slug}/followers`} className="no-underline">
+                    <span className="text-primary hover:underline cursor-pointer">
+                      {followersCount}
+                    </span>
+                  </Link>
                 </div>
                 <div className="flex justify-content-between mb-2">
                   <span className="text-500">Following:</span>
-                  <span>{followingCount}</span>
+                  <Link to={`/u/${user.slug}/following`} className="no-underline">
+                    <span className="text-primary hover:underline cursor-pointer">
+                      {followingCount}
+                    </span>
+                  </Link>
                 </div>
               </div>
 
@@ -303,12 +311,34 @@ export default function PublicUserProfile() {
                   <Button
                     label={isFollowing ? "Unfollow" : "Follow"}
                     icon={isFollowing ? "pi pi-user-minus" : "pi pi-user-plus"}
-                    className="w-full"
+                    className="w-full mb-2"
                     onClick={handleFollowToggle}
                     severity={isFollowing ? "secondary" : "primary"}
                   />
                 </>
               )}
+
+              <Divider />
+              <div className="flex gap-2">
+                <Button
+                  label={`${followersCount} Followers`}
+                  icon="pi pi-users"
+                  className="flex-1"
+                  severity="secondary"
+                  outlined
+                  size="small"
+                  onClick={() => navigate(`/u/${user.slug}/followers`)}
+                />
+                <Button
+                  label={`${followingCount} Following`}
+                  icon="pi pi-user-plus"
+                  className="flex-1"
+                  severity="secondary"
+                  outlined
+                  size="small"
+                  onClick={() => navigate(`/u/${user.slug}/following`)}
+                />
+              </div>
 
               {isOwnProfile && (
                 <>
