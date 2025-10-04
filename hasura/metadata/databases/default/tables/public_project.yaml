@@ -2,10 +2,10 @@ table:
   name: project
   schema: public
 object_relationships:
-  - name: user
+  - name: owner
     using:
       foreign_key_constraint_on: owner_user_id
-  - name: owner
+  - name: user
     using:
       foreign_key_constraint_on: owner_user_id
 insert_permissions:
@@ -33,6 +33,7 @@ select_permissions:
         - lang
         - is_public
         - slug
+        - display_order
       filter:
         is_public:
           _eq: true
@@ -41,6 +42,7 @@ select_permissions:
       columns:
         - code
         - created_at
+        - display_order
         - lang
         - owner_user_id
         - project_id
@@ -60,6 +62,7 @@ update_permissions:
     permission:
       columns:
         - code
+        - display_order
         - title
         - is_public
         - slug

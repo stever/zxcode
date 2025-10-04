@@ -2,6 +2,20 @@ table:
   name: user
   schema: public
 array_relationships:
+  - name: followers
+    using:
+      foreign_key_constraint_on:
+        column: following_id
+        table:
+          name: user_follows
+          schema: public
+  - name: following
+    using:
+      foreign_key_constraint_on:
+        column: follower_id
+        table:
+          name: user_follows
+          schema: public
   - name: projects
     using:
       foreign_key_constraint_on:
@@ -22,20 +36,6 @@ array_relationships:
         column: user_id
         table:
           name: user_role
-          schema: public
-  - name: followers
-    using:
-      foreign_key_constraint_on:
-        column: following_id
-        table:
-          name: user_follows
-          schema: public
-  - name: following
-    using:
-      foreign_key_constraint_on:
-        column: follower_id
-        table:
-          name: user_follows
           schema: public
 select_permissions:
   - role: public
