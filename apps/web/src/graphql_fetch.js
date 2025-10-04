@@ -24,7 +24,11 @@ export async function gqlFetch(userId, query, variables, lock) {
 }
 
 function fetchWithToken(jwt, query, variables, lock) {
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+    };
     if (jwt) headers['Authorization'] = `Bearer ${jwt}`;
 
     return axios.post(Constants.graphQlEndpoint, {

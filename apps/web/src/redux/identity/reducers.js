@@ -6,6 +6,7 @@ import {actionTypes} from "./actions";
 
 const initialState = {
     userId: undefined,
+    userSlug: undefined,
 };
 
 // -----------------------------------------------------------------------------
@@ -16,6 +17,7 @@ function setUserInfo(state, action) {
     return {
         ...state,
         userId: action.userInfo.userId,
+        userSlug: action.userInfo.userSlug,
     };
 }
 

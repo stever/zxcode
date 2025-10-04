@@ -24,8 +24,10 @@ export default function Nav() {
     pathname.startsWith("/projects/");
 
   const userId = useSelector((state) => state?.identity.userId);
+  const userSlug = useSelector((state) => state?.identity.userSlug);
   const lang = useSelector((state) => state?.project.lang);
-  const items = getMenuItems(navigate, userId, dispatch, lang, emuVisible);
+
+  const items = getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible);
 
   const isMobile = useSelector((state) => state?.window.isMobile);
   const className = isMobile ? "" : "px-2 pt-2";
@@ -50,7 +52,7 @@ export default function Nav() {
   );
 }
 
-function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
+function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   const sep = {
     separator: true,
   };
@@ -162,7 +164,8 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
         icon: "pi pi-fw pi-folder-open",
         disabled: !userId,
         command: () => {
-          navigate(`/u/${userId}/projects`);
+          // Use slug if available, otherwise fallback to userId
+          navigate(`/u/${userSlug || userId}/projects`);
         },
       },
       {
@@ -201,7 +204,8 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
     icon: "pi pi-fw pi-user",
     disabled: !userId,
     command: () => {
-      navigate(`/u/${userId}`);
+      // Use slug if available, otherwise fallback to userId
+      navigate(`/u/${userSlug || userId}`);
     },
   };
 
@@ -219,7 +223,8 @@ function getMenuItems(navigate, userId, dispatch, lang, emuVisible) {
     icon: "pi pi-fw pi-folder",
     disabled: !userId,
     command: () => {
-      navigate(`/u/${userId}/projects`);
+      // Use slug if available, otherwise fallback to userId
+      navigate(`/u/${userSlug || userId}/projects`);
     },
   };
 

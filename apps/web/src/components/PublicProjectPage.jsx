@@ -12,7 +12,6 @@ const GET_PROJECT_BY_SLUGS = gql`
   query GetProjectBySlugs($userSlug: String!, $projectSlug: String!) {
     user(where: { slug: { _eq: $userSlug } }, limit: 1) {
       user_id
-      username
       slug
       profile_is_public
       projects(where: { slug: { _eq: $projectSlug } }, limit: 1) {

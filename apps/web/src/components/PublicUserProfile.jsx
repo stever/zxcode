@@ -18,7 +18,6 @@ const GET_USER_BY_SLUG = gql`
   query GetUserBySlug($slug: String!) {
     user(where: { slug: { _eq: $slug } }, limit: 1) {
       user_id
-      username
       greeting_name
       bio
       created_at
@@ -43,7 +42,6 @@ const GET_USER_BY_ID = gql`
   query GetUserById($user_id: uuid!) {
     user_by_pk(user_id: $user_id) {
       user_id
-      username
       greeting_name
       bio
       created_at
@@ -99,41 +97,52 @@ export default function PublicUserProfile() {
   const [error, setError] = useState(null);
 
   const currentUserId = useSelector(state => state?.identity.userId);
+  const currentUserSlug = useSelector(state => state?.identity.userSlug);
   const isOwnProfile = currentUserId && user?.user_id === currentUserId;
 
   useEffect(() => {
-    fetchUserProfile();
-  }, [id]);
+    // Clear old data when ID changes or when current user's slug updates
+    setUser(null);
+    setError(null);
 
-  const fetchUserProfile = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+    const fetchUserProfile = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      // Determine if ID is a UUID or slug
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        // Determine if ID is a UUID or slug
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-      let response;
-      if (isUuid) {
-        response = await gqlFetch(null, GET_USER_BY_ID, { user_id: id });
-        const userData = response?.data?.user_by_pk;
-        setUser(userData);
+        let response;
+        if (isUuid) {
+          response = await gqlFetch(null, GET_USER_BY_ID, { user_id: id });
+          const userData = response?.data?.user_by_pk;
+          setUser(userData);
 
-        // If we have a slug, redirect to the slug-based URL
-        if (userData?.slug) {
-          navigate(`/u/${userData.slug}`, { replace: true });
+          // If we have a slug, redirect to the slug-based URL
+          if (userData?.slug) {
+            navigate(`/u/${userData.slug}`, { replace: true });
+          }
+        } else {
+          response = await gqlFetch(null, GET_USER_BY_SLUG, { slug: id });
+          const userData = response?.data?.user?.[0] || null;
+          setUser(userData);
+
+          // If viewing own profile with outdated slug, redirect to new slug
+          if (userData && currentUserId === userData.user_id && currentUserSlug && currentUserSlug !== id) {
+            navigate(`/u/${currentUserSlug}`, { replace: true });
+          }
         }
-      } else {
-        response = await gqlFetch(null, GET_USER_BY_SLUG, { slug: id });
-        setUser(response?.data?.user?.[0] || null);
+      } catch (err) {
+        console.error("Failed to fetch user profile:", err);
+        setError("Failed to load user profile");
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("Failed to fetch user profile:", err);
-      setError("Failed to load user profile");
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    fetchUserProfile();
+  }, [id, currentUserSlug, currentUserId, navigate]);
 
   if (loading) {
     return (
@@ -167,7 +176,7 @@ export default function PublicUserProfile() {
     );
   }
 
-  const displayName = user.greeting_name || user.username;
+  const displayName = user.greeting_name || "User";
   const memberSince = formatDistanceToNow(new Date(user.created_at), { addSuffix: true });
 
   return (
@@ -184,7 +193,7 @@ export default function PublicUserProfile() {
                 style={{ backgroundColor: '#6366f1', color: 'white', fontSize: '2rem' }}
               />
               <h2 className="m-0">{displayName}</h2>
-              <p className="text-500 mb-3">@{user.username}</p>
+              <p className="text-500 mb-3">@{user.slug}</p>
 
               {user.bio && (
                 <p className="line-height-3">{user.bio}</p>

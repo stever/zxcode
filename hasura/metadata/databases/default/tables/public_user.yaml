@@ -64,6 +64,7 @@ update_permissions:
         - email_address
         - bio
         - profile_is_public
+        - slug
       filter:
         user_id:
           _eq: X-Hasura-User-Id
