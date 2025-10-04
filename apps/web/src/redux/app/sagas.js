@@ -43,15 +43,22 @@ function* handleShowActiveEmulatorActions(_) {
     try {
         const projectId = yield select((state) => state.project.id);
         const isProject = typeof projectId !== 'undefined';
+        const currentPath = yield select((state) => state?.router?.location?.pathname);
 
         if (isProject) {
-            history.push(`/projects/${projectId}`);
+            const targetPath = `/projects/${projectId}`;
+            // Only push to history if we're not already on this page
+            if (currentPath !== targetPath) {
+                history.push(targetPath);
+            }
         } else {
-
             // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
             const isMobile = yield select((state) => state.window.isMobile);
             if (isMobile) yield put(setDemoTabIndex(0));
-            history.push('/');
+            // Only push to history if we're not already on the home page
+            if (currentPath !== '/') {
+                history.push('/');
+            }
         }
     } catch (e) {
         handleException(e);
@@ -62,15 +69,23 @@ function* handleResetEmulatorActions(_) {
     try {
         const projectId = yield select((state) => state.project.id);
         const isProject = typeof projectId !== 'undefined';
+        const currentPath = yield select((state) => state?.router?.location?.pathname);
+
         if (isProject) {
-            history.push(`/projects/${projectId}`);
+            const targetPath = `/projects/${projectId}`;
+            // Only push to history if we're not already on this page
+            if (currentPath !== targetPath) {
+                history.push(targetPath);
+            }
             yield put(reset());
         } else {
-
             // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
             const isMobile = yield select((state) => state.window.isMobile);
             if (isMobile) yield put(setDemoTabIndex(0));
-            history.push('/');
+            // Only push to history if we're not already on the home page
+            if (currentPath !== '/') {
+                history.push('/');
+            }
             yield put(reset());
         }
     } catch (e) {
