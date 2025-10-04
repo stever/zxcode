@@ -15,6 +15,8 @@ export default function ProjectList() {
 
     const projects = useSelector(state => state?.projectList.projectList);
     const isMobile = useSelector(state => state?.window.isMobile);
+    const userSlug = useSelector(state => state?.identity.userSlug);
+    const userId = useSelector(state => state?.identity.userId);
 
     const [first, setFirst] = useState(0);
     const [rows, setRows] = useState(10);
@@ -27,8 +29,13 @@ export default function ProjectList() {
     }, [dispatch]);
 
     function formatLinkName(data) {
+        // Use slug-based URL if both user and project slugs are available
+        const projectUrl = userSlug && data['slug']
+            ? `/u/${userSlug}/${data['slug']}`
+            : `/projects/${data['project_id']}`;
+
         return (
-            <Link to={`/projects/${data['project_id']}`}>
+            <Link to={projectUrl}>
                 {data['title']}
             </Link>
         )

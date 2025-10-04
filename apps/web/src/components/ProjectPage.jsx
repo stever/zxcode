@@ -10,8 +10,10 @@ import {loadProject, setSelectedTabIndex, setErrorItems} from "../redux/project/
 import {showToastsForErrorItems} from "../errors";
 import {sep} from "../constants";
 
-export default function ProjectPage() {
+export default function ProjectPage({ projectId }) {
     const {id} = useParams();
+    // Use the prop if provided, otherwise use the param
+    const effectiveId = projectId || id;
 
     const dispatch = useDispatch();
 
@@ -25,9 +27,9 @@ export default function ProjectPage() {
     const toast = useRef(null);
 
     useEffect(() => {
-        dispatch(loadProject(id));
+        dispatch(loadProject(effectiveId));
         return () => {};
-    }, [id, userId]);
+    }, [effectiveId, userId]);
 
     useEffect(() => {
         if (errorItems && errorItems.length > 0 && toast.current) {
@@ -38,7 +40,7 @@ export default function ProjectPage() {
         return () => {};
     }, [errorItems, toast.current]);
 
-    if (!id || !lang) {
+    if (!effectiveId || !lang) {
         return <></>;
     }
 
@@ -92,7 +94,7 @@ export default function ProjectPage() {
                                         <Emulator zoom={zoom} width={width}/>
                                     </TabPanel>
                                     <TabPanel header={editorTitle}>
-                                        <ProjectEditor id={id}/>
+                                        <ProjectEditor id={effectiveId}/>
                                     </TabPanel>
                                 </TabView>
                             </div>
@@ -108,7 +110,7 @@ export default function ProjectPage() {
                                     activeIndex={selectedTabIndex}
                                     onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
                                     <TabPanel header={editorTitle}>
-                                        <ProjectEditor id={id}/>
+                                        <ProjectEditor id={effectiveId}/>
                                     </TabPanel>
                                 </TabView>
                             </div>

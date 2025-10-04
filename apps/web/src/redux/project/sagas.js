@@ -82,7 +82,14 @@ function* handleCreateNewProjectActions(action) {
         const projectSlug = response?.data?.insert_project_one?.slug;
 
         yield put(receiveLoadedProject(id, action.title, action.lang, '', false, projectSlug));
-        history.push(`/projects/${id}`);
+
+        // Use slug-based URL if both user and project slugs are available
+        const userSlug = yield select((state) => state?.identity.userSlug);
+        if (userSlug && projectSlug) {
+            history.push(`/u/${userSlug}/${projectSlug}`);
+        } else {
+            history.push(`/projects/${id}`);
+        }
     } catch (e) {
         handleException(e);
     }
@@ -226,7 +233,14 @@ function* handleRenameProjectActions(action) {
         // noinspection JSUnresolvedVariable
         console.assert(response?.data?.update_project_by_pk?.project_id, response);
 
+        const newSlug = response?.data?.update_project_by_pk?.slug;
         yield put(setProjectTitle(action.title));
+
+        // Update project with new slug
+        const lang = yield select((state) => state.project.lang);
+        const code = yield select((state) => state.project.code);
+        const isPublic = yield select((state) => state.project.isPublic);
+        yield put(receiveLoadedProject(projectId, action.title, lang, code, isPublic, newSlug));
     } catch (e) {
         handleException(e);
     }
