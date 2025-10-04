@@ -51,6 +51,7 @@ select_permissions:
       filter:
         profile_is_public:
           _eq: true
+      allow_aggregations: true
   - role: zxplay-user
     permission:
       columns:
@@ -69,6 +70,7 @@ select_permissions:
               _eq: X-Hasura-User-Id
           - profile_is_public:
               _eq: true
+      allow_aggregations: true
 update_permissions:
   - role: zxplay-user
     permission:

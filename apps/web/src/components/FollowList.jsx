@@ -8,6 +8,7 @@ import { Avatar } from "primereact/avatar";
 import { ProgressSpinner } from "primereact/progressspinner";
 import { Message } from "primereact/message";
 import { TabView, TabPanel } from "primereact/tabview";
+import { Paginator } from "primereact/paginator";
 import gql from "graphql-tag";
 import { gqlFetch } from "../graphql_fetch";
 import { sep } from "../constants";
@@ -15,12 +16,22 @@ import { formatDistanceToNow } from "date-fns";
 import { followUser, unfollowUser } from "../redux/social/actions";
 
 const GET_USER_WITH_FOLLOWS = gql`
-  query GetUserWithFollows($slug: String!) {
+  query GetUserWithFollows($slug: String!, $followersLimit: Int!, $followersOffset: Int!, $followingLimit: Int!, $followingOffset: Int!) {
     user(where: { slug: { _eq: $slug } }, limit: 1) {
       user_id
       greeting_name
       slug
-      followers {
+      followers_aggregate {
+        aggregate {
+          count
+        }
+      }
+      following_aggregate {
+        aggregate {
+          count
+        }
+      }
+      followers(limit: $followersLimit, offset: $followersOffset, order_by: {created_at: desc}) {
         follower {
           user_id
           greeting_name
@@ -29,7 +40,7 @@ const GET_USER_WITH_FOLLOWS = gql`
           created_at
         }
       }
-      following {
+      following(limit: $followingLimit, offset: $followingOffset, order_by: {created_at: desc}) {
         following {
           user_id
           greeting_name
@@ -88,7 +99,9 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
               icon={isFollowing ? "pi pi-user-minus" : "pi pi-user-plus"}
               onClick={() => onFollowToggle(user.user_id)}
               severity={isFollowing ? "secondary" : "primary"}
+              outlined={isFollowing}
               size="small"
+              style={isFollowing ? { color: '#6c757d', borderColor: '#6c757d' } : {}}
             />
           )}
           <span className="text-400 text-sm mt-2">
@@ -101,9 +114,12 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
 }
 
 export default function FollowList() {
-  const { slug, type } = useParams();
+  const { slug } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+
+  // Determine the type from the URL path
+  const type = window.location.pathname.includes('/following') ? 'following' : 'followers';
 
   const [user, setUser] = useState(null);
   const [followers, setFollowers] = useState([]);
@@ -112,7 +128,19 @@ export default function FollowList() {
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(type === "following" ? 1 : 0);
 
+  // Pagination states
+  const [followersPage, setFollowersPage] = useState(0);
+  const [followingPage, setFollowingPage] = useState(0);
+  const [totalFollowers, setTotalFollowers] = useState(0);
+  const [totalFollowing, setTotalFollowing] = useState(0);
+  const rowsPerPage = 10;
+
   const currentUserId = useSelector((state) => state?.identity.userId);
+
+  // Update activeIndex when type changes
+  useEffect(() => {
+    setActiveIndex(type === "following" ? 1 : 0);
+  }, [type]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -120,7 +148,13 @@ export default function FollowList() {
         setLoading(true);
 
         // Fetch user with followers and following
-        const response = await gqlFetch(null, GET_USER_WITH_FOLLOWS, { slug });
+        const response = await gqlFetch(null, GET_USER_WITH_FOLLOWS, {
+          slug,
+          followersLimit: rowsPerPage,
+          followersOffset: followersPage * rowsPerPage,
+          followingLimit: rowsPerPage,
+          followingOffset: followingPage * rowsPerPage
+        });
         const userData = response?.data?.user?.[0];
 
         if (!userData) {
@@ -131,6 +165,8 @@ export default function FollowList() {
         setUser(userData);
         setFollowers(userData.followers?.map(f => f.follower) || []);
         setFollowing(userData.following?.map(f => f.following) || []);
+        setTotalFollowers(userData.followers_aggregate?.aggregate?.count || 0);
+        setTotalFollowing(userData.following_aggregate?.aggregate?.count || 0);
 
         // Check following status for all users if logged in
         if (currentUserId) {
@@ -165,7 +201,7 @@ export default function FollowList() {
     };
 
     fetchData();
-  }, [slug, currentUserId]);
+  }, [slug, currentUserId, followersPage, followingPage]);
 
   const handleFollowToggle = async (userId) => {
     if (!currentUserId) return;
@@ -232,21 +268,32 @@ export default function FollowList() {
 
           <TabView activeIndex={activeIndex} onTabChange={handleTabChange}>
             <TabPanel
-              header={`Followers (${followers.length})`}
+              header={`Followers (${totalFollowers})`}
               leftIcon="pi pi-users"
             >
               {followers.length > 0 ? (
-                <div>
-                  {followers.map((follower) => (
-                    <UserCard
-                      key={follower.user_id}
-                      user={follower}
-                      isFollowing={followingStatus[follower.user_id] || false}
-                      onFollowToggle={handleFollowToggle}
-                      currentUserId={currentUserId}
+                <>
+                  <div>
+                    {followers.map((follower) => (
+                      <UserCard
+                        key={follower.user_id}
+                        user={follower}
+                        isFollowing={followingStatus[follower.user_id] || false}
+                        onFollowToggle={handleFollowToggle}
+                        currentUserId={currentUserId}
+                      />
+                    ))}
+                  </div>
+                  {totalFollowers > rowsPerPage && (
+                    <Paginator
+                      first={followersPage * rowsPerPage}
+                      rows={rowsPerPage}
+                      totalRecords={totalFollowers}
+                      onPageChange={(e) => setFollowersPage(e.page)}
+                      className="mt-3"
                     />
-                  ))}
-                </div>
+                  )}
+                </>
               ) : (
                 <div className="text-center py-4">
                   <i className="pi pi-users text-4xl text-300 mb-3" />
@@ -256,21 +303,32 @@ export default function FollowList() {
             </TabPanel>
 
             <TabPanel
-              header={`Following (${following.length})`}
+              header={`Following (${totalFollowing})`}
               leftIcon="pi pi-user-plus"
             >
               {following.length > 0 ? (
-                <div>
-                  {following.map((followedUser) => (
-                    <UserCard
-                      key={followedUser.user_id}
-                      user={followedUser}
-                      isFollowing={followingStatus[followedUser.user_id] || false}
-                      onFollowToggle={handleFollowToggle}
-                      currentUserId={currentUserId}
+                <>
+                  <div>
+                    {following.map((followedUser) => (
+                      <UserCard
+                        key={followedUser.user_id}
+                        user={followedUser}
+                        isFollowing={followingStatus[followedUser.user_id] || false}
+                        onFollowToggle={handleFollowToggle}
+                        currentUserId={currentUserId}
+                      />
+                    ))}
+                  </div>
+                  {totalFollowing > rowsPerPage && (
+                    <Paginator
+                      first={followingPage * rowsPerPage}
+                      rows={rowsPerPage}
+                      totalRecords={totalFollowing}
+                      onPageChange={(e) => setFollowingPage(e.page)}
+                      className="mt-3"
                     />
-                  ))}
-                </div>
+                  )}
+                </>
               ) : (
                 <div className="text-center py-4">
                   <i className="pi pi-user-plus text-4xl text-300 mb-3" />
