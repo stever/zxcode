@@ -283,26 +283,6 @@ export default function PublicUserProfile() {
                   <span className="text-500">Member since:</span>
                   <span>{memberSince}</span>
                 </div>
-                <div className="flex justify-content-between mb-2">
-                  <span className="text-500">Public projects:</span>
-                  <span>{user.projects?.length || 0}</span>
-                </div>
-                <div className="flex justify-content-between mb-2">
-                  <span className="text-500">Followers:</span>
-                  <Link to={`/u/${user.slug}/followers`} className="no-underline">
-                    <span className="text-primary hover:underline cursor-pointer">
-                      {followersCount}
-                    </span>
-                  </Link>
-                </div>
-                <div className="flex justify-content-between mb-2">
-                  <span className="text-500">Following:</span>
-                  <Link to={`/u/${user.slug}/following`} className="no-underline">
-                    <span className="text-primary hover:underline cursor-pointer">
-                      {followingCount}
-                    </span>
-                  </Link>
-                </div>
               </div>
 
               {!isOwnProfile && currentUserId && (
@@ -320,24 +300,22 @@ export default function PublicUserProfile() {
 
               <Divider />
               <div className="flex gap-2">
-                <Button
-                  label={`${followersCount} Followers`}
-                  icon="pi pi-users"
-                  className="flex-1"
-                  severity="secondary"
-                  outlined
-                  size="small"
+                <button
+                  className="flex-1 p-button p-component p-button-outlined p-button-secondary p-button-sm flex flex-column align-items-center py-2"
                   onClick={() => navigate(`/u/${user.slug}/followers`)}
-                />
-                <Button
-                  label={`${followingCount} Following`}
-                  icon="pi pi-user-plus"
-                  className="flex-1"
-                  severity="secondary"
-                  outlined
-                  size="small"
+                >
+                  <i className="pi pi-users mb-1"></i>
+                  <span className="font-bold text-lg">{followersCount}</span>
+                  <span className="text-sm">Followers</span>
+                </button>
+                <button
+                  className="flex-1 p-button p-component p-button-outlined p-button-secondary p-button-sm flex flex-column align-items-center py-2"
                   onClick={() => navigate(`/u/${user.slug}/following`)}
-                />
+                >
+                  <i className="pi pi-user-plus mb-1"></i>
+                  <span className="font-bold text-lg">{followingCount}</span>
+                  <span className="text-sm">Following</span>
+                </button>
               </div>
 
               {isOwnProfile && (
@@ -365,7 +343,7 @@ export default function PublicUserProfile() {
         </div>
 
         <div className="col-12 lg:col-9">
-          <Card title="Public Projects">
+          <Card title={`Public Projects (${user.projects?.length || 0})`}>
             {user.projects && user.projects.length > 0 ? (
               <div className="grid">
                 {user.projects.map((project) => {
