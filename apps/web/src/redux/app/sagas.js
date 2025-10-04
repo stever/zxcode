@@ -42,15 +42,27 @@ export function* watchForRequestPrivacyPolicyActions() {
 function* handleShowActiveEmulatorActions(_) {
     try {
         const projectId = yield select((state) => state.project.id);
+        const projectSlug = yield select((state) => state.project.slug);
+        const userSlug = yield select((state) => state?.identity.userSlug);
         const isProject = typeof projectId !== 'undefined';
         const currentPath = yield select((state) => state?.router?.location?.pathname);
 
         if (isProject) {
-            const targetPath = `/projects/${projectId}`;
-            // Only push to history if we're not already on this page
-            if (currentPath !== targetPath) {
+            // Don't change the URL if we're already on a project page
+            const isOnProjectPage = currentPath?.includes(`/projects/${projectId}`) ||
+                                   (userSlug && projectSlug && currentPath?.includes(`/u/${userSlug}/${projectSlug}`));
+
+            if (!isOnProjectPage) {
+                // We're not on a project page, navigate to one
+                let targetPath;
+                if (userSlug && projectSlug) {
+                    targetPath = `/u/${userSlug}/${projectSlug}`;
+                } else {
+                    targetPath = `/projects/${projectId}`;
+                }
                 history.push(targetPath);
             }
+            // If we're already on a project page (either UUID or slug), don't change the URL
         } else {
             // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
             const isMobile = yield select((state) => state.window.isMobile);
@@ -68,11 +80,25 @@ function* handleShowActiveEmulatorActions(_) {
 function* handleResetEmulatorActions(_) {
     try {
         const projectId = yield select((state) => state.project.id);
+        const projectSlug = yield select((state) => state.project.slug);
+        const userSlug = yield select((state) => state?.identity.userSlug);
         const isProject = typeof projectId !== 'undefined';
         const currentPath = yield select((state) => state?.router?.location?.pathname);
 
         if (isProject) {
-            const targetPath = `/projects/${projectId}`;
+            // If we have slugs and are on a slug-based URL, stay on it
+            // Otherwise fall back to UUID-based URL
+            let targetPath;
+            if (userSlug && projectSlug && currentPath?.includes(`/u/${userSlug}/${projectSlug}`)) {
+                targetPath = `/u/${userSlug}/${projectSlug}`;
+            } else if (userSlug && projectSlug) {
+                // If we have slugs but aren't on a slug URL, prefer the slug URL
+                targetPath = `/u/${userSlug}/${projectSlug}`;
+            } else {
+                // Fall back to UUID if slugs aren't available
+                targetPath = `/projects/${projectId}`;
+            }
+
             // Only push to history if we're not already on this page
             if (currentPath !== targetPath) {
                 history.push(targetPath);

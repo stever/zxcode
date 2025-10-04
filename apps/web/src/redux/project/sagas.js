@@ -159,7 +159,6 @@ function* handleLoadProjectActions(action) {
 
         // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
         const isMobile = yield select((state) => state.window.isMobile);
-        console.log('handleRunProjectCodeActions', isMobile);
         if (isMobile) yield put(setSelectedTabIndex(1));
     } catch (e) {
         handleException(e);
