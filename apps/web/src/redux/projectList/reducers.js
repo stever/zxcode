@@ -4,14 +4,34 @@ import {actionTypes} from "./actions";
 // Initial state
 // -----------------------------------------------------------------------------
 
+// Load preferences from localStorage if available
+const loadPreferences = () => {
+    try {
+        const saved = localStorage.getItem('projectListPreferences');
+        if (saved) {
+            return JSON.parse(saved);
+        }
+    } catch (e) {
+        console.error('Failed to load project list preferences:', e);
+    }
+    return {
+        rowsPerPage: 10,
+        currentPage: 0,
+        sortField: null,
+        sortOrder: null
+    };
+};
+
+const savedPreferences = loadPreferences();
+
 const initialState = {
     projectList: undefined,
     // Pagination preferences
-    rowsPerPage: 10,
-    currentPage: 0,
+    rowsPerPage: savedPreferences.rowsPerPage,
+    currentPage: savedPreferences.currentPage,
     // Sorting preferences
-    sortField: null,
-    sortOrder: null
+    sortField: savedPreferences.sortField,
+    sortOrder: savedPreferences.sortOrder
 };
 
 // -----------------------------------------------------------------------------
@@ -30,10 +50,25 @@ function receiveprojectListQueryResult(state, action) {
 }
 
 function setProjectListPreferences(state, action) {
-    return {
+    const newState = {
         ...state,
         ...action.preferences
+    };
+
+    // Save to localStorage
+    try {
+        const preferences = {
+            rowsPerPage: newState.rowsPerPage,
+            currentPage: newState.currentPage,
+            sortField: newState.sortField,
+            sortOrder: newState.sortOrder
+        };
+        localStorage.setItem('projectListPreferences', JSON.stringify(preferences));
+    } catch (e) {
+        console.error('Failed to save project list preferences:', e);
     }
+
+    return newState;
 }
 
 // -----------------------------------------------------------------------------
