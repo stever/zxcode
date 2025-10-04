@@ -1,0 +1,380 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
+import { Titled } from "react-titled";
+import { Card } from "primereact/card";
+import { InputText } from "primereact/inputtext";
+import { InputTextarea } from "primereact/inputtextarea";
+import { InputSwitch } from "primereact/inputswitch";
+import { Button } from "primereact/button";
+import { Message } from "primereact/message";
+import { ProgressSpinner } from "primereact/progressspinner";
+import { Divider } from "primereact/divider";
+import gql from "graphql-tag";
+import { gqlFetch } from "../graphql_fetch";
+import { sep } from "../constants";
+import { generateSlug, isValidSlug, isReservedSlug } from "../utils/slug";
+
+const GET_USER_PROFILE = gql`
+  query GetUserProfile($user_id: uuid!) {
+    user_by_pk(user_id: $user_id) {
+      user_id
+      username
+      greeting_name
+      full_name
+      email_address
+      bio
+      profile_is_public
+      slug
+    }
+  }
+`;
+
+const UPDATE_USER_PROFILE = gql`
+  mutation UpdateUserProfile(
+    $user_id: uuid!
+    $greeting_name: String
+    $full_name: String
+    $email_address: String
+    $bio: String
+    $profile_is_public: Boolean!
+  ) {
+    update_user_by_pk(
+      pk_columns: { user_id: $user_id }
+      _set: {
+        greeting_name: $greeting_name
+        full_name: $full_name
+        email_address: $email_address
+        bio: $bio
+        profile_is_public: $profile_is_public
+      }
+    ) {
+      user_id
+      slug
+    }
+  }
+`;
+
+const CHECK_SLUG_AVAILABILITY = gql`
+  query CheckSlugAvailability($slug: String!, $user_id: uuid!) {
+    user(
+      where: {
+        slug: { _eq: $slug },
+        user_id: { _neq: $user_id }
+      }
+    ) {
+      user_id
+    }
+  }
+`;
+
+export default function UserProfileSettings() {
+  const navigate = useNavigate();
+  const userId = useSelector(state => state?.identity.userId);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState({
+    greeting_name: "",
+    full_name: "",
+    email_address: "",
+    bio: "",
+    profile_is_public: true,
+    slug: ""
+  });
+  const [originalProfile, setOriginalProfile] = useState(null);
+  const [slugError, setSlugError] = useState("");
+  const [saveMessage, setSaveMessage] = useState(null);
+
+  useEffect(() => {
+    if (userId) {
+      fetchProfile();
+    } else {
+      // Redirect to home if not logged in
+      navigate("/");
+    }
+  }, [userId]);
+
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      const response = await gqlFetch(userId, GET_USER_PROFILE, { user_id: userId });
+
+      if (response?.data?.user_by_pk) {
+        const userData = response.data.user_by_pk;
+        const profileData = {
+          greeting_name: userData.greeting_name || "",
+          full_name: userData.full_name || "",
+          email_address: userData.email_address || "",
+          bio: userData.bio || "",
+          profile_is_public: userData.profile_is_public,
+          slug: userData.slug || generateSlug(userData.username)
+        };
+        setProfile(profileData);
+        setOriginalProfile(profileData);
+      }
+    } catch (error) {
+      console.error("Failed to fetch profile:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validateSlug = async (slug) => {
+    if (!slug) {
+      setSlugError("URL slug is required");
+      return false;
+    }
+
+    if (!isValidSlug(slug)) {
+      setSlugError("Slug must be 3+ characters, lowercase letters, numbers, and hyphens only");
+      return false;
+    }
+
+    if (isReservedSlug(slug)) {
+      setSlugError("This URL is reserved and cannot be used");
+      return false;
+    }
+
+    // Check if slug is available
+    try {
+      const response = await gqlFetch(userId, CHECK_SLUG_AVAILABILITY, {
+        slug,
+        user_id: userId
+      });
+
+      if (response?.data?.user?.length > 0) {
+        setSlugError("This URL is already taken");
+        return false;
+      }
+    } catch (error) {
+      console.error("Failed to check slug availability:", error);
+      setSlugError("Failed to verify URL availability");
+      return false;
+    }
+
+    setSlugError("");
+    return true;
+  };
+
+  const handleSlugChange = (value) => {
+    const slug = generateSlug(value);
+    setProfile({ ...profile, slug });
+    setSlugError(""); // Clear error on change
+  };
+
+  const handleSave = async () => {
+    // Validate slug if it changed
+    if (profile.slug !== originalProfile.slug) {
+      const isValid = await validateSlug(profile.slug);
+      if (!isValid) return;
+    }
+
+    setSaving(true);
+    setSaveMessage(null);
+
+    try {
+      const response = await gqlFetch(userId, UPDATE_USER_PROFILE, {
+        user_id: userId,
+        greeting_name: profile.greeting_name || null,
+        full_name: profile.full_name || null,
+        email_address: profile.email_address || null,
+        bio: profile.bio || null,
+        profile_is_public: profile.profile_is_public
+      });
+
+      if (response?.data?.update_user_by_pk) {
+        setOriginalProfile(profile);
+        setSaveMessage({ severity: "success", text: "Profile updated successfully!" });
+
+        // Clear success message after 3 seconds
+        setTimeout(() => setSaveMessage(null), 3000);
+      }
+    } catch (error) {
+      console.error("Failed to save profile:", error);
+      setSaveMessage({ severity: "error", text: "Failed to save profile changes" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setProfile(originalProfile);
+    setSlugError("");
+    navigate(-1);
+  };
+
+  const hasChanges = JSON.stringify(profile) !== JSON.stringify(originalProfile);
+
+  if (loading) {
+    return (
+      <div className="flex justify-content-center align-items-center" style={{ minHeight: "400px" }}>
+        <ProgressSpinner />
+      </div>
+    );
+  }
+
+  return (
+    <Titled title={s => `Profile Settings ${sep} ${s}`}>
+      <Card className="m-2">
+        <h2>Profile Settings</h2>
+
+        {saveMessage && (
+          <Message
+            severity={saveMessage.severity}
+            text={saveMessage.text}
+            className="mb-3 w-full"
+          />
+        )}
+
+        <div className="formgroup-inline">
+          <div className="field grid">
+            <label htmlFor="greeting_name" className="col-12 mb-2 md:col-3 md:mb-0">
+              Display Name
+            </label>
+            <div className="col-12 md:col-9">
+              <InputText
+                id="greeting_name"
+                value={profile.greeting_name}
+                onChange={(e) => setProfile({ ...profile, greeting_name: e.target.value })}
+                className="w-full"
+                placeholder="How you want to be greeted"
+              />
+              <small className="block mt-1">This is how you'll be addressed in the app</small>
+            </div>
+          </div>
+
+          <div className="field grid">
+            <label htmlFor="full_name" className="col-12 mb-2 md:col-3 md:mb-0">
+              Full Name
+            </label>
+            <div className="col-12 md:col-9">
+              <InputText
+                id="full_name"
+                value={profile.full_name}
+                onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
+                className="w-full"
+                placeholder="Your full name (optional)"
+              />
+            </div>
+          </div>
+
+          <div className="field grid">
+            <label htmlFor="email_address" className="col-12 mb-2 md:col-3 md:mb-0">
+              Email Address
+            </label>
+            <div className="col-12 md:col-9">
+              <InputText
+                id="email_address"
+                type="email"
+                value={profile.email_address}
+                onChange={(e) => setProfile({ ...profile, email_address: e.target.value })}
+                className="w-full"
+                placeholder="your@email.com (optional)"
+              />
+            </div>
+          </div>
+
+          <div className="field grid">
+            <label htmlFor="bio" className="col-12 mb-2 md:col-3 md:mb-0">
+              Bio
+            </label>
+            <div className="col-12 md:col-9">
+              <InputTextarea
+                id="bio"
+                value={profile.bio}
+                onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                className="w-full"
+                rows={4}
+                maxLength={500}
+                placeholder="Tell us about yourself..."
+              />
+              <small className="block mt-1">
+                {profile.bio.length}/500 characters
+              </small>
+            </div>
+          </div>
+
+          <Divider />
+
+          <div className="field grid">
+            <label htmlFor="slug" className="col-12 mb-2 md:col-3 md:mb-0">
+              Profile URL
+            </label>
+            <div className="col-12 md:col-9">
+              <div className="p-inputgroup">
+                <span className="p-inputgroup-addon">{window.location.origin}/u/</span>
+                <InputText
+                  id="slug"
+                  value={profile.slug}
+                  onChange={(e) => handleSlugChange(e.target.value)}
+                  className={slugError ? "p-invalid" : ""}
+                  placeholder="your-unique-url"
+                />
+              </div>
+              {slugError && (
+                <small className="p-error block mt-1">{slugError}</small>
+              )}
+              {!slugError && profile.slug && (
+                <small className="block mt-1">
+                  Your profile will be at: {window.location.origin}/u/{profile.slug}
+                </small>
+              )}
+            </div>
+          </div>
+
+          <div className="field grid">
+            <label htmlFor="profile_is_public" className="col-12 mb-2 md:col-3 md:mb-0">
+              Public Profile
+            </label>
+            <div className="col-12 md:col-9">
+              <div className="flex align-items-center gap-3">
+                <InputSwitch
+                  id="profile_is_public"
+                  checked={profile.profile_is_public}
+                  onChange={(e) => setProfile({ ...profile, profile_is_public: e.value })}
+                />
+                <span>{profile.profile_is_public ? "Public" : "Private"}</span>
+              </div>
+              <small className="block mt-2">
+                {profile.profile_is_public
+                  ? "Your profile and public projects are visible to everyone"
+                  : "Your profile is hidden from public view"}
+              </small>
+            </div>
+          </div>
+
+          <Divider />
+
+          <div className="flex justify-content-between align-items-center">
+            <div>
+              {profile.slug && (
+                <Button
+                  label="View Public Profile"
+                  icon="pi pi-external-link"
+                  className="p-button-text"
+                  onClick={() => window.open(`/u/${profile.slug}`, "_blank")}
+                />
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                label="Cancel"
+                icon="pi pi-times"
+                className="p-button-outlined"
+                onClick={handleCancel}
+              />
+              <Button
+                label="Save Changes"
+                icon="pi pi-check"
+                disabled={!hasChanges || !!slugError}
+                loading={saving}
+                onClick={handleSave}
+              />
+            </div>
+          </div>
+        </div>
+      </Card>
+    </Titled>
+  );
+}

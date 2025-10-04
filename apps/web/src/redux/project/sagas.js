@@ -5,6 +5,7 @@ import {gqlFetch} from "../../graphql_fetch";
 import {actionTypes, reset, receiveLoadedProject, setSavedCode, setSelectedTabIndex, setProjectTitle} from "./actions";
 import {pause, reset as resetMachine} from "../jsspeccy/actions";
 import {handleException} from "../../errors";
+import {generateSlug} from "../../utils/slug";
 
 // -----------------------------------------------------------------------------
 // Action watchers
@@ -52,17 +53,22 @@ function* handleCreateNewProjectActions(action) {
     try {
         const userId = yield select((state) => state.identity.userId);
 
+        // Generate slug from the title
+        const slug = generateSlug(action.title);
+
         const query = gql`
-            mutation ($title: String!, $lang: String!) {
-                insert_project_one(object: {title: $title, lang: $lang}) {
+            mutation ($title: String!, $lang: String!, $slug: String!) {
+                insert_project_one(object: {title: $title, lang: $lang, slug: $slug}) {
                     project_id
+                    slug
                 }
             }
         `;
 
         const variables = {
             'title': action.title,
-            'lang': action.lang
+            'lang': action.lang,
+            'slug': slug
         };
 
         // noinspection JSCheckFunctionSignatures
@@ -73,8 +79,9 @@ function* handleCreateNewProjectActions(action) {
 
         // noinspection JSUnresolvedVariable
         const id = response?.data?.insert_project_one?.project_id;
+        const projectSlug = response?.data?.insert_project_one?.slug;
 
-        yield put(receiveLoadedProject(id, action.title, action.lang, '', false, null));
+        yield put(receiveLoadedProject(id, action.title, action.lang, '', false, projectSlug));
         history.push(`/projects/${id}`);
     } catch (e) {
         handleException(e);
@@ -193,17 +200,22 @@ function* handleRenameProjectActions(action) {
         const userId = yield select((state) => state.identity.userId);
         const projectId = yield select((state) => state.project.id);
 
+        // Generate new slug from the new title
+        const slug = generateSlug(action.title);
+
         const query = gql`
-            mutation ($project_id: uuid!, $title: String!) {
-                update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {title: $title}) {
+            mutation ($project_id: uuid!, $title: String!, $slug: String!) {
+                update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {title: $title, slug: $slug}) {
                     project_id
+                    slug
                 }
             }
         `;
 
         const variables = {
             'project_id': projectId,
-            'title': action.title
+            'title': action.title,
+            'slug': slug
         };
 
         // noinspection JSCheckFunctionSignatures
