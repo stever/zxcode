@@ -175,7 +175,7 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
           </div>
 
           <Link to={projectUrl} className="no-underline" style={{ pointerEvents: isSortableDragging ? "none" : "auto" }}>
-            <h4 className="mb-2 text-white relative z-1">{project.title}</h4>
+            <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
           </Link>
 
           <Tag
@@ -597,9 +597,9 @@ export default function PublicUserProfile() {
                                 />
                               </div>
 
-                              <h4 className="mb-2 text-white relative z-1">
+                              <h3 className="mb-2 text-white relative z-1">
                                 {project.title}
-                              </h4>
+                              </h3>
 
                               <Tag
                                 value={getLanguageLabel(project.lang)}
