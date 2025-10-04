@@ -23,6 +23,7 @@ import PublicProjectPage from "./PublicProjectPage";
 import UserProfileSettings from "./UserProfileSettings";
 import YourProjectsPage from "./YourProjectsPage";
 import ActivityFeed from "./ActivityFeed";
+import FollowList from "./FollowList";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
 import clsx from "clsx";
@@ -142,6 +143,8 @@ export default function App() {
                 path="/u/:id/projects"
                 element={<YourProjectsPage />}
               />
+              <Route exact path="/u/:slug/followers" element={<FollowList />} />
+              <Route exact path="/u/:slug/following" element={<FollowList />} />
               <Route
                 exact
                 path="/feed"
