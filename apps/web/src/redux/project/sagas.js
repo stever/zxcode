@@ -236,25 +236,23 @@ function* handleRenameProjectActions(action) {
         const projectId = yield select((state) => state.project.id);
         const currentSlug = yield select((state) => state.project.slug);
 
-        console.log('Rename project action:', {
-            title: action.title,
-            providedSlug: action.slug,
-            currentSlug: currentSlug
-        });
-
         // Determine the desired slug:
-        // - If slug is provided and not empty, use it (run through generateSlug to sanitize)
+        // - If slug is provided and not empty, use it (lightly sanitized)
         // - Otherwise, generate from title
         let slug;
         if (action.slug && action.slug.trim()) {
-            // User provided a custom slug
-            slug = generateSlug(action.slug);
+            // User provided a custom slug - do minimal sanitization to preserve intent
+            slug = action.slug.trim().toLowerCase()
+                // Only replace spaces with hyphens (preserve underscores and existing hyphens)
+                .replace(/\s+/g, '-')
+                // Remove any truly invalid characters (but keep underscores, hyphens, letters, numbers)
+                .replace(/[^a-z0-9_-]/g, '')
+                // Collapse multiple hyphens/underscores
+                .replace(/[-_]+/g, (match) => match[0]);
         } else {
-            // No slug provided, generate from title
+            // No slug provided, generate from title using standard rules
             slug = generateSlug(action.title);
         }
-
-        console.log('Generated slug:', slug);
 
         // If the slug hasn't changed, skip the uniqueness check
         if (slug === currentSlug) {
@@ -333,12 +331,8 @@ function* handleRenameProjectActions(action) {
             'slug': slug
         };
 
-        console.log('Updating project with variables:', variables);
-
         // noinspection JSCheckFunctionSignatures
         const response = yield call(gqlFetch, userId, query, variables);
-
-        console.log('Update response:', response?.data);
 
         if (!response?.data?.update_project_by_pk) {
             console.error('Failed to update project:', response);
@@ -349,12 +343,6 @@ function* handleRenameProjectActions(action) {
         console.assert(response?.data?.update_project_by_pk?.project_id, response);
 
         const newSlug = response?.data?.update_project_by_pk?.slug;
-        console.log('New slug from response:', newSlug);
-
-        // Verify the slug was actually updated
-        if (slug !== currentSlug && newSlug !== slug) {
-            console.error('Slug was not updated! Requested:', slug, 'Got:', newSlug);
-        }
         yield put(setProjectTitle(action.title));
 
         // Update project with new slug
@@ -371,7 +359,6 @@ function* handleRenameProjectActions(action) {
             // Only update URL if we're currently on a slug-based URL
             if (currentPath && currentPath.includes(`/${currentSlug}`)) {
                 const newPath = `/u/${userSlug}/${newSlug}`;
-                console.log('Updating URL from', currentPath, 'to', newPath);
                 history.replace(newPath);
             }
         }
