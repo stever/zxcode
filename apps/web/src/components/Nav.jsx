@@ -218,6 +218,15 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
     },
   };
 
+  const feedMenuItem = {
+    label: "Feed",
+    icon: "pi pi-fw pi-rss",
+    disabled: !userId,
+    command: () => {
+      navigate(`/feed`);
+    },
+  };
+
   const viewProjectsMenuItem = {
     label: "Your Projects",
     icon: "pi pi-fw pi-folder",
@@ -236,6 +245,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
 
   viewMenu.items.push(viewFullScreenMenuItem);
   viewMenu.items.push(sep);
+  viewMenu.items.push(feedMenuItem);
   viewMenu.items.push(viewProfileMenuItem);
   viewMenu.items.push(viewProjectsMenuItem);
   viewMenu.items.push(profileSettingsMenuItem);

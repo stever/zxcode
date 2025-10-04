@@ -22,6 +22,7 @@ import PublicUserProfile from "./PublicUserProfile";
 import PublicProjectPage from "./PublicProjectPage";
 import UserProfileSettings from "./UserProfileSettings";
 import YourProjectsPage from "./YourProjectsPage";
+import ActivityFeed from "./ActivityFeed";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
 import clsx from "clsx";
@@ -140,6 +141,11 @@ export default function App() {
                 exact
                 path="/u/:id/projects"
                 element={<YourProjectsPage />}
+              />
+              <Route
+                exact
+                path="/feed"
+                element={<ActivityFeed />}
               />
               <Route
                 exact
