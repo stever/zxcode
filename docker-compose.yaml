@@ -47,7 +47,7 @@ services:
     restart: always
 
   zxbasic:
-    image: ghcr.io/zxplay/zxcoder-api-zxbasic
+    image: ghcr.io/stever/zxcoder-api-zxbasic
     restart: always
 
 volumes:
