@@ -220,7 +220,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
 
   const feedMenuItem = {
     label: "Feed",
-    icon: "pi pi-fw pi-rss",
+    icon: "pi pi-fw pi-list",
     disabled: !userId,
     command: () => {
       navigate(`/feed`);
