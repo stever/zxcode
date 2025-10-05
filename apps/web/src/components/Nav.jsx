@@ -129,7 +129,6 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const otherMenu = { label: "Other", items: [] };
-  if (Constants.enableBoriel) otherMenu.items.push(newBoriel);
   otherMenu.items.push(newBas2Tap);
   otherMenu.items.push(newZmac);
   if (Constants.enableZ88dk) otherMenu.items.push(newZ88dk);
@@ -137,6 +136,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
 
   const newProjectItems = [];
   newProjectItems.push(newBasic);
+  if (Constants.enableBoriel) newProjectItems.push(newBoriel);
   newProjectItems.push(newPasmo);
   newProjectItems.push(otherMenu);
 
