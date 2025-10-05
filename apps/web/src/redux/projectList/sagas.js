@@ -1,4 +1,4 @@
-import {put, takeLatest} from "redux-saga/effects";
+import {put, takeLatest, select} from "redux-saga/effects";
 import gql from "graphql-tag";
 import {
     actionTypes,
@@ -38,9 +38,14 @@ export function* watchUnsubscribeFromProjectListActions() {
 
 function* handleSubscribeToProjectList(action) {
     try {
+        const userId = yield select((state) => state.identity.userId);
+
         const query = gql`
-            subscription {
-                project(order_by: {created_at: asc}) {
+            subscription($user_id: uuid!) {
+                project(
+                    where: {owner_user_id: {_eq: $user_id}},
+                    order_by: {created_at: asc}
+                ) {
                     project_id
                     title
                     lang
@@ -51,7 +56,9 @@ function* handleSubscribeToProjectList(action) {
             }
         `;
 
-        const variables = {};
+        const variables = {
+            user_id: userId
+        };
 
         yield put(subscribe(action, query, variables, subscribeToProjectListCallback));
         yield put(subscribeAction(action));
