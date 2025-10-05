@@ -32,10 +32,16 @@
     <None Update="GraphQL\GetUser.graphql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="GraphQL\GetUserByEmail.graphql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="GraphQL\GetUserRoles.graphql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="GraphQL\UpdateSessionTimestamp.graphql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="GraphQL\UpdateUserEmail.graphql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
