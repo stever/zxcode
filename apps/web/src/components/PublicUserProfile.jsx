@@ -37,7 +37,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getLanguageLabel } from "../lib/lang";
 import { generateRetroAvatar } from "../lib/avatar";
-import { generateRetroPatternAvatar } from "../lib/retroPatternAvatar";
+import { generateRetroSpriteAvatar } from "../lib/retroSpriteAvatar";
 import AvatarSelector from "./AvatarSelector";
 
 const UPDATE_PROJECT_ORDER = gql`
@@ -370,7 +370,7 @@ export default function PublicUserProfile() {
       }
 
       // Generate new avatar with selected variant
-      const newAvatar = generateRetroPatternAvatar(identifier, 120, variant);
+      const newAvatar = generateRetroSpriteAvatar(identifier, 120, variant);
       setAvatarUrl(newAvatar);
     }
   };
@@ -471,19 +471,20 @@ export default function PublicUserProfile() {
                 <Avatar
                   image={avatarUrl}
                   size="xlarge"
-                  shape="circle"
+                  shape="square"
                   className="mb-3"
                   style={{
                     width: '120px',
-                    height: '120px'
+                    height: '120px',
+                    imageRendering: 'pixelated'
                   }}
                 />
                 {isOwnProfile && (
                   <div
                     className="absolute cursor-pointer"
                     style={{
-                      top: '-8px',
-                      right: '-8px',
+                      top: '0',
+                      left: '128px',
                       backgroundColor: '#1a1a1a',
                       borderRadius: '50%',
                       width: '28px',

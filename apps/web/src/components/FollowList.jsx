@@ -92,11 +92,12 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
           <Avatar
             image={generateRetroAvatar(user.slug || user.user_id, 64)}
             size="large"
-            shape="circle"
+            shape="square"
             className="mr-3"
             style={{
               width: '64px',
-              height: '64px'
+              height: '64px',
+              imageRendering: 'pixelated'
             }}
           />
           <div>

@@ -1,4 +1,4 @@
-import { generateRetroPatternAvatar } from './retroPatternAvatar';
+import { generateRetroSpriteAvatar } from './retroSpriteAvatar';
 
 // Store user's selected variant in localStorage
 const AVATAR_VARIANT_KEY = 'avatar_variants';
@@ -36,7 +36,7 @@ function storeVariant(identifier, variant) {
  */
 export function generateRetroAvatar(identifier, size = 80) {
     const variant = getStoredVariant(identifier);
-    return generateRetroPatternAvatar(identifier, size, variant);
+    return generateRetroSpriteAvatar(identifier, size, variant);
 }
 
 /**
@@ -47,22 +47,7 @@ export function generateRetroAvatar(identifier, size = 80) {
  */
 export function regenerateAvatar(identifier, size = 80) {
     const currentVariant = getStoredVariant(identifier);
-    const nextVariant = (currentVariant + 1) % 100; // Cycle through 100 variants
+    const nextVariant = (currentVariant + 1) % 200; // More variants with transformations
     storeVariant(identifier, nextVariant);
-    return generateRetroPatternAvatar(identifier, size, nextVariant);
-}
-
-/**
- * Get all possible avatar variants for preview
- * @param {string} identifier - The identifier
- * @param {number} count - Number of variants to generate
- * @param {number} size - The size in pixels
- * @returns {Array<string>} Array of data URIs
- */
-export function getAvatarVariants(identifier, count = 9, size = 80) {
-    const variants = [];
-    for (let i = 0; i < count; i++) {
-        variants.push(generateRetroPatternAvatar(identifier, size, i));
-    }
-    return variants;
+    return generateRetroSpriteAvatar(identifier, size, nextVariant);
 }
