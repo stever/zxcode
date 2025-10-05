@@ -122,6 +122,7 @@ const GET_USER_BY_ID = gql`
 
 // Sortable project card component for drag and drop
 function SortableProjectCard({ project, projectUrl, isDragging }) {
+  const navigate = useNavigate();
   const {
     attributes,
     listeners,
@@ -140,6 +141,14 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
     opacity: isSortableDragging ? 0.5 : 1,
   };
 
+  const handleCardClick = (e) => {
+    // Don't navigate if clicking on the drag handle
+    if (e.target.closest('[data-drag-handle="true"]')) {
+      return;
+    }
+    navigate(projectUrl);
+  };
+
   return (
     <div ref={setNodeRef} style={style}>
       <Card
@@ -150,11 +159,13 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
           position: "relative",
           overflow: "visible",
         }}
+        onClick={handleCardClick}
       >
         {/* Drag handle in absolute top-right corner */}
         <div
           {...attributes}
           {...listeners}
+          data-drag-handle="true"
           className="absolute"
           style={{
             top: "-10px",
@@ -171,6 +182,7 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
             border: "2px solid #3a3a3a",
           }}
           title="Drag to reorder"
+          onClick={(e) => e.stopPropagation()}
         >
           <i
             className="pi pi-arrows-alt"
@@ -204,9 +216,7 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
             />
           </div>
 
-          <Link to={projectUrl} className="no-underline">
-            <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
-          </Link>
+          <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
 
           <Tag
             value={getLanguageLabel(project.lang)}
