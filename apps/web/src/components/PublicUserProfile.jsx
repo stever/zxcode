@@ -36,6 +36,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getLanguageLabel } from "../lib/lang";
+import { generateRetroAvatar, regenerateAvatar } from "../lib/avatar";
 
 const UPDATE_PROJECT_ORDER = gql`
   mutation UpdateProjectOrder($projectId: uuid!, $displayOrder: Int!) {
@@ -249,6 +250,7 @@ export default function PublicUserProfile() {
   const [followingCount, setFollowingCount] = useState(0);
   const [projects, setProjects] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(null);
 
   const currentUserId = useSelector((state) => state?.identity.userId);
   const currentUserSlug = useSelector((state) => state?.identity.userSlug);
@@ -342,6 +344,22 @@ export default function PublicUserProfile() {
     fetchUserProfile();
   }, [id, currentUserSlug, currentUserId, navigate]);
 
+  // Generate avatar URL when user data changes
+  useEffect(() => {
+    if (user) {
+      const identifier = user.slug || user.user_id;
+      setAvatarUrl(generateRetroAvatar(identifier, 120));
+    }
+  }, [user]);
+
+  const handleRegenerateAvatar = () => {
+    if (user) {
+      const identifier = user.slug || user.user_id;
+      const newAvatar = regenerateAvatar(identifier, 120);
+      setAvatarUrl(newAvatar);
+    }
+  };
+
   const handleFollowToggle = () => {
     if (!currentUserId || !user) return;
 
@@ -434,17 +452,33 @@ export default function PublicUserProfile() {
         <div className="col-12 lg:col-3 pr-0">
           <Card>
             <div className="flex flex-column align-items-center text-center">
-              <Avatar
-                label={displayName[0].toUpperCase()}
-                size="xlarge"
-                shape="circle"
-                className="mb-3"
-                style={{
-                  backgroundColor: "#6366f1",
-                  color: "white",
-                  fontSize: "2rem",
-                }}
-              />
+              <div className="relative">
+                <Avatar
+                  image={avatarUrl}
+                  size="xlarge"
+                  shape="circle"
+                  className="mb-3"
+                  style={{
+                    width: '120px',
+                    height: '120px'
+                  }}
+                />
+                {isOwnProfile && (
+                  <Button
+                    icon="pi pi-refresh"
+                    className="p-button-rounded p-button-sm absolute"
+                    style={{
+                      bottom: '0',
+                      right: '0',
+                      width: '32px',
+                      height: '32px'
+                    }}
+                    onClick={handleRegenerateAvatar}
+                    tooltip="Generate new avatar"
+                    tooltipOptions={{ position: 'bottom' }}
+                  />
+                )}
+              </div>
               <h2 className="m-0">{displayName}</h2>
               <p className="text-500 mb-3">@{user.slug}</p>
 

@@ -14,6 +14,7 @@ import { gqlFetch } from "../graphql_fetch";
 import { sep } from "../constants";
 import { formatDistanceToNow } from "date-fns";
 import { followUser, unfollowUser } from "../redux/social/actions";
+import { generateRetroAvatar } from "../lib/avatar";
 
 const GET_USER_WITH_FOLLOWS = gql`
   query GetUserWithFollows(
@@ -89,13 +90,13 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
       <div className="flex align-items-center justify-content-between">
         <div className="flex align-items-center">
           <Avatar
-            label={user.greeting_name?.[0]?.toUpperCase() || "?"}
+            image={generateRetroAvatar(user.slug || user.user_id, 64)}
             size="large"
             shape="circle"
             className="mr-3"
             style={{
-              backgroundColor: "#6366f1",
-              color: "white",
+              width: '64px',
+              height: '64px'
             }}
           />
           <div>
