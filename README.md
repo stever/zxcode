@@ -96,14 +96,14 @@ Configured using URL parameters.
 
 #### Example URL
 
-https://zxcoder.org/?k=-W-P,ASDe,123456789M&m=48&u=https://davidprograma.github.io/ytc/09-ZxSpectrum/snake-1.01.tap
+https://code.zxplay.org/?k=-W-P,ASDe,123456789M&m=48&u=https://davidprograma.github.io/ytc/09-ZxSpectrum/snake-1.01.tap
 
 The URL can be decomposed in these parts:
 
 - Main part:
 
 ```
-https://zxcoder.org/
+https://code.zxplay.org/
 ```
 
 - Soft keys:
