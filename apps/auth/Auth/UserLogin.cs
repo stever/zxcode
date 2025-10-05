@@ -1,5 +1,6 @@
 using System.Net;
 using Serilog;
+using SteveR.Auth.Model;
 using SteveR.Auth.Repositories;
 using SteveR.Auth.Tokens;
 
@@ -23,9 +24,20 @@ public static class UserLogin
             return HttpStatusCode.BadRequest;
         }
 
-        var userExists = await userRepository.UserExists(username);
+        // Check if user exists by email first (since email is unique and cannot be changed by users)
+        User? user = null;
+        if (!string.IsNullOrEmpty(email))
+        {
+            user = await userRepository.GetUserByEmail(email);
+        }
 
-        if (!userExists)
+        // If no user found by email, check by username
+        if (user == null)
+        {
+            user = await userRepository.GetUser(username);
+        }
+
+        if (user == null)
         {
             if (!bool.Parse(configuration["SAML:AdmitNewUsers"]))
             {
@@ -33,24 +45,25 @@ public static class UserLogin
             }
 
             // Automatically create user in database if they do not already exist there.
-            Log.Information("New user: {0}", username);
+            Log.Information("New user: {0} ({1})", username, email);
             await userRepository.CreateUser(username, email);
+
+            // Fetch the newly created user
+            user = await userRepository.GetUser(username);
+            if (user == null)
+            {
+                return HttpStatusCode.BadRequest;
+            }
         }
         else
         {
-            Log.Information("Returning user: {0}", username);
+            Log.Information("Returning user: {0} ({1})", user.Username, email);
 
             // Update email address for returning users in case it changed in Auth0
-            if (!string.IsNullOrEmpty(email))
+            if (!string.IsNullOrEmpty(email) && user.Username != null)
             {
-                await userRepository.UpdateUserEmail(username, email);
+                await userRepository.UpdateUserEmail(user.Username, email);
             }
-        }
-
-        var user = await userRepository.GetUser(username);
-        if (user == null)
-        {
-            return HttpStatusCode.BadRequest;
         }
 
         // Session data.
