@@ -117,6 +117,37 @@ public class UserRepository
         return await GetUser(username) != null;
     }
 
+    /// <param name="emailAddress">Email address to lookup in database.</param>
+    /// <returns>
+    /// User entity for the given email address, or null.
+    /// </returns>
+    public async Task<User?> GetUserByEmail(string emailAddress)
+    {
+        if (string.IsNullOrWhiteSpace(emailAddress))
+        {
+            return null;
+        }
+
+        var client = GetGraphQlClient();
+        var query = await File.ReadAllTextAsync(Path.Combine("GraphQL", "GetUserByEmail.graphql"));
+        var result = await client.Query(query, new { email_address = emailAddress.Trim() });
+        result.EnsureNoErrors();
+
+        var users = result.Get<User[]>("user");
+
+        if (users == null || users.Length == 0)
+        {
+            return null;
+        }
+
+        if (users.Length > 1)
+        {
+            throw new Exception("Unexpected number of query results");
+        }
+
+        return users[0];
+    }
+
     /// <summary>
     /// Updates the email address for an existing user.
     /// </summary>
