@@ -41,6 +41,11 @@ export function* watchForRenameProjectActions() {
     yield takeLatest(actionTypes.renameProject, handleRenameProjectActions);
 }
 
+// noinspection JSUnusedGlobalSymbols
+export function* watchForCopyProjectActions() {
+    yield takeLatest(actionTypes.copyProject, handleCopyProjectActions);
+}
+
 // -----------------------------------------------------------------------------
 // Action handlers
 // -----------------------------------------------------------------------------
@@ -111,7 +116,11 @@ function* handleCreateNewProjectActions(action) {
         const id = response?.data?.insert_project_one?.project_id;
         const projectSlug = response?.data?.insert_project_one?.slug;
 
-        yield put(receiveLoadedProject(id, action.title, action.lang, '', false, projectSlug));
+        const currentUserId = yield select((state) => state.identity.userId);
+        const currentUserSlug = yield select((state) => state.identity.userSlug);
+        const currentUserName = yield select((state) => state.identity.greetingName);
+
+        yield put(receiveLoadedProject(id, action.title, action.lang, '', false, projectSlug, currentUserSlug, currentUserId, currentUserName, true));
 
         // For newly created projects, use the UUID URL to avoid race conditions
         // The project might not be immediately queryable through the slug-based nested query
@@ -133,6 +142,12 @@ function* handleLoadProjectActions(action) {
                     code
                     is_public
                     slug
+                    owner_user_id
+                    user {
+                        slug
+                        greeting_name
+                        profile_is_public
+                    }
                 }
             }
         `;
@@ -155,7 +170,24 @@ function* handleLoadProjectActions(action) {
             return;
         }
 
-        yield put(receiveLoadedProject(action.id, proj.title, proj.lang, proj.code, proj.is_public, proj.slug, action.ownerSlug));
+        // If ownerSlug is not passed in the action, try to get it from the user data
+        const finalOwnerSlug = action.ownerSlug || proj.user?.slug;
+        const ownerId = proj.owner_user_id;
+        const ownerName = proj.user?.greeting_name;
+        const ownerProfileIsPublic = proj.user?.profile_is_public || false;
+
+        yield put(receiveLoadedProject(
+            action.id,
+            proj.title,
+            proj.lang,
+            proj.code,
+            proj.is_public,
+            proj.slug,
+            finalOwnerSlug,
+            ownerId,
+            ownerName,
+            ownerProfileIsPublic
+        ));
 
         // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
         const isMobile = yield select((state) => state.window.isMobile);
@@ -277,7 +309,11 @@ function* handleRenameProjectActions(action) {
             const lang = yield select((state) => state.project.lang);
             const code = yield select((state) => state.project.code);
             const isPublic = yield select((state) => state.project.isPublic);
-            yield put(receiveLoadedProject(projectId, action.title, lang, code, isPublic, currentSlug));
+            const ownerId = yield select((state) => state.project.ownerId);
+            const ownerSlug = yield select((state) => state.project.ownerSlug);
+            const ownerName = yield select((state) => state.project.ownerName);
+            const ownerProfileIsPublic = yield select((state) => state.project.ownerProfileIsPublic);
+            yield put(receiveLoadedProject(projectId, action.title, lang, code, isPublic, currentSlug, ownerSlug, ownerId, ownerName, ownerProfileIsPublic));
             return;
         }
 
@@ -348,7 +384,11 @@ function* handleRenameProjectActions(action) {
         const lang = yield select((state) => state.project.lang);
         const code = yield select((state) => state.project.code);
         const isPublic = yield select((state) => state.project.isPublic);
-        yield put(receiveLoadedProject(projectId, action.title, lang, code, isPublic, newSlug));
+        const ownerId = yield select((state) => state.project.ownerId);
+        const ownerSlug = yield select((state) => state.project.ownerSlug);
+        const ownerName = yield select((state) => state.project.ownerName);
+        const ownerProfileIsPublic = yield select((state) => state.project.ownerProfileIsPublic);
+        yield put(receiveLoadedProject(projectId, action.title, lang, code, isPublic, newSlug, ownerSlug, ownerId, ownerName, ownerProfileIsPublic));
 
         // If the slug changed, update the URL
         if (newSlug !== currentSlug) {
@@ -360,6 +400,86 @@ function* handleRenameProjectActions(action) {
                 const newPath = `/u/${userSlug}/${newSlug}`;
                 history.replace(newPath);
             }
+        }
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleCopyProjectActions(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+        const userSlug = yield select((state) => state.identity.userSlug);
+
+        // Generate slug from the title
+        let slug = generateSlug(action.title);
+
+        // Check if slug already exists and find a unique one
+        const checkSlugQuery = gql`
+            query CheckProjectSlug($slug: String!) {
+                project(where: {slug: {_eq: $slug}}) {
+                    slug
+                }
+            }
+        `;
+
+        // Keep checking and incrementing until we find a unique slug
+        let finalSlug = slug;
+        let counter = 1;
+
+        while (true) {
+            const checkResponse = yield call(gqlFetch, userId, checkSlugQuery, {
+                slug: finalSlug
+            });
+
+            // If no project exists with this slug, we can use it
+            if (!checkResponse?.data?.project?.length) {
+                break;
+            }
+
+            // Otherwise, try with a suffix
+            finalSlug = `${slug}-${counter}`;
+            counter++;
+        }
+
+        slug = finalSlug;
+
+        const query = gql`
+            mutation ($title: String!, $lang: String!, $code: String!, $slug: String!) {
+                insert_project_one(object: {title: $title, lang: $lang, code: $code, slug: $slug}) {
+                    project_id
+                    slug
+                }
+            }
+        `;
+
+        const variables = {
+            'title': action.title,
+            'lang': action.lang,
+            'code': action.code,
+            'slug': slug
+        };
+
+        // noinspection JSCheckFunctionSignatures
+        const response = yield call(gqlFetch, userId, query, variables);
+
+        // noinspection JSUnresolvedVariable
+        console.assert(response?.data?.insert_project_one?.project_id, response);
+
+        // noinspection JSUnresolvedVariable
+        const id = response?.data?.insert_project_one?.project_id;
+        const projectSlug = response?.data?.insert_project_one?.slug;
+
+        const currentUserName = yield select((state) => state.identity.greetingName);
+
+        yield put(receiveLoadedProject(id, action.title, action.lang, action.code, false, projectSlug, userSlug, userId, currentUserName, true));
+
+        // Navigate to the new project using the slug-based URL
+        if (userSlug && projectSlug) {
+            history.push(`/u/${userSlug}/${projectSlug}`);
+        } else {
+            // Fallback to UUID URL if slug is not available
+            history.push(`/projects/${id}`);
         }
     } catch (e) {
         handleException(e);
