@@ -23,14 +23,11 @@
     <meta name="twitter:title" content="Code . ZX Play">
     <meta name="twitter:description" content="A ZX Spectrum emulator & programming environment for the browser.">
     <meta name="twitter:image" content="/assets/images/embed-preview.png">
-    <link rel="stylesheet" type="text/css" href="/style.css?ver=0">
+    <link rel="stylesheet" type="text/css" href="/style.css?ver=<%= buildVersion %>">
 </head>
 <body>
 <div id="root"></div>
-<script>
-    window.zxplay_ver=0;
-</script>
-<script src="/dist/bundle.js?ver=0"></script>
+<script src="/dist/bundle.js?ver=<%= buildVersion %>"></script>
 <!-- <script async defer data-domain="zxcoder.org" data-api="/plausible/api/event" src="/plausible/js/script.js"></script> -->
 </body>
 </html>
