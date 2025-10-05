@@ -11,6 +11,7 @@ import { downloadProjectTap } from "../redux/eightbit/actions";
 import { getUserInfo } from "../redux/identity/actions";
 import { login, logout } from "../auth";
 import { resetEmulator } from "../redux/app/actions";
+import { getLanguageLabel } from "../lib/lang";
 import Constants from "../constants";
 
 export default function Nav() {
@@ -72,7 +73,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newPasmo = {
-    label: "Pasmo (Z80 Assembly)",
+    label: getLanguageLabel("asm"),
     command: () => {
       dispatch(pause());
       navigate("/new/asm");
@@ -80,7 +81,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newZmac = {
-    label: "zmac (Z80 Assembly)",
+    label: getLanguageLabel("zmac"),
     command: () => {
       dispatch(pause());
       navigate("/new/zmac");
@@ -88,7 +89,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newBoriel = {
-    label: "Boriel ZX BASIC",
+    label: getLanguageLabel("zxbasic"),
     command: () => {
       dispatch(pause());
       navigate("/new/zxbasic");
@@ -96,7 +97,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newBasic = {
-    label: "zmakebas (BASIC)",
+    label: getLanguageLabel("basic"),
     command: () => {
       dispatch(pause());
       navigate("/new/basic");
@@ -104,7 +105,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newBas2Tap = {
-    label: "bas2tap (BASIC)",
+    label: getLanguageLabel("bas2tap"),
     command: () => {
       dispatch(pause());
       navigate("/new/bas2tap");
@@ -112,7 +113,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newZ88dk = {
-    label: "z88dk zcc (C)",
+    label: getLanguageLabel("c"),
     command: () => {
       dispatch(pause());
       navigate("/new/c");
@@ -120,7 +121,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const newSdcc = {
-    label: "SDCC (C)",
+    label: getLanguageLabel("sdcc"),
     command: () => {
       dispatch(pause());
       navigate("/new/sdcc");
@@ -128,14 +129,14 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const otherMenu = { label: "Other", items: [] };
-  otherMenu.items.push(newBasic);
+  if (Constants.enableBoriel) otherMenu.items.push(newBoriel);
   otherMenu.items.push(newBas2Tap);
   otherMenu.items.push(newZmac);
   if (Constants.enableZ88dk) otherMenu.items.push(newZ88dk);
   otherMenu.items.push(newSdcc);
 
   const newProjectItems = [];
-  if (Constants.enableBoriel) newProjectItems.push(newBoriel);
+  newProjectItems.push(newBasic);
   newProjectItems.push(newPasmo);
   newProjectItems.push(otherMenu);
 
