@@ -60,9 +60,7 @@ export default function ActivityFeed() {
 
   if (feedLoading) {
     return (
-      <div
-        className="flex justify-content-center align-items-center min-height-400"
-      >
+      <div className="flex justify-content-center align-items-center spinner-container-centered">
         <ProgressSpinner />
       </div>
     );

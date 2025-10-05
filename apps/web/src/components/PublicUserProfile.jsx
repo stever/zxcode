@@ -504,9 +504,7 @@ export default function PublicUserProfile() {
 
   if (loading) {
     return (
-      <div
-        className="flex justify-content-center align-items-center min-height-400"
-      >
+      <div className="flex justify-content-center align-items-center spinner-container-centered">
         <ProgressSpinner />
       </div>
     );

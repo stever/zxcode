@@ -27,6 +27,14 @@ code {
     padding: 0 !important;
 }
 
+.p-progress-spinner-circle {
+    stroke: white !important;
+}
+
+.spinner-container-centered {
+    height: calc(100vh - 70px) !important;
+}
+
 .p-card h1,
 .p-card h2,
 .p-card h3,
