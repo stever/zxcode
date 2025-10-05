@@ -14,7 +14,10 @@ const initialState = {
     errorItems: undefined,
     isPublic: false,
     slug: undefined,
-    ownerSlug: undefined
+    ownerSlug: undefined,
+    ownerId: undefined,
+    ownerName: undefined,
+    ownerProfileIsPublic: false
 };
 
 // -----------------------------------------------------------------------------
@@ -51,7 +54,10 @@ function receiveLoadedProject(state, action) {
         selectedTabIndex: 0,
         isPublic: action.isPublic,
         slug: action.slug,
-        ownerSlug: action.ownerSlug
+        ownerSlug: action.ownerSlug,
+        ownerId: action.ownerId,
+        ownerName: action.ownerName,
+        ownerProfileIsPublic: action.ownerProfileIsPublic
     };
 }
 

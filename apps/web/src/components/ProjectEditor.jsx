@@ -1,10 +1,13 @@
 import React, {useEffect, useRef, useState} from "react";
 import {useDispatch, useSelector} from "react-redux";
+import {useNavigate, Link} from "react-router-dom";
 import {Button} from "primereact/button";
 import {ConfirmPopup, confirmPopup} from "primereact/confirmpopup";
+import {Tag} from "primereact/tag";
+import {Toast} from "primereact/toast";
 import CodeMirror from "./CodeMirror";
 import "codemirror/mode/z80/z80";
-import {deleteProject, renameProject, saveCodeChanges} from "../redux/project/actions";
+import {deleteProject, renameProject, saveCodeChanges, copyProject} from "../redux/project/actions";
 import {setCode} from "../redux/project/actions";
 import {runProjectCode} from "../redux/eightbit/actions";
 import "../lib/syntax/pasmo";
@@ -22,12 +25,16 @@ import ProjectVisibilityToggle from "./ProjectVisibilityToggle";
 
 export function ProjectEditor() {
     const dispatch = useDispatch();
+    const navigate = useNavigate();
     const cmRef = useRef(null);
     const renameInputReference = useRef(null);
+    const toast = useRef(null);
 
     const [renameDialogVisible, setRenameDialogVisible] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectSlug, setNewProjectSlug] = useState('');
+    const [copyDialogVisible, setCopyDialogVisible] = useState(false);
+    const [copyProjectName, setCopyProjectName] = useState('');
 
     const lang = useSelector(state => state?.project.lang);
     const code = useSelector(state => state?.project.code);
@@ -38,6 +45,13 @@ export function ProjectEditor() {
     const isPublic = useSelector(state => state?.project.isPublic);
     const projectSlug = useSelector(state => state?.project.slug);
     const userId = useSelector(state => state?.identity.userId);
+    const ownerId = useSelector(state => state?.project.ownerId);
+    const ownerSlug = useSelector(state => state?.project.ownerSlug);
+    const ownerName = useSelector(state => state?.project.ownerName);
+    const ownerProfileIsPublic = useSelector(state => state?.project.ownerProfileIsPublic);
+
+    // Check if current user owns this project
+    const isOwner = userId && ownerId && userId === ownerId;
 
     let mode;
     switch (lang) {
@@ -93,13 +107,29 @@ export function ProjectEditor() {
         });
     }
 
+    const handleCopyProject = () => {
+        const newTitle = copyProjectName || `${projectName} (Copy)`;
+
+        // Use the new copyProject action which handles everything
+        dispatch(copyProject(newTitle, lang, code));
+
+        if (toast.current) {
+            toast.current.show({severity: 'success', summary: 'Project Copied', detail: `Created "${newTitle}"`, life: 3000});
+        }
+
+        setCopyDialogVisible(false);
+        setCopyProjectName('');
+    }
+
     return (
         <>
+            <Toast ref={toast}/>
             <CodeMirror
                 ref={cmRef}
                 options={options}
                 onChange={(cm, _) => dispatch(setCode(cm.getValue()))}
             />
+
             <Button
                 label="Play"
                 icon="pi pi-play"
@@ -109,32 +139,71 @@ export function ProjectEditor() {
                     dispatch(runProjectCode());
                 }}
             />
-            <Button
-                label="Save"
-                icon="pi pi-save"
-                className="p-button-outlined mt-2 mr-2"
-                disabled={code === savedCode}
-                onClick={() => dispatch(saveCodeChanges())}
-            />
-            <Button
-                label="Rename"
-                icon="pi pi-eraser"
-                className="p-button-outlined mt-2 mr-2"
-                onClick={() => {
-                    // Always set to current values when opening
-                    setNewProjectName(projectName || '');
-                    setNewProjectSlug(projectSlug || '');
-                    setRenameDialogVisible(true);
-                    setTimeout(() => renameInputReference.current.focus(), 100);
-                }}
-            />
-            <Button
-                label="Delete"
-                icon="pi pi-times"
-                className="p-button-outlined p-button-danger mt-2 mr-2"
-                onClick={(e) => deleteConfirm(e)}
-            />
-            {userId && projectId && (
+
+            {/* Show Copy button for non-owners (if logged in) */}
+            {!isOwner && userId && (
+                <Button
+                    label="Copy"
+                    icon="pi pi-copy"
+                    className="p-button-outlined p-button-secondary mt-2 mr-2"
+                    onClick={() => {
+                        setCopyProjectName(`${projectName} (Copy)`);
+                        setCopyDialogVisible(true);
+                    }}
+                />
+            )}
+
+            {/* Show Save, Rename, Delete only for owner */}
+            {isOwner && (
+                <>
+                    <Button
+                        label="Save"
+                        icon="pi pi-save"
+                        className="p-button-outlined mt-2 mr-2"
+                        disabled={code === savedCode}
+                        onClick={() => dispatch(saveCodeChanges())}
+                    />
+                    <Button
+                        label="Rename"
+                        icon="pi pi-eraser"
+                        className="p-button-outlined mt-2 mr-2"
+                        onClick={() => {
+                            // Always set to current values when opening
+                            setNewProjectName(projectName || '');
+                            setNewProjectSlug(projectSlug || '');
+                            setRenameDialogVisible(true);
+                            setTimeout(() => renameInputReference.current.focus(), 100);
+                        }}
+                    />
+                    <Button
+                        label="Delete"
+                        icon="pi pi-times"
+                        className="p-button-outlined p-button-danger mt-2 mr-2"
+                        onClick={(e) => deleteConfirm(e)}
+                    />
+                </>
+            )}
+
+            {/* Owner info for non-owned projects */}
+            {!isOwner && ownerSlug && (
+                <>
+                    <Divider layout="vertical" className="hidden md:inline-flex" />
+                    <div className="mt-2 inline-flex align-items-center">
+                        <Tag icon="pi pi-user" style={{ backgroundColor: '#2c2c2c', color: '#ffffff' }}>
+                            Project by: {ownerProfileIsPublic ? (
+                                <Link to={`/u/${ownerSlug}`} className="ml-1 text-white">
+                                    {ownerName || ownerSlug}
+                                </Link>
+                            ) : (
+                                <span className="ml-1">{ownerName || ownerSlug}</span>
+                            )}
+                        </Tag>
+                    </div>
+                </>
+            )}
+
+            {/* Show visibility toggle only for owner */}
+            {isOwner && userId && projectId && (
                 <>
                     <Divider layout="vertical" className="hidden md:inline-flex" />
                     <div className="mt-2 inline-flex">
@@ -223,6 +292,52 @@ export function ProjectEditor() {
                         />
                         <small id="project-slug-help">
                             Optional: Custom URL slug for the project. Leave empty to auto-generate from title.
+                        </small>
+                    </div>
+                </div>
+            </Dialog>
+            <Dialog
+                header="Copy Project"
+                visible={copyDialogVisible}
+                style={{ width: '50vw' }}
+                onHide={() => setCopyDialogVisible(false)}
+                footer={(
+                    <>
+                        <Button
+                            label="Cancel"
+                            icon="pi pi-times"
+                            onClick={() => {
+                                setCopyProjectName('');
+                                setCopyDialogVisible(false);
+                            }}
+                            className="p-button-text"
+                        />
+                        <Button
+                            label="Copy"
+                            icon="pi pi-copy"
+                            onClick={handleCopyProject}
+                            autoFocus
+                        />
+                    </>
+                )}
+            >
+                <div className="flex flex-column gap-3">
+                    <div className="flex flex-column gap-2">
+                        <label htmlFor="copy-project-name">New Project Name</label>
+                        <InputText
+                            id="copy-project-name"
+                            aria-describedby="copy-project-name-help"
+                            value={copyProjectName}
+                            onChange={(e) => setCopyProjectName(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleCopyProject();
+                                }
+                            }}
+                        />
+                        <small id="copy-project-name-help">
+                            Enter a name for your copy of this project.
                         </small>
                     </div>
                 </div>
