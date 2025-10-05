@@ -54,7 +54,7 @@ code {
 }
 
 .desktop .p-tabview {
-    margin-left: 8px !important;
+    margin-left: 0 !important;
 }
 
 .desktop .p-dialog .p-tabview {
