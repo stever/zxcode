@@ -95,9 +95,9 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
             shape="square"
             className="mr-3"
             style={{
-              width: '64px',
-              height: '64px',
-              imageRendering: 'pixelated'
+              width: "64px",
+              height: "64px",
+              imageRendering: "pixelated",
             }}
           />
           <div>
@@ -302,7 +302,7 @@ export default function FollowList() {
             >
               {followers.length > 0 ? (
                 <>
-                  <div>
+                  <div className="mt-2">
                     {followers.map((follower) => (
                       <UserCard
                         key={follower.user_id}
@@ -324,7 +324,7 @@ export default function FollowList() {
                   )}
                 </>
               ) : (
-                <div className="text-center py-4">
+                <div className="text-center py-4 mt-2">
                   <i className="pi pi-users text-4xl text-300 mb-3" />
                   <p className="text-500">No followers yet</p>
                 </div>
@@ -337,7 +337,7 @@ export default function FollowList() {
             >
               {following.length > 0 ? (
                 <>
-                  <div>
+                  <div className="mt-2">
                     {following.map((followedUser) => (
                       <UserCard
                         key={followedUser.user_id}
@@ -361,7 +361,7 @@ export default function FollowList() {
                   )}
                 </>
               ) : (
-                <div className="text-center py-4">
+                <div className="text-center py-4 mt-2">
                   <i className="pi pi-user-plus text-4xl text-300 mb-3" />
                   <p className="text-500">Not following anyone yet</p>
                 </div>
