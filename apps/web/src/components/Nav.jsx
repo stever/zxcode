@@ -65,7 +65,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const homeButton = {
-    label: "ZX Code",
+    label: "Code . ZX Play",
     command: () => {
       navigate("/");
     },

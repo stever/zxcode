@@ -70,9 +70,9 @@ export default function ActivityFeed() {
   }
 
   return (
-    <Titled title={(s) => `Activity Feed ${sep} ${s}`}>
+    <Titled title={(s) => `Feed ${sep} ${s}`}>
       <div className="m-2">
-        <Card title="Activity Feed">
+        <Card title="Feed">
           <p className="text-500 mb-4">
             Recent projects from users you follow
             {feedTotalCount > 0 && (

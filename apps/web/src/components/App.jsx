@@ -34,7 +34,7 @@ export default function App() {
   const className = clsx("pb-1", isMobile ? "mobile" : "desktop");
 
   return (
-    <Titled title={() => "ZX Code"}>
+    <Titled title={() => "Code . ZX Play"}>
       <RenderEmulator />
       <LoadingScreen />
       <LockScreen />
@@ -137,7 +137,11 @@ export default function App() {
               />
               <Route exact path="/projects/:id" element={<ProjectPage />} />
               <Route exact path="/u/:id" element={<PublicUserProfile />} />
-              <Route exact path="/u/:userSlug/:projectSlug" element={<PublicProjectPage />} />
+              <Route
+                exact
+                path="/u/:userSlug/:projectSlug"
+                element={<PublicProjectPage />}
+              />
               <Route
                 exact
                 path="/u/:id/projects"
@@ -145,11 +149,7 @@ export default function App() {
               />
               <Route exact path="/u/:slug/followers" element={<FollowList />} />
               <Route exact path="/u/:slug/following" element={<FollowList />} />
-              <Route
-                exact
-                path="/feed"
-                element={<ActivityFeed />}
-              />
+              <Route exact path="/feed" element={<ActivityFeed />} />
               <Route
                 exact
                 path="/settings/profile"

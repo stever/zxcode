@@ -1,6 +1,6 @@
 # Hasura Configuration & Migrations
 
-This directory contains the Hasura GraphQL engine configuration, database migrations, and metadata for the ZX Coder project.
+This directory contains the Hasura GraphQL engine configuration, database migrations, and metadata for the Code . ZX Play.orgr project.
 
 ## Directory Structure
 
@@ -29,6 +29,7 @@ image: hasura/graphql-engine:latest.cli-migrations-v3
 ### Development Workflow
 
 1. **Starting the environment**: When you run `docker compose up`, Hasura automatically:
+
    - Checks the `hdb_catalog.schema_migrations` table to see which migrations have been applied
    - Applies any new migrations found in `hasura/migrations/default/` in timestamp order
    - Applies metadata from `hasura/metadata/`
@@ -95,11 +96,13 @@ hasura migrate apply \
 ## Migration Best Practices
 
 ### 1. Migration Ordering
+
 - Migrations run in timestamp order
 - Each migration should be atomic and independent
 - Never modify existing migration files after they've been committed
 
 ### 2. Safe Migration Pattern
+
 For adding NOT NULL columns or constraints:
 
 ```sql
@@ -115,6 +118,7 @@ CREATE UNIQUE INDEX user_slug_key ON public.user(slug);
 ```
 
 ### 3. Testing Migrations
+
 1. Always test migrations locally first
 2. Ensure down migrations work (if provided)
 3. Check that migrations are idempotent where possible
@@ -122,13 +126,16 @@ CREATE UNIQUE INDEX user_slug_key ON public.user(slug);
 ## Metadata Management
 
 ### Updating Permissions
+
 Metadata changes (permissions, relationships, etc.) are in `hasura/metadata/`. These are automatically applied alongside migrations.
 
 To modify metadata:
+
 1. Edit the YAML files in `metadata/databases/default/tables/`
 2. Restart Hasura to apply changes
 
 Example: Adding a column to update permissions:
+
 ```yaml
 # metadata/databases/default/tables/public_project.yaml
 update_permissions:
@@ -137,12 +144,13 @@ update_permissions:
       columns:
         - code
         - title
-        - is_public  # Add new column here
+        - is_public # Add new column here
 ```
 
 ## Common Tasks
 
 ### Check Migration Status
+
 Connect to Hasura Console at http://localhost:4000 and check the migrations tab, or query directly:
 
 ```sql
@@ -152,6 +160,7 @@ ORDER BY version DESC;
 ```
 
 ### Reset Database (Development Only!)
+
 ```bash
 # Stop containers
 docker compose down
@@ -164,6 +173,7 @@ docker compose up -d
 ```
 
 ### Add a New Table
+
 ```sql
 -- migrations/default/[timestamp]_create_comments/up.sql
 CREATE TABLE public.comment (
@@ -181,11 +191,13 @@ CREATE INDEX comment_project_id_idx ON public.comment(project_id);
 ## Troubleshooting
 
 ### Migrations Not Applying
+
 1. Check Docker logs: `docker compose logs hasura`
 2. Ensure migration files have correct permissions
 3. Check for SQL syntax errors in migration files
 
 ### Rollback a Migration
+
 ```bash
 # Only if using Hasura CLI and down.sql exists
 hasura migrate apply --version [version] --type down \
@@ -195,7 +207,9 @@ hasura migrate apply --version [version] --type down \
 ```
 
 ### Migration Conflicts
+
 If you have conflicting migrations (same timestamp):
+
 1. Rename one migration folder with a different timestamp
 2. Ensure the SQL operations don't conflict
 3. Restart Hasura
