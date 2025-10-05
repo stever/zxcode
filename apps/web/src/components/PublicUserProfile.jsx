@@ -52,6 +52,19 @@ const UPDATE_PROJECT_ORDER = gql`
   }
 `;
 
+const UPDATE_USER_AVATAR = gql`
+  mutation UpdateUserAvatar($user_id: uuid!, $avatar_variant: Int, $custom_avatar_data: jsonb) {
+    update_user_by_pk(
+      pk_columns: { user_id: $user_id }
+      _set: { avatar_variant: $avatar_variant, custom_avatar_data: $custom_avatar_data }
+    ) {
+      user_id
+      avatar_variant
+      custom_avatar_data
+    }
+  }
+`;
+
 const GET_USER_BY_SLUG = gql`
   query GetUserBySlug($slug: String!) {
     user(where: { slug: { _eq: $slug } }, limit: 1) {
@@ -61,6 +74,8 @@ const GET_USER_BY_SLUG = gql`
       created_at
       profile_is_public
       slug
+      avatar_variant
+      custom_avatar_data
       projects(
         where: { is_public: { _eq: true } }
         order_by: [{ display_order: asc }, { updated_at: desc }]
@@ -95,6 +110,8 @@ const GET_USER_BY_ID = gql`
       created_at
       profile_is_public
       slug
+      avatar_variant
+      custom_avatar_data
       projects(
         where: { is_public: { _eq: true } }
         order_by: [{ display_order: asc }, { updated_at: desc }]
@@ -361,11 +378,11 @@ export default function PublicUserProfile() {
   useEffect(() => {
     if (user) {
       const identifier = user.slug || user.user_id;
-      setAvatarUrl(generateRetroAvatar(identifier, 120));
+      setAvatarUrl(generateRetroAvatar(identifier, 120, user));
     }
   }, [user]);
 
-  const handleAvatarSelect = (variant) => {
+  const handleAvatarSelect = async (variant) => {
     if (user) {
       const identifier = user.slug || user.user_id;
 
@@ -403,28 +420,39 @@ export default function PublicUserProfile() {
             const newAvatar = `data:image/svg+xml;base64,${encoded}`;
             setAvatarUrl(newAvatar);
 
-            // Mark as using custom avatar
-            const variants = JSON.parse(localStorage.getItem('avatar_variants') || '{}');
-            variants[identifier] = 'custom';
-            localStorage.setItem('avatar_variants', JSON.stringify(variants));
+            // Save to database with variant -1 for custom
+            try {
+              await gqlFetch(currentUserId, UPDATE_USER_AVATAR, {
+                user_id: user.user_id,
+                avatar_variant: -1,
+                custom_avatar_data: grid
+              });
+              // Update local user state
+              setUser({...user, avatar_variant: -1, custom_avatar_data: grid});
+            } catch (error) {
+              console.error('Failed to save custom avatar to database:', error);
+            }
           }
         } catch (e) {
           console.error('Failed to load custom avatar:', e);
         }
       } else {
-        // Store the selected variant
-        const AVATAR_VARIANT_KEY = 'avatar_variants';
-        try {
-          const variants = JSON.parse(localStorage.getItem(AVATAR_VARIANT_KEY) || '{}');
-          variants[identifier] = variant;
-          localStorage.setItem(AVATAR_VARIANT_KEY, JSON.stringify(variants));
-        } catch {
-          // Ignore localStorage errors
-        }
-
         // Generate new avatar with selected variant
         const newAvatar = generateRetroSpriteAvatar(identifier, 120, variant);
         setAvatarUrl(newAvatar);
+
+        // Save to database
+        try {
+          await gqlFetch(currentUserId, UPDATE_USER_AVATAR, {
+            user_id: user.user_id,
+            avatar_variant: variant,
+            custom_avatar_data: null
+          });
+          // Update local user state
+          setUser({...user, avatar_variant: variant, custom_avatar_data: null});
+        } catch (error) {
+          console.error('Failed to save avatar to database:', error);
+        }
       }
     }
   };
