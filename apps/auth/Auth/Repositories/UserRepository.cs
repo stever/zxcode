@@ -49,11 +49,36 @@ public class UserRepository
 
         emailAddress = emailAddress?.Trim();
 
+        // Generate slug from username (lowercase, alphanumeric with hyphens)
+        var slug = GenerateSlug(username);
+
         // Query to create new user record.
         var client = GetGraphQlClient();
         var query = await File.ReadAllTextAsync(Path.Combine("GraphQL", "CreateUser.graphql"));
-        var result = await client.Query(query, new { username, email_address = emailAddress });
+        var result = await client.Query(query, new { username, email_address = emailAddress, slug });
         result.EnsureNoErrors();
+    }
+
+    private static string GenerateSlug(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            throw new ArgumentException("Input cannot be null or whitespace", nameof(input));
+        }
+
+        // Convert to lowercase
+        var slug = input.ToLowerInvariant();
+
+        // Replace non-alphanumeric characters with hyphens
+        slug = System.Text.RegularExpressions.Regex.Replace(slug, @"[^a-z0-9]+", "-");
+
+        // Remove leading/trailing hyphens
+        slug = slug.Trim('-');
+
+        // Collapse multiple hyphens
+        slug = System.Text.RegularExpressions.Regex.Replace(slug, @"-+", "-");
+
+        return slug;
     }
 
     /// <param name="username">Unique username for the requested User entity.</param>
