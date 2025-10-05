@@ -121,6 +121,16 @@ public class SamlResponse
         return node?.InnerText;
     }
 
+    /// <returns>Email address provided in the SAML response.</returns>
+    public string? GetEmail()
+    {
+        // Try multiple common SAML attribute names for email
+        var node = _xmlDoc.SelectSingleNode("/samlp:Response/saml:Assertion[1]/saml:AttributeStatement/saml:Attribute[@Name='email']/saml:AttributeValue", _xmlNameSpaceManager);
+        if (node == null) node = _xmlDoc.SelectSingleNode("/samlp:Response/saml:Assertion[1]/saml:AttributeStatement/saml:Attribute[@Name='http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress']/saml:AttributeValue", _xmlNameSpaceManager);
+        if (node == null) node = _xmlDoc.SelectSingleNode("/samlp:Response/saml:Assertion[1]/saml:Subject/saml:NameID[@Format='urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress']", _xmlNameSpaceManager);
+        return node?.InnerText;
+    }
+
     /// <returns>Session expiry time provided by @SessionNotOnOrAfter assertion.</returns>
     public DateTime GetSessionExpiry()
     {
