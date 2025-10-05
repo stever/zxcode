@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Dialog } from "primereact/dialog";
 import { Button } from "primereact/button";
+import { TabView, TabPanel } from "primereact/tabview";
 import { generateRetroSpriteAvatar } from "../lib/retroSpriteAvatar";
+import AvatarPixelEditor from "./AvatarPixelEditor";
 
 export default function AvatarSelector({
   visible,
@@ -13,6 +15,8 @@ export default function AvatarSelector({
   const [avatars, setAvatars] = useState([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [randomOffset, setRandomOffset] = useState(0);
+  const [activeTab, setActiveTab] = useState(0);
+  const [customAvatarUrl, setCustomAvatarUrl] = useState(null);
 
   const avatarsPerPage = 12;
   const totalPages = 16; // 16 pages x 12 avatars = 192 total variants (with transformations)
@@ -44,7 +48,19 @@ export default function AvatarSelector({
   };
 
   const handleConfirm = () => {
-    onSelect(selectedVariant);
+    if (activeTab === 1 && customAvatarUrl) {
+      // Custom avatar from editor
+      onSelect('custom');
+    } else {
+      // Selected from gallery
+      onSelect(selectedVariant);
+    }
+    onHide();
+  };
+
+  const handleCustomAvatarSave = (variant, dataUri) => {
+    setCustomAvatarUrl(dataUri);
+    onSelect('custom');
     onHide();
   };
 
@@ -58,7 +74,7 @@ export default function AvatarSelector({
     setSelectedVariant(newOffset % totalVariants);
   };
 
-  const footer = (
+  const footer = activeTab === 0 ? (
     <div className="flex justify-content-between align-items-center">
       <div className="flex gap-1 align-items-center">
         <Button
@@ -90,7 +106,7 @@ export default function AvatarSelector({
         <Button label="Select" icon="pi pi-check" className="p-button-sm" onClick={handleConfirm} />
       </div>
     </div>
-  );
+  ) : null;
 
   return (
     <Dialog
@@ -101,52 +117,64 @@ export default function AvatarSelector({
       style={{ width: "600px" }}
       className="avatar-selector-dialog"
     >
-      <div className="text-center mb-3">
-        <p className="text-500">Each pattern is unique to your username.</p>
-      </div>
-
-      <div className="grid">
-        {avatars.map((avatar) => (
-          <div key={avatar.variant} className="col-3 p-2">
-            <div
-              className={`avatar-option cursor-pointer border-round p-2 ${
-                selectedVariant === avatar.variant
-                  ? "border-primary border-3"
-                  : "border-1 border-transparent hover:border-300"
-              }`}
-              onClick={() => handleSelect(avatar.variant)}
-              style={{
-                transition: "all 0.2s",
-                backgroundColor:
-                  selectedVariant === avatar.variant
-                    ? "var(--primary-color-alpha-10)"
-                    : "transparent",
-                boxShadow: selectedVariant === avatar.variant
-                    ? "0 0 0 2px var(--primary-color-alpha-20)"
-                    : "none",
-              }}
-            >
-              <img
-                src={avatar.url}
-                alt={`Avatar variant ${avatar.variant}`}
-                className="w-full"
-                style={{
-                  imageRendering: "pixelated", // Keeps pixels crisp
-                  width: "100%",
-                  height: "auto",
-                }}
-              />
-            </div>
+      <TabView activeIndex={activeTab} onTabChange={(e) => setActiveTab(e.index)}>
+        <TabPanel header="Choose Avatar">
+          <div className="text-center mb-3">
+            <p className="text-500">Each pattern is unique to your username.</p>
           </div>
-        ))}
-      </div>
 
-      <div className="text-center mt-3">
-        <small className="text-500">
-          Tip: Use arrow buttons to browse more patterns, or click Randomize for
-          a surprise!
-        </small>
-      </div>
+          <div className="grid">
+            {avatars.map((avatar) => (
+              <div key={avatar.variant} className="col-3 p-2">
+                <div
+                  className={`avatar-option cursor-pointer border-round p-2 ${
+                    selectedVariant === avatar.variant
+                      ? "border-primary border-3"
+                      : "border-1 border-transparent hover:border-300"
+                  }`}
+                  onClick={() => handleSelect(avatar.variant)}
+                  style={{
+                    transition: "all 0.2s",
+                    backgroundColor:
+                      selectedVariant === avatar.variant
+                        ? "var(--primary-color-alpha-10)"
+                        : "transparent",
+                    boxShadow: selectedVariant === avatar.variant
+                        ? "0 0 0 2px var(--primary-color-alpha-20)"
+                        : "none",
+                  }}
+                >
+                  <img
+                    src={avatar.url}
+                    alt={`Avatar variant ${avatar.variant}`}
+                    className="w-full"
+                    style={{
+                      imageRendering: "pixelated", // Keeps pixels crisp
+                      width: "100%",
+                      height: "auto",
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center mt-3">
+            <small className="text-500">
+              Tip: Use arrow buttons to browse more patterns, or click Randomize for
+              a surprise!
+            </small>
+          </div>
+        </TabPanel>
+
+        <TabPanel header="Create Your Own">
+          <AvatarPixelEditor
+            identifier={identifier}
+            onSave={handleCustomAvatarSave}
+            onCancel={() => setActiveTab(0)}
+          />
+        </TabPanel>
+      </TabView>
     </Dialog>
   );
 }
