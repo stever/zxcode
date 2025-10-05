@@ -542,7 +542,7 @@ export default function PublicUserProfile() {
                     title="Change avatar"
                   >
                     <i
-                      className="pi pi-refresh"
+                      className="pi pi-cog"
                       style={{ fontSize: '12px', color: '#aaa' }}
                     />
                   </div>

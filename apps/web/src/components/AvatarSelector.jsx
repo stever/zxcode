@@ -25,6 +25,8 @@ export default function AvatarSelector({
   useEffect(() => {
     if (visible && identifier) {
       generateAvatarsForPage(currentPage);
+      // Always start with the Selection tab when opening
+      setActiveTab(0);
     }
   }, [visible, identifier, currentPage, randomOffset]);
 
@@ -50,7 +52,7 @@ export default function AvatarSelector({
   const handleConfirm = () => {
     if (activeTab === 1 && customAvatarUrl) {
       // Custom avatar from editor
-      onSelect('custom');
+      onSelect("custom");
     } else {
       // Selected from gallery
       onSelect(selectedVariant);
@@ -60,7 +62,7 @@ export default function AvatarSelector({
 
   const handleCustomAvatarSave = (variant, dataUri) => {
     setCustomAvatarUrl(dataUri);
-    onSelect('custom');
+    onSelect("custom");
     onHide();
   };
 
@@ -74,39 +76,52 @@ export default function AvatarSelector({
     setSelectedVariant(newOffset % totalVariants);
   };
 
-  const footer = activeTab === 0 ? (
-    <div className="flex justify-content-between align-items-center">
-      <div className="flex gap-1 align-items-center">
-        <Button
-          icon="pi pi-chevron-left"
-          className="p-button-text p-button-sm"
-          onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-          disabled={currentPage === 0}
-        />
-        <span className="text-sm px-1" style={{ minWidth: '80px', textAlign: 'center' }}>
-          Page {currentPage + 1}/{totalPages}
-        </span>
-        <Button
-          icon="pi pi-chevron-right"
-          className="p-button-text p-button-sm"
-          onClick={() =>
-            setCurrentPage(Math.min(totalPages - 1, currentPage + 1))
-          }
-          disabled={currentPage === totalPages - 1}
-        />
+  const footer =
+    activeTab === 0 ? (
+      <div className="flex justify-content-between align-items-center">
+        <div className="flex gap-1 align-items-center">
+          <Button
+            icon="pi pi-chevron-left"
+            className="p-button-text p-button-sm"
+            onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+            disabled={currentPage === 0}
+          />
+          <span
+            className="text-sm px-1"
+            style={{ minWidth: "80px", textAlign: "center" }}
+          >
+            Page {currentPage + 1}/{totalPages}
+          </span>
+          <Button
+            icon="pi pi-chevron-right"
+            className="p-button-text p-button-sm"
+            onClick={() =>
+              setCurrentPage(Math.min(totalPages - 1, currentPage + 1))
+            }
+            disabled={currentPage === totalPages - 1}
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button
+            label="Randomize"
+            icon="pi pi-refresh"
+            className="p-button-outlined p-button-sm"
+            onClick={handleRandomize}
+          />
+          <Button
+            label="Cancel"
+            className="p-button-text p-button-sm"
+            onClick={onHide}
+          />
+          <Button
+            label="Select"
+            icon="pi pi-check"
+            className="p-button-sm"
+            onClick={handleConfirm}
+          />
+        </div>
       </div>
-      <div className="flex gap-2">
-        <Button
-          label="Randomize"
-          icon="pi pi-refresh"
-          className="p-button-outlined p-button-sm"
-          onClick={handleRandomize}
-        />
-        <Button label="Cancel" className="p-button-text p-button-sm" onClick={onHide} />
-        <Button label="Select" icon="pi pi-check" className="p-button-sm" onClick={handleConfirm} />
-      </div>
-    </div>
-  ) : null;
+    ) : null;
 
   return (
     <Dialog
@@ -117,9 +132,12 @@ export default function AvatarSelector({
       style={{ width: "600px" }}
       className="avatar-selector-dialog"
     >
-      <TabView activeIndex={activeTab} onTabChange={(e) => setActiveTab(e.index)}>
-        <TabPanel header="Choose Avatar">
-          <div className="text-center mb-3">
+      <TabView
+        activeIndex={activeTab}
+        onTabChange={(e) => setActiveTab(e.index)}
+      >
+        <TabPanel header="Selection">
+          <div className="text-center mb-5 mt-3">
             <p className="text-500">Each pattern is unique to your username.</p>
           </div>
 
@@ -139,7 +157,8 @@ export default function AvatarSelector({
                       selectedVariant === avatar.variant
                         ? "var(--primary-color-alpha-10)"
                         : "transparent",
-                    boxShadow: selectedVariant === avatar.variant
+                    boxShadow:
+                      selectedVariant === avatar.variant
                         ? "0 0 0 2px var(--primary-color-alpha-20)"
                         : "none",
                   }}
@@ -159,10 +178,10 @@ export default function AvatarSelector({
             ))}
           </div>
 
-          <div className="text-center mt-3">
+          <div className="text-center mt-2" style={{ paddingTop: "10px" }}>
             <small className="text-500">
-              Tip: Use arrow buttons to browse more patterns, or click Randomize for
-              a surprise!
+              Tip: Use arrow buttons to browse more patterns, or click Randomize
+              for a surprise!
             </small>
           </div>
         </TabPanel>
@@ -171,7 +190,7 @@ export default function AvatarSelector({
           <AvatarPixelEditor
             identifier={identifier}
             onSave={handleCustomAvatarSave}
-            onCancel={() => setActiveTab(0)}
+            onCancel={onHide}
           />
         </TabPanel>
       </TabView>
