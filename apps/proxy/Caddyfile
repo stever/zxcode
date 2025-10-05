@@ -1,4 +1,26 @@
 :8080 {
+	# Strict Content Security Policy
+	header {
+		# Remove server identification headers
+		-Server
+		-X-Powered-By
+
+		# Security headers
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-XSS-Protection "1; mode=block"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+
+		# Strict CSP with nonces for inline scripts/styles
+		# Note: 'unsafe-inline' for style-src is needed for React inline styles
+		# 'unsafe-eval' is avoided - using 'wasm-unsafe-eval' for WebAssembly only
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ws://localhost:* wss://localhost:* http://localhost:4000 http://localhost:5000 http://localhost:8000; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+
+		# Report CSP violations (optional - you can set up a reporting endpoint)
+		# Content-Security-Policy-Report-Only would be useful for testing
+	}
+
 	redir /auth /auth/
 	handle /auth/* {
 		uri strip_prefix /auth
