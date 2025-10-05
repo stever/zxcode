@@ -1,41 +1,41 @@
 :8080 {
-    redir /api /api/
-    handle /api/* {
-        uri strip_prefix /api
-        reverse_proxy hasura:8080
-    }
-
-    # Strict Content Security Policy for production
-    header {
-        # Remove server identification headers
-        -Server
-        -X-Powered-By
-
-        # Security headers
-        X-Frame-Options "DENY"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        X-XSS-Protection "1; mode=block"
-        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"
-
-        # Strict Transport Security (HSTS) - enable if using HTTPS
-        # Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-
-        # Production CSP
-        # Using hash for inline script instead of 'unsafe-inline'
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-HlD9D/WlEaVKKAvDnldsXkj/nllO8aCRBvtofUTEnGQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss://*.zxcoder.org https://*.zxcoder.org; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content"
-
-        # CSP Report endpoint (optional - set up monitoring)
-        # Report-To "{\"group\":\"csp-endpoint\",\"max_age\":10886400,\"endpoints\":[{\"url\":\"https://your-report-collector.example.com/csp-reports\"}]}"
-    }
-
     redir /auth /auth/
     handle /auth/* {
         uri strip_prefix /auth
         reverse_proxy auth:8080
     }
 
+    redir /api /api/
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy hasura:8080
+    }
+
     handle {
+        # Strict Content Security Policy for production
+        header {
+            # Remove server identification headers
+            -Server
+            -X-Powered-By
+
+            # Security headers
+            X-Frame-Options "DENY"
+            X-Content-Type-Options "nosniff"
+            Referrer-Policy "strict-origin-when-cross-origin"
+            X-XSS-Protection "1; mode=block"
+            Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"
+
+            # Strict Transport Security (HSTS) - enable if using HTTPS
+            # Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+            # Production CSP
+            # Using hash for inline script instead of 'unsafe-inline'
+            Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-HlD9D/WlEaVKKAvDnldsXkj/nllO8aCRBvtofUTEnGQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss://*.zxcoder.org https://*.zxcoder.org; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content"
+
+            # CSP Report endpoint (optional - set up monitoring)
+            # Report-To "{\"group\":\"csp-endpoint\",\"max_age\":10886400,\"endpoints\":[{\"url\":\"https://your-report-collector.example.com/csp-reports\"}]}"
+        }
+
         reverse_proxy web:8080
     }
 }
