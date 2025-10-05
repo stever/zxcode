@@ -105,10 +105,7 @@ export default function ProjectList() {
 
       return (
         <React.Fragment>
-          <span
-            className="mx-1 user-select-none"
-            style={{ color: "var(--text-color)" }}
-          >
+          <span className="user-select-none paginator-label">
             Items per page:{" "}
           </span>
           <Dropdown
@@ -121,12 +118,7 @@ export default function ProjectList() {
     },
     CurrentPageReport: (options) => {
       return (
-        <span
-          className="user-select-none text-nowrap-min-160"
-          style={{
-            color: "var(--text-color)",
-          }}
-        >
+        <span className="user-select-none paginator-count">
           {options.first} - {options.last} of {options.totalRecords}
         </span>
       );

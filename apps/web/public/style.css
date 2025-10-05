@@ -53,8 +53,33 @@ code {
     font-style: italic;
 }
 
+.desktop .p-tabview {
+    margin-left: 8px !important;
+}
+
+.desktop .p-dialog .p-tabview {
+    margin-left: 0 !important;
+}
+
+.p-tabview-nav {
+    margin-bottom: 8px !important;
+}
+
+.paginator-label {
+    color: var(--text-color) !important;
+    margin-right: 8px !important;
+}
+
+.paginator-count {
+    color: var(--text-color) !important;
+    white-space: nowrap !important;
+    min-width: 160px !important;
+    display: inline-block !important;
+    text-align: center !important;
+}
+
 .p-tabview-panels {
-    padding: 8px 0 0 0 !important;
+    padding: 0 !important;
 }
 
 .p-tabview .p-tabview-nav .p-tabview-ink-bar {
@@ -135,69 +160,65 @@ code {
     border: 0 !important;
 }
 
-.mobile .p-tabview-panels {
-    padding: 0 !important;
-}
-
 /* Utility classes for inline style replacements */
 .text-center {
-    text-align: center;
+    text-align: center !important;
 }
 
 .full-width-grid {
-    width: 100%;
-    padding: 0;
-    margin: 0;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
 .col-no-padding {
-    padding: 0;
+    padding: 0 !important;
 }
 
 .height-53 {
-    height: 53px;
+    height: 53px !important;
 }
 
 .max-width-1024 {
-    max-width: 1024px;
-    margin: auto;
+    max-width: 1024px !important;
+    margin: auto !important;
 }
 
 .margin-top-8 {
-    margin-top: 8px;
+    margin-top: 8px !important;
 }
 
 .dialog-width-450 {
-    width: 450px;
+    width: 450px !important;
 }
 
 .min-height-400 {
-    min-height: 400px;
+    min-height: 400px !important;
 }
 
 .text-nowrap-min-160 {
-    white-space: nowrap;
-    min-width: 160px;
+    white-space: nowrap !important;
+    min-width: 160px !important;
 }
 
 .user-select-none {
-    user-select: none;
+    user-select: none !important;
 }
 
 .col-width-34-mobile-70 {
-    width: 34%;
+    width: 34% !important;
 }
 
 .col-width-22-mobile-30 {
-    width: 22%;
+    width: 22% !important;
 }
 
 .col-width-22 {
-    width: 22%;
+    width: 22% !important;
 }
 
 .card-bg-dark {
-    background-color: #2c2c2c;
+    background-color: #2c2c2c !important;
 }
 
 .avatar-editor-container {
