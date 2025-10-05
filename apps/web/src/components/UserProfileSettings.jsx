@@ -228,7 +228,7 @@ export default function UserProfileSettings() {
 
   if (loading) {
     return (
-      <div className="flex justify-content-center align-items-center" style={{ minHeight: "400px" }}>
+      <div className="flex justify-content-center align-items-center min-height-400">
         <ProgressSpinner />
       </div>
     );
@@ -362,7 +362,7 @@ export default function UserProfileSettings() {
                 disabled={!hasChanges || !!slugError}
                 loading={saving}
                 onClick={handleSave}
-                style={{ whiteSpace: "nowrap", minWidth: "160px" }}
+                className="text-nowrap-min-160"
               />
             </div>
           </div>

@@ -189,7 +189,7 @@ export function ProjectEditor() {
                 <>
                     <Divider layout="vertical" className="hidden md:inline-flex" />
                     <div className="mt-2 inline-flex align-items-center">
-                        <Tag icon="pi pi-user" style={{ backgroundColor: '#2c2c2c', color: '#ffffff' }}>
+                        <Tag icon="pi pi-user" className="tag-user-icon">
                             Project by: {ownerProfileIsPublic ? (
                                 <Link to={`/u/${ownerSlug}`} className="ml-1 text-white">
                                     {ownerName || ownerSlug}
@@ -222,7 +222,7 @@ export function ProjectEditor() {
             <Dialog
                 header="Rename Project"
                 visible={renameDialogVisible}
-                style={{ width: '50vw' }}
+                className="editor-dialog-50vw"
                 onHide={() => setRenameDialogVisible(false)}
                 footer={(
                     <>
@@ -299,7 +299,7 @@ export function ProjectEditor() {
             <Dialog
                 header="Copy Project"
                 visible={copyDialogVisible}
-                style={{ width: '50vw' }}
+                className="editor-dialog-50vw"
                 onHide={() => setCopyDialogVisible(false)}
                 footer={(
                     <>

@@ -2,7 +2,7 @@ import React from "react";
 
 export default function MaxWidth(props) {
     return (
-        <div style={{maxWidth: '1024px', margin: 'auto'}}>
+        <div className="max-width-1024">
             {props.children}
         </div>
     )

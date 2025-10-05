@@ -44,10 +44,10 @@ export default function HomePage() {
         <>
             <Toast ref={toast}/>
             <div className={className}>
-                <div className="grid" style={{width: "100%", padding: 0, margin: 0}}>
+                <div className="grid full-width-grid">
                     {isMobile && (
                         <>
-                            <div className="col" style={{padding: 0}}>
+                            <div className="col col-no-padding">
 
                             </div>
                             <div className="col-fixed p-0" style={{width: `${width}px`}}>
@@ -65,7 +65,7 @@ export default function HomePage() {
                                     </TabPanel>
                                 </TabView>
                             </div>
-                            <div className="col" style={{padding: 0}}>
+                            <div className="col col-no-padding">
 
                             </div>
                         </>
@@ -85,7 +85,7 @@ export default function HomePage() {
                                 </TabView>
                             </div>
                             <div className="col-fixed p-0 pt-1" style={{width: `${width}px`}}>
-                                <div style={{height: '53px'}} className="pt-3 pl-1">
+                                <div className="height-53 pt-3 pl-1">
 
                                 </div>
                                 <Emulator zoom={zoom} width={width}/>

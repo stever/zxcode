@@ -1,6 +1,7 @@
 const webpack = require("webpack");
 const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
+const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 
 module.exports = (env, _) => {
     const isProduction = env && env.production ? env.production : false;
@@ -34,11 +35,14 @@ module.exports = (env, _) => {
         }),
         new HtmlWebpackPlugin({
             template: path.join(__dirname, "public", "index.html"),
-            filename: path.join(__dirname, "public", "index.html"),
+            filename: "index.html",
             inject: false,
             templateParameters: {
                 buildVersion: buildVersion
             }
+        }),
+        new MiniCssExtractPlugin({
+            filename: "[name].css"
         }),
     ];
 
@@ -46,7 +50,7 @@ module.exports = (env, _) => {
         {
             test: /\.(s?)css$/i,
             use: [
-                'style-loader',
+                MiniCssExtractPlugin.loader,
                 'css-loader',
                 {
                     loader: 'sass-loader',
@@ -103,6 +107,9 @@ module.exports = (env, _) => {
             devServer: {
                 port: 8000,
                 historyApiFallback: true,
+                static: {
+                    directory: path.join(__dirname, "public")
+                },
                 devMiddleware: {
                     writeToDisk: true
                 }

@@ -61,8 +61,7 @@ export default function ActivityFeed() {
   if (feedLoading) {
     return (
       <div
-        className="flex justify-content-center align-items-center"
-        style={{ minHeight: "400px" }}
+        className="flex justify-content-center align-items-center min-height-400"
       >
         <ProgressSpinner />
       </div>
@@ -105,10 +104,9 @@ export default function ActivityFeed() {
                     >
                       <Link to={projectUrl} className="no-underline">
                         <Card
-                          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden"
+                          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
                           style={{
                             border: "none",
-                            backgroundColor: "#2c2c2c",
                           }}
                         >
                           <div className="flex flex-column h-full relative">

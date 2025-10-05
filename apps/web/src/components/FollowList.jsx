@@ -86,7 +86,7 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
   const isOwnProfile = currentUserId === user.user_id;
 
   return (
-    <Card className="mb-3" style={{ backgroundColor: "#2c2c2c" }}>
+    <Card className="mb-3 card-bg-dark">
       <div className="flex align-items-center justify-content-between">
         <div className="flex align-items-center">
           <Avatar
@@ -258,8 +258,7 @@ export default function FollowList() {
   if (loading) {
     return (
       <div
-        className="flex justify-content-center align-items-center"
-        style={{ minHeight: "400px" }}
+        className="flex justify-content-center align-items-center min-height-400"
       >
         <ProgressSpinner />
       </div>

@@ -25,7 +25,7 @@ export default function ErrorPage({msg}) {
 
     return (
         <Titled title={(s) => `Error ${sep} ${s}`}>
-            <Card className="m-2" style={{textAlign: 'center'}}>
+            <Card className="m-2 text-center">
                 <div className="m-4">
                     <p>Sorry, an unexpected error occurred.</p>
                     <p>Error message is:</p>
