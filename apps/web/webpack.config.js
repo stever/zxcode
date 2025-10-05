@@ -1,8 +1,10 @@
 const webpack = require("webpack");
 const path = require("path");
+const HtmlWebpackPlugin = require("html-webpack-plugin");
 
 module.exports = (env, _) => {
     const isProduction = env && env.production ? env.production : false;
+    const buildVersion = Date.now();
 
     let hostname;
     let protocol;
@@ -28,6 +30,15 @@ module.exports = (env, _) => {
             AUTH_BASE: JSON.stringify(`${protocol}://${hostname}/auth`),
             HOSTNAME: JSON.stringify(hostname),
             HTTP_PROTO: JSON.stringify(protocol),
+            BUILD_VERSION: JSON.stringify(buildVersion),
+        }),
+        new HtmlWebpackPlugin({
+            template: path.join(__dirname, "public", "index.html"),
+            filename: "index.html",
+            inject: false,
+            templateParameters: {
+                buildVersion: buildVersion
+            }
         }),
     ];
 
