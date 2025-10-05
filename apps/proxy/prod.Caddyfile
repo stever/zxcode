@@ -25,8 +25,8 @@
             X-XSS-Protection "1; mode=block"
             Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"
 
-            # Strict Transport Security (HSTS) - enable if using HTTPS
-            # Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+            # Strict Transport Security (HSTS)
+            Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 
             # Production CSP
             # Using hash for inline script instead of 'unsafe-inline'
