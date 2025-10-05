@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Dialog } from "primereact/dialog";
 import { Button } from "primereact/button";
-import { generateRetroPatternAvatar } from "../lib/retroPatternAvatar";
+import { generateRetroSpriteAvatar } from "../lib/retroSpriteAvatar";
 
 export default function AvatarSelector({
   visible,
@@ -12,25 +12,28 @@ export default function AvatarSelector({
   const [selectedVariant, setSelectedVariant] = useState(0);
   const [avatars, setAvatars] = useState([]);
   const [currentPage, setCurrentPage] = useState(0);
+  const [randomOffset, setRandomOffset] = useState(0);
 
   const avatarsPerPage = 12;
-  const totalPages = 10; // 10 pages x 12 avatars = 120 total variants
+  const totalPages = 16; // 16 pages x 12 avatars = 192 total variants (with transformations)
+  const totalVariants = totalPages * avatarsPerPage;
 
   useEffect(() => {
     if (visible && identifier) {
       generateAvatarsForPage(currentPage);
     }
-  }, [visible, identifier, currentPage]);
+  }, [visible, identifier, currentPage, randomOffset]);
 
   const generateAvatarsForPage = (page) => {
     const newAvatars = [];
     const startIdx = page * avatarsPerPage;
 
     for (let i = 0; i < avatarsPerPage; i++) {
-      const variant = startIdx + i;
+      // Apply random offset to cycle through all possible variants
+      const variant = (startIdx + i + randomOffset) % totalVariants;
       newAvatars.push({
         variant,
-        url: generateRetroPatternAvatar(identifier, 80, variant),
+        url: generateRetroSpriteAvatar(identifier, 80, variant),
       });
     }
     setAvatars(newAvatars);
@@ -46,11 +49,13 @@ export default function AvatarSelector({
   };
 
   const handleRandomize = () => {
-    // Jump to a random page and select a random avatar
-    const randomPage = Math.floor(Math.random() * totalPages);
-    const randomIndex = Math.floor(Math.random() * avatarsPerPage);
-    setCurrentPage(randomPage);
-    setSelectedVariant(randomPage * avatarsPerPage + randomIndex);
+    // Shuffle all avatars by applying a random offset
+    const newOffset = Math.floor(Math.random() * totalVariants);
+    setRandomOffset(newOffset);
+    // Reset to first page to show the new selection
+    setCurrentPage(0);
+    // Select the first avatar in the new shuffled set
+    setSelectedVariant(newOffset % totalVariants);
   };
 
   const footer = (
@@ -77,7 +82,7 @@ export default function AvatarSelector({
       <div className="flex gap-2">
         <Button
           label="Randomize"
-          icon="pi pi-shuffle"
+          icon="pi pi-refresh"
           className="p-button-outlined p-button-sm"
           onClick={handleRandomize}
         />
@@ -104,18 +109,21 @@ export default function AvatarSelector({
         {avatars.map((avatar) => (
           <div key={avatar.variant} className="col-3 p-2">
             <div
-              className={`avatar-option cursor-pointer border-round p-2 hover:surface-hover ${
+              className={`avatar-option cursor-pointer border-round p-2 ${
                 selectedVariant === avatar.variant
-                  ? "border-primary border-2"
-                  : "border-1 border-300"
+                  ? "border-primary border-3"
+                  : "border-1 border-transparent hover:border-300"
               }`}
               onClick={() => handleSelect(avatar.variant)}
               style={{
                 transition: "all 0.2s",
                 backgroundColor:
                   selectedVariant === avatar.variant
-                    ? "var(--primary-100)"
+                    ? "var(--primary-color-alpha-10)"
                     : "transparent",
+                boxShadow: selectedVariant === avatar.variant
+                    ? "0 0 0 2px var(--primary-color-alpha-20)"
+                    : "none",
               }}
             >
               <img
