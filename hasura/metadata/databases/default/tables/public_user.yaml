@@ -48,6 +48,8 @@ select_permissions:
         - slug
         - bio
         - profile_is_public
+        - avatar_variant
+        - custom_avatar_data
       filter:
         profile_is_public:
           _eq: true
@@ -64,6 +66,8 @@ select_permissions:
         - slug
         - bio
         - profile_is_public
+        - avatar_variant
+        - custom_avatar_data
       filter:
         _or:
           - user_id:
@@ -81,6 +85,8 @@ update_permissions:
         - bio
         - profile_is_public
         - slug
+        - avatar_variant
+        - custom_avatar_data
       filter:
         user_id:
           _eq: X-Hasura-User-Id
