@@ -36,7 +36,9 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getLanguageLabel } from "../lib/lang";
-import { generateRetroAvatar, regenerateAvatar } from "../lib/avatar";
+import { generateRetroAvatar } from "../lib/avatar";
+import { generateRetroPatternAvatar } from "../lib/retroPatternAvatar";
+import AvatarSelector from "./AvatarSelector";
 
 const UPDATE_PROJECT_ORDER = gql`
   mutation UpdateProjectOrder($projectId: uuid!, $displayOrder: Int!) {
@@ -251,6 +253,7 @@ export default function PublicUserProfile() {
   const [projects, setProjects] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [showAvatarSelector, setShowAvatarSelector] = useState(false);
 
   const currentUserId = useSelector((state) => state?.identity.userId);
   const currentUserSlug = useSelector((state) => state?.identity.userSlug);
@@ -352,10 +355,22 @@ export default function PublicUserProfile() {
     }
   }, [user]);
 
-  const handleRegenerateAvatar = () => {
+  const handleAvatarSelect = (variant) => {
     if (user) {
       const identifier = user.slug || user.user_id;
-      const newAvatar = regenerateAvatar(identifier, 120);
+
+      // Store the selected variant
+      const AVATAR_VARIANT_KEY = 'avatar_variants';
+      try {
+        const variants = JSON.parse(localStorage.getItem(AVATAR_VARIANT_KEY) || '{}');
+        variants[identifier] = variant;
+        localStorage.setItem(AVATAR_VARIANT_KEY, JSON.stringify(variants));
+      } catch {
+        // Ignore localStorage errors
+      }
+
+      // Generate new avatar with selected variant
+      const newAvatar = generateRetroPatternAvatar(identifier, 120, variant);
       setAvatarUrl(newAvatar);
     }
   };
@@ -464,19 +479,28 @@ export default function PublicUserProfile() {
                   }}
                 />
                 {isOwnProfile && (
-                  <Button
-                    icon="pi pi-refresh"
-                    className="p-button-rounded p-button-sm absolute"
+                  <div
+                    className="absolute cursor-pointer"
                     style={{
-                      bottom: '0',
-                      right: '0',
-                      width: '32px',
-                      height: '32px'
+                      top: '-8px',
+                      right: '-8px',
+                      backgroundColor: '#1a1a1a',
+                      borderRadius: '50%',
+                      width: '28px',
+                      height: '28px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '2px solid #3a3a3a',
                     }}
-                    onClick={handleRegenerateAvatar}
-                    tooltip="Generate new avatar"
-                    tooltipOptions={{ position: 'bottom' }}
-                  />
+                    onClick={() => setShowAvatarSelector(true)}
+                    title="Change avatar"
+                  >
+                    <i
+                      className="pi pi-refresh"
+                      style={{ fontSize: '12px', color: '#aaa' }}
+                    />
+                  </div>
                 )}
               </div>
               <h2 className="m-0">{displayName}</h2>
@@ -688,6 +712,15 @@ export default function PublicUserProfile() {
           </Card>
         </div>
       </div>
+
+      {isOwnProfile && (
+        <AvatarSelector
+          visible={showAvatarSelector}
+          onHide={() => setShowAvatarSelector(false)}
+          identifier={user?.slug || user?.user_id}
+          onSelect={handleAvatarSelect}
+        />
+      )}
     </Titled>
   );
 }
