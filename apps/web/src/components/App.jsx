@@ -34,7 +34,7 @@ export default function App() {
   const className = clsx("pb-1", isMobile ? "mobile" : "desktop");
 
   return (
-    <Titled title={() => "Code . ZX Play"}>
+    <Titled title={() => "Code · ZX Play"}>
       <RenderEmulator />
       <LoadingScreen />
       <LockScreen />
