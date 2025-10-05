@@ -34,7 +34,7 @@ module.exports = (env, _) => {
         }),
         new HtmlWebpackPlugin({
             template: path.join(__dirname, "public", "index.html"),
-            filename: "index.html",
+            filename: path.join(__dirname, "public", "index.html"),
             inject: false,
             templateParameters: {
                 buildVersion: buildVersion
