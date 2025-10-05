@@ -87,8 +87,7 @@ export default function AvatarSelector({
             disabled={currentPage === 0}
           />
           <span
-            className="text-sm px-1"
-            style={{ minWidth: "80px", textAlign: "center" }}
+            className="text-sm px-1 avatar-button-min-80"
           >
             Page {currentPage + 1}/{totalPages}
           </span>
@@ -129,7 +128,6 @@ export default function AvatarSelector({
       visible={visible}
       onHide={onHide}
       footer={footer}
-      style={{ width: "600px" }}
       className="avatar-selector-dialog"
     >
       <TabView
@@ -178,7 +176,7 @@ export default function AvatarSelector({
             ))}
           </div>
 
-          <div className="text-center mt-2" style={{ paddingTop: "10px" }}>
+          <div className="text-center mt-2 avatar-preview-centered">
             <small className="text-500">
               Tip: Use arrow buttons to browse more patterns, or click Randomize
               for a surprise!

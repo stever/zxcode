@@ -38,7 +38,7 @@ export function DemoAssemblyEditor() {
       <Button
         label="Play"
         icon="pi pi-play"
-        style={{ marginTop: "8px" }}
+        className="margin-top-8"
         onClick={() => {
           dashboardLock();
           dispatch(runAssembly());

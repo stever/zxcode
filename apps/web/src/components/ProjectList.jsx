@@ -106,8 +106,8 @@ export default function ProjectList() {
       return (
         <React.Fragment>
           <span
-            className="mx-1"
-            style={{ color: "var(--text-color)", userSelect: "none" }}
+            className="mx-1 user-select-none"
+            style={{ color: "var(--text-color)" }}
           >
             Items per page:{" "}
           </span>
@@ -122,11 +122,9 @@ export default function ProjectList() {
     CurrentPageReport: (options) => {
       return (
         <span
+          className="user-select-none text-nowrap-min-160"
           style={{
             color: "var(--text-color)",
-            userSelect: "none",
-            width: "120px",
-            textAlign: "center",
           }}
         >
           {options.first} - {options.last} of {options.totalRecords}
@@ -163,14 +161,14 @@ export default function ProjectList() {
         field="title"
         header="Project Title"
         body={formatLinkName}
-        style={{ width: !isMobile ? "34%" : "70%" }}
+        className="col-width-34-mobile-70"
         sortable
       />
       {!isMobile && (
         <Column
           field="lang_title"
           header="Compiler"
-          style={{ width: "22%" }}
+          className="col-width-22"
           sortable
         />
       )}
@@ -179,7 +177,7 @@ export default function ProjectList() {
           field="created_at"
           header="Created"
           body={formatCreated}
-          style={{ width: "22%" }}
+          className="col-width-22"
           sortable
         />
       )}
@@ -187,7 +185,7 @@ export default function ProjectList() {
         field="updated_at"
         header="Updated"
         body={formatUpdated}
-        style={{ width: !isMobile ? "22%" : "30%" }}
+        className="col-width-22-mobile-30"
         sortable
       />
     </DataTable>

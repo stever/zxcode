@@ -82,7 +82,7 @@ export default function PublicProjectPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-content-center align-items-center" style={{ minHeight: "400px" }}>
+      <div className="flex justify-content-center align-items-center min-height-400">
         <ProgressSpinner />
       </div>
     );

@@ -169,10 +169,9 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
   return (
     <div ref={setNodeRef} style={style}>
       <Card
-        className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer"
+        className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer card-bg-dark"
         style={{
           border: "none",
-          backgroundColor: "#2c2c2c",
           position: "relative",
           overflow: "visible",
         }}
@@ -506,8 +505,7 @@ export default function PublicUserProfile() {
   if (loading) {
     return (
       <div
-        className="flex justify-content-center align-items-center"
-        style={{ minHeight: "400px" }}
+        className="flex justify-content-center align-items-center min-height-400"
       >
         <ProgressSpinner />
       </div>
@@ -722,10 +720,9 @@ export default function PublicUserProfile() {
                       >
                         <Link to={projectUrl} className="no-underline">
                           <Card
-                            className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden"
+                            className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
                             style={{
                               border: "none",
-                              backgroundColor: "#2c2c2c",
                             }}
                           >
                             <div className="flex flex-column h-full relative">

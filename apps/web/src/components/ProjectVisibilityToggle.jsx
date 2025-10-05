@@ -121,7 +121,7 @@ export default function ProjectVisibilityToggle({ project, userId }) {
       <Dialog
         header="Make Project Public?"
         visible={showDialog}
-        style={{ width: "450px" }}
+        className="dialog-width-450"
         footer={dialogFooter}
         onHide={() => setShowDialog(false)}
       >

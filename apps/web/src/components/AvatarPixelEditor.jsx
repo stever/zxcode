@@ -147,7 +147,7 @@ export default function AvatarPixelEditor({ identifier, onSave, onCancel }) {
           </div>
 
           <div
-            className="pixel-canvas"
+            className="pixel-canvas user-select-none"
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
             style={{
@@ -156,7 +156,6 @@ export default function AvatarPixelEditor({ identifier, onSave, onCancel }) {
               borderRadius: "4px",
               backgroundColor: "#1a1a1a",
               padding: "8px",
-              userSelect: "none",
             }}
           >
             <div
