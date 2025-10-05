@@ -36,6 +36,44 @@ function storeVariant(identifier, variant) {
  */
 export function generateRetroAvatar(identifier, size = 80) {
     const variant = getStoredVariant(identifier);
+
+    // Check if using custom avatar
+    if (variant === 'custom') {
+        try {
+            const saved = localStorage.getItem(`custom_avatar_${identifier}`);
+            if (saved) {
+                const grid = JSON.parse(saved);
+                // Generate SVG from saved grid
+                const pixelSize = size / 8;
+                const COLORS = [
+                    '#000000', '#0000D7', '#D70000', '#D700D7',
+                    '#00D700', '#00D7D7', '#D7D700', '#D7D7D7',
+                    '#0000FF', '#FF0000', '#FF00FF', '#00FF00',
+                    '#00FFFF', '#FFFF00', '#FFFFFF'
+                ];
+
+                let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
+                svg += `<rect width="${size}" height="${size}" fill="${COLORS[0]}"/>`;
+
+                for (let row = 0; row < 8; row++) {
+                    for (let col = 0; col < 8; col++) {
+                        const colorIndex = grid[row][col];
+                        if (colorIndex > 0 && colorIndex < COLORS.length) {
+                            const color = COLORS[colorIndex];
+                            svg += `<rect x="${col * pixelSize}" y="${row * pixelSize}" width="${pixelSize}" height="${pixelSize}" fill="${color}"/>`;
+                        }
+                    }
+                }
+
+                svg += '</svg>';
+                const encoded = btoa(unescape(encodeURIComponent(svg)));
+                return `data:image/svg+xml;base64,${encoded}`;
+            }
+        } catch (e) {
+            console.error('Failed to load custom avatar:', e);
+        }
+    }
+
     return generateRetroSpriteAvatar(identifier, size, variant);
 }
 
