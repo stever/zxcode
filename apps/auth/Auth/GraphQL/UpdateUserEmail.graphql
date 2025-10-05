@@ -1,0 +1,5 @@
+mutation UpdateUserEmail($username: String!, $email_address: String) {
+    update_user(where: {username: {_eq: $username}}, _set: {email_address: $email_address}) {
+        affected_rows
+    }
+}

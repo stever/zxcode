@@ -8,14 +8,15 @@ namespace SteveR.Auth;
 public static class UserLogin
 {
     public static async Task<HttpStatusCode> PerformLoginAsync(
-        string username, 
+        string username,
         DateTime expiry,
         UserRepository userRepository,
         SessionRepository sessionRepository,
         CookieRepository cookieRepository,
         IConfiguration configuration,
         HttpRequest request,
-        HttpResponse response)
+        HttpResponse response,
+        string? email = null)
     {
         if (string.IsNullOrEmpty(username))
         {
@@ -33,11 +34,17 @@ public static class UserLogin
 
             // Automatically create user in database if they do not already exist there.
             Log.Information("New user: {0}", username);
-            await userRepository.CreateUser(username);
+            await userRepository.CreateUser(username, email);
         }
         else
         {
             Log.Information("Returning user: {0}", username);
+
+            // Update email address for returning users in case it changed in Auth0
+            if (!string.IsNullOrEmpty(email))
+            {
+                await userRepository.UpdateUserEmail(username, email);
+            }
         }
 
         var user = await userRepository.GetUser(username);

@@ -32,7 +32,8 @@ public class UserRepository
     /// Creates a new user entry in the database for the given username.
     /// </summary>
     /// <param name="username">Unique username for the user.</param>
-    public async Task CreateUser(string username)
+    /// <param name="emailAddress">Email address for the user.</param>
+    public async Task CreateUser(string username, string? emailAddress = null)
     {
         if (username == null)
         {
@@ -40,16 +41,18 @@ public class UserRepository
         }
 
         username = username.Trim();
-        
+
         if (username.Length == 0)
         {
             throw new Exception("Invalid username");
         }
-    
-        // Query to create new user record. 
+
+        emailAddress = emailAddress?.Trim();
+
+        // Query to create new user record.
         var client = GetGraphQlClient();
         var query = await File.ReadAllTextAsync(Path.Combine("GraphQL", "CreateUser.graphql"));
-        var result = await client.Query(query, new { username });
+        var result = await client.Query(query, new { username, email_address = emailAddress });
         result.EnsureNoErrors();
     }
 
@@ -87,6 +90,26 @@ public class UserRepository
     public async Task<bool> UserExists(string username)
     {
         return await GetUser(username) != null;
+    }
+
+    /// <summary>
+    /// Updates the email address for an existing user.
+    /// </summary>
+    /// <param name="username">Username of the user to update.</param>
+    /// <param name="emailAddress">New email address.</param>
+    public async Task UpdateUserEmail(string username, string? emailAddress)
+    {
+        if (string.IsNullOrEmpty(username))
+        {
+            throw new ArgumentNullException(nameof(username));
+        }
+
+        emailAddress = emailAddress?.Trim();
+
+        var client = GetGraphQlClient();
+        var query = await File.ReadAllTextAsync(Path.Combine("GraphQL", "UpdateUserEmail.graphql"));
+        var result = await client.Query(query, new { username, email_address = emailAddress });
+        result.EnsureNoErrors();
     }
 
     public async Task<List<string>> GetRoles(string userId)
