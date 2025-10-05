@@ -132,12 +132,12 @@ export default function ProjectVisibilityToggle({ project, userId }) {
           />
         </div>
         <p>
-          Once public, your project will be accessible via a shareable link.
-          You can make it private again at any time.
+          Once public, your project will be accessible via a shareable link. You
+          can make it private again at any time.
         </p>
-        <p className="text-sm text-color-secondary">
-          Your project will be visible on your public profile if your profile
-          is also public.
+        <p className="text-xs text-color-secondary mt-2">
+          Your project will be visible on your public profile if your profile is
+          also public.
         </p>
       </Dialog>
     </div>
