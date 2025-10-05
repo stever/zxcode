@@ -1,6 +1,6 @@
 # Hasura Configuration & Migrations
 
-This directory contains the Hasura GraphQL engine configuration, database migrations, and metadata for the Code . ZX Play.orgr project.
+This directory contains the Hasura GraphQL engine configuration, database migrations, and metadata for the Code · ZX Play.orgr project.
 
 ## Directory Structure
 

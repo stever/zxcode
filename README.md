@@ -1,4 +1,4 @@
-# Code . ZX Play
+# Code · ZX Play
 
 A ZX Spectrum emulator & programming environment for the browser.
 
