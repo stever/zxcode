@@ -161,14 +161,14 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
       {
         separator: true,
       },
-      {
-        label: "Upload TAP",
-        icon: "pi pi-fw pi-upload",
-        command: () => {
-          dispatch(showOpenFileDialog());
-          navigate("/");
-        },
-      },
+      // {
+      //   label: "Upload TAP",
+      //   icon: "pi pi-fw pi-upload",
+      //   command: () => {
+      //     dispatch(showOpenFileDialog());
+      //     navigate("/");
+      //   },
+      // },
       {
         label: "Download TAP",
         icon: "pi pi-fw pi-download",
@@ -217,16 +217,6 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
     },
   };
 
-  const viewProjectsMenuItem = {
-    label: "Your Projects",
-    icon: "pi pi-fw pi-folder",
-    disabled: !userId,
-    command: () => {
-      // Use slug if available, otherwise fallback to userId
-      navigate(`/u/${userSlug || userId}/projects`);
-    },
-  };
-
   const viewMenu = {
     label: "View",
     icon: "pi pi-fw pi-eye",
@@ -237,7 +227,6 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   viewMenu.items.push(sep);
   viewMenu.items.push(feedMenuItem);
   viewMenu.items.push(viewProfileMenuItem);
-  viewMenu.items.push(viewProjectsMenuItem);
   viewMenu.items.push(profileSettingsMenuItem);
 
   const infoMenu = {
