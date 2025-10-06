@@ -27,6 +27,7 @@ import { Dialog } from "primereact/dialog";
 import { InputText } from "primereact/inputtext";
 import { Divider } from "primereact/divider";
 import ProjectVisibilityToggle from "./ProjectVisibilityToggle";
+import LineNumbersToggle from "./LineNumbersToggle";
 
 export function ProjectEditor() {
   const dispatch = useDispatch();
@@ -56,6 +57,7 @@ export function ProjectEditor() {
   const ownerProfileIsPublic = useSelector(
     (state) => state?.project.ownerProfileIsPublic
   );
+  const lineNumbers = useSelector((state) => state?.app?.lineNumbers || false);
 
   // Check if current user owns this project
   const isOwner = userId && ownerId && userId === ownerId;
@@ -92,7 +94,7 @@ export function ProjectEditor() {
     theme: "mbo",
     readOnly: false,
     lineWrapping: false,
-    lineNumbers: true,
+    lineNumbers: lineNumbers,
     matchBrackets: true,
     tabSize: 4,
     indentAuto: true,
@@ -103,6 +105,13 @@ export function ProjectEditor() {
     cm.setValue(code || "");
     dispatch(setCode(cm.getValue()));
   }, []);
+
+  useEffect(() => {
+    if (cmRef.current) {
+      const cm = cmRef.current.getCodeMirror();
+      cm.setOption("lineNumbers", lineNumbers);
+    }
+  }, [lineNumbers]);
 
   const deleteConfirm = (event) => {
     confirmPopup({
@@ -240,6 +249,15 @@ export function ProjectEditor() {
           </div>
         </>
       )}
+
+      {/* Line numbers toggle for everyone */}
+      <Divider
+        layout="vertical"
+        className="hidden md:inline-flex project-divider ml-4"
+      />
+      <div className="mt-2 inline-flex project-divider-after">
+        <LineNumbersToggle />
+      </div>
       <ConfirmPopup />
       <Dialog
         header="Rename Project"

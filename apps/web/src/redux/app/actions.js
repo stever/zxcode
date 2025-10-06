@@ -5,6 +5,7 @@ export const actionTypes = {
     receiveTermsOfUse: 'app/receiveTermsOfUse',
     requestPrivacyPolicy: 'app/requestPrivacyPolicy',
     receivePrivacyPolicy: 'app/receivePrivacyPolicy',
+    toggleLineNumbers: 'app/toggleLineNumbers',
 };
 
 export const showActiveEmulator = () => ({
@@ -31,4 +32,9 @@ export const requestPrivacyPolicy = () => ({
 export const receivePrivacyPolicy = (text) => ({
     type: actionTypes.receivePrivacyPolicy,
     text
+})
+
+export const toggleLineNumbers = (enabled) => ({
+    type: actionTypes.toggleLineNumbers,
+    enabled
 })
