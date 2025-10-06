@@ -95,7 +95,7 @@ export default function ActivityFeed() {
                     <div
                       key={project.project_id}
                       style={{
-                        flexBasis: "448px",
+                        flexBasis: "400px",
                         flexGrow: 0,
                         flexShrink: 0,
                       }}

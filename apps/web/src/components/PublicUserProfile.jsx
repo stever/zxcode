@@ -53,10 +53,17 @@ const UPDATE_PROJECT_ORDER = gql`
 `;
 
 const UPDATE_USER_AVATAR = gql`
-  mutation UpdateUserAvatar($user_id: uuid!, $avatar_variant: Int, $custom_avatar_data: jsonb) {
+  mutation UpdateUserAvatar(
+    $user_id: uuid!
+    $avatar_variant: Int
+    $custom_avatar_data: jsonb
+  ) {
     update_user_by_pk(
       pk_columns: { user_id: $user_id }
-      _set: { avatar_variant: $avatar_variant, custom_avatar_data: $custom_avatar_data }
+      _set: {
+        avatar_variant: $avatar_variant
+        custom_avatar_data: $custom_avatar_data
+      }
     ) {
       user_id
       avatar_variant
@@ -152,7 +159,7 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    flexBasis: "448px",
+    flexBasis: "400px",
     flexGrow: 0,
     flexShrink: 0,
     opacity: isSortableDragging ? 0.5 : 1,
@@ -385,7 +392,7 @@ export default function PublicUserProfile() {
     if (user) {
       const identifier = user.slug || user.user_id;
 
-      if (variant === 'custom') {
+      if (variant === "custom") {
         // Load custom avatar from localStorage
         try {
           const saved = localStorage.getItem(`custom_avatar_${identifier}`);
@@ -395,10 +402,21 @@ export default function PublicUserProfile() {
             const size = 120;
             const pixelSize = size / 8;
             const COLORS = [
-              '#000000', '#0000D7', '#D70000', '#D700D7',
-              '#00D700', '#00D7D7', '#D7D700', '#D7D7D7',
-              '#0000FF', '#FF0000', '#FF00FF', '#00FF00',
-              '#00FFFF', '#FFFF00', '#FFFFFF'
+              "#000000",
+              "#0000D7",
+              "#D70000",
+              "#D700D7",
+              "#00D700",
+              "#00D7D7",
+              "#D7D700",
+              "#D7D7D7",
+              "#0000FF",
+              "#FF0000",
+              "#FF00FF",
+              "#00FF00",
+              "#00FFFF",
+              "#FFFF00",
+              "#FFFFFF",
             ];
 
             let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
@@ -409,12 +427,14 @@ export default function PublicUserProfile() {
                 const colorIndex = grid[row][col];
                 if (colorIndex > 0) {
                   const color = COLORS[colorIndex];
-                  svg += `<rect x="${col * pixelSize}" y="${row * pixelSize}" width="${pixelSize}" height="${pixelSize}" fill="${color}"/>`;
+                  svg += `<rect x="${col * pixelSize}" y="${
+                    row * pixelSize
+                  }" width="${pixelSize}" height="${pixelSize}" fill="${color}"/>`;
                 }
               }
             }
 
-            svg += '</svg>';
+            svg += "</svg>";
             const encoded = btoa(unescape(encodeURIComponent(svg)));
             const newAvatar = `data:image/svg+xml;base64,${encoded}`;
             setAvatarUrl(newAvatar);
@@ -424,16 +444,20 @@ export default function PublicUserProfile() {
               await gqlFetch(currentUserId, UPDATE_USER_AVATAR, {
                 user_id: user.user_id,
                 avatar_variant: -1,
-                custom_avatar_data: grid
+                custom_avatar_data: grid,
               });
               // Update local user state
-              setUser({...user, avatar_variant: -1, custom_avatar_data: grid});
+              setUser({
+                ...user,
+                avatar_variant: -1,
+                custom_avatar_data: grid,
+              });
             } catch (error) {
-              console.error('Failed to save custom avatar to database:', error);
+              console.error("Failed to save custom avatar to database:", error);
             }
           }
         } catch (e) {
-          console.error('Failed to load custom avatar:', e);
+          console.error("Failed to load custom avatar:", e);
         }
       } else {
         // Generate new avatar with selected variant
@@ -445,12 +469,16 @@ export default function PublicUserProfile() {
           await gqlFetch(currentUserId, UPDATE_USER_AVATAR, {
             user_id: user.user_id,
             avatar_variant: variant,
-            custom_avatar_data: null
+            custom_avatar_data: null,
           });
           // Update local user state
-          setUser({...user, avatar_variant: variant, custom_avatar_data: null});
+          setUser({
+            ...user,
+            avatar_variant: variant,
+            custom_avatar_data: null,
+          });
         } catch (error) {
-          console.error('Failed to save avatar to database:', error);
+          console.error("Failed to save avatar to database:", error);
         }
       }
     }
@@ -552,32 +580,32 @@ export default function PublicUserProfile() {
                   shape="square"
                   className="mb-3"
                   style={{
-                    width: '120px',
-                    height: '120px',
-                    imageRendering: 'pixelated'
+                    width: "120px",
+                    height: "120px",
+                    imageRendering: "pixelated",
                   }}
                 />
                 {isOwnProfile && (
                   <div
                     className="absolute cursor-pointer"
                     style={{
-                      top: '0',
-                      left: '128px',
-                      backgroundColor: '#1a1a1a',
-                      borderRadius: '50%',
-                      width: '28px',
-                      height: '28px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '2px solid #3a3a3a',
+                      top: "0",
+                      left: "128px",
+                      backgroundColor: "#1a1a1a",
+                      borderRadius: "50%",
+                      width: "28px",
+                      height: "28px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      border: "2px solid #3a3a3a",
                     }}
                     onClick={() => setShowAvatarSelector(true)}
                     title="Change avatar"
                   >
                     <i
                       className="pi pi-cog"
-                      style={{ fontSize: '12px', color: '#aaa' }}
+                      style={{ fontSize: "12px", color: "#aaa" }}
                     />
                   </div>
                 )}
@@ -711,7 +739,7 @@ export default function PublicUserProfile() {
                       <div
                         key={project.project_id}
                         style={{
-                          flexBasis: "448px",
+                          flexBasis: "400px",
                           flexGrow: 0,
                           flexShrink: 0,
                         }}
