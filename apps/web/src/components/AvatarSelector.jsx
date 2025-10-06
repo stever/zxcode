@@ -10,6 +10,7 @@ export default function AvatarSelector({
   onHide,
   identifier,
   onSelect,
+  customAvatarData,
 }) {
   const [selectedVariant, setSelectedVariant] = useState(0);
   const [avatars, setAvatars] = useState([]);
@@ -189,6 +190,7 @@ export default function AvatarSelector({
             identifier={identifier}
             onSave={handleCustomAvatarSave}
             onCancel={onHide}
+            customAvatarData={customAvatarData}
           />
         </TabPanel>
       </TabView>

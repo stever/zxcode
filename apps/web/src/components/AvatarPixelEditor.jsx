@@ -20,7 +20,7 @@ const SPECTRUM_COLORS = [
   { name: "Bright White", value: "#FFFFFF" },
 ];
 
-export default function AvatarPixelEditor({ identifier, onSave, onCancel }) {
+export default function AvatarPixelEditor({ identifier, onSave, onCancel, customAvatarData }) {
   const [grid, setGrid] = useState(() => {
     // Initialize empty 8x8 grid
     return Array(8)
@@ -35,15 +35,23 @@ export default function AvatarPixelEditor({ identifier, onSave, onCancel }) {
   // Load saved custom avatar if exists
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(`custom_avatar_${identifier}`);
-      if (saved) {
-        const savedGrid = JSON.parse(saved);
-        setGrid(savedGrid);
+      // First try to load from customAvatarData (from database)
+      if (customAvatarData) {
+        setGrid(customAvatarData);
+        // Also save to localStorage for offline access
+        localStorage.setItem(`custom_avatar_${identifier}`, JSON.stringify(customAvatarData));
+      } else {
+        // Fall back to localStorage if no database data
+        const saved = localStorage.getItem(`custom_avatar_${identifier}`);
+        if (saved) {
+          const savedGrid = JSON.parse(saved);
+          setGrid(savedGrid);
+        }
       }
     } catch (e) {
       console.error("Failed to load saved avatar:", e);
     }
-  }, [identifier]);
+  }, [identifier, customAvatarData]);
 
   const handlePixelClick = (row, col) => {
     const newGrid = [...grid];
