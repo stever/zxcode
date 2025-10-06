@@ -825,6 +825,7 @@ export default function PublicUserProfile() {
           onHide={() => setShowAvatarSelector(false)}
           identifier={user?.slug || user?.user_id}
           onSelect={handleAvatarSelect}
+          customAvatarData={user?.custom_avatar_data}
         />
       )}
     </Titled>
