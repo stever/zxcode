@@ -24,17 +24,13 @@ public static class UserLogin
             return HttpStatusCode.BadRequest;
         }
 
-        // Check if user exists by email first (since email is unique and cannot be changed by users)
-        User? user = null;
-        if (!string.IsNullOrEmpty(email))
+        // Check if user exists by username (username is stable and won't change)
+        User? user = await userRepository.GetUser(username);
+
+        // Fallback to email lookup for edge cases
+        if (user == null && !string.IsNullOrEmpty(email))
         {
             user = await userRepository.GetUserByEmail(email);
-        }
-
-        // If no user found by email, check by username
-        if (user == null)
-        {
-            user = await userRepository.GetUser(username);
         }
 
         if (user == null)

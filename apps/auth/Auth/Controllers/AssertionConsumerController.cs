@@ -51,20 +51,11 @@ public class AssertionConsumerController : ControllerBase
             return HttpStatusCode.BadRequest;
         }
 
-        // Extract email from SAML response and derive username from it
-        var email = samlResponse.GetEmail()?.Trim();
-        var username = email;
+        // Extract username from SAML NameID (Auth0 ID)
+        var username = samlResponse.GetUserNameId()?.Trim();
 
-        // If we have an email, extract the local part as the username
-        if (!string.IsNullOrEmpty(email) && email.Contains('@'))
-        {
-            username = email.Split('@')[0];
-            // Remove any + tags (e.g., user+tag@domain.com -> user)
-            if (username.Contains('+'))
-            {
-                username = username.Split('+')[0];
-            }
-        }
+        // Extract email from SAML response
+        var email = samlResponse.GetEmail()?.Trim();
 
         // Match the expiry in the SAML response in the ticket below.
         var expiry = samlResponse.GetSessionExpiry();
