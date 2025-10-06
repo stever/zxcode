@@ -6,7 +6,8 @@ import {actionTypes} from "./actions";
 
 const initialState = {
     privacyPolicy: undefined,
-    termsOfUse: undefined
+    termsOfUse: undefined,
+    lineNumbers: false
 };
 
 // -----------------------------------------------------------------------------
@@ -27,6 +28,13 @@ function receiveTermsOfUse(state, action) {
     }
 }
 
+function toggleLineNumbers(state, action) {
+    return {
+        ...state,
+        lineNumbers: action.enabled
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Reducer
 // -----------------------------------------------------------------------------
@@ -34,6 +42,7 @@ function receiveTermsOfUse(state, action) {
 const actionsMap = {
     [actionTypes.receivePrivacyPolicy]: receivePrivacyPolicy,
     [actionTypes.receiveTermsOfUse]: receiveTermsOfUse,
+    [actionTypes.toggleLineNumbers]: toggleLineNumbers,
 };
 
 export default function reducer(state = initialState, action) {
