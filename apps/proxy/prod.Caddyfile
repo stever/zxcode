@@ -1,4 +1,22 @@
 :8080 {
+    # GoToSocial federated instance for the bot. Handled first so the whole
+    # social.zxplay.org host goes to GoToSocial regardless of path.
+    @social host social.zxplay.org
+    handle @social {
+        reverse_proxy gotosocial:8080
+    }
+
+    # account-domain trick: remote servers resolve @bot@zxplay.org by querying
+    # the apex well-known endpoints, which we redirect to the GoToSocial host.
+    # {uri} preserves the ?resource= query that webfinger depends on.
+    @apexWellKnown {
+        host zxplay.org
+        path /.well-known/webfinger /.well-known/host-meta /.well-known/nodeinfo /.well-known/nodeinfo/*
+    }
+    handle @apexWellKnown {
+        redir https://social.zxplay.org{uri} permanent
+    }
+
     redir /auth /auth/
     handle /auth/* {
         uri strip_prefix /auth

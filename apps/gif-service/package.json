@@ -12,7 +12,8 @@
   "dependencies": {
     "express": "^4.21.2",
     "gif-encoder-2": "^1.0.5",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "zmakebas": "0.0.1-alpha.4"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

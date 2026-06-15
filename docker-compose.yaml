@@ -50,5 +50,58 @@ services:
     image: ghcr.io/stever/zxcoder-api-zxbasic
     restart: always
 
+  # Headless emulator: compiles BASIC to .tap and renders a running program to GIF.
+  # Does untrusted execution; holds no secrets. Not exposed publicly.
+  gif-service:
+    build:
+      context: .
+      dockerfile: apps/gif-service/Dockerfile
+    restart: always
+
+  # GoToSocial: the bot's federated identity, served at social.zxplay.org but
+  # presenting handles as @user@zxplay.org via the account-domain webfinger trick.
+  # TLS is terminated by the Caddy proxy, so Let's Encrypt is disabled here.
+  gotosocial:
+    image: superseriousbusiness/gotosocial:latest
+    restart: always
+    environment:
+      GTS_HOST: social.zxplay.org
+      GTS_ACCOUNT_DOMAIN: zxplay.org
+      GTS_PROTOCOL: https
+      GTS_BIND_ADDRESS: 0.0.0.0
+      GTS_PORT: "8080"
+      GTS_DB_TYPE: sqlite
+      GTS_DB_ADDRESS: /gotosocial/storage/sqlite.db
+      GTS_STORAGE_LOCAL_BASE_PATH: /gotosocial/storage
+      GTS_LETSENCRYPT_ENABLED: "false"
+      GTS_ACCOUNTS_REGISTRATION_OPEN: "false"
+      # Trust X-Forwarded-* from the proxy on the Docker network. Tighten to the
+      # proxy's actual subnet in production.
+      GTS_TRUSTED_PROXIES: "172.16.0.0/12"
+    volumes:
+      - gotosocial_data:/gotosocial/storage
+
+  # The Mastodon adapter: holds the access token, watches mentions, calls
+  # gif-service, posts replies. Runs no untrusted code.
+  mastodon-bot:
+    build:
+      context: .
+      dockerfile: apps/mastodon-bot/Dockerfile
+    restart: always
+    depends_on:
+      - gif-service
+      - gotosocial
+    environment:
+      # Use the public host so the Host header matches GTS_HOST (GoToSocial
+      # rejects API requests whose Host is not its configured host).
+      MASTODON_INSTANCE_URL: https://social.zxplay.org
+      MASTODON_ACCESS_TOKEN: ${MASTODON_ACCESS_TOKEN}
+      GIF_SERVICE_URL: http://gif-service:5001
+      STATE_FILE: /data/state.json
+    volumes:
+      - bot_data:/data
+
 volumes:
   pg_data:
+  gotosocial_data:
+  bot_data:

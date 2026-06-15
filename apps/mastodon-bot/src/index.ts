@@ -1,0 +1,113 @@
+import { config, assertRuntimeConfig } from './config.js';
+import { htmlToBasic } from './basic.js';
+import { basicToGif } from './gif.js';
+import { loadState, saveState } from './state.js';
+import {
+    MastodonAccount,
+    MastodonNotification,
+    MastodonStatus,
+    Visibility,
+    fetchMentions,
+    postReply,
+    sleep,
+    uploadGif,
+    verifyCredentials,
+} from './mastodon.js';
+
+// Never reply more publicly than the original mention, and never escalate a
+// public mention back to the public timeline.
+function replyVisibility(original: Visibility): Visibility {
+    return original === 'public' ? 'unlisted' : original;
+}
+
+function truncate(text: string, max: number): string {
+    return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+async function handleMention(self: MastodonAccount, n: MastodonNotification): Promise<void> {
+    const status = n.status;
+    if (!status) return;
+    if (status.account.id === self.id) return; // never answer ourselves
+
+    const code = htmlToBasic(status.content);
+    if (!code) {
+        console.log(`Mention ${n.id} from @${status.account.acct}: no BASIC found, skipping`);
+        return;
+    }
+    console.log(`Mention ${n.id} from @${status.account.acct}: ${code.split('\n').length} line(s)`);
+
+    const visibility = replyVisibility(status.visibility);
+
+    if (config.dryRun) {
+        console.log(`[dry-run] would run:\n${code}`);
+        return;
+    }
+
+    const result = await basicToGif(code);
+
+    if (!result.ok) {
+        await postReply({
+            inReplyToId: status.id,
+            statusText: truncate(`That didn't compile or run:\n\n${result.error}`, 480),
+            visibility,
+        });
+        return;
+    }
+
+    if (result.gif.length > config.maxGifBytes) {
+        await postReply({
+            inReplyToId: status.id,
+            statusText: 'That program produced a GIF too large to post here.',
+            visibility,
+        });
+        return;
+    }
+
+    const mediaId = await uploadGif(result.gif, code);
+    await postReply({
+        inReplyToId: status.id,
+        statusText: config.replyCaption,
+        mediaIds: [mediaId],
+        visibility,
+    });
+    console.log(`Replied to ${n.id} with ${result.gif.length} byte GIF`);
+}
+
+async function pollOnce(self: MastodonAccount): Promise<void> {
+    const state = await loadState();
+    const mentions = await fetchMentions(state.lastNotificationId);
+    if (mentions.length === 0) return;
+
+    for (const n of mentions) {
+        try {
+            await handleMention(self, n);
+        } catch (err) {
+            // Advance past poison mentions rather than retrying forever.
+            console.error(`Failed to handle mention ${n.id}:`, err);
+        }
+        state.lastNotificationId = n.id;
+        await saveState(state);
+    }
+}
+
+async function main(): Promise<void> {
+    assertRuntimeConfig();
+    const self = await verifyCredentials();
+    console.log(
+        `Bot running as @${self.acct} (id ${self.id}); polling ${config.instanceUrl} every ${config.pollIntervalMs}ms`,
+    );
+
+    for (;;) {
+        try {
+            await pollOnce(self);
+        } catch (err) {
+            console.error('Poll failed:', err);
+        }
+        await sleep(config.pollIntervalMs);
+    }
+}
+
+main().catch((err) => {
+    console.error('Fatal:', err);
+    process.exit(1);
+});
