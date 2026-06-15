@@ -6,6 +6,7 @@ export const config = {
     instanceUrl: trimSlash(process.env.MASTODON_INSTANCE_URL ?? ''),
     accessToken: process.env.MASTODON_ACCESS_TOKEN ?? '',
     gifServiceUrl: trimSlash(process.env.GIF_SERVICE_URL ?? 'http://localhost:5001'),
+    projectHost: (process.env.PROJECT_HOST ?? 'code.zxplay.org').replace(/^https?:\/\//, '').replace(/\/$/, ''),
     stateFile: process.env.STATE_FILE ?? './state.json',
     pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS ?? '15000', 10),
     maxSeconds: parseInt(process.env.MAX_SECONDS ?? '30', 10),

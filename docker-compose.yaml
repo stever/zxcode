@@ -50,13 +50,20 @@ services:
     image: ghcr.io/stever/zxcoder-api-zxbasic
     restart: always
 
-  # Headless emulator: compiles BASIC to .tap and renders a running program to GIF.
-  # Does untrusted execution; holds no secrets. Not exposed publicly.
+  # Headless emulator: compiles a program to .tap and renders it running to
+  # GIF/MP4. Renders inline BASIC, or a public project looked up from Hasura
+  # (compiling asm/bas2tap in-process and zxbasic/c via the Hasura actions).
+  # Talks to Hasura as the unauthenticated `public` role, so it holds no
+  # secrets. Does untrusted execution; not exposed publicly.
   gif-service:
     build:
       context: .
       dockerfile: apps/gif-service/Dockerfile
     restart: always
+    depends_on:
+      - hasura
+    environment:
+      HASURA_URL: http://hasura:8080/v1/graphql
 
   # GoToSocial: the bot's federated identity, served at social.zxplay.org but
   # presenting handles as @user@zxplay.org via the account-domain webfinger trick.

@@ -1,6 +1,7 @@
 import { config, assertRuntimeConfig } from './config.js';
 import { htmlToBasic } from './basic.js';
-import { basicToMedia } from './media.js';
+import { extractProjectId } from './project.js';
+import { basicToMedia, projectToMedia } from './media.js';
 import { loadState, saveState } from './state.js';
 import {
     MastodonAccount,
@@ -30,21 +31,28 @@ async function handleMention(self: MastodonAccount, n: MastodonNotification): Pr
     if (!status) return;
     if (status.account.id === self.id) return; // never answer ourselves
 
-    const code = htmlToBasic(status.content);
-    if (!code) {
-        console.log(`Mention ${n.id} from @${status.account.acct}: no BASIC found, skipping`);
+    // A project link takes precedence over inline BASIC: the source already
+    // lives on the site, so render it directly rather than parsing the toot.
+    const projectId = extractProjectId(status.content, config.projectHost);
+    const code = projectId ? null : htmlToBasic(status.content);
+    if (!projectId && !code) {
+        console.log(`Mention ${n.id} from @${status.account.acct}: no project link or BASIC found, skipping`);
         return;
     }
-    console.log(`Mention ${n.id} from @${status.account.acct}: ${code.split('\n').length} line(s)`);
+    console.log(
+        projectId
+            ? `Mention ${n.id} from @${status.account.acct}: project ${projectId}`
+            : `Mention ${n.id} from @${status.account.acct}: ${code!.split('\n').length} line(s)`,
+    );
 
     const visibility = replyVisibility(status.visibility);
 
     if (config.dryRun) {
-        console.log(`[dry-run] would run:\n${code}`);
+        console.log(projectId ? `[dry-run] would render project ${projectId}` : `[dry-run] would run:\n${code}`);
         return;
     }
 
-    const result = await basicToMedia(code);
+    const result = projectId ? await projectToMedia(projectId) : await basicToMedia(code!);
 
     if (!result.ok) {
         await postReply({
@@ -64,7 +72,7 @@ async function handleMention(self: MastodonAccount, n: MastodonNotification): Pr
         return;
     }
 
-    const mediaId = await uploadMedia(result.data, result.contentType, result.filename, code);
+    const mediaId = await uploadMedia(result.data, result.contentType, result.filename, result.altText);
     await postReply({
         inReplyToId: status.id,
         statusText: config.replyCaption,
