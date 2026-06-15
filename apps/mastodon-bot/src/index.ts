@@ -1,6 +1,6 @@
 import { config, assertRuntimeConfig } from './config.js';
 import { htmlToBasic } from './basic.js';
-import { extractProjectId } from './project.js';
+import { extractProjectRef } from './project.js';
 import { basicToMedia, projectToMedia } from './media.js';
 import { loadState, saveState } from './state.js';
 import {
@@ -33,26 +33,27 @@ async function handleMention(self: MastodonAccount, n: MastodonNotification): Pr
 
     // A project link takes precedence over inline BASIC: the source already
     // lives on the site, so render it directly rather than parsing the toot.
-    const projectId = extractProjectId(status.content, config.projectHost);
-    const code = projectId ? null : htmlToBasic(status.content);
-    if (!projectId && !code) {
+    const projectRef = extractProjectRef(status.content, config.projectHost);
+    const code = projectRef ? null : htmlToBasic(status.content);
+    if (!projectRef && !code) {
         console.log(`Mention ${n.id} from @${status.account.acct}: no project link or BASIC found, skipping`);
         return;
     }
+    const projectPath = projectRef ? `${projectRef.userSlug}/${projectRef.projectSlug}` : '';
     console.log(
-        projectId
-            ? `Mention ${n.id} from @${status.account.acct}: project ${projectId}`
+        projectRef
+            ? `Mention ${n.id} from @${status.account.acct}: project ${projectPath}`
             : `Mention ${n.id} from @${status.account.acct}: ${code!.split('\n').length} line(s)`,
     );
 
     const visibility = replyVisibility(status.visibility);
 
     if (config.dryRun) {
-        console.log(projectId ? `[dry-run] would render project ${projectId}` : `[dry-run] would run:\n${code}`);
+        console.log(projectRef ? `[dry-run] would render project ${projectPath}` : `[dry-run] would run:\n${code}`);
         return;
     }
 
-    const result = projectId ? await projectToMedia(projectId) : await basicToMedia(code!);
+    const result = projectRef ? await projectToMedia(projectRef) : await basicToMedia(code!);
 
     if (!result.ok) {
         await postReply({

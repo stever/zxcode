@@ -8,11 +8,25 @@ const router = Router();
 
 type Format = 'gif' | 'mp4';
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SLUG = /^[a-z0-9-]+$/i;
 
-function readProjectId(req: Request): string | null {
-    const id: unknown = typeof req.body === 'object' && req.body ? req.body.projectId : undefined;
-    return typeof id === 'string' && UUID.test(id) ? id.toLowerCase() : null;
+interface ProjectRef {
+    userSlug: string;
+    projectSlug: string;
+}
+
+function readProjectRef(req: Request): ProjectRef | null {
+    const body = typeof req.body === 'object' && req.body ? req.body : {};
+    const { userSlug, projectSlug } = body;
+    if (
+        typeof userSlug === 'string' &&
+        typeof projectSlug === 'string' &&
+        SLUG.test(userSlug) &&
+        SLUG.test(projectSlug)
+    ) {
+        return { userSlug: userSlug.toLowerCase(), projectSlug: projectSlug.toLowerCase() };
+    }
+    return null;
 }
 
 /**
@@ -23,13 +37,13 @@ function readProjectId(req: Request): string | null {
  */
 async function handle(format: Format, req: Request, res: Response): Promise<void> {
     try {
-        const projectId = readProjectId(req);
-        if (!projectId) {
-            res.status(400).json({ error: 'No valid projectId provided' });
+        const ref = readProjectRef(req);
+        if (!ref) {
+            res.status(400).json({ error: 'No valid project reference provided' });
             return;
         }
 
-        const project = await fetchProject(projectId);
+        const project = await fetchProject(ref.userSlug, ref.projectSlug);
         if (!project) {
             res.status(404).json({ error: 'Project not found or not public' });
             return;
@@ -59,7 +73,7 @@ async function handle(format: Format, req: Request, res: Response): Promise<void
         await generator.initialize();
 
         console.log(
-            `Generating ${format.toUpperCase()} from project ${projectId} (lang=${project.lang})...`,
+            `Generating ${format.toUpperCase()} from project ${ref.userSlug}/${ref.projectSlug} (lang=${project.lang})...`,
         );
         if (format === 'mp4') {
             const mp4 = await generator.generateMp4FromTAP(tap, machineType);

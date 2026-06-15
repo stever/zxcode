@@ -37,21 +37,31 @@ export interface ProjectRecord {
 }
 
 /**
- * Look up a public project by id. Returns null when the project is missing or
- * private: the `public` role's select permission filters to is_public, so a
- * private project is simply absent from the result rather than an error.
+ * Look up a public project from its canonical /u/<userSlug>/<projectSlug> URL.
+ *
+ * Project slug is unique only per owner (user slug is globally unique), so the
+ * lookup is scoped by the owner relationship rather than projectSlug alone.
+ * Returns null when the project is missing or private: the `public` role's
+ * select permission filters to is_public, so a private project is simply absent
+ * rather than an error.
  */
-export async function fetchProject(projectId: string): Promise<ProjectRecord | null> {
+export async function fetchProject(
+    userSlug: string,
+    projectSlug: string,
+): Promise<ProjectRecord | null> {
     const query = `
-        query ($id: uuid!) {
-            project(where: { project_id: { _eq: $id } }, limit: 1) {
+        query ($userSlug: String!, $projectSlug: String!) {
+            project(
+                where: { slug: { _eq: $projectSlug }, owner: { slug: { _eq: $userSlug } } }
+                limit: 1
+            ) {
                 lang
                 code
                 title
             }
         }
     `;
-    const data = await gql<{ project: ProjectRecord[] }>(query, { id: projectId });
+    const data = await gql<{ project: ProjectRecord[] }>(query, { userSlug, projectSlug });
     return data.project[0] ?? null;
 }
 

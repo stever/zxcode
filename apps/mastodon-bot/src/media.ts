@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { ProjectRef } from './project.js';
 
 export type MediaResult =
     | { ok: true; data: Buffer; contentType: string; filename: string; altText: string }
@@ -39,10 +40,10 @@ export function basicToMedia(code: string): Promise<MediaResult> {
 }
 
 /** Render a public code.zxplay.org project via gif-service, returning an MP4 or an error. */
-export function projectToMedia(projectId: string): Promise<MediaResult> {
+export function projectToMedia(ref: ProjectRef): Promise<MediaResult> {
     return requestMedia(
         '/api/project-to-mp4',
-        { projectId },
-        `${config.projectHost}/projects/${projectId}`,
+        ref,
+        `${config.projectHost}/u/${ref.userSlug}/${ref.projectSlug}`,
     );
 }
