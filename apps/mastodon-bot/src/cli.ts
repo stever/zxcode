@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'fs/promises';
-import { basicToGif } from './gif.js';
+import { basicToMedia } from './media.js';
 
-// Local end-to-end test of the BASIC -> GIF chain without any Mastodon account.
+// Local end-to-end test of the BASIC -> MP4 chain without any Mastodon account.
 // Usage:
 //   GIF_SERVICE_URL=http://localhost:5001 npm run cli -- program.bas
 //   echo '10 PRINT "HI"' | GIF_SERVICE_URL=http://localhost:5001 npm run cli
@@ -22,15 +22,15 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
-    const result = await basicToGif(code);
+    const result = await basicToMedia(code);
     if (!result.ok) {
         console.error('Error:', result.error);
         process.exit(1);
     }
 
-    const out = process.env.OUT ?? 'program.gif';
-    await writeFile(out, result.gif);
-    console.log(`Wrote ${out} (${result.gif.length} bytes)`);
+    const out = process.env.OUT ?? result.filename;
+    await writeFile(out, result.data);
+    console.log(`Wrote ${out} (${result.data.length} bytes)`);
 }
 
 main().catch((err) => {

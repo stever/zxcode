@@ -1,12 +1,12 @@
 import { config } from './config.js';
 
-export type GifResult =
-    | { ok: true; gif: Buffer }
+export type MediaResult =
+    | { ok: true; data: Buffer; contentType: string; filename: string }
     | { ok: false; error: string };
 
-/** Compile and run BASIC via gif-service, returning the GIF or a user-facing error. */
-export async function basicToGif(code: string): Promise<GifResult> {
-    const url = `${config.gifServiceUrl}/api/basic-to-gif?maxSeconds=${config.maxSeconds}`;
+/** Compile and run BASIC via gif-service, returning an MP4 or a user-facing error. */
+export async function basicToMedia(code: string): Promise<MediaResult> {
+    const url = `${config.gifServiceUrl}/api/basic-to-mp4?maxSeconds=${config.maxSeconds}`;
     const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -14,7 +14,12 @@ export async function basicToGif(code: string): Promise<GifResult> {
     });
 
     if (res.ok) {
-        return { ok: true, gif: Buffer.from(await res.arrayBuffer()) };
+        return {
+            ok: true,
+            data: Buffer.from(await res.arrayBuffer()),
+            contentType: 'video/mp4',
+            filename: 'program.mp4',
+        };
     }
 
     let detail = '';

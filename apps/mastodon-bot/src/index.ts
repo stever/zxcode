@@ -1,6 +1,6 @@
 import { config, assertRuntimeConfig } from './config.js';
 import { htmlToBasic } from './basic.js';
-import { basicToGif } from './gif.js';
+import { basicToMedia } from './media.js';
 import { loadState, saveState } from './state.js';
 import {
     MastodonAccount,
@@ -10,7 +10,7 @@ import {
     fetchMentions,
     postReply,
     sleep,
-    uploadGif,
+    uploadMedia,
     verifyCredentials,
 } from './mastodon.js';
 
@@ -43,7 +43,7 @@ async function handleMention(self: MastodonAccount, n: MastodonNotification): Pr
         return;
     }
 
-    const result = await basicToGif(code);
+    const result = await basicToMedia(code);
 
     if (!result.ok) {
         await postReply({
@@ -54,23 +54,23 @@ async function handleMention(self: MastodonAccount, n: MastodonNotification): Pr
         return;
     }
 
-    if (result.gif.length > config.maxGifBytes) {
+    if (result.data.length > config.maxMediaBytes) {
         await postReply({
             inReplyToId: status.id,
-            statusText: 'That program produced a GIF too large to post here.',
+            statusText: 'That program produced a file too large to post here.',
             visibility,
         });
         return;
     }
 
-    const mediaId = await uploadGif(result.gif, code);
+    const mediaId = await uploadMedia(result.data, result.contentType, result.filename, code);
     await postReply({
         inReplyToId: status.id,
         statusText: config.replyCaption,
         mediaIds: [mediaId],
         visibility,
     });
-    console.log(`Replied to ${n.id} with ${result.gif.length} byte GIF`);
+    console.log(`Replied to ${n.id} with ${result.data.length} byte ${result.contentType}`);
 }
 
 async function pollOnce(self: MastodonAccount): Promise<void> {

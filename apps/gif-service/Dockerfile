@@ -2,6 +2,11 @@
 # ROMs from apps/web/public (see emulator.ts paths relative to apps/gif-service).
 FROM node:22-slim
 
+# ffmpeg is required for MP4 output.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/apps/gif-service
 
 # Install this service's own dependencies (not workspace-hoisted).

@@ -1,7 +1,9 @@
 import GIFEncoder from 'gif-encoder-2';
+import { spawn } from 'child_process';
+import { tmpdir } from 'os';
 import { Emulator } from './emulator.js';
 import { FrameDecoder } from './frame-decoder.js';
-import { readFile } from 'fs/promises';
+import { readFile, unlink } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -65,19 +67,11 @@ export class GIFGenerator {
         for (let i = 0; i < gapFrames; i++) this.emulator.runFrame();
     }
 
-    async generateFromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
-        const width = this.decoder.getWidth();
-        const height = this.decoder.getHeight();
-
-        // Encode every Nth emulated frame. The core runs at 50fps; encoding at
-        // 25fps halves GIF size and encode time with little visible loss.
-        const frameStep = 2;
-        const encoder = new GIFEncoder(width, height, 'neuquant');
-        encoder.setDelay(20 * frameStep); // match the decimated frame rate
-        encoder.setRepeat(0); // loop forever
-        encoder.setQuality(10);
-        encoder.start();
-
+    /**
+     * Boot the machine, load the tape, run the program, and return the kept raw
+     * frame buffers (50fps, trailing static trimmed). Shared by both encoders.
+     */
+    private async captureFrames(tapData: Buffer, machineType: number): Promise<Uint8Array[]> {
         this.emulator.setMachineType(machineType);
         this.emulator.setTapeTraps(true); // instant block loading; no pulse playback needed
         this.emulator.loadTAPFile(tapData);
@@ -104,9 +98,8 @@ export class GIFGenerator {
         // Let the trap loader inject every block and the program start.
         for (let i = 0; i < 15; i++) this.emulator.runFrame();
 
-        // Phase 4: capture the running program. Stop once the screen has been
-        // static for `staleFrameThreshold` consecutive frames (the program has
-        // finished or paused), then trim the trailing static frames.
+        // Capture the running program. Stop once the screen has been static for
+        // `staleFrameThreshold` consecutive frames, then trim trailing static.
         const maxFrames = Math.floor(this.options.maxDurationMs / 20);
         const staleStop = this.options.staleFrameThreshold;
         const tailFrames = 25; // ~0.5s of static tail kept for readability
@@ -134,19 +127,78 @@ export class GIFGenerator {
         }
 
         if (lastChangeIndex < 0) {
-            // Nothing ever changed; keep a short clip so the GIF is not empty.
+            // Nothing ever changed; keep a short clip so the output is not empty.
             lastChangeIndex = Math.min(frames.length, tailFrames) - 1;
         }
         const keep = Math.min(frames.length, lastChangeIndex + 1 + tailFrames);
-        let encoded = 0;
-        for (let i = 0; i < keep; i += frameStep) {
-            encoder.addFrame(this.decoder.decode(frames[i]));
-            encoded++;
-        }
-        console.log(`Encoding ${encoded} frames (${frames.length} captured, ${keep} kept)`);
+        console.log(`Captured ${frames.length} frames, keeping ${keep}`);
+        return frames.slice(0, keep);
+    }
 
+    /** Render the program to an animated GIF (25fps to keep size sane). */
+    async generateFromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
+        const frames = await this.captureFrames(tapData, machineType);
+
+        // The core runs at 50fps; encode every 2nd frame (25fps) to halve GIF
+        // size and encode time with little visible loss.
+        const frameStep = 2;
+        const encoder = new GIFEncoder(this.decoder.getWidth(), this.decoder.getHeight(), 'neuquant');
+        encoder.setDelay(20 * frameStep);
+        encoder.setRepeat(0); // loop forever
+        encoder.setQuality(10);
+        encoder.start();
+
+        for (let i = 0; i < frames.length; i += frameStep) {
+            encoder.addFrame(this.decoder.decode(frames[i]));
+        }
         encoder.finish();
         return Buffer.from(encoder.out.getData());
+    }
+
+    /** Render the program to an H.264 MP4 at the full 50fps. */
+    async generateMp4FromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
+        const frames = await this.captureFrames(tapData, machineType);
+        return this.encodeMp4(frames, 50);
+    }
+
+    /** Pipe decoded RGBA frames through ffmpeg to a temporary MP4 and return it. */
+    private async encodeMp4(frames: Uint8Array[], fps: number): Promise<Buffer> {
+        const width = this.decoder.getWidth();
+        const height = this.decoder.getHeight();
+        const outPath = join(tmpdir(), `zxplay-${process.pid}-${Date.now()}.mp4`);
+
+        const args = [
+            '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${width}x${height}`, '-r', String(fps),
+            '-i', 'pipe:0',
+            '-an', // no audio
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '20',
+            '-movflags', '+faststart',
+            '-y', outPath,
+        ];
+        const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', (d) => { stderr += d.toString(); });
+
+        const finished = new Promise<void>((resolve, reject) => {
+            ff.on('error', reject);
+            ff.on('close', (code) =>
+                code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-500)}`)),
+            );
+        });
+
+        for (const raw of frames) {
+            const rgba = this.decoder.decode(raw);
+            if (!ff.stdin.write(rgba)) {
+                await new Promise<void>((resolve) => ff.stdin.once('drain', () => resolve()));
+            }
+        }
+        ff.stdin.end();
+        await finished;
+
+        const buffer = await readFile(outPath);
+        await unlink(outPath).catch(() => undefined);
+        console.log(`Encoded MP4: ${frames.length} frames, ${buffer.length} bytes`);
+        return buffer;
     }
 
     private async parseSZXSnapshot(data: Buffer): Promise<any> {

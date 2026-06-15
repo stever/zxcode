@@ -64,10 +64,15 @@ export async function fetchMentions(sinceId: string | null): Promise<MastodonNot
     return notifications.reverse();
 }
 
-/** Upload a GIF, waiting for server-side processing, and return its media id. */
-export async function uploadGif(gif: Buffer, description: string): Promise<string> {
+/** Upload media, waiting for server-side processing, and return its media id. */
+export async function uploadMedia(
+    data: Buffer,
+    contentType: string,
+    filename: string,
+    description: string,
+): Promise<string> {
     const form = new FormData();
-    form.append('file', new Blob([gif], { type: 'image/gif' }), 'program.gif');
+    form.append('file', new Blob([data], { type: contentType }), filename);
     if (description) {
         form.append('description', description.slice(0, 1400));
     }
@@ -76,9 +81,10 @@ export async function uploadGif(gif: Buffer, description: string): Promise<strin
         headers: authHeaders(),
         body: form,
     });
-    // v2 media may return with url=null while the server processes it.
+    // v2 media may return with url=null while the server processes it. Video
+    // transcoding can take longer than images, so allow up to ~60s.
     let media = created;
-    for (let i = 0; i < 30 && !media.url; i++) {
+    for (let i = 0; i < 60 && !media.url; i++) {
         await sleep(1000);
         media = await api<MediaAttachment>(`/api/v1/media/${created.id}`, { headers: authHeaders() });
     }

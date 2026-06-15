@@ -9,7 +9,7 @@ export const config = {
     stateFile: process.env.STATE_FILE ?? './state.json',
     pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS ?? '15000', 10),
     maxSeconds: parseInt(process.env.MAX_SECONDS ?? '30', 10),
-    maxGifBytes: parseInt(process.env.MAX_GIF_BYTES ?? '8000000', 10),
+    maxMediaBytes: parseInt(process.env.MAX_MEDIA_BYTES ?? '8000000', 10),
     replyCaption: process.env.REPLY_CAPTION ?? '',
     dryRun: process.env.DRY_RUN === 'true',
 };
