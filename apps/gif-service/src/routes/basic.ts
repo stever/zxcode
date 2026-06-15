@@ -22,7 +22,8 @@ router.post('/basic-to-gif', async (req, res) => {
 
         const maxSeconds = parseInt(req.query.maxSeconds as string) || 30;
         const staleThreshold = parseInt(req.query.staleThreshold as string) || 150;
-        const machineType = parseInt(req.query.machineType as string) || 128;
+        const machineType = parseInt(req.query.machineType as string) || 48;
+        const scale = parseInt(req.query.scale as string) || 2;
 
         let tap: Uint8Array;
         try {
@@ -41,6 +42,7 @@ router.post('/basic-to-gif', async (req, res) => {
         const generator = new GIFGenerator({
             maxDurationMs: maxSeconds * 1000,
             staleFrameThreshold: staleThreshold,
+            scale,
         });
         await generator.initialize();
 

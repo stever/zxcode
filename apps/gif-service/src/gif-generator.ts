@@ -12,6 +12,7 @@ export interface GIFGeneratorOptions {
     maxDurationMs: number;
     staleFrameThreshold: number;
     ignoreInitialFrames: number;
+    scale: number;
 }
 
 export class GIFGenerator {
@@ -24,9 +25,10 @@ export class GIFGenerator {
             maxDurationMs: options.maxDurationMs ?? 30000,
             staleFrameThreshold: options.staleFrameThreshold ?? 150,
             ignoreInitialFrames: options.ignoreInitialFrames ?? 0,
+            scale: options.scale ?? 2,
         };
         this.emulator = new Emulator();
-        this.decoder = new FrameDecoder();
+        this.decoder = new FrameDecoder({ scale: this.options.scale });
     }
 
     async initialize(): Promise<void> {
@@ -46,16 +48,32 @@ export class GIFGenerator {
         return true;
     }
 
-    // ZX Spectrum keyboard matrix cell for ENTER (used to select the 128K menu).
-    private static readonly ENTER_ROW = 6;
-    private static readonly ENTER_MASK = 0x01;
+    // ZX Spectrum keyboard matrix cells.
+    private static readonly KEY = {
+        ENTER: [6, 0x01] as [number, number],
+        J: [6, 0x08] as [number, number], // produces the LOAD token in 48K K-mode
+        P: [5, 0x01] as [number, number],
+        SYMBOL_SHIFT: [7, 0x02] as [number, number],
+    };
 
-    async generateFromTAP(tapData: Buffer, machineType: number = 128): Promise<Buffer> {
+    // Hold a set of matrix cells down for a few frames, then release, leaving a
+    // gap so the ROM keyboard scan registers each press distinctly.
+    private pressKeys(keys: Array<[number, number]>, downFrames = 4, gapFrames = 4): void {
+        for (const [row, mask] of keys) this.emulator.rawKeyDown(row, mask);
+        for (let i = 0; i < downFrames; i++) this.emulator.runFrame();
+        for (const [row, mask] of keys) this.emulator.rawKeyUp(row, mask);
+        for (let i = 0; i < gapFrames; i++) this.emulator.runFrame();
+    }
+
+    async generateFromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
         const width = this.decoder.getWidth();
         const height = this.decoder.getHeight();
 
+        // Encode every Nth emulated frame. The core runs at 50fps; encoding at
+        // 25fps halves GIF size and encode time with little visible loss.
+        const frameStep = 2;
         const encoder = new GIFEncoder(width, height, 'neuquant');
-        encoder.setDelay(20); // 20ms => 50fps, matching the emulated frame rate
+        encoder.setDelay(20 * frameStep); // match the decimated frame rate
         encoder.setRepeat(0); // loop forever
         encoder.setQuality(10);
         encoder.start();
@@ -67,25 +85,24 @@ export class GIFGenerator {
 
         console.log(`Booting ${machineType}K machine with tape traps enabled`);
 
-        // Phase 1: boot to the 128K start-up menu, which pre-selects "Tape Loader".
-        const bootFrames = 150; // ~3s at 50fps
-        for (let i = 0; i < bootFrames; i++) {
-            this.emulator.runFrame();
+        if (machineType === 48) {
+            // 48K boots straight to the (C) screen with a K cursor and no loader
+            // window. Enter LOAD "" using single-key tokens: J = LOAD,
+            // SYMBOL SHIFT + P = the " character.
+            for (let i = 0; i < 100; i++) this.emulator.runFrame(); // ~2s to settle
+            this.pressKeys([GIFGenerator.KEY.J]);
+            this.pressKeys([GIFGenerator.KEY.SYMBOL_SHIFT, GIFGenerator.KEY.P]);
+            this.pressKeys([GIFGenerator.KEY.SYMBOL_SHIFT, GIFGenerator.KEY.P]);
+            this.pressKeys([GIFGenerator.KEY.ENTER]);
+        } else {
+            // 128K boots to a menu with "Tape Loader" pre-selected; ENTER runs it.
+            // Note: leaves the loader's bottom-window UI on screen.
+            for (let i = 0; i < 150; i++) this.emulator.runFrame(); // ~3s to menu
+            this.pressKeys([GIFGenerator.KEY.ENTER]);
         }
 
-        // Phase 2: press ENTER to run the Tape Loader (LOAD ""). The key must be
-        // held across several frames so the ULA samples it.
-        this.emulator.rawKeyDown(GIFGenerator.ENTER_ROW, GIFGenerator.ENTER_MASK);
-        for (let i = 0; i < 4; i++) {
-            this.emulator.runFrame();
-        }
-        this.emulator.rawKeyUp(GIFGenerator.ENTER_ROW, GIFGenerator.ENTER_MASK);
-
-        // Phase 3: let the trap loader inject every block and the program start.
-        const loadGraceFrames = 15;
-        for (let i = 0; i < loadGraceFrames; i++) {
-            this.emulator.runFrame();
-        }
+        // Let the trap loader inject every block and the program start.
+        for (let i = 0; i < 15; i++) this.emulator.runFrame();
 
         // Phase 4: capture the running program. Stop once the screen has been
         // static for `staleFrameThreshold` consecutive frames (the program has
@@ -121,10 +138,12 @@ export class GIFGenerator {
             lastChangeIndex = Math.min(frames.length, tailFrames) - 1;
         }
         const keep = Math.min(frames.length, lastChangeIndex + 1 + tailFrames);
-        for (let i = 0; i < keep; i++) {
+        let encoded = 0;
+        for (let i = 0; i < keep; i += frameStep) {
             encoder.addFrame(this.decoder.decode(frames[i]));
+            encoded++;
         }
-        console.log(`Encoding ${keep} frames (${frames.length} captured)`);
+        console.log(`Encoding ${encoded} frames (${frames.length} captured, ${keep} kept)`);
 
         encoder.finish();
         return Buffer.from(encoder.out.getData());

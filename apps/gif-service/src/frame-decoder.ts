@@ -20,29 +20,32 @@ const PALETTE = new Uint32Array([
 ]);
 
 export interface FrameDecoderOptions {
-    width?: number;
-    height?: number;
-    borderSize?: number;
+    // Integer upscale factor applied with nearest-neighbour (keeps pixels crisp).
+    scale?: number;
 }
 
 export class FrameDecoder {
-    private width: number = 320;
-    private height: number = 240;
+    private baseWidth: number = 320;
+    private baseHeight: number = 240;
+    private scale: number;
     private flashPhase: number = 0;
 
     constructor(options: FrameDecoderOptions = {}) {
+        this.scale = Math.max(1, Math.floor(options.scale ?? 1));
     }
 
     getWidth(): number {
-        return this.width;
+        return this.baseWidth * this.scale;
     }
 
     getHeight(): number {
-        return this.height;
+        return this.baseHeight * this.scale;
     }
 
     decode(frameBuffer: Uint8Array): Uint8Array {
-        const pixels = new Uint32Array(this.width * this.height);
+        const bw = this.baseWidth;
+        const bh = this.baseHeight;
+        const pixels = new Uint32Array(bw * bh);
         let pixelPtr = 0;
         let bufferPtr = 0;
 
@@ -103,6 +106,28 @@ export class FrameDecoder {
 
         this.flashPhase = (this.flashPhase + 1) & 0x1f;
 
-        return new Uint8Array(pixels.buffer);
+        if (this.scale === 1) {
+            return new Uint8Array(pixels.buffer);
+        }
+        return this.upscale(pixels, bw, bh, this.scale);
+    }
+
+    /* Nearest-neighbour integer upscale of an ABGR pixel buffer. */
+    private upscale(src: Uint32Array, w: number, h: number, s: number): Uint8Array {
+        const dw = w * s;
+        const out = new Uint32Array(dw * h * s);
+        for (let y = 0; y < h; y++) {
+            const srcRow = y * w;
+            for (let sy = 0; sy < s; sy++) {
+                let o = (y * s + sy) * dw;
+                for (let x = 0; x < w; x++) {
+                    const p = src[srcRow + x];
+                    for (let sx = 0; sx < s; sx++) {
+                        out[o++] = p;
+                    }
+                }
+            }
+        }
+        return new Uint8Array(out.buffer);
     }
 }
