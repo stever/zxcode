@@ -227,9 +227,11 @@ export class GIFGenerator {
         const height = this.decoder.getHeight();
         const outPath = join(tmpdir(), `zxplay-${process.pid}-${Date.now()}.mp4`);
 
-        // Audio (if any) goes via a temp f32le file as a second ffmpeg input;
-        // video stays on stdin. Both run frames/50 seconds long, so they align.
-        const hasAudio = audio.length > 0;
+        // Only attach an audio track when the program actually made a sound;
+        // a silent program is encoded video-only (-an), as it was before audio
+        // support. Audio (when present) goes via a temp f32le file as a second
+        // ffmpeg input; video stays on stdin. Both are frames/50 seconds long.
+        const hasAudio = audio.some((a) => !this.isAudioSilent(a.left, a.right));
         const audioPath = outPath.replace(/\.mp4$/, '.f32le');
         if (hasAudio) {
             await writeFile(audioPath, this.interleaveAudio(audio));
