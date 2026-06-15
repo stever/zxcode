@@ -1,7 +1,8 @@
 import { config, assertRuntimeConfig } from './config.js';
 import { htmlToBasic } from './basic.js';
 import { extractProjectRef } from './project.js';
-import { basicToMedia, projectToMedia } from './media.js';
+import { parseDirectives } from './directives.js';
+import { sourceToMedia, projectToMedia } from './media.js';
 import { loadState, saveState } from './state.js';
 import {
     MastodonAccount,
@@ -31,29 +32,42 @@ async function handleMention(self: MastodonAccount, n: MastodonNotification): Pr
     if (!status) return;
     if (status.account.id === self.id) return; // never answer ourselves
 
-    // A project link takes precedence over inline BASIC: the source already
+    // A project link takes precedence over inline source: the program already
     // lives on the site, so render it directly rather than parsing the toot.
+    // Directives (#128/#48 machine, #asm language) are read from the toot text
+    // in both cases; for a project link the URL's ?m= hint wins over a tag.
     const projectRef = extractProjectRef(status.content, config.projectHost);
-    const code = projectRef ? null : htmlToBasic(status.content);
+    const directives = parseDirectives(htmlToBasic(status.content));
+    const code = projectRef ? null : directives.code;
     if (!projectRef && !code) {
-        console.log(`Mention ${n.id} from @${status.account.acct}: no project link or BASIC found, skipping`);
+        console.log(`Mention ${n.id} from @${status.account.acct}: no project link or source found, skipping`);
         return;
     }
+
+    const machineType = projectRef ? (projectRef.machineType ?? directives.machineType) : directives.machineType;
+    const lang = directives.lang ?? 'basic';
     const projectPath = projectRef ? `${projectRef.userSlug}/${projectRef.projectSlug}` : '';
+    const machineNote = machineType ? ` @${machineType}K` : '';
     console.log(
         projectRef
-            ? `Mention ${n.id} from @${status.account.acct}: project ${projectPath}`
-            : `Mention ${n.id} from @${status.account.acct}: ${code!.split('\n').length} line(s)`,
+            ? `Mention ${n.id} from @${status.account.acct}: project ${projectPath}${machineNote}`
+            : `Mention ${n.id} from @${status.account.acct}: ${code!.split('\n').length} line(s) of ${lang}${machineNote}`,
     );
 
     const visibility = replyVisibility(status.visibility);
 
     if (config.dryRun) {
-        console.log(projectRef ? `[dry-run] would render project ${projectPath}` : `[dry-run] would run:\n${code}`);
+        console.log(
+            projectRef
+                ? `[dry-run] would render project ${projectPath}${machineNote}`
+                : `[dry-run] would run ${lang}${machineNote}:\n${code}`,
+        );
         return;
     }
 
-    const result = projectRef ? await projectToMedia(projectRef) : await basicToMedia(code!);
+    const result = projectRef
+        ? await projectToMedia(projectRef, machineType)
+        : await sourceToMedia(code!, lang, machineType);
 
     if (!result.ok) {
         await postReply({

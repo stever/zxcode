@@ -6,9 +6,14 @@ export type MediaResult =
     | { ok: false; error: string };
 
 /** POST a render request to gif-service and shape the response into a MediaResult. */
-async function requestMedia(path: string, body: unknown, altText: string): Promise<MediaResult> {
-    const url = `${config.gifServiceUrl}${path}?maxSeconds=${config.maxSeconds}`;
-    const res = await fetch(url, {
+async function requestMedia(
+    path: string,
+    body: unknown,
+    altText: string,
+    params: Record<string, string> = {},
+): Promise<MediaResult> {
+    const query = new URLSearchParams({ maxSeconds: String(config.maxSeconds), ...params });
+    const res = await fetch(`${config.gifServiceUrl}${path}?${query}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -34,16 +39,30 @@ async function requestMedia(path: string, body: unknown, altText: string): Promi
     return { ok: false, error: detail || `gif-service returned ${res.status}` };
 }
 
-/** Compile and run BASIC via gif-service, returning an MP4 or a user-facing error. */
-export function basicToMedia(code: string): Promise<MediaResult> {
-    return requestMedia('/api/basic-to-mp4', { code }, code);
+function machineParam(machineType?: number): Record<string, string> {
+    return machineType ? { machineType: String(machineType) } : {};
 }
 
-/** Render a public code.zxplay.org project via gif-service, returning an MP4 or an error. */
-export function projectToMedia(ref: ProjectRef): Promise<MediaResult> {
+/** Compile and run inline source (BASIC or asm) via gif-service. */
+export function sourceToMedia(
+    code: string,
+    lang: string,
+    machineType?: number,
+): Promise<MediaResult> {
+    return requestMedia('/api/source-to-mp4', { code, lang }, code, machineParam(machineType));
+}
+
+/** Compile and run Sinclair BASIC via gif-service. */
+export function basicToMedia(code: string): Promise<MediaResult> {
+    return sourceToMedia(code, 'basic');
+}
+
+/** Render a public code.zxplay.org project via gif-service. */
+export function projectToMedia(ref: ProjectRef, machineType?: number): Promise<MediaResult> {
     return requestMedia(
         '/api/project-to-mp4',
-        ref,
+        { userSlug: ref.userSlug, projectSlug: ref.projectSlug },
         `${config.projectHost}/u/${ref.userSlug}/${ref.projectSlug}`,
+        machineParam(machineType),
     );
 }

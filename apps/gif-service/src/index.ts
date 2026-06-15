@@ -2,6 +2,7 @@ import express from 'express';
 import tapeRoutes from './routes/tape.js';
 import basicRoutes from './routes/basic.js';
 import projectRoutes from './routes/project.js';
+import sourceRoutes from './routes/source.js';
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -11,6 +12,7 @@ app.use(express.text({ type: 'text/plain', limit: '256kb' }));
 app.use('/api', tapeRoutes);
 app.use('/api', basicRoutes);
 app.use('/api', projectRoutes);
+app.use('/api', sourceRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
