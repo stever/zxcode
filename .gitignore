@@ -7,3 +7,7 @@
 CLAUDE.md
 node_modules/
 plan_*
+
+*.gif
+
+*.tap

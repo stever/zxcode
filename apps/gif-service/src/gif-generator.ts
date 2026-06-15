@@ -59,25 +59,50 @@ export class GIFGenerator {
         this.emulator.setMachineType(machineType);
         this.emulator.setTapeTraps(true);
         this.emulator.loadTAPFile(tapData);
+        this.emulator.reset();
 
-        const tapeLoaderPath = join(
-            __dirname,
-            '../../..',
-            'apps/web/public/tapeloaders',
-            machineType === 128 ? 'tape_128.szx' : 'tape_48.szx'
-        );
+        // Start tape playing for pulse-based loading
+        this.emulator.playTape();
 
-        const snapshotData = await readFile(tapeLoaderPath);
-        const snapshot = await this.parseSZXSnapshot(snapshotData);
-        await this.emulator.loadSnapshot(snapshot);
+        // Create a fresh startup state instead of using tape loader snapshot
+        console.log(`Starting fresh ${machineType}K machine with tape traps enabled and tape playing`);
 
+        console.log('Starting tape loading process...');
+        
+        // Phase 1: Let the emulator settle after loading the snapshot
+        console.log('Phase 1: Letting emulator settle...');
+        for (let i = 0; i < 25; i++) { // 0.5 seconds at 50fps
+            const frameBuffer = this.emulator.runFrame();
+            const rgbaData = this.decoder.decode(frameBuffer);
+            encoder.addFrame(rgbaData);
+        }
+
+        // Phase 2: Type the LOAD command
+        console.log('Phase 2: Triggering LOAD command...');
+        await this.emulator.typeLoadCommand(50); // 50ms delay between keystrokes for more reliable input
+        
+        // Wait a bit after pressing Enter for the command to be processed
+        console.log('Phase 2b: Waiting for LOAD command to be processed...');
+        for (let i = 0; i < 50; i++) { // 1 second at 50fps
+            const frameBuffer = this.emulator.runFrame();
+            const rgbaData = this.decoder.decode(frameBuffer);
+            encoder.addFrame(rgbaData);
+        }
+
+        // Phase 3: Capture the tape loading process
+        console.log('Phase 3: Capturing tape loading...');
         const startTime = Date.now();
-        let frameCount = 0;
+        let frameCount = 25; // Account for frames already captured
         let staleCount = 0;
         let previousFrame: Uint8Array | null = null;
         let hasSeenChange = false;
+        let loadingStarted = false;
+        let loadingCompleted = false;
+        let framesSinceLoadingComplete = 0;
 
         const maxFrames = Math.floor(this.options.maxDurationMs / 20);
+        const maxLoadingFrames = 300; // 6 seconds max for loading
+        const maxPostLoadingFrames = 150; // 3 seconds after loading completes
 
         while (frameCount < maxFrames) {
             const frameBuffer = this.emulator.runFrame();
@@ -86,11 +111,46 @@ export class GIFGenerator {
             const rgbaData = this.decoder.decode(frameBuffer);
             encoder.addFrame(rgbaData);
 
+            // Log every 50 frames to see what's happening
+            if (frameCount % 50 === 0) {
+                console.log(`Frame ${frameCount}: loadingStarted=${loadingStarted}, staleCount=${staleCount}`);
+            }
+
+            // Detect loading start (border color changes)
+            if (!loadingStarted && this.isLoadingBorder(frameBuffer)) {
+                console.log(`Loading started at frame ${frameCount}`);
+                loadingStarted = true;
+            }
+
+            // Detect loading completion (border returns to normal)
+            if (loadingStarted && !loadingCompleted && !this.isLoadingBorder(frameBuffer)) {
+                console.log(`Loading completed at frame ${frameCount}`);
+                loadingCompleted = true;
+                framesSinceLoadingComplete = 0;
+            }
+
+            // Count frames after loading completes
+            if (loadingCompleted) {
+                framesSinceLoadingComplete++;
+                if (framesSinceLoadingComplete >= maxPostLoadingFrames) {
+                    console.log(`Stopping: captured ${framesSinceLoadingComplete} frames after loading completed`);
+                    break;
+                }
+            }
+
+            // Stop if loading takes too long
+            if (loadingStarted && !loadingCompleted && (frameCount > maxLoadingFrames)) {
+                console.log(`Stopping: loading took too long (${frameCount} frames)`);
+                break;
+            }
+
+            // General stale frame detection - but be more lenient
             if (previousFrame && this.areFramesIdentical(frameBuffer, previousFrame)) {
                 if (hasSeenChange) {
                     staleCount++;
-                    if (staleCount >= this.options.staleFrameThreshold) {
-                        console.log(`Stopping: ${staleCount} stale frames after ${frameCount} total frames`);
+                    // Increase threshold to allow more time for loading to start
+                    if (staleCount >= 2000 && !loadingStarted) {
+                        console.log(`Stopping: ${staleCount} stale frames before loading started`);
                         break;
                     }
                 }
@@ -107,6 +167,37 @@ export class GIFGenerator {
 
         encoder.finish();
         return Buffer.from(encoder.out.getData());
+    }
+
+    /**
+     * Check if the current frame shows loading border colors (red/cyan stripes)
+     */
+    private isLoadingBorder(frameBuffer: Uint8Array): boolean {
+        // Check a few border pixels for loading colors
+        // Loading typically shows red/cyan alternating border
+        const borderPixels = [
+            0,      // Top-left border
+            50,     // Top border
+            100,    // Top-right border
+            6200,   // Bottom-left border
+            6250,   // Bottom border
+            6300    // Bottom-right border
+        ];
+
+        let redCount = 0;
+        let cyanCount = 0;
+        
+        for (const pixel of borderPixels) {
+            if (pixel < frameBuffer.length) {
+                const color = frameBuffer[pixel];
+                // Red (color 2) or Cyan (color 5) indicate loading
+                if (color === 2) redCount++;
+                else if (color === 5) cyanCount++;
+            }
+        }
+
+        // Consider it loading if we see both red and cyan (loading stripes)
+        return redCount > 0 && cyanCount > 0;
     }
 
     private async parseSZXSnapshot(data: Buffer): Promise<any> {
