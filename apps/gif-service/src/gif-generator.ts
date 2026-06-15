@@ -3,12 +3,21 @@ import { spawn } from 'child_process';
 import { tmpdir } from 'os';
 import { Emulator } from './emulator.js';
 import { FrameDecoder } from './frame-decoder.js';
-import { readFile, unlink } from 'fs/promises';
+import { readFile, unlink, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+const SAMPLE_RATE = 44100;
+const SAMPLES_PER_FRAME = SAMPLE_RATE / 50; // 882 stereo samples per 50fps frame
+const AUDIO_SILENCE_EPS = 0.001; // a channel whose peak-to-peak is below this is flat (silent)
+
+interface AudioFrame {
+    left: Float32Array;
+    right: Float32Array;
+}
 
 export interface GIFGeneratorOptions {
     maxDurationMs: number;
@@ -71,9 +80,14 @@ export class GIFGenerator {
      * Boot the machine, load the tape, run the program, and return the kept raw
      * frame buffers (50fps, trailing static trimmed). Shared by both encoders.
      */
-    private async captureFrames(tapData: Buffer, machineType: number): Promise<Uint8Array[]> {
+    private async captureFrames(
+        tapData: Buffer,
+        machineType: number,
+        captureAudio: boolean,
+    ): Promise<{ frames: Uint8Array[]; audio: AudioFrame[] }> {
         this.emulator.setMachineType(machineType);
         this.emulator.setTapeTraps(true); // instant block loading; no pulse playback needed
+        this.emulator.enableAudio(captureAudio ? SAMPLES_PER_FRAME : 0);
         this.emulator.loadTAPFile(tapData);
         this.emulator.reset();
 
@@ -105,6 +119,7 @@ export class GIFGenerator {
         const tailFrames = 25; // ~0.5s of static tail kept for readability
 
         const frames: Uint8Array[] = [];
+        const audio: AudioFrame[] = [];
         let previousFrame: Uint8Array | null = null;
         let staleCount = 0;
         let lastChangeIndex = -1;
@@ -113,7 +128,21 @@ export class GIFGenerator {
             const frameBuffer = new Uint8Array(this.emulator.runFrame());
             frames.push(frameBuffer);
 
-            if (previousFrame && this.areFramesIdentical(frameBuffer, previousFrame)) {
+            // Audio activity counts as a change: a tune over a static screen must
+            // not be cut short, nor its tail trimmed. Kept aligned 1:1 with frames.
+            let audioSilent = true;
+            if (captureAudio) {
+                const a = this.emulator.getLastAudio() ?? {
+                    left: new Float32Array(SAMPLES_PER_FRAME),
+                    right: new Float32Array(SAMPLES_PER_FRAME),
+                };
+                audio.push(a);
+                audioSilent = this.isAudioSilent(a.left, a.right);
+            }
+
+            const videoStatic =
+                previousFrame !== null && this.areFramesIdentical(frameBuffer, previousFrame);
+            if (videoStatic && audioSilent) {
                 staleCount++;
                 if (staleCount >= staleStop) {
                     console.log(`Program settled after ${f + 1} captured frames`);
@@ -132,12 +161,29 @@ export class GIFGenerator {
         }
         const keep = Math.min(frames.length, lastChangeIndex + 1 + tailFrames);
         console.log(`Captured ${frames.length} frames, keeping ${keep}`);
-        return frames.slice(0, keep);
+        return { frames: frames.slice(0, keep), audio: audio.slice(0, keep) };
     }
 
-    /** Render the program to an animated GIF (25fps to keep size sane). */
+    private isAudioSilent(left: Float32Array, right: Float32Array): boolean {
+        return this.channelFlat(left) && this.channelFlat(right);
+    }
+
+    // A channel is "silent" when it is flat: an idle beeper/AY holds a constant
+    // (often non-zero) DC level, so detect a lack of oscillation, not zero.
+    private channelFlat(samples: Float32Array): boolean {
+        let min = Infinity;
+        let max = -Infinity;
+        for (let i = 0; i < samples.length; i++) {
+            const v = samples[i];
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+        return max - min < AUDIO_SILENCE_EPS;
+    }
+
+    /** Render the program to an animated GIF (25fps to keep size sane). GIF carries no audio. */
     async generateFromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
-        const frames = await this.captureFrames(tapData, machineType);
+        const { frames } = await this.captureFrames(tapData, machineType, false);
 
         // The core runs at 50fps; encode every 2nd frame (25fps) to halve GIF
         // size and encode time with little visible loss.
@@ -155,26 +201,56 @@ export class GIFGenerator {
         return Buffer.from(encoder.out.getData());
     }
 
-    /** Render the program to an H.264 MP4 at the full 50fps. */
+    /** Render the program to an H.264 MP4 at the full 50fps, with AAC audio. */
     async generateMp4FromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
-        const frames = await this.captureFrames(tapData, machineType);
-        return this.encodeMp4(frames, 50);
+        const { frames, audio } = await this.captureFrames(tapData, machineType, true);
+        return this.encodeMp4(frames, audio, 50);
+    }
+
+    // Concatenate per-frame stereo audio into one interleaved (L,R,L,R) f32 buffer.
+    private interleaveAudio(audio: AudioFrame[]): Buffer {
+        const total = audio.reduce((sum, a) => sum + a.left.length, 0);
+        const interleaved = new Float32Array(total * 2);
+        let p = 0;
+        for (const { left, right } of audio) {
+            for (let i = 0; i < left.length; i++) {
+                interleaved[p++] = left[i];
+                interleaved[p++] = right[i];
+            }
+        }
+        return Buffer.from(interleaved.buffer, interleaved.byteOffset, interleaved.byteLength);
     }
 
     /** Pipe decoded RGBA frames through ffmpeg to a temporary MP4 and return it. */
-    private async encodeMp4(frames: Uint8Array[], fps: number): Promise<Buffer> {
+    private async encodeMp4(frames: Uint8Array[], audio: AudioFrame[], fps: number): Promise<Buffer> {
         const width = this.decoder.getWidth();
         const height = this.decoder.getHeight();
         const outPath = join(tmpdir(), `zxplay-${process.pid}-${Date.now()}.mp4`);
 
+        // Audio (if any) goes via a temp f32le file as a second ffmpeg input;
+        // video stays on stdin. Both run frames/50 seconds long, so they align.
+        const hasAudio = audio.length > 0;
+        const audioPath = outPath.replace(/\.mp4$/, '.f32le');
+        if (hasAudio) {
+            await writeFile(audioPath, this.interleaveAudio(audio));
+        }
+
         const args = [
             '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${width}x${height}`, '-r', String(fps),
             '-i', 'pipe:0',
-            '-an', // no audio
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '20',
-            '-movflags', '+faststart',
-            '-y', outPath,
         ];
+        if (hasAudio) {
+            args.push('-f', 'f32le', '-ar', String(SAMPLE_RATE), '-ac', '2', '-i', audioPath);
+        }
+        args.push(
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '20',
+        );
+        if (hasAudio) {
+            args.push('-c:a', 'aac', '-b:a', '128k', '-shortest');
+        } else {
+            args.push('-an');
+        }
+        args.push('-movflags', '+faststart', '-y', outPath);
         const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
         let stderr = '';
         ff.stderr.on('data', (d) => { stderr += d.toString(); });
@@ -197,7 +273,8 @@ export class GIFGenerator {
 
         const buffer = await readFile(outPath);
         await unlink(outPath).catch(() => undefined);
-        console.log(`Encoded MP4: ${frames.length} frames, ${buffer.length} bytes`);
+        if (hasAudio) await unlink(audioPath).catch(() => undefined);
+        console.log(`Encoded MP4: ${frames.length} frames, ${buffer.length} bytes${hasAudio ? ' (with audio)' : ''}`);
         return buffer;
     }
 

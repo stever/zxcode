@@ -46,6 +46,12 @@ export class Emulator {
     private tape: TAPFile | null = null;
     private tapePulses: Uint16Array | null = null;
     private tapeIsPlaying: boolean = false;
+    // Audio is generated only when a non-zero samples-per-frame is requested.
+    // Each frame's stereo samples are copied out of WASM memory before the next
+    // frame overwrites them.
+    private audioSamplesPerFrame: number = 0;
+    private lastAudioLeft: Float32Array | null = null;
+    private lastAudioRight: Float32Array | null = null;
 
     // ZX Spectrum keyboard matrix (character -> [row, bitmask]).
     // Rows/masks match the core's keyDown(row, mask) convention used by the web
@@ -137,6 +143,19 @@ export class Emulator {
         return this.tapeIsPlaying;
     }
 
+    // Ask the core to render `samplesPerFrame` stereo audio samples each frame
+    // (0 disables audio generation entirely, the default).
+    enableAudio(samplesPerFrame: number): void {
+        this.audioSamplesPerFrame = samplesPerFrame;
+    }
+
+    // The stereo samples produced by the most recent runFrame, or null if audio
+    // is disabled. The arrays are copies, safe to retain past the next frame.
+    getLastAudio(): { left: Float32Array; right: Float32Array } | null {
+        if (!this.lastAudioLeft || !this.lastAudioRight) return null;
+        return { left: this.lastAudioLeft, right: this.lastAudioRight };
+    }
+
     private trapTapeLoad(): void {
         if (!this.tape || !this.core || !this.registerPairs) {
             console.log('trapTapeLoad: missing tape, core, or registers');
@@ -203,7 +222,7 @@ export class Emulator {
         if (!this.core || !this.frameData) {
             throw new Error('Core not loaded');
         }
-        this.core.setAudioSamplesPerFrame(0);
+        this.core.setAudioSamplesPerFrame(this.audioSamplesPerFrame);
 
         // Handle tape pulse generation if tape is playing
         if (this.tape && this.tapeIsPlaying && this.tapePulses) {
@@ -235,6 +254,15 @@ export class Emulator {
             }
             status = this.core.resumeFrame();
         }
+
+        if (this.audioSamplesPerFrame > 0) {
+            // Copy out of WASM memory: the views alias the heap, which the next
+            // frame overwrites, so slice() to detach a standalone buffer.
+            const n = this.audioSamplesPerFrame;
+            this.lastAudioLeft = new Float32Array(this.core.memory.buffer, this.core.AUDIO_BUFFER_LEFT, n).slice();
+            this.lastAudioRight = new Float32Array(this.core.memory.buffer, this.core.AUDIO_BUFFER_RIGHT, n).slice();
+        }
+
         return new Uint8Array(this.frameData);
     }
 
