@@ -47,23 +47,19 @@ export class Emulator {
     private tapePulses: Uint16Array | null = null;
     private tapeIsPlaying: boolean = false;
 
-    // ZX Spectrum keyboard layout mapping (character -> [row, mask])
+    // ZX Spectrum keyboard matrix (character -> [row, bitmask]).
+    // Rows/masks match the core's keyDown(row, mask) convention used by the web
+    // app's KeyboardHandler. Only unshifted keys are mapped; punctuation and
+    // symbols require CAPS/SYMBOL SHIFT combinations that are not modelled here.
     private static readonly KEY_MAP: { [key: string]: [number, number] } = {
-        'A': [0, 0x01], 'B': [3, 0x10], 'C': [3, 0x04], 'D': [1, 0x01],
-        'E': [1, 0x02], 'F': [2, 0x01], 'G': [2, 0x02], 'H': [2, 0x04],
-        'I': [1, 0x10], 'J': [2, 0x08], 'K': [2, 0x10], 'L': [2, 0x20],
-        'M': [4, 0x04], 'N': [4, 0x02], 'O': [1, 0x20], 'P': [1, 0x40],
-        'Q': [0, 0x02], 'R': [0, 0x04], 'S': [1, 0x08], 'T': [0, 0x08],
-        'U': [0, 0x10], 'V': [3, 0x08], 'W': [0, 0x20], 'X': [3, 0x02],
-        'Y': [0, 0x40], 'Z': [3, 0x01], '0': [4, 0x10], '1': [4, 0x01],
-        '2': [4, 0x02], '3': [4, 0x04], '4': [4, 0x08], '5': [4, 0x10],
-        '6': [4, 0x20], '7': [4, 0x40], '8': [3, 0x20], '9': [3, 0x40],
-        ' ': [7, 0x01], '"': [0, 0x80], ':': [0, 0x01], '?': [4, 0x80],
-        '(': [1, 0x80], ')': [2, 0x80], '-': [3, 0x80], '+': [4, 0x80],
-        '*': [5, 0x80], '/': [5, 0x40], '=': [6, 0x80], ',': [6, 0x40],
-        '.': [6, 0x20], ';': [7, 0x20], '\'': [7, 0x40], '[': [8, 0x40],
-        ']': [8, 0x20], '←': [8, 0x01], 'ENTER': [0, 0x01], 'BREAK': [0, 0x02],
-        'CAPS SHIFT': [0, 0x02], 'SYMBOL SHIFT': [1, 0x02]
+        'CAPS SHIFT': [0, 0x01], 'Z': [0, 0x02], 'X': [0, 0x04], 'C': [0, 0x08], 'V': [0, 0x10],
+        'A': [1, 0x01], 'S': [1, 0x02], 'D': [1, 0x04], 'F': [1, 0x08], 'G': [1, 0x10],
+        'Q': [2, 0x01], 'W': [2, 0x02], 'E': [2, 0x04], 'R': [2, 0x08], 'T': [2, 0x10],
+        '1': [3, 0x01], '2': [3, 0x02], '3': [3, 0x04], '4': [3, 0x08], '5': [3, 0x10],
+        '0': [4, 0x01], '9': [4, 0x02], '8': [4, 0x04], '7': [4, 0x08], '6': [4, 0x10],
+        'P': [5, 0x01], 'O': [5, 0x02], 'I': [5, 0x04], 'U': [5, 0x08], 'Y': [5, 0x10],
+        'ENTER': [6, 0x01], 'L': [6, 0x02], 'K': [6, 0x04], 'J': [6, 0x08], 'H': [6, 0x10],
+        ' ': [7, 0x01], 'SYMBOL SHIFT': [7, 0x02], 'M': [7, 0x04], 'N': [7, 0x08], 'B': [7, 0x10]
     };
 
     async loadCore(): Promise<void> {
@@ -221,15 +217,6 @@ export class Emulator {
                 this.tapeIsPlaying = false;
                 console.log('Tape finished playing');
             }
-            // Debug: Log pulse generation every 50 frames
-            if (Math.random() < 0.02) { // ~2% chance per frame
-                console.log(`Pulse gen: bufferCount=${tapePulseBufferTstateCount}, writeIndex=${tapePulseWriteIndex}, generated=${tstatesGenerated}`);
-            }
-        } else {
-            // Debug: Log why pulse generation isn't happening
-            if (Math.random() < 0.01) { // ~1% chance per frame
-                console.log(`No pulse gen: tape=${!!this.tape}, playing=${this.tapeIsPlaying}, pulses=${!!this.tapePulses}`);
-            }
         }
 
         let status = this.core.runFrame();
@@ -285,6 +272,23 @@ export class Emulator {
         }
 
         this.core.setTStates(snapshot.tstates);
+    }
+
+    /**
+     * Press a matrix cell directly (row + bitmask), bypassing the character map.
+     */
+    rawKeyDown(row: number, mask: number): void {
+        if (!this.core) {
+            throw new Error('Core not loaded');
+        }
+        this.core.keyDown(row, mask);
+    }
+
+    rawKeyUp(row: number, mask: number): void {
+        if (!this.core) {
+            throw new Error('Core not loaded');
+        }
+        this.core.keyUp(row, mask);
     }
 
     /**

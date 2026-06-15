@@ -21,8 +21,8 @@ export class GIFGenerator {
 
     constructor(options: Partial<GIFGeneratorOptions> = {}) {
         this.options = {
-            maxDurationMs: options.maxDurationMs ?? 180000,
-            staleFrameThreshold: options.staleFrameThreshold ?? 500,
+            maxDurationMs: options.maxDurationMs ?? 30000,
+            staleFrameThreshold: options.staleFrameThreshold ?? 150,
             ignoreInitialFrames: options.ignoreInitialFrames ?? 0,
         };
         this.emulator = new Emulator();
@@ -46,158 +46,88 @@ export class GIFGenerator {
         return true;
     }
 
+    // ZX Spectrum keyboard matrix cell for ENTER (used to select the 128K menu).
+    private static readonly ENTER_ROW = 6;
+    private static readonly ENTER_MASK = 0x01;
+
     async generateFromTAP(tapData: Buffer, machineType: number = 128): Promise<Buffer> {
         const width = this.decoder.getWidth();
         const height = this.decoder.getHeight();
 
         const encoder = new GIFEncoder(width, height, 'neuquant');
-        encoder.setDelay(20);
-        encoder.setRepeat(0);
+        encoder.setDelay(20); // 20ms => 50fps, matching the emulated frame rate
+        encoder.setRepeat(0); // loop forever
         encoder.setQuality(10);
         encoder.start();
 
         this.emulator.setMachineType(machineType);
-        this.emulator.setTapeTraps(true);
+        this.emulator.setTapeTraps(true); // instant block loading; no pulse playback needed
         this.emulator.loadTAPFile(tapData);
         this.emulator.reset();
 
-        // Start tape playing for pulse-based loading
-        this.emulator.playTape();
+        console.log(`Booting ${machineType}K machine with tape traps enabled`);
 
-        // Create a fresh startup state instead of using tape loader snapshot
-        console.log(`Starting fresh ${machineType}K machine with tape traps enabled and tape playing`);
-
-        console.log('Starting tape loading process...');
-        
-        // Phase 1: Let the emulator settle after loading the snapshot
-        console.log('Phase 1: Letting emulator settle...');
-        for (let i = 0; i < 25; i++) { // 0.5 seconds at 50fps
-            const frameBuffer = this.emulator.runFrame();
-            const rgbaData = this.decoder.decode(frameBuffer);
-            encoder.addFrame(rgbaData);
+        // Phase 1: boot to the 128K start-up menu, which pre-selects "Tape Loader".
+        const bootFrames = 150; // ~3s at 50fps
+        for (let i = 0; i < bootFrames; i++) {
+            this.emulator.runFrame();
         }
 
-        // Phase 2: Type the LOAD command
-        console.log('Phase 2: Triggering LOAD command...');
-        await this.emulator.typeLoadCommand(50); // 50ms delay between keystrokes for more reliable input
-        
-        // Wait a bit after pressing Enter for the command to be processed
-        console.log('Phase 2b: Waiting for LOAD command to be processed...');
-        for (let i = 0; i < 50; i++) { // 1 second at 50fps
-            const frameBuffer = this.emulator.runFrame();
-            const rgbaData = this.decoder.decode(frameBuffer);
-            encoder.addFrame(rgbaData);
+        // Phase 2: press ENTER to run the Tape Loader (LOAD ""). The key must be
+        // held across several frames so the ULA samples it.
+        this.emulator.rawKeyDown(GIFGenerator.ENTER_ROW, GIFGenerator.ENTER_MASK);
+        for (let i = 0; i < 4; i++) {
+            this.emulator.runFrame();
+        }
+        this.emulator.rawKeyUp(GIFGenerator.ENTER_ROW, GIFGenerator.ENTER_MASK);
+
+        // Phase 3: let the trap loader inject every block and the program start.
+        const loadGraceFrames = 15;
+        for (let i = 0; i < loadGraceFrames; i++) {
+            this.emulator.runFrame();
         }
 
-        // Phase 3: Capture the tape loading process
-        console.log('Phase 3: Capturing tape loading...');
-        const startTime = Date.now();
-        let frameCount = 25; // Account for frames already captured
-        let staleCount = 0;
-        let previousFrame: Uint8Array | null = null;
-        let hasSeenChange = false;
-        let loadingStarted = false;
-        let loadingCompleted = false;
-        let framesSinceLoadingComplete = 0;
-
+        // Phase 4: capture the running program. Stop once the screen has been
+        // static for `staleFrameThreshold` consecutive frames (the program has
+        // finished or paused), then trim the trailing static frames.
         const maxFrames = Math.floor(this.options.maxDurationMs / 20);
-        const maxLoadingFrames = 300; // 6 seconds max for loading
-        const maxPostLoadingFrames = 150; // 3 seconds after loading completes
+        const staleStop = this.options.staleFrameThreshold;
+        const tailFrames = 25; // ~0.5s of static tail kept for readability
 
-        while (frameCount < maxFrames) {
-            const frameBuffer = this.emulator.runFrame();
-            frameCount++;
+        const frames: Uint8Array[] = [];
+        let previousFrame: Uint8Array | null = null;
+        let staleCount = 0;
+        let lastChangeIndex = -1;
 
-            const rgbaData = this.decoder.decode(frameBuffer);
-            encoder.addFrame(rgbaData);
+        for (let f = 0; f < maxFrames; f++) {
+            const frameBuffer = new Uint8Array(this.emulator.runFrame());
+            frames.push(frameBuffer);
 
-            // Log every 50 frames to see what's happening
-            if (frameCount % 50 === 0) {
-                console.log(`Frame ${frameCount}: loadingStarted=${loadingStarted}, staleCount=${staleCount}`);
-            }
-
-            // Detect loading start (border color changes)
-            if (!loadingStarted && this.isLoadingBorder(frameBuffer)) {
-                console.log(`Loading started at frame ${frameCount}`);
-                loadingStarted = true;
-            }
-
-            // Detect loading completion (border returns to normal)
-            if (loadingStarted && !loadingCompleted && !this.isLoadingBorder(frameBuffer)) {
-                console.log(`Loading completed at frame ${frameCount}`);
-                loadingCompleted = true;
-                framesSinceLoadingComplete = 0;
-            }
-
-            // Count frames after loading completes
-            if (loadingCompleted) {
-                framesSinceLoadingComplete++;
-                if (framesSinceLoadingComplete >= maxPostLoadingFrames) {
-                    console.log(`Stopping: captured ${framesSinceLoadingComplete} frames after loading completed`);
+            if (previousFrame && this.areFramesIdentical(frameBuffer, previousFrame)) {
+                staleCount++;
+                if (staleCount >= staleStop) {
+                    console.log(`Program settled after ${f + 1} captured frames`);
                     break;
                 }
-            }
-
-            // Stop if loading takes too long
-            if (loadingStarted && !loadingCompleted && (frameCount > maxLoadingFrames)) {
-                console.log(`Stopping: loading took too long (${frameCount} frames)`);
-                break;
-            }
-
-            // General stale frame detection - but be more lenient
-            if (previousFrame && this.areFramesIdentical(frameBuffer, previousFrame)) {
-                if (hasSeenChange) {
-                    staleCount++;
-                    // Increase threshold to allow more time for loading to start
-                    if (staleCount >= 2000 && !loadingStarted) {
-                        console.log(`Stopping: ${staleCount} stale frames before loading started`);
-                        break;
-                    }
-                }
             } else {
-                if (!hasSeenChange) {
-                    console.log(`First frame change detected at frame ${frameCount}`);
-                }
-                hasSeenChange = true;
                 staleCount = 0;
+                lastChangeIndex = f;
             }
-
-            previousFrame = new Uint8Array(frameBuffer);
+            previousFrame = frameBuffer;
         }
+
+        if (lastChangeIndex < 0) {
+            // Nothing ever changed; keep a short clip so the GIF is not empty.
+            lastChangeIndex = Math.min(frames.length, tailFrames) - 1;
+        }
+        const keep = Math.min(frames.length, lastChangeIndex + 1 + tailFrames);
+        for (let i = 0; i < keep; i++) {
+            encoder.addFrame(this.decoder.decode(frames[i]));
+        }
+        console.log(`Encoding ${keep} frames (${frames.length} captured)`);
 
         encoder.finish();
         return Buffer.from(encoder.out.getData());
-    }
-
-    /**
-     * Check if the current frame shows loading border colors (red/cyan stripes)
-     */
-    private isLoadingBorder(frameBuffer: Uint8Array): boolean {
-        // Check a few border pixels for loading colors
-        // Loading typically shows red/cyan alternating border
-        const borderPixels = [
-            0,      // Top-left border
-            50,     // Top border
-            100,    // Top-right border
-            6200,   // Bottom-left border
-            6250,   // Bottom border
-            6300    // Bottom-right border
-        ];
-
-        let redCount = 0;
-        let cyanCount = 0;
-        
-        for (const pixel of borderPixels) {
-            if (pixel < frameBuffer.length) {
-                const color = frameBuffer[pixel];
-                // Red (color 2) or Cyan (color 5) indicate loading
-                if (color === 2) redCount++;
-                else if (color === 5) cyanCount++;
-            }
-        }
-
-        // Consider it loading if we see both red and cyan (loading stripes)
-        return redCount > 0 && cyanCount > 0;
     }
 
     private async parseSZXSnapshot(data: Buffer): Promise<any> {
