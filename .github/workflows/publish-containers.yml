@@ -27,6 +27,12 @@ jobs:
           - context: ./apps/auth/
             dockerfile: ./apps/auth/Dockerfile
             image: ghcr.io/stever/zxcoder-auth
+          - context: ./
+            dockerfile: ./apps/gif-service/Dockerfile
+            image: ghcr.io/stever/zxcoder-gif-service
+          - context: ./
+            dockerfile: ./apps/mastodon-bot/Dockerfile
+            image: ghcr.io/stever/zxcoder-mastodon-bot
     permissions:
       contents: read
       packages: write

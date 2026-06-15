@@ -7,6 +7,8 @@
 /build/
 /es5/
 /node_modules/
-/public/dist/
+/public/dist/*
+# The compiled emulator core is committed so gif-service can be built in CI.
+!/public/dist/jsspeccy-core.wasm
 /schema.graphql
 /typedocs/
