@@ -14,10 +14,11 @@ import {
     verifyCredentials,
 } from './mastodon.js';
 
-// Never reply more publicly than the original mention, and never escalate a
-// public mention back to the public timeline.
+// Mirror the mention's visibility: a public mention gets a public reply (so it
+// lands in the #ZXPlay hashtag feed and the profile gallery), while a private
+// or direct mention is answered just as privately.
 function replyVisibility(original: Visibility): Visibility {
-    return original === 'public' ? 'unlisted' : original;
+    return original;
 }
 
 function truncate(text: string, max: number): string {
