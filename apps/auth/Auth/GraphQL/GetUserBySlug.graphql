@@ -1,0 +1,5 @@
+query GetUserBySlug($slug: String!) {
+    user(where: {slug: {_eq: $slug}}) {
+        user_id
+    }
+}

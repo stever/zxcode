@@ -37,6 +37,7 @@ select_permissions:
       filter:
         is_public:
           _eq: true
+      allow_aggregations: true
   - role: zxplay-user
     permission:
       columns:

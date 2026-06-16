@@ -49,14 +49,44 @@ public class UserRepository
 
         emailAddress = emailAddress?.Trim();
 
-        // Generate slug from username (lowercase, alphanumeric with hyphens)
-        var slug = GenerateSlug(username);
+        // Opaque provider identifiers (e.g. "auth0|...", "google-oauth2|...") make
+        // ugly slugs when derived directly. For those, assign a friendly, unique
+        // speccy-themed handle and a display name. Real usernames keep deriving a
+        // slug from the username as before.
+        string slug;
+        string? greetingName = null;
+        if (username.Contains('|'))
+        {
+            string displayName;
+            do
+            {
+                (slug, displayName) = HandleGenerator.Generate();
+            } while (await SlugExists(slug));
+            greetingName = displayName;
+        }
+        else
+        {
+            slug = GenerateSlug(username);
+        }
 
         // Query to create new user record.
         var client = GetGraphQlClient();
         var query = await File.ReadAllTextAsync(Path.Combine("GraphQL", "CreateUser.graphql"));
-        var result = await client.Query(query, new { username, email_address = emailAddress, slug });
+        var result = await client.Query(query, new { username, email_address = emailAddress, slug, greeting_name = greetingName });
         result.EnsureNoErrors();
+    }
+
+    /// <param name="slug">Slug to look up.</param>
+    /// <returns>True if a user already has this slug, otherwise false.</returns>
+    private async Task<bool> SlugExists(string slug)
+    {
+        var client = GetGraphQlClient();
+        var query = await File.ReadAllTextAsync(Path.Combine("GraphQL", "GetUserBySlug.graphql"));
+        var result = await client.Query(query, new { slug });
+        result.EnsureNoErrors();
+
+        var users = result.Get<User[]>("user");
+        return users != null && users.Length > 0;
     }
 
     private static string GenerateSlug(string input)

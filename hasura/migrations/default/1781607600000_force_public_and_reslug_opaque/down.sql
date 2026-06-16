@@ -1,0 +1,2 @@
+-- Irreversible: original slugs and prior profile_is_public values are not stored,
+-- so there is nothing to restore. This migration intentionally has no down step.

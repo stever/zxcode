@@ -35,6 +35,9 @@
     <None Update="GraphQL\GetUserByEmail.graphql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="GraphQL\GetUserBySlug.graphql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="GraphQL\GetUserRoles.graphql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
