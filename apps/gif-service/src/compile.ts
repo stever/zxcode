@@ -70,7 +70,9 @@ export async function compileProject(lang: string, code: string): Promise<Buffer
                 });
                 const cim = files['zout/in.cim'];
                 if (!cim || cim.length === 0) {
-                    throw errors.length ? errors : new Error('zmac produced no output');
+                    // errors are raw stderr strings; join them so the reason
+                    // surfaces (logged + returned) rather than "unknown error".
+                    throw new Error(errors.join('\n').slice(0, 500) || 'zmac produced no output');
                 }
                 // Wrap the raw code image (ORG 0x8000) into a self-loading TAP.
                 const { bin2tap } = await import('pasmo');

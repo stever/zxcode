@@ -84,16 +84,17 @@ router.get('/:id', async (req: Request, res: Response) => {
     } catch (err) {
         if (err instanceof CompileError) {
             // Unrenderable (e.g. unsupported lang, or bad source) → web falls
-            // back to the cartridge. Short negative-cache: enough to avoid
-            // re-rendering on every page load, but it self-heals quickly after a
-            // deploy that adds rendering support (the key is project-based, so a
-            // server capability change can't otherwise invalidate it).
+            // back to the cartridge. Log + return the reason so failures are
+            // inspectable (docker logs and the response body) instead of a silent
+            // 422. Short negative-cache: avoids re-rendering on every page load
+            // but self-heals quickly after a deploy that adds render support.
+            console.log(`Screenshot ${id}: not rendered: ${err.message.slice(0, 300)}`);
             res.setHeader('Cache-Control', 'public, max-age=300');
-            res.status(422).end();
+            res.status(422).type('text/plain').send(err.message.slice(0, 300));
             return;
         }
-        console.error('Screenshot error:', err);
-        res.status(500).end();
+        console.error(`Screenshot ${id} error:`, err);
+        res.status(500).type('text/plain').send('Internal error');
     }
 });
 
