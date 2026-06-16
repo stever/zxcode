@@ -36,15 +36,11 @@ export default function PublicProjectPage() {
   const currentUserId = useSelector(state => state?.identity.userId);
 
   useEffect(() => {
-    // Wait a moment for auth to initialize if needed
-    if (currentUserId === undefined) {
-      const timer = setTimeout(() => {
-        fetchProject();
-      }, 500);
-      return () => clearTimeout(timer);
-    } else {
-      fetchProject();
-    }
+    // Wait until auth state is known (null for anonymous, a uuid when logged in)
+    // so the single fetch carries the correct auth context for RLS. Fetching at
+    // `undefined` and again once identity resolves caused a visible reload.
+    if (currentUserId === undefined) return;
+    fetchProject();
   }, [userSlug, projectSlug, currentUserId]);
 
   const fetchProject = async () => {

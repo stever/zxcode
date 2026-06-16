@@ -280,8 +280,10 @@ export default function PublicUserProfile() {
     })
   );
 
+  // Fetch the profile whenever the route param changes. This is intentionally
+  // independent of identity: resolving the logged-in user must not blank the
+  // page and re-fetch (which looked like a second refresh).
   useEffect(() => {
-    // Clear old data when ID changes or when current user's slug updates
     setUser(null);
     setError(null);
 
@@ -296,59 +298,21 @@ export default function PublicUserProfile() {
             id
           );
 
-        let response;
+        let userData;
         if (isUuid) {
-          response = await gqlFetch(null, GET_USER_BY_ID, {
+          const response = await gqlFetch(null, GET_USER_BY_ID, {
             user_id: id,
           });
-          const userData = response?.data?.user_by_pk;
-          setUser(userData);
-          setProjects(userData?.projects || []);
-
-          // Set follow status and counts
-          if (userData) {
-            const isCurrentUserFollowing =
-              userData.followers?.some(
-                (f) => f.follower_id === currentUserId
-              ) || false;
-            setIsFollowing(isCurrentUserFollowing);
-            setFollowersCount(userData.followers?.length || 0);
-            setFollowingCount(userData.following?.length || 0);
-          }
-
-          // If we have a slug, redirect to the slug-based URL
-          if (userData?.slug) {
-            navigate(`/u/${userData.slug}`, { replace: true });
-          }
+          userData = response?.data?.user_by_pk || null;
         } else {
-          response = await gqlFetch(null, GET_USER_BY_SLUG, {
+          const response = await gqlFetch(null, GET_USER_BY_SLUG, {
             slug: id,
           });
-          const userData = response?.data?.user?.[0] || null;
-          setUser(userData);
-          setProjects(userData?.projects || []);
-
-          // Set follow status and counts
-          if (userData) {
-            const isCurrentUserFollowing =
-              userData.followers?.some(
-                (f) => f.follower_id === currentUserId
-              ) || false;
-            setIsFollowing(isCurrentUserFollowing);
-            setFollowersCount(userData.followers?.length || 0);
-            setFollowingCount(userData.following?.length || 0);
-          }
-
-          // If viewing own profile with outdated slug, redirect to new slug
-          if (
-            userData &&
-            currentUserId === userData.user_id &&
-            currentUserSlug &&
-            currentUserSlug !== id
-          ) {
-            navigate(`/u/${currentUserSlug}`, { replace: true });
-          }
+          userData = response?.data?.user?.[0] || null;
         }
+
+        setUser(userData);
+        setProjects(userData?.projects || []);
       } catch (err) {
         console.error("Failed to fetch user profile:", err);
         setError("Failed to load user profile");
@@ -358,7 +322,34 @@ export default function PublicUserProfile() {
     };
 
     fetchUserProfile();
-  }, [id, currentUserSlug, currentUserId, navigate]);
+  }, [id]);
+
+  // Derive identity-dependent UI from the already-fetched profile. Runs when the
+  // profile loads or identity resolves, without re-fetching.
+  useEffect(() => {
+    if (!user) return;
+
+    const isCurrentUserFollowing =
+      user.followers?.some((f) => f.follower_id === currentUserId) || false;
+    setIsFollowing(isCurrentUserFollowing);
+    setFollowersCount(user.followers?.length || 0);
+    setFollowingCount(user.following?.length || 0);
+
+    // Canonicalise the URL to the slug form (e.g. /u/<uuid> -> /u/<slug>).
+    if (user.slug && user.slug !== id) {
+      navigate(`/u/${user.slug}`, { replace: true });
+      return;
+    }
+
+    // Viewing own profile under an outdated slug -> redirect to the new slug.
+    if (
+      currentUserId === user.user_id &&
+      currentUserSlug &&
+      currentUserSlug !== id
+    ) {
+      navigate(`/u/${currentUserSlug}`, { replace: true });
+    }
+  }, [user, currentUserId, currentUserSlug, id, navigate]);
 
   // Generate avatar URL when user data changes
   useEffect(() => {

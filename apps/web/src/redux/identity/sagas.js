@@ -59,6 +59,9 @@ function* handleGetUserInfo() {
 
     } catch (e) {
         if (e.response && e.response.status === 401) {
+            // Resolve identity to a known "logged out" state so consumers can
+            // distinguish "auth not yet checked" (undefined) from "anonymous".
+            yield put(setUserInfo({userId: null, userSlug: null}));
             return;
         }
 
