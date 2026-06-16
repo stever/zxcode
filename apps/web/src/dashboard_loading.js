@@ -3,7 +3,7 @@ export function showLoading() {
     for (let i = 0; i < elems.length; i++) {
         const elem = elems[i];
         elem.style.visibility = 'visible';
-        elem.style.opacity = '0.5';
+        elem.style.opacity = '1';
     }
 }
 

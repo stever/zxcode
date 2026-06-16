@@ -22,6 +22,7 @@ import "../lib/syntax/z88dk-c";
 import "../lib/syntax/sdcc";
 import "../lib/syntax/zxbasic";
 import { dashboardLock } from "../dashboard_lock";
+import { showLoading } from "../dashboard_loading";
 import clsx from "clsx";
 import { Dialog } from "primereact/dialog";
 import { InputText } from "primereact/inputtext";
@@ -157,6 +158,7 @@ export function ProjectEditor() {
         className={clsx("mt-2 mr-2", isMobile && "ml-2")}
         onClick={() => {
           dashboardLock();
+          showLoading();
           dispatch(runProjectCode());
         }}
       />

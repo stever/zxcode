@@ -1,5 +1,4 @@
 import React from "react";
-import {ProgressSpinner} from "primereact/progressspinner";
 
 export default function LockScreen() {
     return (
@@ -7,8 +6,8 @@ export default function LockScreen() {
             <div className="dashboard-lock-screen" style={styles.fullPage}/>
             <div className="dashboard-lock-screen" style={styles.contentBlanker}/>
             <div className="dashboard-lock-screen" style={styles.container}>
-                <div className="center-screen" style={styles.centerScreen}>
-                    <ProgressSpinner/>
+                <div className="center-screen">
+
                 </div>
             </div>
         </React.Fragment>
@@ -38,7 +37,7 @@ const styles = {
         width: '100%',
         height: '100vh',
         backgroundColor: 'black',
-        opacity: 0.5,
+        opacity: 0.05,
         display: 'none',
         userSelect: 'none'
     },
@@ -53,12 +52,5 @@ const styles = {
         height: '100vh',
         display: 'none',
         userSelect: 'none'
-    },
-    centerScreen: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '100%',
-        height: '100%'
     }
 };

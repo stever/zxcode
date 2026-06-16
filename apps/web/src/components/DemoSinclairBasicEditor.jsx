@@ -5,6 +5,7 @@ import CodeMirror from "./CodeMirror";
 import {setSinclairBasicCode, runSinclairBasic} from "../redux/demo/actions";
 import "../lib/syntax/zmakebas";
 import {dashboardLock} from "../dashboard_lock";
+import {showLoading} from "../dashboard_loading";
 import LineNumbersToggle from "./LineNumbersToggle";
 import {Divider} from "primereact/divider";
 
@@ -51,6 +52,7 @@ export function DemoSinclairBasicEditor() {
                 className="margin-top-8"
                 onClick={() => {
                     dashboardLock();
+                    showLoading();
                     dispatch(runSinclairBasic());
                 }}
             />

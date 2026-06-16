@@ -5,6 +5,7 @@ import CodeMirror from "./CodeMirror";
 import { setAssemblyCode, runAssembly } from "../redux/demo/actions";
 import "../lib/syntax/pasmo";
 import { dashboardLock } from "../dashboard_lock";
+import { showLoading } from "../dashboard_loading";
 import LineNumbersToggle from "./LineNumbersToggle";
 import { Divider } from "primereact/divider";
 
@@ -51,6 +52,7 @@ export function DemoAssemblyEditor() {
         className="margin-top-8"
         onClick={() => {
           dashboardLock();
+          showLoading();
           dispatch(runAssembly());
         }}
       />

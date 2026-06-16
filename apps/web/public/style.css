@@ -100,7 +100,7 @@ code {
     bottom: 0;
     left: 0;
     right: 0;
-    background-color: black;
+    background-color: rgba(0, 0, 0, 0.5);
     transition: opacity 350ms;
     visibility: hidden;
     opacity: 0;
