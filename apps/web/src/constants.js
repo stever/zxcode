@@ -11,7 +11,7 @@ const hasuraBase = `${hostname}/api`;
 
 export default {
     authBase,
-    enableBoriel: isDev,
+    enableBoriel: true,
     enableZ88dk: isDev,
     graphQlEndpoint: `${httpProtocol}://${hasuraBase}/v1/graphql`,
     graphQlSubscriptionEndpoint: `${httpProtocol === 'https' ? 'wss' : 'ws'}://${hasuraBase}/v1/graphql`,
