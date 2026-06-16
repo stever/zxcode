@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 
-// Tilted corner thumbnail for a project card. Shows a rendered screenshot of
-// the project (a square, border-padded PNG from gif-service); falls back to the
+// Tilted corner thumbnail for a project card. The box is 4:3 to match the
+// Spectrum screenshot's aspect, so the rendered PNG from gif-service fills it
+// exactly with no crop (only the tilt trims the corners). Falls back to the
 // static cartridge graphic when there's no screenshot yet, the project isn't
 // public, or it can't be rendered (e.g. zmac/sdcc).
 export default function ProjectThumbnail({ projectId, updatedAt }) {
@@ -15,7 +16,7 @@ export default function ProjectThumbnail({ projectId, updatedAt }) {
       style={{
         top: "-5px",
         right: "-5px",
-        width: "120px",
+        width: "160px",
         height: "120px",
         background: "#000",
         borderRadius: "20px",
