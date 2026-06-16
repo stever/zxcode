@@ -5,7 +5,13 @@ export type MediaResult =
     | { ok: true; data: Buffer; contentType: string; filename: string; altText: string }
     | { ok: false; error: string };
 
-/** POST a render request to gif-service and shape the response into a MediaResult. */
+/**
+ * POST a render request to gif-service and shape the response into a MediaResult.
+ *
+ * Bounded by an AbortController: a hung or unreachable renderer becomes an
+ * ok:false result (caller replies) rather than an unbounded await that wedges
+ * the poll loop. The timer covers the body download too, not just the headers.
+ */
 async function requestMedia(
     path: string,
     body: unknown,
@@ -13,30 +19,42 @@ async function requestMedia(
     params: Record<string, string> = {},
 ): Promise<MediaResult> {
     const query = new URLSearchParams({ maxSeconds: String(config.maxSeconds), ...params });
-    const res = await fetch(`${config.gifServiceUrl}${path}?${query}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-    });
-
-    if (res.ok) {
-        return {
-            ok: true,
-            data: Buffer.from(await res.arrayBuffer()),
-            contentType: 'video/mp4',
-            filename: 'program.mp4',
-            altText,
-        };
-    }
-
-    let detail = '';
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.gifServiceTimeoutMs);
     try {
-        const errorBody = (await res.json()) as { error?: string; detail?: string };
-        detail = errorBody.detail || errorBody.error || '';
-    } catch {
-        detail = '';
+        const res = await fetch(`${config.gifServiceUrl}${path}?${query}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+
+        if (res.ok) {
+            return {
+                ok: true,
+                data: Buffer.from(await res.arrayBuffer()),
+                contentType: 'video/mp4',
+                filename: 'program.mp4',
+                altText,
+            };
+        }
+
+        let detail = '';
+        try {
+            const errorBody = (await res.json()) as { error?: string; detail?: string };
+            detail = errorBody.detail || errorBody.error || '';
+        } catch {
+            detail = '';
+        }
+        return { ok: false, error: detail || `gif-service returned ${res.status}` };
+    } catch (err) {
+        if (controller.signal.aborted) {
+            return { ok: false, error: `Renderer timed out after ${config.gifServiceTimeoutMs / 1000}s` };
+        }
+        return { ok: false, error: 'Could not reach the renderer' };
+    } finally {
+        clearTimeout(timer);
     }
-    return { ok: false, error: detail || `gif-service returned ${res.status}` };
 }
 
 function machineParam(machineType?: number): Record<string, string> {

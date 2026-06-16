@@ -105,6 +105,23 @@ async function handleMention(self: MastodonAccount, n: MastodonNotification): Pr
     console.log(`Replied to ${n.id} with ${result.data.length} byte ${result.contentType}`);
 }
 
+// Best-effort generic reply when handleMention throws, so an unexpected failure
+// isn't silent. Skips self/empty mentions and swallows its own errors (a failure
+// to post the error reply must not break the poll loop).
+async function replyWithError(self: MastodonAccount, n: MastodonNotification): Promise<void> {
+    const status = n.status;
+    if (!status || status.account.id === self.id) return;
+    try {
+        await postReply({
+            inReplyToId: status.id,
+            statusText: 'Something went wrong rendering that. Please try again later.',
+            visibility: replyVisibility(status.visibility),
+        });
+    } catch (err) {
+        console.error(`Also failed to send error reply for ${n.id}:`, err);
+    }
+}
+
 async function pollOnce(self: MastodonAccount): Promise<void> {
     const state = await loadState();
     const mentions = await fetchMentions(state.lastNotificationId);
@@ -114,8 +131,10 @@ async function pollOnce(self: MastodonAccount): Promise<void> {
         try {
             await handleMention(self, n);
         } catch (err) {
-            // Advance past poison mentions rather than retrying forever.
+            // Advance past poison mentions rather than retrying forever, but tell
+            // the sender something failed instead of going silent.
             console.error(`Failed to handle mention ${n.id}:`, err);
+            await replyWithError(self, n);
         }
         state.lastNotificationId = n.id;
         await saveState(state);

@@ -12,6 +12,9 @@ export const config = {
     maxSeconds: parseInt(process.env.MAX_SECONDS ?? '30', 10),
     maxMediaBytes: parseInt(process.env.MAX_MEDIA_BYTES ?? '8000000', 10),
     maxPerUserPerHour: parseInt(process.env.MAX_PER_USER_PER_HOUR ?? '10', 10),
+    // Hard cap on a single gif-service request so a hung renderer can't wedge
+    // the poll loop. Must exceed gif-service's own render budget (~maxSeconds*4).
+    gifServiceTimeoutMs: parseInt(process.env.GIF_SERVICE_TIMEOUT_MS ?? '180000', 10),
     replyCaption: process.env.REPLY_CAPTION ?? '#ZXPlay',
     dryRun: process.env.DRY_RUN === 'true',
 };
