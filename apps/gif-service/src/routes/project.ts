@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { GIFGenerator } from '../gif-generator.js';
 import { fetchProject } from '../hasura.js';
-import { compileProject } from '../compile.js';
+import { compileProjectIsolated } from '../compile-isolated.js';
 import { CompileError } from '../errors.js';
 
 const router = Router();
@@ -56,7 +56,7 @@ async function handle(format: Format, req: Request, res: Response): Promise<void
 
         let tap: Buffer;
         try {
-            tap = await compileProject(project.lang, project.code);
+            tap = await compileProjectIsolated(project.lang, project.code);
         } catch (err) {
             if (err instanceof CompileError) {
                 res.status(400).json({ error: 'Project failed to compile', detail: err.message });
