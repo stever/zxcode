@@ -4,6 +4,7 @@ import { join } from 'path';
 import { GIFGenerator } from '../gif-generator.js';
 import { fetchProjectById } from '../hasura.js';
 import { compileProjectIsolated } from '../compile-isolated.js';
+import { withRenderSlot } from '../concurrency.js';
 import { CompileError } from '../errors.js';
 
 const router = Router();
@@ -52,15 +53,15 @@ router.get('/:id', async (req: Request, res: Response) => {
         } else {
             let pending = inFlight.get(key);
             if (!pending) {
-                pending = (async () => {
+                pending = withRenderSlot(async () => {
                     const tap = await compileProjectIsolated(project.lang, project.code);
-                    const generator = new GIFGenerator({ maxDurationMs: 4000, scale: 2 });
+                    const generator = new GIFGenerator({ maxDurationMs: 2500, scale: 2 });
                     await generator.initialize();
                     const out = await generator.generatePngFromTAP(tap, 48);
                     await mkdir(CACHE_DIR, { recursive: true }).catch(() => undefined);
                     await writeFile(file, out).catch(() => undefined);
                     return out;
-                })();
+                });
                 inFlight.set(key, pending);
                 pending.finally(() => inFlight.delete(key));
             }
