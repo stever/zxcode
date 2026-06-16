@@ -35,6 +35,17 @@
         reverse_proxy gif-service:5001
     }
 
+    # OpenGraph cards for shared project links: only social-media crawlers
+    # fetching a project URL get the gif-service OG page (which points og:image
+    # at the screenshot). Real browsers fall through to the SPA below.
+    @ogcrawler {
+        path /u/* /projects/*
+        header_regexp User-Agent (?i)(Mastodon|gotosocial|Pleroma|Akkoma|Misskey|Twitterbot|facebookexternalhit|Facebot|Discordbot|Slackbot|TelegramBot|WhatsApp|bsky|LinkedInBot|redditbot|Iframely|Embedly|Synapse|SkypeUriPreview|vkShare|Google-PageRenderer)
+    }
+    handle @ogcrawler {
+        reverse_proxy gif-service:5001
+    }
+
     handle {
         # Strict Content Security Policy for production
         header {

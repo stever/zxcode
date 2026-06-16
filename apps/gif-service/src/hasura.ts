@@ -105,6 +105,53 @@ export async function fetchProject(
     return data.project[0] ?? null;
 }
 
+export interface ProjectMeta {
+    projectId: string;
+    title: string;
+    updatedAt: string;
+}
+
+/** Public project meta from a /u/<userSlug>/<projectSlug> URL (public profile + public project). */
+export async function fetchProjectMetaBySlug(
+    userSlug: string,
+    projectSlug: string,
+): Promise<ProjectMeta | null> {
+    const query = `
+        query ($userSlug: String!, $projectSlug: String!) {
+            project(where: { slug: { _eq: $projectSlug }, owner: { slug: { _eq: $userSlug } } }, limit: 1) {
+                project_id
+                title
+                updated_at
+            }
+        }
+    `;
+    const data = await gql<{ project: Array<{ project_id: string; title: string; updated_at: string }> }>(
+        query,
+        { userSlug, projectSlug },
+    );
+    const p = data.project[0];
+    return p ? { projectId: p.project_id, title: p.title, updatedAt: p.updated_at } : null;
+}
+
+/** Public project meta by id (for /projects/<id> URLs). */
+export async function fetchProjectMetaById(id: string): Promise<ProjectMeta | null> {
+    const query = `
+        query ($id: uuid!) {
+            project(where: { project_id: { _eq: $id } }, limit: 1) {
+                project_id
+                title
+                updated_at
+            }
+        }
+    `;
+    const data = await gql<{ project: Array<{ project_id: string; title: string; updated_at: string }> }>(
+        query,
+        { id },
+    );
+    const p = data.project[0];
+    return p ? { projectId: p.project_id, title: p.title, updatedAt: p.updated_at } : null;
+}
+
 /**
  * Compile ZX BASIC (Boriel) or C (z88dk) through the Hasura actions, returning
  * the TAP bytes. A rejection here usually means the source did not compile, so

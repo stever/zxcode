@@ -39,6 +39,16 @@
 		reverse_proxy localhost:5001
 	}
 
+	# OpenGraph cards for shared project links: social crawlers only; browsers
+	# fall through to the SPA.
+	@ogcrawler {
+		path /u/* /projects/*
+		header_regexp User-Agent (?i)(Mastodon|gotosocial|Pleroma|Akkoma|Misskey|Twitterbot|facebookexternalhit|Facebot|Discordbot|Slackbot|TelegramBot|WhatsApp|bsky|LinkedInBot|redditbot|Iframely|Embedly|Synapse|SkypeUriPreview|vkShare|Google-PageRenderer)
+	}
+	handle @ogcrawler {
+		reverse_proxy localhost:5001
+	}
+
 	handle {
 		reverse_proxy localhost:8000
 	}
