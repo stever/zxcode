@@ -79,7 +79,10 @@ export async function compileProject(lang: string, code: string): Promise<Buffer
                 return bin2tap(Buffer.from(cim));
             });
         case 'sdcc':
-            throw new CompileError(`Language "${lang}" can't be rendered yet`);
+            return inProcess(async () => {
+                const { compileSdcc } = await import('./tools-sdcc.js');
+                return compileSdcc(code);
+            });
         default:
             throw new CompileError(`Unknown language "${lang}"`);
     }

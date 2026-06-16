@@ -21,9 +21,13 @@ COPY apps/gif-service/ ./
 COPY apps/web/public/dist/jsspeccy-core.wasm /app/apps/web/public/dist/jsspeccy-core.wasm
 COPY apps/web/public/roms/ /app/apps/web/public/roms/
 
-# Emscripten CLI toolchains for rendering zmac (and, later, sdcc) projects.
-# Resolved via WASM_TOOLS_DIR (defaults to this path next to src/).
+# Emscripten/asm.js CLI toolchains for rendering zmac and sdcc projects, plus
+# the sdcc bundled filesystem (fssdcc.data: crt0, z80 stdlib, headers) and the
+# ZX crt0 object. Resolved via TOOLS_BASE (defaults to this dir, next to src/).
 COPY apps/web/public/8bitworker/wasm/ ./wasm/
+COPY apps/web/public/8bitworker/asmjs/ ./asmjs/
+COPY apps/web/public/8bitworker/fs/ ./fs/
+COPY apps/web/public/8bitworker/zx/ ./zx/
 
 # Screenshot cache mount point, pre-owned by `node` so the named volume
 # initialises writable for the non-root user under a read-only root FS.
