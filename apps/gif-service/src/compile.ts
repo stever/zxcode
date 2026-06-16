@@ -60,6 +60,22 @@ export async function compileProject(lang: string, code: string): Promise<Buffer
         case 'c':
             return Buffer.from(await compileViaAction('compileC', code));
         case 'zmac':
+            return inProcess(async () => {
+                const { runTool } = await import('./wasm-tools.js');
+                const { files, errors } = runTool({
+                    module: 'zmac',
+                    inputs: { 'in.asm': code },
+                    args: ['-z', '-c', '--oo', 'lst,cim', 'in.asm'],
+                    outputs: ['zout/in.cim'],
+                });
+                const cim = files['zout/in.cim'];
+                if (!cim || cim.length === 0) {
+                    throw errors.length ? errors : new Error('zmac produced no output');
+                }
+                // Wrap the raw code image (ORG 0x8000) into a self-loading TAP.
+                const { bin2tap } = await import('pasmo');
+                return bin2tap(Buffer.from(cim));
+            });
         case 'sdcc':
             throw new CompileError(`Language "${lang}" can't be rendered yet`);
         default:

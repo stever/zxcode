@@ -3,6 +3,7 @@
 declare module 'pasmo' {
     const compile: (asmInput: string) => Promise<Uint8Array>;
     export default compile;
+    export function bin2tap(binInput: Uint8Array): Promise<Uint8Array>;
 }
 
 declare module 'bas2tap' {

@@ -21,6 +21,10 @@ COPY apps/gif-service/ ./
 COPY apps/web/public/dist/jsspeccy-core.wasm /app/apps/web/public/dist/jsspeccy-core.wasm
 COPY apps/web/public/roms/ /app/apps/web/public/roms/
 
+# Emscripten CLI toolchains for rendering zmac (and, later, sdcc) projects.
+# Resolved via WASM_TOOLS_DIR (defaults to this path next to src/).
+COPY apps/web/public/8bitworker/wasm/ ./wasm/
+
 # Screenshot cache mount point, pre-owned by `node` so the named volume
 # initialises writable for the non-root user under a read-only root FS.
 RUN mkdir -p /cache && chown node:node /cache
