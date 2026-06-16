@@ -1,5 +1,5 @@
 import { config, assertRuntimeConfig } from './config.js';
-import { htmlToBasic } from './basic.js';
+import { htmlToBasic, leadingMentions } from './basic.js';
 import { extractProjectRef } from './project.js';
 import { parseDirectives } from './directives.js';
 import { allowRequest } from './ratelimit.js';
@@ -28,10 +28,30 @@ function truncate(text: string, max: number): string {
     return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }
 
+// True when the bot's own handle is the first @mention in the toot, i.e. the
+// post is addressed to the bot rather than merely referencing it in passing.
+// The rendered mention text is the bare "@username"; we also accept a
+// "username@domain" form defensively in case an instance renders the full acct.
+function addressesBot(content: string, self: MastodonAccount): boolean {
+    const first = leadingMentions(content)[0];
+    if (!first) return false;
+    const username = self.username.toLowerCase();
+    return first === username || first === self.acct.toLowerCase() || first.startsWith(`${username}@`);
+}
+
 async function handleMention(self: MastodonAccount, n: MastodonNotification): Promise<void> {
     const status = n.status;
     if (!status) return;
     if (status.account.id === self.id) return; // never answer ourselves
+
+    // Only act when the toot is addressed to the bot, i.e. our handle is the
+    // first thing in it. A mid-sentence mention ("love what @bot does") is
+    // conversation, not a submission, so ignore it rather than parse the
+    // chatter as a program and reply with a compile error.
+    if (!addressesBot(status.content, self)) {
+        console.log(`Mention ${n.id} from @${status.account.acct}: not addressed to the bot, skipping`);
+        return;
+    }
 
     // A project link takes precedence over inline source: the program already
     // lives on the site, so render it directly rather than parsing the toot.

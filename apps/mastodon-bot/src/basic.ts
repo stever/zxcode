@@ -42,3 +42,17 @@ export function htmlToBasic(content: string): string {
 
     return text.replace(/[ \t]+$/gm, '').trim();
 }
+
+/**
+ * Return the leading run of @mention handles from a status, lowercased and
+ * without the leading '@'. Mirrors the strip in htmlToBasic so the two agree on
+ * what counts as a leading mention. Tags are dropped (not spaced) so the anchor
+ * "@<span>bot</span>" rejoins into "@bot"; the rendered text is just the bare
+ * "@username", with the domain living in the (now-stripped) href.
+ */
+export function leadingMentions(content: string): string[] {
+    const text = decodeEntities(content.replace(/<[^>]+>/g, '')).replace(/ /g, ' ');
+    const match = text.match(/^\s*((?:@\S+[ \t]*)+)/);
+    if (!match) return [];
+    return match[1].trim().split(/\s+/).map((handle) => handle.slice(1).toLowerCase());
+}
