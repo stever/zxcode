@@ -11,6 +11,7 @@ export const config = {
     pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS ?? '15000', 10),
     maxSeconds: parseInt(process.env.MAX_SECONDS ?? '30', 10),
     maxMediaBytes: parseInt(process.env.MAX_MEDIA_BYTES ?? '8000000', 10),
+    maxPerUserPerHour: parseInt(process.env.MAX_PER_USER_PER_HOUR ?? '10', 10),
     replyCaption: process.env.REPLY_CAPTION ?? '#ZXPlay',
     dryRun: process.env.DRY_RUN === 'true',
 };

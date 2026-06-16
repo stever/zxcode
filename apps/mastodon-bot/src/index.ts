@@ -2,6 +2,7 @@ import { config, assertRuntimeConfig } from './config.js';
 import { htmlToBasic } from './basic.js';
 import { extractProjectRef } from './project.js';
 import { parseDirectives } from './directives.js';
+import { allowRequest } from './ratelimit.js';
 import { sourceToMedia, projectToMedia } from './media.js';
 import { loadState, saveState } from './state.js';
 import {
@@ -41,6 +42,13 @@ async function handleMention(self: MastodonAccount, n: MastodonNotification): Pr
     const code = projectRef ? null : directives.code;
     if (!projectRef && !code) {
         console.log(`Mention ${n.id} from @${status.account.acct}: no project link or source found, skipping`);
+        return;
+    }
+
+    // Rate-limit per account to blunt a flood of mentions. Skip silently rather
+    // than reply, so an attacker can't turn the limit into reply amplification.
+    if (!allowRequest(status.account.acct, config.maxPerUserPerHour)) {
+        console.log(`Mention ${n.id} from @${status.account.acct}: rate limit reached, skipping`);
         return;
     }
 

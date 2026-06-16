@@ -118,6 +118,11 @@ export class GIFGenerator {
         const staleStop = this.options.staleFrameThreshold;
         const tailFrames = 25; // ~0.5s of static tail kept for readability
 
+        // Hard wall-clock backstop independent of frame count: emulation is
+        // normally faster than real time, so generous headroom over the clip
+        // length still catches a pathologically slow program.
+        const renderDeadline = Date.now() + Math.max(this.options.maxDurationMs * 4, 60_000);
+
         const frames: Uint8Array[] = [];
         const audio: AudioFrame[] = [];
         let previousFrame: Uint8Array | null = null;
@@ -125,6 +130,10 @@ export class GIFGenerator {
         let lastChangeIndex = -1;
 
         for (let f = 0; f < maxFrames; f++) {
+            if (Date.now() > renderDeadline) {
+                console.warn(`Render wall-clock budget exceeded after ${f} frames; stopping`);
+                break;
+            }
             const frameBuffer = new Uint8Array(this.emulator.runFrame());
             frames.push(frameBuffer);
 

@@ -5,6 +5,9 @@ import { CompileError } from './errors.js';
 // and call the compile / compileC actions. No admin secret is sent, so the
 // service keeps holding no secrets.
 const HASURA_URL = process.env.HASURA_URL ?? 'http://hasura:8080/v1/graphql';
+// Cap every Hasura call so a hung upstream compiler (zxbasic/z88dk) or a slow
+// lookup can't tie up a request indefinitely.
+const HASURA_TIMEOUT_MS = parseInt(process.env.HASURA_TIMEOUT_MS ?? '20000', 10);
 
 interface GraphQLResponse<T> {
     data?: T;
@@ -12,22 +15,34 @@ interface GraphQLResponse<T> {
 }
 
 async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-    const res = await fetch(HASURA_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables }),
-    });
-    if (!res.ok) {
-        throw new Error(`Hasura returned ${res.status}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), HASURA_TIMEOUT_MS);
+    try {
+        const res = await fetch(HASURA_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, variables }),
+            signal: controller.signal,
+        });
+        if (!res.ok) {
+            throw new Error(`Hasura returned ${res.status}`);
+        }
+        const body = (await res.json()) as GraphQLResponse<T>;
+        if (body.errors?.length) {
+            throw new Error(body.errors.map((e) => e.message).join('; '));
+        }
+        if (!body.data) {
+            throw new Error('Hasura returned no data');
+        }
+        return body.data;
+    } catch (err) {
+        if (controller.signal.aborted) {
+            throw new Error(`Hasura request timed out after ${HASURA_TIMEOUT_MS}ms`);
+        }
+        throw err;
+    } finally {
+        clearTimeout(timer);
     }
-    const body = (await res.json()) as GraphQLResponse<T>;
-    if (body.errors?.length) {
-        throw new Error(body.errors.map((e) => e.message).join('; '));
-    }
-    if (!body.data) {
-        throw new Error('Hasura returned no data');
-    }
-    return body.data;
 }
 
 export interface ProjectRecord {

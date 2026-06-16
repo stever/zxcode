@@ -242,6 +242,11 @@ export class Emulator {
         let trapCount = 0;
         while (status) {
             trapCount++;
+            // Bound the trap loop: a normal tape load fires a few hundred traps,
+            // so a runaway here is a malformed/hostile program, not real work.
+            if (trapCount > 20000) {
+                throw new Error('Too many tape traps in one frame');
+            }
             switch (status) {
                 case 1:
                     throw new Error('Unrecognized opcode');
