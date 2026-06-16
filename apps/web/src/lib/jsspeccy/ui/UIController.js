@@ -2,7 +2,7 @@ import EventEmitter from "events";
 import {MenuBar} from "./MenuBar";
 import {Toolbar} from "./Toolbar";
 import closeIcon from "./icons/close.svg";
-import playIcon from "./icons/play.svg";
+import powerIcon from "./icons/power.svg";
 
 export class UIController extends EventEmitter {
     constructor(container, emulator, opts) {
@@ -40,7 +40,7 @@ export class UIController extends EventEmitter {
         this.toolbar = new Toolbar(this.appContainer);
 
         this.startButton = document.createElement('button');
-        this.startButton.innerHTML = playIcon;
+        this.startButton.innerHTML = powerIcon;
         this.appContainer.appendChild(this.startButton);
         this.startButton.style.position = 'absolute';
         this.startButton.style.top = '50%';
