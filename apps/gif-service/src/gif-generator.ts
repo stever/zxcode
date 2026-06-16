@@ -109,9 +109,10 @@ export class GIFGenerator {
             this.pressKeys([GIFGenerator.KEY.ENTER]);
         }
 
-        // Let the trap loader inject every block and the program start.
-        for (let i = 0; i < 15; i++) this.emulator.runFrame();
-
+        // Start capturing immediately so a program's one-shot startup audio
+        // (e.g. a beep on launch) isn't lost in a pre-roll. The trap loader has
+        // already injected the blocks during the LOAD keypresses above; the
+        // first captured frames cover the loader handing off to the program.
         // Capture the running program. Stop once the screen has been static for
         // `staleFrameThreshold` consecutive frames, then trim trailing static.
         const maxFrames = Math.floor(this.options.maxDurationMs / 20);
