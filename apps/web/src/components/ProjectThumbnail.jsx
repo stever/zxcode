@@ -30,7 +30,7 @@ export default function ProjectThumbnail({ projectId, updatedAt }) {
         src={showShot ? `/screenshots/${projectId}.png?v=${version}` : "/assets/images/zx-square.png"}
         alt=""
         onError={showShot ? () => setFailed(true) : undefined}
-        style={{ width: "94%", height: "94%", objectFit: "cover", margin: "3%" }}
+        style={{ width: "100%", height: "100%", objectFit: "cover" }}
       />
     </div>
   );

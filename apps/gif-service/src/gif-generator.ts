@@ -290,7 +290,7 @@ export class GIFGenerator {
         return buffer;
     }
 
-    /** Render a representative still frame to a square PNG (Spectrum border preserved). */
+    /** Render a representative still frame to a 4:3 PNG (Spectrum border included). */
     async generatePngFromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
         const { frames } = await this.captureFrames(tapData, machineType, false);
         const frame = frames[frames.length - 1] ?? frames[0];
@@ -298,21 +298,17 @@ export class GIFGenerator {
         return this.encodePng(frame);
     }
 
-    /** ffmpeg-encode one decoded frame to a square PNG, padding the (landscape) frame
-     *  with black so a rounded/tilted card crop never truncates the screen content. */
+    /** ffmpeg-encode one decoded frame to a PNG at its native 4:3 size (border
+     *  included). The card fills it with object-fit: cover, so the outer border
+     *  is cropped to the square crop, not the screen. */
     private async encodePng(frame: Uint8Array): Promise<Buffer> {
         const width = this.decoder.getWidth();
         const height = this.decoder.getHeight();
         const rgba = this.decoder.decode(frame);
         const outPath = join(tmpdir(), `zxshot-${process.pid}-${Date.now()}.png`);
 
-        // Pad the landscape frame (border included) to a centred square so the
-        // card's rounded corners clip black margin, not the Spectrum screen.
-        const pad = 'pad=iw:iw:0:(iw-ih)/2:black';
-
         const args = [
             '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${width}x${height}`, '-i', 'pipe:0',
-            '-vf', pad,
             '-frames:v', '1',
             '-y', outPath,
         ];

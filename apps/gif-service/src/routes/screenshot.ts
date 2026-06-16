@@ -12,7 +12,7 @@ const router = Router();
 const CACHE_DIR = process.env.SCREENSHOT_CACHE_DIR ?? '/cache';
 // Bump when the render output changes (size, padding, etc.) so cached PNGs
 // from older logic are superseded without manually clearing the volume.
-const RENDER_VERSION = 'v2';
+const RENDER_VERSION = 'v3';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Single-flight: collapse concurrent requests for the same cache key onto one render.
@@ -83,10 +83,12 @@ router.get('/:id', async (req: Request, res: Response) => {
         res.send(png);
     } catch (err) {
         if (err instanceof CompileError) {
-            // Unrenderable (e.g. zmac/sdcc not supported, or bad source) → web
-            // falls back to the cartridge. Negative-cache to avoid re-rendering
-            // it on every page load.
-            res.setHeader('Cache-Control', 'public, max-age=3600');
+            // Unrenderable (e.g. unsupported lang, or bad source) → web falls
+            // back to the cartridge. Short negative-cache: enough to avoid
+            // re-rendering on every page load, but it self-heals quickly after a
+            // deploy that adds rendering support (the key is project-based, so a
+            // server capability change can't otherwise invalidate it).
+            res.setHeader('Cache-Control', 'public, max-age=300');
             res.status(422).end();
             return;
         }
