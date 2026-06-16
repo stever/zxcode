@@ -5,6 +5,12 @@ import projectRoutes from './routes/project.js';
 import sourceRoutes from './routes/source.js';
 import screenshotRoutes from './routes/screenshot.js';
 
+// Safety net: a single bad render must never take down the whole service. Log
+// and keep serving rather than letting an unhandled error exit the process
+// (each request is independent and stateless).
+process.on('unhandledRejection', (reason) => console.error('Unhandled rejection:', reason));
+process.on('uncaughtException', (err) => console.error('Uncaught exception:', err));
+
 const app = express();
 const PORT = process.env.PORT || 5001;
 

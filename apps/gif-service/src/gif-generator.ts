@@ -265,6 +265,7 @@ export class GIFGenerator {
         const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
         let stderr = '';
         ff.stderr.on('data', (d) => { stderr += d.toString(); });
+        ff.stdin.on('error', () => undefined); // EPIPE if ffmpeg exits early; close handler reports status
 
         const finished = new Promise<void>((resolve, reject) => {
             ff.on('error', reject);
@@ -322,6 +323,9 @@ export class GIFGenerator {
         const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
         let stderr = '';
         ff.stderr.on('data', (d) => { stderr += d.toString(); });
+        // If ffmpeg exits early the stdin write EPIPEs; swallow it (the close
+        // handler reports the real status) so it can't crash the process.
+        ff.stdin.on('error', () => undefined);
         const finished = new Promise<void>((resolve, reject) => {
             ff.on('error', reject);
             ff.on('close', (code) =>

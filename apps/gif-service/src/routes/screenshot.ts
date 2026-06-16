@@ -63,7 +63,11 @@ router.get('/:id', async (req: Request, res: Response) => {
                     return out;
                 });
                 inFlight.set(key, pending);
-                pending.finally(() => inFlight.delete(key));
+                // Clear the slot when done. The trailing .catch is essential: the
+                // real error is surfaced via `await pending` below, but this
+                // derived promise would otherwise reject unhandled and crash the
+                // process (Node exits on unhandledRejection).
+                pending.finally(() => inFlight.delete(key)).catch(() => undefined);
             }
             png = await pending;
         }
