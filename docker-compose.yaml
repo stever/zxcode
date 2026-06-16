@@ -49,7 +49,7 @@ services:
   # NOTE: the healthchecks need the hardened images (which add /health to z88dk)
   # rebuilt and pushed — see zxcode-api-z88dk / zxcode-api-zxbasic.
   z88dk:
-    image: ghcr.io/stever/zxcoder-api-z88dk
+    image: ghcr.io/stever/zxcode-api-z88dk
     restart: always
     mem_limit: 512m
     cpus: 1.0
@@ -67,7 +67,7 @@ services:
       start_period: 20s
 
   zxbasic:
-    image: ghcr.io/stever/zxcoder-api-zxbasic
+    image: ghcr.io/stever/zxcode-api-zxbasic
     restart: always
     mem_limit: 512m
     cpus: 1.0

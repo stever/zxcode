@@ -20,19 +20,19 @@ jobs:
         include:
           - context: ./
             dockerfile: ./apps/web/Dockerfile
-            image: ghcr.io/stever/zxcoder
+            image: ghcr.io/stever/zxcode
           - context: ./apps/proxy/
             dockerfile: ./apps/proxy/Dockerfile
-            image: ghcr.io/stever/zxcoder-proxy
+            image: ghcr.io/stever/zxcode-proxy
           - context: ./apps/auth/
             dockerfile: ./apps/auth/Dockerfile
-            image: ghcr.io/stever/zxcoder-auth
+            image: ghcr.io/stever/zxcode-auth
           - context: ./
             dockerfile: ./apps/gif-service/Dockerfile
-            image: ghcr.io/stever/zxcoder-gif-service
+            image: ghcr.io/stever/zxcode-gif-service
           - context: ./
             dockerfile: ./apps/mastodon-bot/Dockerfile
-            image: ghcr.io/stever/zxcoder-mastodon-bot
+            image: ghcr.io/stever/zxcode-mastodon-bot
     permissions:
       contents: read
       packages: write
