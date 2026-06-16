@@ -218,6 +218,14 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
     },
   };
 
+  const publicProfilesMenuItem = {
+    label: "Public Profiles",
+    icon: "pi pi-fw pi-users",
+    command: () => {
+      navigate(`/profiles`);
+    },
+  };
+
   const viewMenu = {
     label: "View",
     icon: "pi pi-fw pi-eye",
@@ -227,6 +235,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   viewMenu.items.push(viewFullScreenMenuItem);
   viewMenu.items.push(sep);
   viewMenu.items.push(feedMenuItem);
+  viewMenu.items.push(publicProfilesMenuItem);
   viewMenu.items.push(viewProfileMenuItem);
   viewMenu.items.push(profileSettingsMenuItem);
 
