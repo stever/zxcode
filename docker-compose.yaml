@@ -109,6 +109,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    volumes:
+      - screenshot_cache:/cache
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
@@ -176,3 +178,4 @@ volumes:
   pg_data:
   gotosocial_data:
   bot_data:
+  screenshot_cache:

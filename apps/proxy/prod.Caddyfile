@@ -29,6 +29,12 @@
         reverse_proxy hasura:8080
     }
 
+    # Read-only project screenshots (PNG). Only this gif-service path is exposed;
+    # the compile /api routes stay internal. Served at /screenshots/<id>.png.
+    handle /screenshots/* {
+        reverse_proxy gif-service:5001
+    }
+
     handle {
         # Strict Content Security Policy for production
         header {

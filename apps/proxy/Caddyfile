@@ -33,6 +33,12 @@
 		reverse_proxy localhost:4000
 	}
 
+	# Read-only project screenshots (PNG) from gif-service. Local dev must expose
+	# gif-service on :5001 (publish the port) for this to resolve.
+	handle /screenshots/* {
+		reverse_proxy localhost:5001
+	}
+
 	handle {
 		reverse_proxy localhost:8000
 	}

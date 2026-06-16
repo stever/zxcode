@@ -10,6 +10,7 @@ import { Paginator } from "primereact/paginator";
 import { formatDistanceToNow } from "date-fns";
 import { fetchActivityFeed } from "../redux/social/actions";
 import { getLanguageLabel } from "../lib/lang";
+import ProjectThumbnail from "./ProjectThumbnail";
 import { sep } from "../constants";
 
 function getLanguageColor(lang) {
@@ -108,32 +109,10 @@ export default function ActivityFeed() {
                           }}
                         >
                           <div className="flex flex-column h-full relative">
-                            {/* Background icon in corner */}
-                            <div
-                              className="absolute"
-                              style={{
-                                top: "-5px",
-                                right: "-5px",
-                                width: "120px",
-                                height: "120px",
-                                background: "#000",
-                                borderRadius: "20px",
-                                transform: "rotate(12deg)",
-                                overflow: "hidden",
-                                opacity: 0.7,
-                              }}
-                            >
-                              <img
-                                src="/assets/images/zx-square.png"
-                                alt=""
-                                style={{
-                                  width: "94%",
-                                  height: "94%",
-                                  objectFit: "cover",
-                                  margin: "3%",
-                                }}
-                              />
-                            </div>
+                            <ProjectThumbnail
+                              projectId={project.project_id}
+                              updatedAt={project.updated_at}
+                            />
 
                             <h3 className="mb-2 text-white relative z-1">
                               {project.title}

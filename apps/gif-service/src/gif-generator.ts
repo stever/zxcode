@@ -289,6 +289,54 @@ export class GIFGenerator {
         return buffer;
     }
 
+    /** Render a representative still frame to PNG, with a ZX rainbow ribbon baked into a corner. */
+    async generatePngFromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
+        const { frames } = await this.captureFrames(tapData, machineType, false);
+        const frame = frames[frames.length - 1] ?? frames[0];
+        if (!frame) throw new Error('No frame captured');
+        return this.encodePng(frame);
+    }
+
+    /** ffmpeg-encode one decoded frame to PNG, drawing a 4-bar Spectrum ribbon bottom-right. */
+    private async encodePng(frame: Uint8Array): Promise<Buffer> {
+        const width = this.decoder.getWidth();
+        const height = this.decoder.getHeight();
+        const rgba = this.decoder.decode(frame);
+        const outPath = join(tmpdir(), `zxshot-${process.pid}-${Date.now()}.png`);
+
+        // Four bars (red/yellow/green/cyan) tiled into the bottom-right corner.
+        const colors = ['red', 'yellow', 'lime', 'cyan'];
+        const ribbon = colors
+            .map((c, i) => {
+                const left = (0.24 - i * 0.06).toFixed(2);
+                return `drawbox=x=iw-iw*${left}:y=ih-ih*0.13:w=iw*0.06:h=ih*0.13:color=${c}:t=fill`;
+            })
+            .join(',');
+
+        const args = [
+            '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${width}x${height}`, '-i', 'pipe:0',
+            '-vf', ribbon,
+            '-frames:v', '1',
+            '-y', outPath,
+        ];
+        const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', (d) => { stderr += d.toString(); });
+        const finished = new Promise<void>((resolve, reject) => {
+            ff.on('error', reject);
+            ff.on('close', (code) =>
+                code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-500)}`)),
+            );
+        });
+        ff.stdin.write(rgba);
+        ff.stdin.end();
+        await finished;
+
+        const buffer = await readFile(outPath);
+        await unlink(outPath).catch(() => undefined);
+        return buffer;
+    }
+
     private async parseSZXSnapshot(data: Buffer): Promise<any> {
         const file = new DataView(data.buffer, data.byteOffset, data.byteLength);
 

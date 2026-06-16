@@ -51,6 +51,31 @@ export interface ProjectRecord {
     title: string;
 }
 
+export interface ProjectById {
+    lang: string;
+    code: string;
+    updated_at: string;
+}
+
+/**
+ * Look up a public project by id (for screenshots). Returns null when missing or
+ * private (the `public` role filters to is_public). `updated_at` is the cache key
+ * component so a screenshot self-invalidates when the project is edited.
+ */
+export async function fetchProjectById(projectId: string): Promise<ProjectById | null> {
+    const query = `
+        query ($id: uuid!) {
+            project(where: { project_id: { _eq: $id } }, limit: 1) {
+                lang
+                code
+                updated_at
+            }
+        }
+    `;
+    const data = await gql<{ project: ProjectById[] }>(query, { id: projectId });
+    return data.project[0] ?? null;
+}
+
 /**
  * Look up a public project from its canonical /u/<userSlug>/<projectSlug> URL.
  *

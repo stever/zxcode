@@ -36,6 +36,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getLanguageLabel } from "../lib/lang";
+import ProjectThumbnail from "./ProjectThumbnail";
 import { generateRetroAvatar } from "../lib/avatar";
 import { generateRetroSpriteAvatar } from "../lib/retroSpriteAvatar";
 import AvatarSelector from "./AvatarSelector";
@@ -213,31 +214,10 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
           />
         </div>
         <div className="flex flex-column h-full relative">
-          <div
-            className="absolute"
-            style={{
-              top: "-5px",
-              right: "-5px",
-              width: "120px",
-              height: "120px",
-              background: "#000",
-              borderRadius: "20px",
-              transform: "rotate(12deg)",
-              overflow: "hidden",
-              opacity: 0.7,
-            }}
-          >
-            <img
-              src="/assets/images/zx-square.png"
-              alt=""
-              style={{
-                width: "94%",
-                height: "94%",
-                objectFit: "cover",
-                margin: "3%",
-              }}
-            />
-          </div>
+          <ProjectThumbnail
+            projectId={project.project_id}
+            updatedAt={project.updated_at}
+          />
 
           <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
 
@@ -752,32 +732,10 @@ export default function PublicUserProfile() {
                             }}
                           >
                             <div className="flex flex-column h-full relative">
-                              {/* Background icon in corner */}
-                              <div
-                                className="absolute"
-                                style={{
-                                  top: "-5px",
-                                  right: "-5px",
-                                  width: "120px",
-                                  height: "120px",
-                                  background: "#000",
-                                  borderRadius: "20px",
-                                  transform: "rotate(12deg)",
-                                  overflow: "hidden",
-                                  opacity: 0.7,
-                                }}
-                              >
-                                <img
-                                  src="/assets/images/zx-square.png"
-                                  alt=""
-                                  style={{
-                                    width: "94%",
-                                    height: "94%",
-                                    objectFit: "cover",
-                                    margin: "3%",
-                                  }}
-                                />
-                              </div>
+                              <ProjectThumbnail
+                                projectId={project.project_id}
+                                updatedAt={project.updated_at}
+                              />
 
                               <h3 className="mb-2 text-white relative z-1">
                                 {project.title}
