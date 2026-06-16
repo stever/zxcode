@@ -10,6 +10,9 @@ import { CompileError } from '../errors.js';
 const router = Router();
 
 const CACHE_DIR = process.env.SCREENSHOT_CACHE_DIR ?? '/cache';
+// Bump when the render output changes (size, padding, etc.) so cached PNGs
+// from older logic are superseded without manually clearing the volume.
+const RENDER_VERSION = 'v2';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Single-flight: collapse concurrent requests for the same cache key onto one render.
@@ -40,11 +43,14 @@ router.get('/:id', async (req: Request, res: Response) => {
     try {
         const project = await fetchProjectById(id);
         if (!project) {
+            // Negative-cache so the browser doesn't re-request missing/private
+            // projects on every page load (web shows the cartridge fallback).
+            res.setHeader('Cache-Control', 'public, max-age=3600');
             res.status(404).end();
             return;
         }
 
-        const key = `${id}-${Date.parse(project.updated_at) || 0}`;
+        const key = `${RENDER_VERSION}-${id}-${Date.parse(project.updated_at) || 0}`;
         const file = join(CACHE_DIR, `${key}.png`);
 
         let png: Buffer;
@@ -77,7 +83,11 @@ router.get('/:id', async (req: Request, res: Response) => {
         res.send(png);
     } catch (err) {
         if (err instanceof CompileError) {
-            res.status(422).end(); // unrenderable source → web falls back to cartridge
+            // Unrenderable (e.g. zmac/sdcc not supported, or bad source) → web
+            // falls back to the cartridge. Negative-cache to avoid re-rendering
+            // it on every page load.
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.status(422).end();
             return;
         }
         console.error('Screenshot error:', err);

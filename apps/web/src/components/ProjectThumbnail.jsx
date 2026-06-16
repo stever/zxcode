@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 
-// Corner thumbnail for a project card. Shows a rendered screenshot of the
-// project (with the ZX rainbow ribbon baked into a corner by gif-service);
-// falls back to the static cartridge graphic when there's no screenshot yet,
-// the project isn't public, or the render failed.
+// Tilted corner thumbnail for a project card. Shows a rendered screenshot of
+// the project (a square, border-padded PNG from gif-service); falls back to the
+// static cartridge graphic when there's no screenshot yet, the project isn't
+// public, or it can't be rendered (e.g. zmac/sdcc).
 export default function ProjectThumbnail({ projectId, updatedAt }) {
   const [failed, setFailed] = useState(false);
   const version = updatedAt ? Date.parse(updatedAt) || 0 : 0;
@@ -19,27 +19,19 @@ export default function ProjectThumbnail({ projectId, updatedAt }) {
         height: "120px",
         background: "#000",
         borderRadius: "20px",
+        transform: "rotate(12deg)",
         overflow: "hidden",
-        // Screenshots read cleaner upright and opaque; the cartridge fallback
-        // keeps its original tilted, translucent look.
-        transform: showShot ? "none" : "rotate(12deg)",
+        // Screenshots are the real content, so show them opaque; the cartridge
+        // fallback keeps its original faded decoration look.
         opacity: showShot ? 1 : 0.7,
       }}
     >
-      {showShot ? (
-        <img
-          src={`/screenshots/${projectId}.png?v=${version}`}
-          alt=""
-          onError={() => setFailed(true)}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      ) : (
-        <img
-          src="/assets/images/zx-square.png"
-          alt=""
-          style={{ width: "94%", height: "94%", objectFit: "cover", margin: "3%" }}
-        />
-      )}
+      <img
+        src={showShot ? `/screenshots/${projectId}.png?v=${version}` : "/assets/images/zx-square.png"}
+        alt=""
+        onError={showShot ? () => setFailed(true) : undefined}
+        style={{ width: "94%", height: "94%", objectFit: "cover", margin: "3%" }}
+      />
     </div>
   );
 }
