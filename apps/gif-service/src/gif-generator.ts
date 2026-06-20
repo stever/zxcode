@@ -59,6 +59,64 @@ export class GIFGenerator {
         return true;
     }
 
+    // Count the set (non-zero) bitmap bytes on screen, i.e. how many pixel cells
+    // carry drawn content. The 0x6600 buffer is a 24-row top border, then 192
+    // rows of [16 left-border][32 (bitmap,attr) pairs][16 right-border], then a
+    // 24-row bottom border (see FrameDecoder). Only the bitmap byte of each pair
+    // is counted, so a blank/cleared screen reads ~0 regardless of paper colour,
+    // while text or graphics read higher.
+    private screenInk(a: Uint8Array): number {
+        let n = 0;
+        let p = 24 * 160; // skip top border
+        for (let row = 0; row < 192; row++) {
+            p += 16; // left border
+            for (let i = 0; i < 32; i++) {
+                if (a[p] !== 0) n++; // bitmap byte
+                p += 2; // step over this pair's attribute byte
+            }
+            p += 16; // right border
+        }
+        return n;
+    }
+
+    // Pick the frame the clip should open on: the program's first own frame,
+    // with the ROM loader skipped entirely. Tape-load traps fire only while LOAD
+    // pulls blocks in, so `lastLoadFrame` is where the loader hands control to
+    // the program. From there the program typically clears the loader screen
+    // (CLS), which is the one event that reliably wipes the ROM's "Program:" /
+    // "Bytes:" text. Open on the first frame that draws content after that clear,
+    // so no opening-animation frame is lost and no loader text is ever shown.
+    private findProgramStart(
+        frames: Uint8Array[],
+        lastLoadFrame: number,
+        lastChangeIndex: number,
+    ): number {
+        if (lastLoadFrame < 0) return 0; // no tape load seen; nothing to skip
+        const CLEAR_INK = 2; // at/below this the screen is effectively blank
+        const afterLoad = Math.min(lastLoadFrame + 1, lastChangeIndex);
+
+        // Find the program's first screen clear after the loader handoff.
+        let clearedAt = -1;
+        for (let i = afterLoad; i <= lastChangeIndex; i++) {
+            if (this.screenInk(frames[i]) <= CLEAR_INK) {
+                clearedAt = i;
+                break;
+            }
+        }
+        // No clear (e.g. a program that loads a screen and draws straight over
+        // it): best effort is the loader handoff frame.
+        if (clearedAt < 0) return afterLoad;
+
+        // Open on the first frame that draws anything after the clear. Catching
+        // the very first drawn pixel (not a content threshold) means a slow
+        // opening animation keeps all its frames. If the program never draws
+        // (blank or audio-only), stay on the cleared frame.
+        for (let i = clearedAt + 1; i <= lastChangeIndex; i++) {
+            if (this.screenInk(frames[i]) > CLEAR_INK) return i;
+        }
+        return clearedAt;
+    }
+
     // ZX Spectrum keyboard matrix cells.
     private static readonly KEY = {
         ENTER: [6, 0x01] as [number, number],
@@ -139,6 +197,7 @@ export class GIFGenerator {
         let previousFrame: Uint8Array | null = null;
         let staleCount = 0;
         let lastChangeIndex = -1;
+        let lastLoadFrame = -1; // last frame in which a tape-load trap fired
 
         for (let f = 0; f < maxFrames; f++) {
             if (Date.now() > renderDeadline) {
@@ -152,6 +211,7 @@ export class GIFGenerator {
             }
             const frameBuffer = new Uint8Array(this.emulator.runFrame());
             frames.push(frameBuffer);
+            if (this.emulator.getTapeTrapsLastFrame() > 0) lastLoadFrame = f;
 
             // Audio activity counts as a change: a tune over a static screen must
             // not be cut short, nor its tail trimmed. Kept aligned 1:1 with frames.
@@ -188,12 +248,11 @@ export class GIFGenerator {
             return { frames: frames.slice(0, keepStatic), audio: audio.slice(0, keepStatic) };
         }
 
-        // Keep every captured frame from the very first one. The social preview
-        // is frame 0, so it may show the blank boot/loader screen before the
-        // program draws, but no opening frames are ever skipped.
+        // Open on the program's first own frame, skipping the ROM loader.
+        const start = this.findProgramStart(frames, lastLoadFrame, lastChangeIndex);
         const keep = Math.min(frames.length, lastChangeIndex + 1 + tailFrames);
-        console.log(`Captured ${frames.length} frames, keeping ${keep}`);
-        return { frames: frames.slice(0, keep), audio: audio.slice(0, keep) };
+        console.log(`Captured ${frames.length} frames, keeping ${start}..${keep}`);
+        return { frames: frames.slice(start, keep), audio: audio.slice(start, keep) };
     }
 
     private isAudioSilent(left: Float32Array, right: Float32Array): boolean {
