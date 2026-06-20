@@ -12,7 +12,8 @@ export function Keyboard(props) {
     const isMobile = useSelector(state => state?.window.isMobile);
 
     useEffect(() => {
-        renderKeyboard(width);
+        const win = renderKeyboard(width);
+        return () => win.destroy();
     }, []);
 
     let style = {
@@ -171,4 +172,6 @@ function renderKeyboard(width) {
     }
 
     win._onload();
+
+    return win;
 }
