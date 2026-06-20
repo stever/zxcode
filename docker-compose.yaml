@@ -137,6 +137,9 @@ services:
   gotosocial:
     image: superseriousbusiness/gotosocial:latest
     restart: always
+    # Social stack: only started with `docker compose --profile social up`.
+    # Plain `docker compose up` brings up the core dev stack without it.
+    profiles: ["social"]
     environment:
       GTS_HOST: social.zxplay.org
       GTS_ACCOUNT_DOMAIN: zxplay.org
@@ -161,6 +164,8 @@ services:
       context: .
       dockerfile: apps/mastodon-bot/Dockerfile
     restart: always
+    # Social stack: only started with `docker compose --profile social up`.
+    profiles: ["social"]
     depends_on:
       - gif-service
       - gotosocial
