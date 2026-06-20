@@ -1,0 +1,12 @@
+*.DS_Store
+*.swp
+.env
+.idea/
+build/
+es5/
+node_modules/
+public/dist/
+# Emulator runtime assets are copied in from @zxplay/emulator at build time.
+public/roms/
+public/tapeloaders/
+typedocs/

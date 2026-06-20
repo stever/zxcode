@@ -1,0 +1,139 @@
+:root {
+    color-scheme: dark;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: #444;
+    overflow-y: scroll;
+    height: 100vh;
+    font-family: Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
+}
+
+ul, ol {
+    margin: 1em 2em;
+}
+
+code {
+    white-space: pre !important;
+}
+
+.p-menubar {
+    padding: 0 !important;
+}
+
+.p-card h1,
+.p-card h2,
+.p-card h3,
+.p-card h4,
+.p-card h5 {
+    margin: 30px 0 20px 0;
+}
+
+.p-card h1:first-child {
+    margin-top: 0;
+}
+
+.p-card p {
+    margin-bottom: 0.75em;
+}
+
+.p-card a,
+.p-card a:active,
+.p-card a:visited {
+    color: #fff;
+}
+
+.p-card blockquote {
+    font-style: italic;
+}
+
+.p-tabview-panels {
+    padding: 8px 0 0 0 !important;
+}
+
+.p-tabview .p-tabview-nav .p-tabview-ink-bar {
+    z-index: unset !important;
+}
+
+.dashboard-loading-screen {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: black;
+    transition: opacity 350ms;
+    visibility: hidden;
+    opacity: 0;
+    z-index: 9999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.desktop .p-tabview,
+.desktop .p-tabview > .p-tabview-nav-container,
+.desktop .p-tabview > .p-tabview-nav-container > .p-tabview-nav-content,
+.desktop .p-tabview > .p-tabview-nav-container > .p-tabview-nav-content > .p-tabview-nav,
+.desktop .p-tabview > .p-tabview-nav-container > .p-tabview-nav-content > .p-tabview-nav > .p-tabview-selected,
+.desktop .p-tabview > .p-tabview-nav-container > .p-tabview-nav-content > .p-tabview-nav > .p-tabview-selected > a,
+.desktop #jsspeccy-screen > div,
+.desktop #jsspeccy-screen > div > div,
+.desktop #jsspeccy-screen > div > div > canvas {
+    border-radius: 5px 5px 0 0;
+}
+
+#jsspeccy-screen > div {
+    background-color: transparent !important;
+}
+
+#jsspeccy-screen > div > div > canvas
+{
+    background-color: #4E4E4E;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+.CodeMirror {
+    font-family: monospace !important;
+    font-size: 16px !important;
+    height: calc(100vh - 177px) !important;
+    max-height: 736px !important;
+}
+
+.desktop .CodeMirror {
+    border: 1px solid #5B5B5B;
+    border-radius: 5px;
+}
+
+.mobile .CodeMirror {
+    border: 0 !important;
+}
+
+.CodeMirror-scrollbar-filler {
+    background-color: #424242 !important;
+}
+
+.p-button {
+    border-radius: 5px !important;
+}
+
+.p-submenu-list {
+    z-index: 100 !important;
+}
+
+.mobile .p-tabview-nav {
+    border: 0 !important;
+}
+
+.mobile .p-tabview-panels {
+    padding: 0 !important;
+}

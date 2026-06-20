@@ -17,8 +17,13 @@ export class UIController extends EventEmitter {
         dialogCloseButton.innerHTML = closeIcon;
         dialogCloseButton.style.float = 'right';
         dialogCloseButton.style.border = 'none';
-        dialogCloseButton.firstChild.style.height = '20px';
-        dialogCloseButton.firstChild.style.verticalAlign = 'middle';
+        // Select the <svg> rather than firstChild, which may be an XML
+        // declaration/whitespace node depending on how the .svg was loaded.
+        const closeSvg = dialogCloseButton.querySelector('svg');
+        if (closeSvg) {
+            closeSvg.style.height = '20px';
+            closeSvg.style.verticalAlign = 'middle';
+        }
         this.dialog.appendChild(dialogCloseButton);
         dialogCloseButton.addEventListener('click', () => {
             this.hideDialog();
@@ -52,8 +57,11 @@ export class UIController extends EventEmitter {
         this.startButton.style.backgroundColor = 'rgba(160, 160, 160, 0.7)';
         this.startButton.style.border = 'none';
         this.startButton.style.borderRadius = '4px';
-        this.startButton.firstChild.style.height = '56px';
-        this.startButton.firstChild.style.verticalAlign = 'middle';
+        const startSvg = this.startButton.querySelector('svg');
+        if (startSvg) {
+            startSvg.style.height = '56px';
+            startSvg.style.verticalAlign = 'middle';
+        }
 
         this.startButton.addEventListener('mouseenter', () => {
             this.startButton.style.backgroundColor = 'rgba(128, 128, 128, 0.7)';
