@@ -16,10 +16,11 @@ RUN npm install --omit=dev --no-audit --no-fund && npm install tsx typescript
 # Service source.
 COPY apps/gif-service/ ./
 
-# Emulator assets, kept at the same relative location the code expects
+# Emulator assets, sourced from the shared @zxplay/emulator package (the single
+# source of truth) but placed at the relative location the code expects
 # (apps/gif-service/src -> ../../.. -> /app -> apps/web/public/...).
-COPY apps/web/public/dist/jsspeccy-core.wasm /app/apps/web/public/dist/jsspeccy-core.wasm
-COPY apps/web/public/roms/ /app/apps/web/public/roms/
+COPY packages/emulator/dist/jsspeccy-core.wasm /app/apps/web/public/dist/jsspeccy-core.wasm
+COPY packages/emulator/roms/ /app/apps/web/public/roms/
 
 # Emscripten/asm.js CLI toolchains for rendering zmac and sdcc projects, plus
 # the sdcc bundled filesystem (fssdcc.data: crt0, z80 stdlib, headers) and the

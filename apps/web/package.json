@@ -2,25 +2,26 @@
   "name": "web",
   "private": true,
   "scripts": {
-    "dev": "run-s build:clean:all build:8bitworker:es:debug build:wasm:debug serve",
+    "dev": "run-s build:clean:all build:8bitworker:es:debug build:emulator:debug serve",
     "test": "run-s test:jsspeccy jest",
     "test:jsspeccy": "node --experimental-wasm-modules test/jsspeccy/test.mjs test/jsspeccy/tests.in test/jsspeccy/tests.expected",
     "test:jest": "jest",
     "build": "npm run build:all:release",
-    "build:all:debug": "run-s build:clean:all build:copyfiles build:8bitworker:es:debug build:babel build:wasm:debug build:js:debug build:clean",
-    "build:all:release": "run-s build:clean:all build:copyfiles build:8bitworker:es:release build:babel build:wasm:release build:js:release build:copyindex build:clean",
+    "build:all:debug": "run-s build:clean:all build:copyfiles build:8bitworker:es:debug build:babel build:emulator:debug build:js:debug build:clean",
+    "build:all:release": "run-s build:clean:all build:copyfiles build:8bitworker:es:release build:babel build:emulator:release build:js:release build:copyindex build:clean",
     "build:copyindex": "copyfiles -f public/dist/index.html public",
     "build:clean": "del-cli build es5",
     "build:clean:all": "del-cli build es5 public/dist",
     "build:copyfiles": "copyfiles \"src/**/*\" -u 1 es5",
     "build:babel": "babel src --out-dir es5",
-    "build:core": "run-s build:mkdir build:gencore",
-    "build:mkdir": "mkdir build",
-    "build:gencore": "node src/lib/jsspeccy/generator/gencore.mjs src/lib/jsspeccy/generator/core.ts.in build/core.ts",
-    "build:wasm:debug": "run-s build:core build:as:debug",
-    "build:wasm:release": "run-s build:core build:as:release",
-    "build:as:debug": "asc build/core.ts --target debug",
-    "build:as:release": "asc build/core.ts --target release",
+    "build:emulator:debug": "run-s emulator:build:debug copy:emulator",
+    "build:emulator:release": "run-s emulator:build:release copy:emulator",
+    "emulator:build:debug": "npm run build:debug -w @zxplay/emulator",
+    "emulator:build:release": "npm run build -w @zxplay/emulator",
+    "copy:emulator": "run-s copy:emulator:dist copy:emulator:roms copy:emulator:tapeloaders",
+    "copy:emulator:dist": "copyfiles -f \"../../packages/emulator/dist/*\" public/dist",
+    "copy:emulator:roms": "copyfiles -f \"../../packages/emulator/roms/*\" public/roms",
+    "copy:emulator:tapeloaders": "copyfiles -f \"../../packages/emulator/tapeloaders/*\" public/tapeloaders",
     "build:js:debug": "webpack",
     "build:js:release": "webpack --env production",
     "build:8bitworker:es:debug": "esbuild src/lib/8bitworker/worker.ts --bundle --sourcemap --target=es2017 --outfile=./public/dist/8bitworker.js",
@@ -33,6 +34,7 @@
   },
   "dependencies": {
     "@lagunovsky/redux-react-router": "^4.5.0",
+    "@zxplay/emulator": "*",
     "axios": "^1.12.2",
     "bas2tap": "^0.0.1-alpha.4",
     "clsx": "^2.1.1",
@@ -93,30 +95,15 @@
     "webpack-dev-server": "^5.2.2"
   },
   "watch": {
-    "build:core": {
+    "build:emulator:debug": {
       "patterns": [
-        "src/lib/jsspeccy/generator/*.js",
-        "src/lib/jsspeccy/generator/*.ts.in"
+        "../../packages/emulator/src"
       ],
       "extensions": [
         "js",
-        "in"
-      ]
-    },
-    "build:wasm:debug": {
-      "patterns": [
-        "build/core.ts"
-      ],
-      "extensions": "ts"
-    },
-    "build:js": {
-      "patterns": [
-        "src/lib/jsspeccy/*.js",
-        "src/lib/jsspeccy/icons/*.svg",
-        "build/*.js"
-      ],
-      "extensions": [
-        "js",
+        "mjs",
+        "in",
+        "txt",
         "svg"
       ]
     }

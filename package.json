@@ -3,7 +3,8 @@
   "private": true,
   "packageManager": "npm@11.2.0",
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=web --filter=proxy --filter=auth",
+    "dev:all": "turbo run dev",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "build": "turbo run build"

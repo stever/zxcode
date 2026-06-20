@@ -1,5 +1,6 @@
 import { argv, exit } from 'process';
 import * as fs from 'fs';
+import * as path from 'path';
 import * as readline from 'readline';
 
 import instructionTable from './instructions.mjs';
@@ -31,18 +32,21 @@ const loadOpcodeTable = (filename, table, altTable) => {
     }
 }
 
+// Opcode tables live alongside this script; resolve relative to it so the
+// generator is independent of the current working directory.
+const opcodePath = (name) => new URL(`./${name}`, import.meta.url);
 const baseOpcodes = {};
-loadOpcodeTable('src/lib/jsspeccy/generator/opcodes_base.txt', baseOpcodes);
+loadOpcodeTable(opcodePath('opcodes_base.txt'), baseOpcodes);
 const cbOpcodes = {};
-loadOpcodeTable('src/lib/jsspeccy/generator/opcodes_cb.txt', cbOpcodes);
+loadOpcodeTable(opcodePath('opcodes_cb.txt'), cbOpcodes);
 const ddOpcodes = {};
 const fdOpcodes = {};
-loadOpcodeTable('src/lib/jsspeccy/generator/opcodes_dd.txt', ddOpcodes, fdOpcodes);
+loadOpcodeTable(opcodePath('opcodes_dd.txt'), ddOpcodes, fdOpcodes);
 const ddcbOpcodes = {};
 const fdcbOpcodes = {};
-loadOpcodeTable('src/lib/jsspeccy/generator/opcodes_ddcb.txt', ddcbOpcodes, fdcbOpcodes);
+loadOpcodeTable(opcodePath('opcodes_ddcb.txt'), ddcbOpcodes, fdcbOpcodes);
 const edOpcodes = {};
-loadOpcodeTable('src/lib/jsspeccy/generator/opcodes_ed.txt', edOpcodes);
+loadOpcodeTable(opcodePath('opcodes_ed.txt'), edOpcodes);
 
 class Variable {
     getter() {
@@ -289,6 +293,7 @@ const generateOpcodeTable = (prefix, outFile) => {
 }
 
 const inFile = fs.createReadStream(inputFilename);
+fs.mkdirSync(path.dirname(outputFilename), { recursive: true });
 const outFile = fs.createWriteStream(outputFilename);
 
 const processLine = (line) => {

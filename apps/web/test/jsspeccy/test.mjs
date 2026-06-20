@@ -2,7 +2,7 @@ import { argv, exit } from 'process';
 import * as fs from 'fs';
 import * as readline from 'readline';
 
-import * as core from '../../public/dist/jsspeccy-core.wasm';
+import * as core from '../../../../packages/emulator/dist/jsspeccy-core.wasm';
 
 if (argv.length != 4) {
     console.log("Usage: node test.js path/to/tests.in path/to/tests.expected");

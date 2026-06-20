@@ -8,7 +8,9 @@
 /es5/
 /node_modules/
 /public/dist/*
-# The compiled emulator core is committed so gif-service can be built in CI.
-!/public/dist/jsspeccy-core.wasm
+# Emulator runtime assets are copied in from @zxplay/emulator at build time
+# (see copy:emulator); the package is their source of truth, not this app.
+/public/roms/
+/public/tapeloaders/
 /schema.graphql
 /typedocs/

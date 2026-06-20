@@ -1,7 +1,7 @@
 import {take, takeLatest, put, call} from "redux-saga/effects";
 import {eventChannel} from "redux-saga";
 import queryString from "query-string";
-import {JSSpeccy} from "../../lib/jsspeccy/JSSpeccy";
+import {JSSpeccy} from "@zxplay/emulator";
 import {
     actionTypes,
     handleClick,

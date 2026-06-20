@@ -1,0 +1,37 @@
+{
+  "name": "@zxplay/emulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared ZX Spectrum emulator engine (JSSpeccy3-derived core) for ZX Play apps",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./dist/jsspeccy-worker.js": "./dist/jsspeccy-worker.js",
+    "./dist/jsspeccy-core.wasm": "./dist/jsspeccy-core.wasm"
+  },
+  "scripts": {
+    "build": "run-s build:wasm:release build:worker:release",
+    "build:debug": "run-s build:wasm:debug build:worker:debug",
+    "build:core": "node src/generator/gencore.mjs src/generator/core.ts.in build/core.ts",
+    "build:dist": "mkdir -p dist",
+    "build:wasm:debug": "run-s build:core build:dist build:as:debug",
+    "build:wasm:release": "run-s build:core build:dist build:as:release",
+    "build:as:debug": "asc build/core.ts --target debug",
+    "build:as:release": "asc build/core.ts --target release",
+    "build:worker:debug": "esbuild src/worker.js --bundle --sourcemap --target=es2017 --outfile=dist/jsspeccy-worker.js",
+    "build:worker:release": "esbuild src/worker.js --bundle --minify --sourcemap --target=es2017 --outfile=dist/jsspeccy-worker.js",
+    "clean": "del-cli build dist/jsspeccy-worker.js \"dist/*.map\""
+  },
+  "dependencies": {
+    "events": "^3.3.0",
+    "file-dialog": "^0.0.8",
+    "jszip": "^3.10.1",
+    "pako": "^2.1.0"
+  },
+  "devDependencies": {
+    "assemblyscript": "0.19.6",
+    "del-cli": "^7.0.0",
+    "esbuild": "^0.25.10",
+    "npm-run-all": "^4.1.5"
+  }
+}

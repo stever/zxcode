@@ -66,36 +66,39 @@ module.exports = (env, _) => {
         }
     ];
 
+    const babelLoader = {
+        loader: "babel-loader",
+        options: {
+            presets: [
+                "@babel/preset-env",
+                "@babel/preset-react"
+            ],
+            plugins: [
+                "@babel/plugin-transform-runtime"
+            ]
+        }
+    };
+
     if (!isProduction) {
+        // Dev: transpile app source on the fly. The shared emulator package
+        // resolves (via symlink) to packages/emulator, outside node_modules,
+        // so it is transpiled by this rule too.
         loaders.push({
             test: /\.jsx?$/,
             exclude: /node_modules/,
-            use: {
-                loader: "babel-loader",
-                options: {
-                    presets: [
-                        "@babel/preset-env",
-                        "@babel/preset-react"
-                    ],
-                    plugins: [
-                        "@babel/plugin-transform-runtime"
-                    ]
-                }
-            }
+            use: babelLoader
+        });
+    } else {
+        // Release: app source is pre-transpiled into es5/, but the shared
+        // emulator package is consumed from source, so transpile it here.
+        loaders.push({
+            test: /\.jsx?$/,
+            include: /packages[/\\]emulator/,
+            use: babelLoader
         });
     }
 
     return [
-        {
-            name: "worker",
-            mode: isProduction ? "production" : "development",
-            devtool: isProduction ? false : "source-map",
-            output: {
-                path: path.join(__dirname, "public", "dist"),
-                filename: "jsspeccy-worker.js"
-            },
-            entry: path.join(__dirname, "src", "lib", "jsspeccy", "worker.js")
-        },
         {
             mode: isProduction ? "production" : "development",
             devtool: isProduction ? false : "source-map",

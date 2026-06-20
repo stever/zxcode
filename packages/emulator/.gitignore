@@ -1,0 +1,6 @@
+build/
+dist/*
+# The compiled core is committed as the canonical engine artifact so consumers
+# (apps/web, apps/play, gif-service) can use it without running the AssemblyScript
+# build. Regenerated in place by `npm run build:wasm:*`.
+!dist/jsspeccy-core.wasm

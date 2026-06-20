@@ -26,6 +26,14 @@ const loadCore = (baseUrl) => {
         postMessage({
             'message': 'ready',
         });
+
+        const queued = deferredMessages;
+        deferredMessages = [];
+        queued.forEach(handleMessage);
+    }).catch(err => {
+        // Surface a load failure instead of leaving `core` null silently (which
+        // otherwise only shows up later as "core is null" on the first command).
+        console.error('Failed to load emulator WASM core:', err);
     });
 }
 
@@ -113,7 +121,7 @@ const trapTapeLoad = () => {
     core.setPC(0x05e2);  /* address at which to exit the tape trap */
 }
 
-onmessage = (e) => {
+const handleMessage = (e) => {
     switch (e.data.message) {
         case 'loadCore':
             loadCore(e.data.baseUrl);
@@ -253,4 +261,22 @@ onmessage = (e) => {
         default:
             console.log('message received by worker:', e.data);
     }
+};
+
+// The WASM core loads asynchronously, but the host may post core-dependent
+// messages (reset/start/loadTap/...) before it is ready. Buffer those until
+// loadCore resolves, then replay them in arrival order, so an early message
+// never dereferences a null core.
+let deferredMessages = [];
+
+onmessage = (e) => {
+    if (e.data.message === 'loadCore') {
+        loadCore(e.data.baseUrl);
+        return;
+    }
+    if (!core) {
+        deferredMessages.push(e);
+        return;
+    }
+    handleMessage(e);
 };

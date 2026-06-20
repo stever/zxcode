@@ -68,6 +68,12 @@ export class SingleWindow extends Group {
     _onresize() {
         if (this.dolog) console.log("SingleWindow._onresize");
 
+        // Window resize/load listeners registered in _onload outlive the canvas
+        // when the host component unmounts (no listener cleanup), so a later
+        // resize can reach here with a detached/missing canvas. Guard rather
+        // than dereference null.
+        if (!this.canvas) return;
+
         this.wi.w = this.dst.w;
         this.wi.h = this.dst.h;
 
@@ -93,6 +99,9 @@ export class SingleWindow extends Group {
         // this._setTransform(0, 0, 1, 1);
         // this.ctx.fillStyle = this.outerColor;
         // this.ctx.fillRect(0, 0, this.wi.w, this.wi.h);
+
+        // Deferred redraws (e.g. image loads) can fire after the canvas is gone.
+        if (!this.ctx) return;
 
         this._setTransform(this.xf.x, this.xf.y, this.xf.w, this.xf.h);
         this.ctx.fillStyle = this.bgColor;
