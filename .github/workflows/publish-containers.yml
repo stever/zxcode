@@ -33,6 +33,12 @@ jobs:
           - context: ./
             dockerfile: ./apps/mastodon-bot/Dockerfile
             image: ghcr.io/stever/zxcode-mastodon-bot
+          # zxplay.org. Keeps the original ghcr.io/stever/zxplay image name so the
+          # existing deploy is unchanged; requires granting this repo Actions
+          # write access to the stever/zxplay package in GHCR.
+          - context: ./
+            dockerfile: ./apps/play/Dockerfile
+            image: ghcr.io/stever/zxplay
     permissions:
       contents: read
       packages: write
