@@ -59,26 +59,6 @@ export class GIFGenerator {
         return true;
     }
 
-    // Count the set (non-zero) bitmap bytes on screen, i.e. how many pixel cells
-    // carry drawn content. The 0x6600 buffer is a 24-row top border, then 192
-    // rows of [16 left-border][32 (bitmap,attr) pairs][16 right-border], then a
-    // 24-row bottom border (see FrameDecoder). Only the bitmap byte of each pair
-    // is counted, so a blank/cleared screen reads ~0 regardless of paper colour,
-    // while text or graphics read higher.
-    private inkBytes(a: Uint8Array): number {
-        let n = 0;
-        let p = 24 * 160; // skip top border
-        for (let row = 0; row < 192; row++) {
-            p += 16; // left border
-            for (let i = 0; i < 32; i++) {
-                if (a[p] !== 0) n++; // bitmap byte
-                p += 2; // step over this pair's attribute byte
-            }
-            p += 16; // right border
-        }
-        return n;
-    }
-
     // ZX Spectrum keyboard matrix cells.
     private static readonly KEY = {
         ENTER: [6, 0x01] as [number, number],
@@ -159,7 +139,6 @@ export class GIFGenerator {
         let previousFrame: Uint8Array | null = null;
         let staleCount = 0;
         let lastChangeIndex = -1;
-        let lastLoadFrame = -1; // last frame in which a tape-load trap fired
 
         for (let f = 0; f < maxFrames; f++) {
             if (Date.now() > renderDeadline) {
@@ -173,7 +152,6 @@ export class GIFGenerator {
             }
             const frameBuffer = new Uint8Array(this.emulator.runFrame());
             frames.push(frameBuffer);
-            if (this.emulator.getTapeTrapsLastFrame() > 0) lastLoadFrame = f;
 
             // Audio activity counts as a change: a tune over a static screen must
             // not be cut short, nor its tail trimmed. Kept aligned 1:1 with frames.
@@ -210,48 +188,12 @@ export class GIFGenerator {
             return { frames: frames.slice(0, keepStatic), audio: audio.slice(0, keepStatic) };
         }
 
-        // Open on the program's first real content, not the ROM editor/loader
-        // pre-roll or the bare cleared screen. Capturing begins at the load
-        // keypress (so no opening draw is ever missed), which leaves the blank
-        // boot screen and the loader's "Program:" header at the head. Tape-load
-        // traps fire only while LOAD pulls blocks in, so the program takes
-        // control on the frame after the last trap. From there a program
-        // typically clears the loader screen (CLS) and then draws: open on the
-        // first frame that carries real drawn pixels after that clear, so the
-        // first frame (and thus the social preview, which is frame 0) shows
-        // content rather than a blank screen.
-        const INK_CONTENT = 16; // set bitmap bytes that count as real drawn content
-        const INK_CLEARED = 8; // at/below this the screen is effectively blank
-        let start = lastLoadFrame >= 0 ? Math.min(lastLoadFrame + 1, lastChangeIndex) : 0;
-        if (lastLoadFrame >= 0) {
-            // Find where the program clears the loader's screen (ink falls to
-            // ~blank) after taking control.
-            let clearedAt = -1;
-            for (let i = lastLoadFrame + 1; i <= lastChangeIndex; i++) {
-                if (this.inkBytes(frames[i]) <= INK_CLEARED) {
-                    clearedAt = i;
-                    break;
-                }
-            }
-            // Then open on the first frame drawing real content. Searching after
-            // the clear skips the loader header; if the program never clears,
-            // search from the load handoff so the clip still opens on content.
-            const from = clearedAt >= 0 ? clearedAt + 1 : lastLoadFrame + 1;
-            for (let i = from; i <= lastChangeIndex; i++) {
-                if (this.inkBytes(frames[i]) >= INK_CONTENT) {
-                    start = i;
-                    break;
-                }
-            }
-            // No content found after the clear (e.g. an audio-only program with a
-            // blank screen): fall back to the cleared frame rather than the
-            // loader header.
-            if (clearedAt >= 0 && start < clearedAt) start = clearedAt;
-        }
-
+        // Keep every captured frame from the very first one. The social preview
+        // is frame 0, so it may show the blank boot/loader screen before the
+        // program draws, but no opening frames are ever skipped.
         const keep = Math.min(frames.length, lastChangeIndex + 1 + tailFrames);
-        console.log(`Captured ${frames.length} frames, keeping ${start}..${keep}`);
-        return { frames: frames.slice(start, keep), audio: audio.slice(start, keep) };
+        console.log(`Captured ${frames.length} frames, keeping ${keep}`);
+        return { frames: frames.slice(0, keep), audio: audio.slice(0, keep) };
     }
 
     private isAudioSilent(left: Float32Array, right: Float32Array): boolean {

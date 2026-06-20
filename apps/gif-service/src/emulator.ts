@@ -52,10 +52,6 @@ export class Emulator {
     private audioSamplesPerFrame: number = 0;
     private lastAudioLeft: Float32Array | null = null;
     private lastAudioRight: Float32Array | null = null;
-    // Number of tape-load traps that fired during the most recent runFrame.
-    // Non-zero only while a LOAD is pulling blocks in, so it marks the loader
-    // phase distinctly from the program running afterwards.
-    private tapeTrapsLastFrame: number = 0;
 
     // ZX Spectrum keyboard matrix (character -> [row, bitmask]).
     // Rows/masks match the core's keyDown(row, mask) convention used by the web
@@ -145,12 +141,6 @@ export class Emulator {
 
     isTapePlaying(): boolean {
         return this.tapeIsPlaying;
-    }
-
-    // How many tape-load traps fired during the most recent runFrame. Used to
-    // tell the loader phase apart from the program running afterwards.
-    getTapeTrapsLastFrame(): number {
-        return this.tapeTrapsLastFrame;
     }
 
     // Ask the core to render `samplesPerFrame` stereo audio samples each frame
@@ -269,7 +259,6 @@ export class Emulator {
             }
             status = this.core.resumeFrame();
         }
-        this.tapeTrapsLastFrame = trapCount;
 
         if (this.audioSamplesPerFrame > 0) {
             // Copy out of WASM memory: the views alias the heap, which the next
