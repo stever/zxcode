@@ -244,6 +244,14 @@ export const JSSpeccy = (container, opts) => {
         openFileDialog: () => openFileDialog(),
         openUrl: (url) => emu.openUrl(url).catch((err) => {alert(err)}),
         openTAPFile: (data) => emu.openTAPFile(data),
+        loadSnapshotFromStruct: (snapshot) => emu.loadSnapshot(snapshot),
+        onReady: (callback) => {
+            if (emu.isReady) {
+                callback();
+            } else {
+                emu.onReadyHandlers.push(callback);
+            }
+        },
         exit: () => exit(),
         hideUI: () => ui.hideUI(),
         showUI: () => ui.showUI(),

@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import { DisplayHandler } from './DisplayHandler.js';
 import { parseSNAFile, parseZ80File, parseSZXFile } from './snapshot.js';
 import { TAPFile, TZXFile } from './tape';
-import { KeyboardHandler } from './KeyboardHandler.js';
+import { StandardKeyboardHandler, RecreatedZXSpectrumHandler } from './KeyboardHandler.js';
 import { AudioHandler } from './AudioHandler.js';
 
 const scriptUrl = document.currentScript.src;
@@ -14,7 +14,12 @@ export class Emulator extends EventEmitter {
         super();
         this.canvas = canvas;
         this.worker = new Worker(new URL(`/dist/jsspeccy-worker.js?ver=${window.zxplay_ver}`, scriptUrl));
-        this.keyboardHandler = new KeyboardHandler(this.worker);
+        this.keyboardEnabled = ('keyboardEnabled' in opts) ? opts.keyboardEnabled : true;
+        if (this.keyboardEnabled) {
+            this.keyboardHandler = (opts.keyboardMap == 'recreated')
+                ? new RecreatedZXSpectrumHandler(this.worker, opts.keyboardEventRoot || document)
+                : new StandardKeyboardHandler(this.worker, opts.keyboardEventRoot || document);
+        }
         this.displayHandler = new DisplayHandler(this.canvas);
         this.audioHandler = new AudioHandler();
         this.isRunning = false;
@@ -33,6 +38,9 @@ export class Emulator extends EventEmitter {
         this.nextFileOpenID = 0;
         this.fileOpenPromiseResolutions = {};
 
+        this.isReady = false;
+        this.onReadyHandlers = [];
+
         this.worker.onmessage = (e) => {
             switch(e.data.message) {
                 case 'ready':
@@ -47,6 +55,11 @@ export class Emulator extends EventEmitter {
                             });
                         } else if (opts.autoStart) {
                             this.start();
+                        }
+
+                        this.isReady = true;
+                        for (let i = 0; i < this.onReadyHandlers.length; i++) {
+                            this.onReadyHandlers[i]();
                         }
                     });
                     break;
@@ -113,7 +126,7 @@ export class Emulator extends EventEmitter {
             this.isRunning = true;
             this.isInitiallyPaused = false;
             this.nextFrameTime = performance.now();
-            this.keyboardHandler.start();
+            if (this.keyboardEnabled) this.keyboardHandler.start();
             this.audioHandler.start();
             this.emit('start');
             window.requestAnimationFrame((t) => {
@@ -125,7 +138,7 @@ export class Emulator extends EventEmitter {
     pause() {
         if (this.isRunning) {
             this.isRunning = false;
-            this.keyboardHandler.stop();
+            if (this.keyboardEnabled) this.keyboardHandler.stop();
             this.audioHandler.stop();
             this.emit('pause');
         }
