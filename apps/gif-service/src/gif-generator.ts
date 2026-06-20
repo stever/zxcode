@@ -59,6 +59,26 @@ export class GIFGenerator {
         return true;
     }
 
+    // Count the set (non-zero) bitmap bytes on screen, i.e. how many pixel cells
+    // carry drawn content. The 0x6600 buffer is a 24-row top border, then 192
+    // rows of [16 left-border][32 (bitmap,attr) pairs][16 right-border], then a
+    // 24-row bottom border (see FrameDecoder). Only the bitmap byte of each pair
+    // is counted, so a blank/cleared screen reads ~0 regardless of paper colour,
+    // while text or graphics read higher.
+    private inkBytes(a: Uint8Array): number {
+        let n = 0;
+        let p = 24 * 160; // skip top border
+        for (let row = 0; row < 192; row++) {
+            p += 16; // left border
+            for (let i = 0; i < 32; i++) {
+                if (a[p] !== 0) n++; // bitmap byte
+                p += 2; // step over this pair's attribute byte
+            }
+            p += 16; // right border
+        }
+        return n;
+    }
+
     // ZX Spectrum keyboard matrix cells.
     private static readonly KEY = {
         ENTER: [6, 0x01] as [number, number],
@@ -93,6 +113,14 @@ export class GIFGenerator {
 
         console.log(`Booting ${machineType}K machine with tape traps enabled`);
 
+        // Boot, reach the LOAD prompt, then press the key that kicks off the
+        // instant trap-load. The trigger key is deliberately left held here: the
+        // capture loop below runs (and records) the frames during which the ROM
+        // registers the press and the program starts drawing, and releases it a
+        // few frames in. Releasing it here (as a pressKeys "gap") would swallow
+        // the program's opening frames, since a trap-loaded program can begin
+        // drawing within a frame or two of the keypress.
+        let triggerKey: [number, number];
         if (machineType === 48) {
             // 48K boots straight to the (C) screen with a K cursor and no loader
             // window. Enter LOAD "" using single-key tokens: J = LOAD,
@@ -101,20 +129,22 @@ export class GIFGenerator {
             this.pressKeys([GIFGenerator.KEY.J]);
             this.pressKeys([GIFGenerator.KEY.SYMBOL_SHIFT, GIFGenerator.KEY.P]);
             this.pressKeys([GIFGenerator.KEY.SYMBOL_SHIFT, GIFGenerator.KEY.P]);
-            this.pressKeys([GIFGenerator.KEY.ENTER]);
+            triggerKey = GIFGenerator.KEY.ENTER;
         } else {
             // 128K boots to a menu with "Tape Loader" pre-selected; ENTER runs it.
             // Note: leaves the loader's bottom-window UI on screen.
             for (let i = 0; i < 150; i++) this.emulator.runFrame(); // ~3s to menu
-            this.pressKeys([GIFGenerator.KEY.ENTER]);
+            triggerKey = GIFGenerator.KEY.ENTER;
         }
+        this.emulator.rawKeyDown(triggerKey[0], triggerKey[1]);
+        const triggerReleaseFrame = 4; // hold the trigger ~4 frames so the ROM registers it
 
-        // Start capturing immediately so a program's one-shot startup audio
-        // (e.g. a beep on launch) isn't lost in a pre-roll. The trap loader has
-        // already injected the blocks during the LOAD keypresses above; the
+        // Capture from the first frame after the trigger keypress so a program's
+        // opening draws (and one-shot startup audio, e.g. a launch beep) aren't
+        // lost in a pre-roll. With tape traps the blocks load instantly, so the
         // first captured frames cover the loader handing off to the program.
-        // Capture the running program. Stop once the screen has been static for
-        // `staleFrameThreshold` consecutive frames, then trim trailing static.
+        // Stop once the screen has been static for `staleFrameThreshold`
+        // consecutive frames, then trim trailing static.
         const maxFrames = Math.floor(this.options.maxDurationMs / 20);
         const staleStop = this.options.staleFrameThreshold;
         const tailFrames = 25; // ~0.5s of static tail kept for readability
@@ -129,14 +159,21 @@ export class GIFGenerator {
         let previousFrame: Uint8Array | null = null;
         let staleCount = 0;
         let lastChangeIndex = -1;
+        let lastLoadFrame = -1; // last frame in which a tape-load trap fired
 
         for (let f = 0; f < maxFrames; f++) {
             if (Date.now() > renderDeadline) {
                 console.warn(`Render wall-clock budget exceeded after ${f} frames; stopping`);
                 break;
             }
+            // Release the load-trigger key once the ROM has had a few frames to
+            // register the press; the frames it was held for are captured above.
+            if (f === triggerReleaseFrame) {
+                this.emulator.rawKeyUp(triggerKey[0], triggerKey[1]);
+            }
             const frameBuffer = new Uint8Array(this.emulator.runFrame());
             frames.push(frameBuffer);
+            if (this.emulator.getTapeTrapsLastFrame() > 0) lastLoadFrame = f;
 
             // Audio activity counts as a change: a tune over a static screen must
             // not be cut short, nor its tail trimmed. Kept aligned 1:1 with frames.
@@ -167,11 +204,54 @@ export class GIFGenerator {
 
         if (lastChangeIndex < 0) {
             // Nothing ever changed; keep a short clip so the output is not empty.
-            lastChangeIndex = Math.min(frames.length, tailFrames) - 1;
+            // There is no drawing to open on, so start at the first frame.
+            const keepStatic = Math.min(frames.length, tailFrames);
+            console.log(`Captured ${frames.length} frames, no changes; keeping ${keepStatic}`);
+            return { frames: frames.slice(0, keepStatic), audio: audio.slice(0, keepStatic) };
         }
+
+        // Open on the program's first real content, not the ROM editor/loader
+        // pre-roll or the bare cleared screen. Capturing begins at the load
+        // keypress (so no opening draw is ever missed), which leaves the blank
+        // boot screen and the loader's "Program:" header at the head. Tape-load
+        // traps fire only while LOAD pulls blocks in, so the program takes
+        // control on the frame after the last trap. From there a program
+        // typically clears the loader screen (CLS) and then draws: open on the
+        // first frame that carries real drawn pixels after that clear, so the
+        // first frame (and thus the social preview, which is frame 0) shows
+        // content rather than a blank screen.
+        const INK_CONTENT = 16; // set bitmap bytes that count as real drawn content
+        const INK_CLEARED = 8; // at/below this the screen is effectively blank
+        let start = lastLoadFrame >= 0 ? Math.min(lastLoadFrame + 1, lastChangeIndex) : 0;
+        if (lastLoadFrame >= 0) {
+            // Find where the program clears the loader's screen (ink falls to
+            // ~blank) after taking control.
+            let clearedAt = -1;
+            for (let i = lastLoadFrame + 1; i <= lastChangeIndex; i++) {
+                if (this.inkBytes(frames[i]) <= INK_CLEARED) {
+                    clearedAt = i;
+                    break;
+                }
+            }
+            // Then open on the first frame drawing real content. Searching after
+            // the clear skips the loader header; if the program never clears,
+            // search from the load handoff so the clip still opens on content.
+            const from = clearedAt >= 0 ? clearedAt + 1 : lastLoadFrame + 1;
+            for (let i = from; i <= lastChangeIndex; i++) {
+                if (this.inkBytes(frames[i]) >= INK_CONTENT) {
+                    start = i;
+                    break;
+                }
+            }
+            // No content found after the clear (e.g. an audio-only program with a
+            // blank screen): fall back to the cleared frame rather than the
+            // loader header.
+            if (clearedAt >= 0 && start < clearedAt) start = clearedAt;
+        }
+
         const keep = Math.min(frames.length, lastChangeIndex + 1 + tailFrames);
-        console.log(`Captured ${frames.length} frames, keeping ${keep}`);
-        return { frames: frames.slice(0, keep), audio: audio.slice(0, keep) };
+        console.log(`Captured ${frames.length} frames, keeping ${start}..${keep}`);
+        return { frames: frames.slice(start, keep), audio: audio.slice(start, keep) };
     }
 
     private isAudioSilent(left: Float32Array, right: Float32Array): boolean {
