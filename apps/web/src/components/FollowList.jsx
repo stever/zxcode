@@ -82,13 +82,19 @@ const CHECK_FOLLOWING_STATUS = gql`
 `;
 
 function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
-  const navigate = useNavigate();
   const isOwnProfile = currentUserId === user.user_id;
+  // Fall back to the user id if a slug is missing; /u/<uuid> canonicalises to the slug.
+  const profileUrl = `/u/${user.slug || user.user_id}`;
 
   return (
     <Card className="mb-3 card-bg-dark">
       <div className="flex align-items-center justify-content-between">
-        <div className="flex align-items-center">
+        {/* The whole identity block (avatar + name + handle) links to the profile. */}
+        <Link
+          to={profileUrl}
+          className="flex align-items-center no-underline cursor-pointer"
+          style={{ color: "inherit" }}
+        >
           <Avatar
             image={generateRetroAvatar(user.slug || user.user_id, 64)}
             size="large"
@@ -101,15 +107,13 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
             }}
           />
           <div>
-            <Link to={`/u/${user.slug}`} className="no-underline">
-              <h4 className="m-0 mb-1">{user.greeting_name}</h4>
-            </Link>
+            <h4 className="m-0 mb-1">{user.greeting_name}</h4>
             <p className="text-500 m-0 text-sm">@{user.slug}</p>
             {user.bio && (
               <p className="text-400 m-0 mt-2 text-sm">{user.bio}</p>
             )}
           </div>
-        </div>
+        </Link>
         <div className="flex flex-column align-items-end">
           {!isOwnProfile && currentUserId && (
             <Button
