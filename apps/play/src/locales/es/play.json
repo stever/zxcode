@@ -6,5 +6,32 @@
     "aboutThisSite": "Acerca de este sitio",
     "linking": "Enlazar con ZX Play",
     "reset": "Reiniciar"
+  },
+  "about": {
+    "intro1": "Un emulador de ZX Spectrum adaptado a móviles para el navegador. Código fuente disponible <srcLink>aquí</srcLink>.",
+    "intro2": "Hay un sitio web alternativo, relacionado con este, en <coderLink>zxcoder.org</coderLink>. ZX Coder permite ejecutar programas introducidos mediante páginas web.",
+    "acknowledgementsIntro": "Este software utiliza código de los siguientes proyectos de código abierto:",
+    "sinclairRomHeading": "Permiso de copyright de la ROM de Sinclair",
+    "sinclairRomText": "Amstrad ha dado amablemente su permiso para la redistribución de su material protegido por copyright, pero conserva dicho copyright."
+  },
+  "linking": {
+    "intro": "Puedes enlazar directamente a ZX Play usando parámetros de URL para cargar un programa o una imagen de cinta de juego desde otra URL.",
+    "example": "Ejemplo:",
+    "decompose": "La URL se puede descomponer en estas partes:",
+    "mainPart": "Parte principal: ",
+    "softKeys": "Teclas: ",
+    "machineType": "Tipo de máquina (48, 128, 5 para Pentagon): ",
+    "programUrl": "URL del programa/juego a cargar: ",
+    "filtering": "Filtrado opcional (el valor predeterminado 0 no filtra, los píxeles de toda la vida): ",
+    "buildOwn": "Puedes crear tu propia URL indicando las teclas, el tipo de máquina (48 por defecto) y una URL de un archivo Z80, SNA, SZX, TZX o TAP que contenga el juego o programa deseado. Ten en cuenta que la URL del programa/juego a cargar <b>debe</b> estar alojada en un sitio web con CORS habilitado.",
+    "softKeySyntaxHeading": "Sintaxis de las teclas",
+    "syntaxSimple": "La sintaxis es sencilla: las teclas se organizan en filas, y las filas se separan con comas.",
+    "threeRows": "Así, la cadena anterior tiene 3 filas:",
+    "keyDefinition": "Una tecla se define por su carácter en MAYÚSCULA, y un guion (-) representa un espacio en blanco.",
+    "exceptionsAre": "Las excepciones son:",
+    "enterKey": "Tecla Intro: e (e minúscula)",
+    "capsShift": "Caps Shift: c (c minúscula)",
+    "symbolShift": "Symbol Shift: s (s minúscula)",
+    "space": "Espacio: _ (guion bajo)"
   }
 }

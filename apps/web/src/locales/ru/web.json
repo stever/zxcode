@@ -69,5 +69,27 @@
     "intro1": "Эмулятор ZX Spectrum и среда программирования в браузере. Исходный код доступен <srcLink>здесь</srcLink>.",
     "intro2": "Существует связанный с этим альтернативный сайт — <zxplayLink>zxplay.org</zxplayLink>. ZX Play — это эмулятор ZX Spectrum для мобильных устройств, для игр.",
     "legal": "Пожалуйста, ознакомьтесь с <privacyLink>политикой конфиденциальности</privacyLink> и <termsLink>условиями использования</termsLink> этого сайта."
+  },
+  "settings": {
+    "displayName": "Отображаемое имя",
+    "displayNamePlaceholder": "Как к вам обращаться",
+    "displayNameHelp": "Так к вам будут обращаться в приложении",
+    "fullName": "Полное имя",
+    "fullNamePlaceholder": "Ваше полное имя (необязательно)",
+    "email": "Адрес эл. почты",
+    "emailPlaceholder": "ваш@email.com (необязательно)",
+    "bio": "О себе",
+    "bioPlaceholder": "Расскажите о себе...",
+    "profileUrl": "URL профиля",
+    "profileUrlPlaceholder": "ваш-уникальный-url",
+    "publicProfile": "Открытый профиль",
+    "viewPublicProfile": "Открыть публичный профиль",
+    "saveChanges": "Сохранить изменения",
+    "charsCount": "{{count}}/500 символов",
+    "profileUrlPreview": "Ваш профиль будет доступен по адресу: {{url}}",
+    "publicState": "Открытый",
+    "privateState": "Закрытый",
+    "publicHelp": "Ваш профиль и открытые проекты видны всем",
+    "privateHelp": "Ваш профиль скрыт от посторонних"
   }
 }

@@ -1,25 +1,30 @@
 import React from "react";
 import {Titled} from "react-titled";
 import {Card} from "primereact/card";
+import {useTranslation, Trans} from "@zxplay/i18n";
 import {sep} from "../constants";
 
 export default function AboutPage() {
+    const {t} = useTranslation();
     return (
-        <Titled title={(s) => `About ${sep} ${s}`}>
+        <Titled title={(s) => `${t("nav.aboutThisSite")} ${sep} ${s}`}>
             <Card className="m-2">
-                <h1>About This Site</h1>
+                <h1>{t("nav.aboutThisSite")}</h1>
                 <p>
-                    A mobile-friendly ZX Spectrum emulator for the browser.
-                    Source available <a href="https://github.com/zxplay/zxplay" target="_blank">here</a>.
+                    <Trans
+                        i18nKey="about.intro1"
+                        components={{srcLink: <a href="https://github.com/zxplay/zxplay" target="_blank" rel="noreferrer"/>}}
+                    />
                 </p>
                 <p>
-                    An alternative website, related to this one,
-                    is available at <a href="https://zxcoder.org/" target="_blank">zxcoder.org</a>.
-                    ZX Coder supports running programs entered via web pages.
+                    <Trans
+                        i18nKey="about.intro2"
+                        components={{coderLink: <a href="https://zxcoder.org/" target="_blank" rel="noreferrer"/>}}
+                    />
                 </p>
-                <h2>Acknowledgements</h2>
+                <h2>{t("acknowledgements")}</h2>
                 <p>
-                    This software uses code from the following open source projects:
+                    {t("about.acknowledgementsIntro")}
                 </p>
                 <ul>
                     <li>
@@ -34,10 +39,9 @@ export default function AboutPage() {
                         <a href="https://github.com/primefaces/primereact/blob/master/LICENSE.md" target="_blank">LICENSE</a>.
                     </li>
                 </ul>
-                <h2>Sinclair ROM Copyright Permission</h2>
+                <h2>{t("about.sinclairRomHeading")}</h2>
                 <blockquote>
-                    Amstrad have kindly given their permission for the
-                    redistribution of their copyrighted material but retain that copyright.
+                    {t("about.sinclairRomText")}
                 </blockquote>
                 <a href="https://worldofspectrum.net/assets/amstrad-roms.txt" target="_blank">comp.sys.sinclair</a> 1999-08-31
             </Card>

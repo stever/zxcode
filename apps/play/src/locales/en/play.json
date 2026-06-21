@@ -6,5 +6,32 @@
     "aboutThisSite": "About This Site",
     "linking": "Linking To ZX Play",
     "reset": "Reset"
+  },
+  "about": {
+    "intro1": "A mobile-friendly ZX Spectrum emulator for the browser. Source available <srcLink>here</srcLink>.",
+    "intro2": "An alternative website, related to this one, is available at <coderLink>zxcoder.org</coderLink>. ZX Coder supports running programs entered via web pages.",
+    "acknowledgementsIntro": "This software uses code from the following open source projects:",
+    "sinclairRomHeading": "Sinclair ROM Copyright Permission",
+    "sinclairRomText": "Amstrad have kindly given their permission for the redistribution of their copyrighted material but retain that copyright."
+  },
+  "linking": {
+    "intro": "You can link directly to ZX Play using URL parameters to load a program or game tape image from another URL.",
+    "example": "Example:",
+    "decompose": "The URL can be decomposed in these parts:",
+    "mainPart": "Main part: ",
+    "softKeys": "Soft keys: ",
+    "machineType": "Machine type (48, 128, 5 for pentagon): ",
+    "programUrl": "Program/game URL to load: ",
+    "filtering": "Optional filtering (default 0 is not filtered, good old pixels): ",
+    "buildOwn": "You can build your own URL setting soft keys, machine type (defaults to 48) and a URL for a Z80, SNA, SZX, TZX or TAP file containing the desired game or program. Please note that the program/game URL to load <b>must</b> be hosted in a website with CORS enabled.",
+    "softKeySyntaxHeading": "Soft key syntax",
+    "syntaxSimple": "The syntax is simple: keys are arranged as rows, and rows are separated by commas.",
+    "threeRows": "So, the previous strings has 3 rows:",
+    "keyDefinition": "A key is defined by its UPPERCASE character, and a hyphen (-) means a blank.",
+    "exceptionsAre": "The exceptions are:",
+    "enterKey": "Enter key: e (lowercase e)",
+    "capsShift": "Caps shift: c (lowercase c)",
+    "symbolShift": "Symbol shift: s (lowercase s)",
+    "space": "Space: _ (underscore)"
   }
 }

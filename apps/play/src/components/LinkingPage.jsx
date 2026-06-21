@@ -1,63 +1,58 @@
 import React from "react";
 import {Titled} from "react-titled";
 import {Card} from "primereact/card";
+import {useTranslation, Trans} from "@zxplay/i18n";
 import {sep} from "../constants";
 
 export default function LinkingPage() {
+    const {t} = useTranslation();
     const domain = `${window.location.protocol}//${window.location.host}/`;
     const k = '-W-P,ASDe,123456789M';
     const m = '48';
     const u = 'https://davidprograma.github.io/ytc/09-ZxSpectrum/snake-1.01.tap';
     const href = `${domain}?k=${k}&m=${m}&u=${u}`;
     return (
-        <Titled title={(s) => `Linking ${sep} ${s}`}>
+        <Titled title={(s) => `${t("nav.linking")} ${sep} ${s}`}>
             <Card className="m-2">
-                <h1>Linking To ZX Play</h1>
+                <h1>{t("nav.linking")}</h1>
                 <p>
-                    You can link directly to ZX Play using URL parameters to load
-                    a program or game tape image from another URL.
+                    {t("linking.intro")}
                 </p>
-                <p>Example:</p>
+                <p>{t("linking.example")}</p>
                 <p><a href={href}>{href}</a></p>
-                <p>The URL can be decomposed in these parts:</p>
+                <p>{t("linking.decompose")}</p>
                 <ul>
-                    <li><b>Main part: </b><code>https://zxplay.org/</code></li>
-                    <li><b>Soft keys: </b><code>?k=-W-P,ASDe,123456789M</code></li>
-                    <li><b>Machine type (48, 128, 5 for pentagon): </b><code>&m=48</code></li>
+                    <li><b>{t("linking.mainPart")}</b><code>https://zxplay.org/</code></li>
+                    <li><b>{t("linking.softKeys")}</b><code>?k=-W-P,ASDe,123456789M</code></li>
+                    <li><b>{t("linking.machineType")}</b><code>&m=48</code></li>
                     <li>
-                        <b>Program/game URL to load: </b>
+                        <b>{t("linking.programUrl")}</b>
                         <code>&u=https://davidprograma.github.io/ytc/09-ZxSpectrum/snake-1.01.tap</code>
                     </li>
-                    <li><b>Optional filtering (default 0 is not filtered, good old pixels): </b><code>&f=1</code></li>
+                    <li><b>{t("linking.filtering")}</b><code>&f=1</code></li>
                 </ul>
                 <p>
-                    You can build your own URL setting soft keys, machine type
-                    (defaults to 48) and a URL for a Z80, SNA, SZX, TZX or TAP file
-                    containing the desired game or program. Please note that the
-                    program/game URL to load <b>must</b> be hosted in a website
-                    with CORS enabled.
+                    <Trans i18nKey="linking.buildOwn" components={{b: <b/>}}/>
                 </p>
-                <h2>Soft key syntax</h2>
+                <h2>{t("linking.softKeySyntaxHeading")}</h2>
                 <p>
-                    The syntax is simple: keys are arranged as rows, and rows are
-                    separated by commas.
+                    {t("linking.syntaxSimple")}
                 </p>
-                <p>So, the previous strings has 3 rows:</p>
+                <p>{t("linking.threeRows")}</p>
                 <ol>
                     <li><code>-W-P</code></li>
                     <li><code>ASDe</code></li>
                     <li><code>123456789M</code></li>
                 </ol>
                 <p>
-                    A key is defined by its UPPERCASE character, and a hyphen (-)
-                    means a blank.
+                    {t("linking.keyDefinition")}
                 </p>
-                <p>The exceptions are:</p>
+                <p>{t("linking.exceptionsAre")}</p>
                 <ul>
-                    <li>Enter key: e (lowercase e)</li>
-                    <li>Caps shift: c (lowercase c)</li>
-                    <li>Symbol shift: s (lowercase s)</li>
-                    <li>Space: _ (underscore)</li>
+                    <li>{t("linking.enterKey")}</li>
+                    <li>{t("linking.capsShift")}</li>
+                    <li>{t("linking.symbolShift")}</li>
+                    <li>{t("linking.space")}</li>
                 </ul>
             </Card>
         </Titled>

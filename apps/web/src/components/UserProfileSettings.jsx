@@ -15,6 +15,7 @@ import { gqlFetch } from "../graphql_fetch";
 import { sep } from "../constants";
 import { generateSlug, isValidSlug, isReservedSlug } from "../utils/slug";
 import { getUserInfo } from "../redux/identity/actions";
+import { useTranslation } from "@zxplay/i18n";
 
 const GET_USER_PROFILE = gql`
   query GetUserProfile($user_id: uuid!) {
@@ -71,6 +72,7 @@ const CHECK_SLUG_AVAILABILITY = gql`
 `;
 
 export default function UserProfileSettings() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const userId = useSelector(state => state?.identity.userId);
@@ -235,9 +237,9 @@ export default function UserProfileSettings() {
   }
 
   return (
-    <Titled title={s => `Profile Settings ${sep} ${s}`}>
+    <Titled title={s => `${t("nav.profileSettings")} ${sep} ${s}`}>
       <Card className="m-2">
-        <h1>Profile Settings</h1>
+        <h1>{t("nav.profileSettings")}</h1>
 
         {saveMessage && (
           <Message
@@ -249,56 +251,56 @@ export default function UserProfileSettings() {
 
         <div className="p-fluid">
           <div className="field">
-            <label htmlFor="greeting_name">Display Name</label>
+            <label htmlFor="greeting_name">{t("settings.displayName")}</label>
             <InputText
               id="greeting_name"
               value={profile.greeting_name}
               onChange={(e) => setProfile({ ...profile, greeting_name: e.target.value })}
-              placeholder="How you want to be greeted"
+              placeholder={t("settings.displayNamePlaceholder")}
             />
-            <small className="block mt-1">This is how you'll be addressed in the app</small>
+            <small className="block mt-1">{t("settings.displayNameHelp")}</small>
           </div>
 
           <div className="field">
-            <label htmlFor="full_name">Full Name</label>
+            <label htmlFor="full_name">{t("settings.fullName")}</label>
             <InputText
               id="full_name"
               value={profile.full_name}
               onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
-              placeholder="Your full name (optional)"
+              placeholder={t("settings.fullNamePlaceholder")}
             />
           </div>
 
           <div className="field">
-            <label htmlFor="email_address">Email Address</label>
+            <label htmlFor="email_address">{t("settings.email")}</label>
             <InputText
               id="email_address"
               type="email"
               value={profile.email_address}
               onChange={(e) => setProfile({ ...profile, email_address: e.target.value })}
-              placeholder="your@email.com (optional)"
+              placeholder={t("settings.emailPlaceholder")}
             />
           </div>
 
           <div className="field">
-            <label htmlFor="bio">Bio</label>
+            <label htmlFor="bio">{t("settings.bio")}</label>
             <InputTextarea
               id="bio"
               value={profile.bio}
               onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
               rows={4}
               maxLength={500}
-              placeholder="Tell us about yourself..."
+              placeholder={t("settings.bioPlaceholder")}
             />
             <small className="block mt-1">
-              {profile.bio.length}/500 characters
+              {t("settings.charsCount", { count: profile.bio.length })}
             </small>
           </div>
 
           <Divider />
 
           <div className="field">
-            <label htmlFor="slug">Profile URL</label>
+            <label htmlFor="slug">{t("settings.profileUrl")}</label>
             <div className="p-inputgroup">
               <span className="p-inputgroup-addon">{window.location.origin}/u/</span>
               <InputText
@@ -306,7 +308,7 @@ export default function UserProfileSettings() {
                 value={profile.slug}
                 onChange={(e) => handleSlugChange(e.target.value)}
                 className={slugError ? "p-invalid" : ""}
-                placeholder="your-unique-url"
+                placeholder={t("settings.profileUrlPlaceholder")}
               />
             </div>
             {slugError && (
@@ -314,25 +316,25 @@ export default function UserProfileSettings() {
             )}
             {!slugError && profile.slug && (
               <small className="block mt-1">
-                Your profile will be at: {window.location.origin}/u/{profile.slug}
+                {t("settings.profileUrlPreview", { url: `${window.location.origin}/u/${profile.slug}` })}
               </small>
             )}
           </div>
 
           <div className="field">
-            <label htmlFor="profile_is_public">Public Profile</label>
+            <label htmlFor="profile_is_public">{t("settings.publicProfile")}</label>
             <div className="flex align-items-center gap-3">
               <InputSwitch
                 id="profile_is_public"
                 checked={profile.profile_is_public}
                 onChange={(e) => setProfile({ ...profile, profile_is_public: e.value })}
               />
-              <span>{profile.profile_is_public ? "Public" : "Private"}</span>
+              <span>{profile.profile_is_public ? t("settings.publicState") : t("settings.privateState")}</span>
             </div>
             <small className="block mt-2">
               {profile.profile_is_public
-                ? "Your profile and public projects are visible to everyone"
-                : "Your profile is hidden from public view"}
+                ? t("settings.publicHelp")
+                : t("settings.privateHelp")}
             </small>
           </div>
 
@@ -342,7 +344,7 @@ export default function UserProfileSettings() {
             <div>
               {profile.slug && (
                 <Button
-                  label="View Public Profile"
+                  label={t("settings.viewPublicProfile")}
                   icon="pi pi-external-link"
                   className="p-button-text"
                   onClick={() => window.open(`/u/${profile.slug}`, "_blank")}
@@ -351,13 +353,13 @@ export default function UserProfileSettings() {
             </div>
             <div className="flex gap-2">
               <Button
-                label="Cancel"
+                label={t("actions.cancel")}
                 icon="pi pi-times"
                 className="p-button-outlined"
                 onClick={handleCancel}
               />
               <Button
-                label="Save Changes"
+                label={t("settings.saveChanges")}
                 icon="pi pi-check"
                 disabled={!hasChanges || !!slugError}
                 loading={saving}

@@ -69,5 +69,27 @@
     "intro1": "A ZX Spectrum emulator & programming environment for the browser. Source available <srcLink>here</srcLink>.",
     "intro2": "An alternative website, related to this one, is available at <zxplayLink>zxplay.org</zxplayLink>. ZX Play is a mobile-friendly ZX Spectrum emulator, for games.",
     "legal": "Please read <privacyLink>privacy policy</privacyLink> and <termsLink>terms of use</termsLink>, for this website."
+  },
+  "settings": {
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "How you want to be greeted",
+    "displayNameHelp": "This is how you'll be addressed in the app",
+    "fullName": "Full Name",
+    "fullNamePlaceholder": "Your full name (optional)",
+    "email": "Email Address",
+    "emailPlaceholder": "your@email.com (optional)",
+    "bio": "Bio",
+    "bioPlaceholder": "Tell us about yourself...",
+    "profileUrl": "Profile URL",
+    "profileUrlPlaceholder": "your-unique-url",
+    "publicProfile": "Public Profile",
+    "viewPublicProfile": "View Public Profile",
+    "saveChanges": "Save Changes",
+    "charsCount": "{{count}}/500 characters",
+    "profileUrlPreview": "Your profile will be at: {{url}}",
+    "publicState": "Public",
+    "privateState": "Private",
+    "publicHelp": "Your profile and public projects are visible to everyone",
+    "privateHelp": "Your profile is hidden from public view"
   }
 }
