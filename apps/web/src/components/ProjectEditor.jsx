@@ -216,10 +216,10 @@ export function ProjectEditor() {
             layout="vertical"
             className="hidden md:inline-flex project-divider"
           />
-          <div className="inline-flex align-items-center">
+          <div className="mt-2 inline-flex project-divider-after">
             <Tag
               icon="pi pi-user"
-              className="tag-user-icon project-divider-after"
+              className="tag-user-icon"
             >
               {t("editor.projectBy")}{" "}
               {ownerProfileIsPublic ? (
