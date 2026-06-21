@@ -54,7 +54,7 @@ export default function Nav() {
         start={
           <img alt="logo" src="/logo.png" height={"40"} className="mx-1" />
         }
-        end={<LanguageSwitcher className="p-2 border-round" />}
+        end={<LanguageSwitcher className="mr-2" />}
         style={{
           borderRadius: isMobile ? 0 : "5px",
           borderColor: "#1E1E1E",

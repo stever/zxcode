@@ -41,7 +41,7 @@ export default function Nav() {
                                     navigate(`/search?q=${searchInput}`);
                                 }
                             }}/>
-                        <LanguageSwitcher className="mx-1 p-2 border-round"/>
+                        <LanguageSwitcher className="mx-1"/>
                     </div>
                 )}
                 style={{

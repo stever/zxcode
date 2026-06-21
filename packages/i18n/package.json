@@ -10,6 +10,7 @@
     "react-i18next": "^15.4.0"
   },
   "peerDependencies": {
+    "primereact": ">=9",
     "react": ">=18"
   }
 }
