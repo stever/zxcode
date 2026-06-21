@@ -10,12 +10,16 @@
         border: 0;
         border-radius: 0;
         background: linear-gradient(var(--zx-surface), #1B1714);
-        padding: 0 1rem;
         min-height: 56px;
         gap: 0.5rem;
+        // No padding on the bar itself: primeflex ships an !important padding
+        // utility layer that collapses it to 0 anyway, and we want the bar
+        // background plus the rainbow rule to stay full-bleed. The page gutter
+        // is applied to the brand and the end slot instead (our own elements,
+        // which nothing else targets).
     }
 
-    .p-menubar-start { display: flex; align-items: center; }
+    .p-menubar-start { display: flex; align-items: center; margin-left: 1rem; }
 
     // brand: rainbow mark + wordmark, doubles as the home control
     .zx-brand {
@@ -52,8 +56,11 @@
         white-space: nowrap;
     }
 
-    // top-level menu items: uppercase, letterspaced, quiet until hover
+    // top-level menu items: uppercase, letterspaced, quiet until hover.
+    // Tighter horizontal padding than the theme's 1rem so the bar reads dense
+    // and deliberate rather than airy.
     .p-menubar-root-list > .p-menuitem > .p-menuitem-link {
+        padding: 0.6rem 0.75rem;
         border-radius: 6px;
         .p-menuitem-text {
             text-transform: uppercase;
@@ -67,8 +74,19 @@
         &:hover .p-menuitem-icon { color: var(--zx-text); }
     }
 
-    .zx-deck-end { display: flex; align-items: center; gap: 0.5rem; }
-    .zx-lang .p-dropdown { background: var(--zx-ground); }
+    .zx-deck-end { display: flex; align-items: center; gap: 0.5rem; margin-right: 1rem; }
+
+    // Language picker reads as part of the header: transparent so the bar shows
+    // through, with the theme's border defining the pill. (zx-lang is applied
+    // to the .p-dropdown element itself, not a parent.)
+    .p-dropdown.zx-lang {
+        background: transparent;
+    }
+
+    // Search is a deliberately recessed field, distinct from the flush header.
+    .p-inputtext {
+        background: var(--zx-ground);
+    }
 
     .zx-rule {
         height: 3px;

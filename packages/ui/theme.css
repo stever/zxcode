@@ -11,7 +11,7 @@
   --text-color-secondary:rgba(255, 255, 255, 0.6);
   --primary-color:#2BD4D4;
   --primary-color-text:#121212;
-  --font-family:Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
+  --font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --surface-0: #121212;
   --surface-50: #2a2a2a;
   --surface-100: #414141;
@@ -60,7 +60,7 @@
 }
 
 .p-component {
-  font-family: Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 1rem;
   font-weight: normal;
 }
@@ -93,7 +93,7 @@
 
 .p-link {
   font-size: 1rem;
-  font-family: Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   border-radius: 4px;
 }
 .p-link:focus {
@@ -272,7 +272,7 @@
   padding: 0.5rem 0;
 }
 .p-autocomplete .p-autocomplete-multiple-container .p-autocomplete-input-token input {
-  font-family: Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 1rem;
   color: rgba(255, 255, 255, 0.87);
   padding: 0;
@@ -722,7 +722,7 @@
   padding: 0.5rem 0;
 }
 .p-chips .p-chips-multiple-container .p-chips-input-token input {
-  font-family: Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 1rem;
   color: rgba(255, 255, 255, 0.87);
   padding: 0;
@@ -1087,7 +1087,7 @@
 }
 
 .p-inputtext {
-  font-family: Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 1rem;
   color: rgba(255, 255, 255, 0.87);
   background: #1e1e1e;
@@ -6167,7 +6167,7 @@
 }
 .p-terminal .p-terminal-input {
   font-size: 1rem;
-  font-family: Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 .p-badge {

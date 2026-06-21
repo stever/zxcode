@@ -27,12 +27,23 @@ const OUT = join(here, "theme.css");
 const CYAN_HEX = "#2BD4D4";
 const CYAN_RGB = "43, 212, 212";
 
+// The theme hardcodes Roboto on every control. We strip the bundled Roboto
+// @font-face below, so that literal stack falls through fonts that mostly do
+// not exist (Helvetica Neue Light, Lucida Grande), landing on a fallback whose
+// vertical metrics ride text high in fixed-height controls. Remap it to the
+// system stack so control text matches the body and sits on its true centre.
+const SYS_FONT =
+  'system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const ROBOTO_STACK =
+  /Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif/g;
+
 let css = readFileSync(SRC, "utf8");
 
 // Drop the bundled Roboto @font-face blocks: they reference ./fonts/* relative
-// to the source file, which would 404 from the package, and both apps use the
-// system font stack anyway.
+// to the source file, which would 404 from the package, and we use the system
+// font stack anyway.
 css = css.replace(/@font-face\s*\{[^}]*\}/g, "");
+css = css.replace(ROBOTO_STACK, SYS_FONT);
 
 // Remap the primary palette.
 css = css.replace(/#9fa8da/gi, CYAN_HEX);

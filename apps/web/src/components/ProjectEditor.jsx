@@ -157,7 +157,7 @@ export function ProjectEditor() {
       <Button
         label={t("actions.play")}
         icon="pi pi-play"
-        className={clsx("mt-2 mr-2", isMobile && "ml-2")}
+        className={clsx("zx-run mt-2 mr-2", isMobile && "ml-2")}
         onClick={() => {
           dashboardLock();
           showLoading();

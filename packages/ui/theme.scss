@@ -76,7 +76,22 @@
     border-color: var(--zx-cyan);
 }
 
-// Primary buttons read as "go": the accent fill with dark text.
-.p-button:not(.p-button-secondary):not(.p-button-text):not(.p-button-outlined) {
+.p-button {
     font-weight: 600;
+}
+
+// Run / play actions use the Spectrum green (go), with dark text, per the
+// functional colour code. Apply `zx-run` to the button.
+.p-button.zx-run {
+    background: var(--zx-green);
+    border-color: var(--zx-green);
+    color: #06210D;
+
+    .p-button-icon { color: #06210D; }
+
+    &:enabled:hover {
+        background: #43D65F;
+        border-color: #43D65F;
+        color: #06210D;
+    }
 }
