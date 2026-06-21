@@ -48,6 +48,8 @@ const GET_USER_WITH_FOLLOWS = gql`
           greeting_name
           slug
           bio
+          avatar_variant
+          custom_avatar_data
           created_at
         }
       }
@@ -61,6 +63,8 @@ const GET_USER_WITH_FOLLOWS = gql`
           greeting_name
           slug
           bio
+          avatar_variant
+          custom_avatar_data
           created_at
         }
       }
@@ -96,7 +100,7 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
           style={{ color: "inherit" }}
         >
           <Avatar
-            image={generateRetroAvatar(user.slug || user.user_id, 64)}
+            image={generateRetroAvatar(user.slug || user.user_id, 64, user)}
             size="large"
             shape="square"
             className="mr-3"
