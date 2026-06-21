@@ -1,0 +1,160 @@
+{
+  "nav": {
+    "project": "Proiect",
+    "newProject": "Proiect nou",
+    "openProject": "Deschide proiect",
+    "downloadTap": "Descarcă TAP",
+    "fullScreen": "Ecran complet",
+    "yourProfile": "Profilul tău",
+    "profileSettings": "Setări profil",
+    "feed": "Flux",
+    "publicProfiles": "Profiluri publice",
+    "view": "Vizualizare",
+    "info": "Informații",
+    "aboutThisSite": "Despre acest site",
+    "privacyPolicy": "Politica de confidențialitate",
+    "termsOfUse": "Termeni de utilizare",
+    "reset": "Resetează",
+    "other": "Altele"
+  },
+  "errorPage": {
+    "errorTitle": "Eroare",
+    "notFoundTitle": "Negăsit",
+    "notFoundBody": "Locația paginii solicitate nu a fost găsită.",
+    "title": "Ne pare rău, a apărut o eroare neașteptată.",
+    "messageLabel": "Mesajul de eroare este:",
+    "buttonsPrompt": "Apasă unul dintre butoanele următoare:",
+    "reload": "Reîncarcă",
+    "reloadTitle": "Reîncarcă această pagină",
+    "restart": "Repornește",
+    "restartTitle": "Revino la pagina principală",
+    "goBack": "Înapoi",
+    "goBackTitle": "Revino la pagina anterioară"
+  },
+  "home": {
+    "tabEmulator": "Emulator"
+  },
+  "profiles": {
+    "title": "Profiluri publice",
+    "none": "Încă nu există profiluri publice"
+  },
+  "follow": {
+    "networkTitle": "Rețeaua lui {{name}}",
+    "followersTab": "Urmăritori ({{count}})",
+    "followingTab": "Urmăriți ({{count}})",
+    "noFollowers": "Încă nu există urmăritori",
+    "noFollowing": "Încă nu urmărești pe nimeni",
+    "backToProfile": "Înapoi la profil",
+    "joined": "S-a alăturat {{when}}",
+    "pageTitle": "{{type}} lui {{name}}",
+    "typeFollowers": "Urmăritori",
+    "typeFollowing": "Urmăriți"
+  },
+  "profile": {
+    "changeAvatar": "Schimbă avatarul",
+    "memberSince": "Membru din:",
+    "editProfile": "Editează profilul",
+    "noProjects": "Încă nu există proiecte publice",
+    "dragToReorder": "Trage pentru a reordona",
+    "defaultName": "Utilizator",
+    "private": "Acest profil este privat",
+    "privateOwn": "Profilul tău este momentan privat"
+  },
+  "about": {
+    "createProjects": "Creează proiecte",
+    "registeredUsers": "Utilizatorii înregistrați pot salva proiecte.",
+    "createAccount": "Folosește butonul Autentificare de mai sus și caută linkul \"Sign Up\" pe pagina următoare pentru a crea un cont.",
+    "acknowledgementsIntro": "Acest software folosește cod din următoarele proiecte open source:",
+    "sinclairRomHeading": "Permisiune privind drepturile de autor pentru ROM-ul Sinclair",
+    "sinclairRomText": "Amstrad a acordat cu amabilitate permisiunea de a redistribui materialul lor protejat prin drepturi de autor, dar își păstrează aceste drepturi.",
+    "intro1": "Un emulator ZX Spectrum și mediu de programare pentru browser. Codul sursă este disponibil <srcLink>aici</srcLink>.",
+    "intro2": "Un site alternativ, înrudit cu acesta, este disponibil la <zxplayLink>zxplay.org</zxplayLink>. ZX Play este un emulator ZX Spectrum optimizat pentru mobil, pentru jocuri.",
+    "legal": "Te rugăm să citești <privacyLink>politica de confidențialitate</privacyLink> și <termsLink>termenii de utilizare</termsLink> pentru acest site."
+  },
+  "settings": {
+    "displayName": "Nume afișat",
+    "displayNamePlaceholder": "Cum vrei să fii salutat",
+    "displayNameHelp": "Așa vei fi adresat în aplicație",
+    "fullName": "Nume complet",
+    "fullNamePlaceholder": "Numele tău complet (opțional)",
+    "email": "Adresă de e-mail",
+    "emailPlaceholder": "tu@email.com (opțional)",
+    "bio": "Biografie",
+    "bioPlaceholder": "Spune-ne despre tine...",
+    "profileUrl": "URL profil",
+    "profileUrlPlaceholder": "url-ul-tau-unic",
+    "publicProfile": "Profil public",
+    "viewPublicProfile": "Vezi profilul public",
+    "saveChanges": "Salvează modificările",
+    "charsCount": "{{count}}/500 caractere",
+    "profileUrlPreview": "Profilul tău va fi la: {{url}}",
+    "publicState": "Public",
+    "privateState": "Privat",
+    "publicHelp": "Profilul tău și proiectele publice sunt vizibile pentru toată lumea",
+    "privateHelp": "Profilul tău este ascuns din vizualizarea publică"
+  },
+  "avatar": {
+    "chooseTitle": "Alege-ți avatarul",
+    "selection": "Selecție",
+    "unique": "Fiecare model este unic pentru numele tău de utilizator.",
+    "createOwn": "Creează-ți propriul avatar",
+    "randomize": "Aleatoriu",
+    "select": "Selectează",
+    "drawTitle": "Desenează-ți avatarul",
+    "clear": "Șterge",
+    "fill": "Umple",
+    "flip": "Oglindește",
+    "colors": "Culori",
+    "preview": "Previzualizare",
+    "useThis": "Folosește acest avatar",
+    "page": "Pagina {{current}}/{{total}}",
+    "tip": "Sfat: Folosește butoanele săgeată pentru a răsfoi mai multe modele sau apasă Aleatoriu pentru o surpriză!"
+  },
+  "editor": {
+    "projectCopied": "Proiect copiat",
+    "renameTitle": "Redenumește proiectul",
+    "projectName": "Nume proiect",
+    "urlSlug": "Slug URL",
+    "copyTitle": "Copiază proiectul",
+    "newProjectName": "Nume proiect nou",
+    "copiedDetail": "S-a creat \"{{name}}\"",
+    "deleteConfirm": "Sigur vrei să elimini definitiv acest proiect?",
+    "projectBy": "Proiect de:",
+    "renameNameHelp": "Actualizează sau introdu text pentru a redenumi proiectul.",
+    "renameSlugHelp": "Opțional: slug URL personalizat pentru proiect. Lasă gol pentru a genera automat din titlu.",
+    "copyNameHelp": "Introdu un nume pentru copia ta a acestui proiect."
+  },
+  "projectList": {
+    "title": "Titlul proiectului",
+    "compiler": "Compilator",
+    "created": "Creat",
+    "updated": "Actualizat"
+  },
+  "feed": {
+    "none": "Încă nu există activitate",
+    "loginPrompt": "Te rugăm să te autentifici pentru a vedea fluxul de activitate",
+    "subtitle": "Proiecte recente de la utilizatorii pe care îi urmărești",
+    "showing": "(se afișează {{first}} - {{last}} din {{total}})",
+    "by": "de",
+    "updated": "Actualizat",
+    "followHint": "Urmărește alți utilizatori pentru a le vedea aici proiectele publice"
+  },
+  "newProject": {
+    "title": "Proiect {{lang}} nou",
+    "create": "Creează proiect"
+  },
+  "visibility": {
+    "makePublic": "Fă public",
+    "makePublicTitle": "Faci proiectul public?",
+    "copied": "Copiat!",
+    "copyLink": "Copiază linkul",
+    "warning": "Dacă faci proiectul public, oricine va putea vizualiza și rula codul tău.",
+    "oncePublic": "Odată public, proiectul tău va fi accesibil printr-un link care poate fi partajat. Îl poți face din nou privat oricând.",
+    "profileNote": "Proiectul tău va fi vizibil pe profilul tău public dacă și profilul tău este public."
+  },
+  "pages": {
+    "yourProfile": "Profilul tău",
+    "yourProjects": "Proiectele tale",
+    "lineNumbers": "Numere de linie"
+  }
+}

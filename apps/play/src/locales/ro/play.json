@@ -1,0 +1,37 @@
+{
+  "nav": {
+    "fullScreen": "Ecran complet",
+    "view": "Vizualizare",
+    "info": "Informații",
+    "aboutThisSite": "Despre acest site",
+    "linking": "Conectare către ZX Play",
+    "reset": "Resetează"
+  },
+  "about": {
+    "intro1": "Un emulator ZX Spectrum optimizat pentru mobil, pentru browser. Codul sursă este disponibil <srcLink>aici</srcLink>.",
+    "intro2": "Un site alternativ, înrudit cu acesta, este disponibil la <coderLink>zxcoder.org</coderLink>. ZX Coder permite rularea programelor introduse prin pagini web.",
+    "acknowledgementsIntro": "Acest software folosește cod din următoarele proiecte open source:",
+    "sinclairRomHeading": "Permisiune privind drepturile de autor pentru ROM-ul Sinclair",
+    "sinclairRomText": "Amstrad a acordat cu amabilitate permisiunea de a redistribui materialul lor protejat prin drepturi de autor, dar își păstrează aceste drepturi."
+  },
+  "linking": {
+    "intro": "Te poți conecta direct la ZX Play folosind parametri URL pentru a încărca un program sau o imagine de bandă cu joc de la un alt URL.",
+    "example": "Exemplu:",
+    "decompose": "URL-ul poate fi descompus în aceste părți:",
+    "mainPart": "Partea principală: ",
+    "softKeys": "Taste programabile: ",
+    "machineType": "Tip de mașină (48, 128, 5 pentru Pentagon): ",
+    "programUrl": "URL program/joc de încărcat: ",
+    "filtering": "Filtrare opțională (implicit 0 înseamnă fără filtrare, pixeli ca pe vremuri): ",
+    "buildOwn": "Îți poți construi propriul URL setând taste programabile, tipul de mașină (implicit 48) și un URL pentru un fișier Z80, SNA, SZX, TZX sau TAP care conține jocul sau programul dorit. Reține că URL-ul programului/jocului de încărcat <b>trebuie</b> să fie găzduit pe un site cu CORS activat.",
+    "softKeySyntaxHeading": "Sintaxa tastelor programabile",
+    "syntaxSimple": "Sintaxa este simplă: tastele sunt aranjate pe rânduri, iar rândurile sunt separate prin virgule.",
+    "threeRows": "Astfel, șirurile anterioare au 3 rânduri:",
+    "keyDefinition": "O tastă este definită prin caracterul ei MAJUSCUL, iar o cratimă (-) înseamnă un spațiu gol.",
+    "exceptionsAre": "Excepțiile sunt:",
+    "enterKey": "Tasta Enter: e (e minuscul)",
+    "capsShift": "Caps shift: c (c minuscul)",
+    "symbolShift": "Symbol shift: s (s minuscul)",
+    "space": "Spațiu: _ (liniuță de subliniere)"
+  }
+}

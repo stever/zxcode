@@ -1,0 +1,37 @@
+{
+  "nav": {
+    "fullScreen": "Celá obrazovka",
+    "view": "Zobrazenie",
+    "info": "Informácie",
+    "aboutThisSite": "O tejto stránke",
+    "linking": "Odkazovanie na ZX Play",
+    "reset": "Resetovať"
+  },
+  "about": {
+    "intro1": "Emulátor ZX Spectrum vhodný pre mobilné zariadenia pre prehliadač. Zdrojový kód je dostupný <srcLink>tu</srcLink>.",
+    "intro2": "Alternatívna webová stránka súvisiaca s touto je dostupná na <coderLink>zxcoder.org</coderLink>. ZX Coder podporuje spúšťanie programov zadaných cez webové stránky.",
+    "acknowledgementsIntro": "Tento softvér využíva kód z nasledujúcich open source projektov:",
+    "sinclairRomHeading": "Povolenie autorských práv k Sinclair ROM",
+    "sinclairRomText": "Spoločnosť Amstrad láskavo udelila povolenie na ďalšie šírenie svojho materiálu chráneného autorskými právami, ale tieto práva si ponecháva."
+  },
+  "linking": {
+    "intro": "Na ZX Play môžete odkazovať priamo pomocou URL parametrov a načítať tak program alebo obraz hernej pásky z inej URL.",
+    "example": "Príklad:",
+    "decompose": "URL možno rozložiť na tieto časti:",
+    "mainPart": "Hlavná časť: ",
+    "softKeys": "Softvérové klávesy: ",
+    "machineType": "Typ stroja (48, 128, 5 pre pentagon): ",
+    "programUrl": "URL programu/hry na načítanie: ",
+    "filtering": "Voliteľné filtrovanie (predvolené 0 znamená bez filtra, dobré staré pixely): ",
+    "buildOwn": "Môžete si vytvoriť vlastnú URL nastavením softvérových klávesov, typu stroja (predvolene 48) a URL pre súbor Z80, SNA, SZX, TZX alebo TAP obsahujúci požadovanú hru alebo program. Upozorňujeme, že URL programu/hry na načítanie <b>musí</b> byť hostovaná na webovej stránke s povoleným CORS.",
+    "softKeySyntaxHeading": "Syntax softvérových klávesov",
+    "syntaxSimple": "Syntax je jednoduchá: klávesy sú usporiadané do riadkov a riadky sú oddelené čiarkami.",
+    "threeRows": "Predchádzajúci reťazec má teda 3 riadky:",
+    "keyDefinition": "Kláves je definovaný svojím VEĽKÝM písmenom a pomlčka (-) znamená medzeru.",
+    "exceptionsAre": "Výnimky sú:",
+    "enterKey": "Kláves Enter: e (malé e)",
+    "capsShift": "Caps shift: c (malé c)",
+    "symbolShift": "Symbol shift: s (malé s)",
+    "space": "Medzerník: _ (podčiarkovník)"
+  }
+}

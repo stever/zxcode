@@ -1,0 +1,37 @@
+{
+  "nav": {
+    "fullScreen": "Ecrã inteiro",
+    "view": "Ver",
+    "info": "Informação",
+    "aboutThisSite": "Sobre este site",
+    "linking": "Ligar ao ZX Play",
+    "reset": "Repor"
+  },
+  "about": {
+    "intro1": "Um emulador de ZX Spectrum compatível com dispositivos móveis para o navegador. Código disponível <srcLink>aqui</srcLink>.",
+    "intro2": "Um website alternativo, relacionado com este, está disponível em <coderLink>zxcoder.org</coderLink>. O ZX Coder permite executar programas introduzidos através de páginas web.",
+    "acknowledgementsIntro": "Este software usa código dos seguintes projetos de código aberto:",
+    "sinclairRomHeading": "Permissão de direitos de autor da ROM Sinclair",
+    "sinclairRomText": "A Amstrad teve a amabilidade de dar a sua permissão para a redistribuição do seu material protegido por direitos de autor, mas mantém esses direitos."
+  },
+  "linking": {
+    "intro": "Pode ligar diretamente ao ZX Play usando parâmetros de URL para carregar um programa ou imagem de cassete de jogo a partir de outro URL.",
+    "example": "Exemplo:",
+    "decompose": "O URL pode ser decomposto nestas partes:",
+    "mainPart": "Parte principal: ",
+    "softKeys": "Teclas virtuais: ",
+    "machineType": "Tipo de máquina (48, 128, 5 para pentagon): ",
+    "programUrl": "URL do programa/jogo a carregar: ",
+    "filtering": "Filtragem opcional (predefinição 0 não é filtrado, os bons e velhos pixels): ",
+    "buildOwn": "Pode construir o seu próprio URL definindo teclas virtuais, tipo de máquina (predefinição 48) e um URL para um ficheiro Z80, SNA, SZX, TZX ou TAP que contenha o jogo ou programa pretendido. Tenha em atenção que o URL do programa/jogo a carregar <b>tem</b> de estar alojado num website com CORS ativado.",
+    "softKeySyntaxHeading": "Sintaxe das teclas virtuais",
+    "syntaxSimple": "A sintaxe é simples: as teclas são organizadas em linhas e as linhas são separadas por vírgulas.",
+    "threeRows": "Assim, a string anterior tem 3 linhas:",
+    "keyDefinition": "Uma tecla é definida pelo seu caractere MAIÚSCULO, e um hífen (-) significa um espaço em branco.",
+    "exceptionsAre": "As exceções são:",
+    "enterKey": "Tecla Enter: e (e minúsculo)",
+    "capsShift": "Caps shift: c (c minúsculo)",
+    "symbolShift": "Symbol shift: s (s minúsculo)",
+    "space": "Espaço: _ (underscore)"
+  }
+}

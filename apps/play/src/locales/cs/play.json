@@ -1,0 +1,37 @@
+{
+  "nav": {
+    "fullScreen": "Celá obrazovka",
+    "view": "Zobrazit",
+    "info": "Informace",
+    "aboutThisSite": "O tomto webu",
+    "linking": "Odkazování na ZX Play",
+    "reset": "Resetovat"
+  },
+  "about": {
+    "intro1": "Emulátor ZX Spectrum vhodný pro mobily, určený pro prohlížeč. Zdrojový kód je dostupný <srcLink>zde</srcLink>.",
+    "intro2": "Alternativní web související s tímto je dostupný na <coderLink>zxcoder.org</coderLink>. ZX Coder podporuje spouštění programů zadaných přes webové stránky.",
+    "acknowledgementsIntro": "Tento software využívá kód z následujících open source projektů:",
+    "sinclairRomHeading": "Povolení k autorským právům ROM Sinclair",
+    "sinclairRomText": "Společnost Amstrad laskavě udělila svolení k šíření svého materiálu chráněného autorskými právy, tato práva si však ponechává."
+  },
+  "linking": {
+    "intro": "Na ZX Play můžete odkazovat přímo pomocí parametrů URL pro načtení programu nebo obrazu herní kazety z jiné URL.",
+    "example": "Příklad:",
+    "decompose": "URL lze rozložit na tyto části:",
+    "mainPart": "Hlavní část: ",
+    "softKeys": "Softwarové klávesy: ",
+    "machineType": "Typ stroje (48, 128, 5 pro pentagon): ",
+    "programUrl": "URL programu/hry k načtení: ",
+    "filtering": "Nepovinné filtrování (výchozí hodnota 0 znamená bez filtrování, dobré staré pixely): ",
+    "buildOwn": "Můžete si vytvořit vlastní URL nastavením softwarových kláves, typu stroje (výchozí je 48) a URL souboru Z80, SNA, SZX, TZX nebo TAP obsahujícího požadovanou hru či program. Upozorňujeme, že URL programu/hry k načtení <b>musí</b> být hostována na webu s povoleným CORS.",
+    "softKeySyntaxHeading": "Syntaxe softwarových kláves",
+    "syntaxSimple": "Syntaxe je jednoduchá: klávesy jsou uspořádány do řádků a řádky jsou odděleny čárkami.",
+    "threeRows": "Předchozí řetězec má tedy 3 řádky:",
+    "keyDefinition": "Klávesa je definována svým VELKÝM písmenem a pomlčka (-) znamená mezeru.",
+    "exceptionsAre": "Výjimkou jsou:",
+    "enterKey": "Klávesa Enter: e (malé e)",
+    "capsShift": "Caps shift: c (malé c)",
+    "symbolShift": "Symbol shift: s (malé s)",
+    "space": "Mezerník: _ (podtržítko)"
+  }
+}

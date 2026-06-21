@@ -1,0 +1,160 @@
+{
+  "nav": {
+    "project": "Projekt",
+    "newProject": "Nový projekt",
+    "openProject": "Otvoriť projekt",
+    "downloadTap": "Stiahnuť TAP",
+    "fullScreen": "Celá obrazovka",
+    "yourProfile": "Váš profil",
+    "profileSettings": "Nastavenia profilu",
+    "feed": "Aktivita",
+    "publicProfiles": "Verejné profily",
+    "view": "Zobrazenie",
+    "info": "Informácie",
+    "aboutThisSite": "O tejto stránke",
+    "privacyPolicy": "Zásady ochrany súkromia",
+    "termsOfUse": "Podmienky používania",
+    "reset": "Resetovať",
+    "other": "Ostatné"
+  },
+  "errorPage": {
+    "errorTitle": "Chyba",
+    "notFoundTitle": "Nenájdené",
+    "notFoundBody": "Požadovaná stránka sa nenašla.",
+    "title": "Prepáčte, vyskytla sa neočakávaná chyba.",
+    "messageLabel": "Chybová správa:",
+    "buttonsPrompt": "Stlačte jedno z nasledujúcich tlačidiel:",
+    "reload": "Obnoviť",
+    "reloadTitle": "Obnoviť túto stránku",
+    "restart": "Reštartovať",
+    "restartTitle": "Vrátiť sa na domovskú stránku",
+    "goBack": "Späť",
+    "goBackTitle": "Vrátiť sa na predchádzajúcu stránku"
+  },
+  "home": {
+    "tabEmulator": "Emulátor"
+  },
+  "profiles": {
+    "title": "Verejné profily",
+    "none": "Zatiaľ žiadne verejné profily"
+  },
+  "follow": {
+    "networkTitle": "Sieť používateľa {{name}}",
+    "followersTab": "Sledovatelia ({{count}})",
+    "followingTab": "Sledované ({{count}})",
+    "noFollowers": "Zatiaľ žiadni sledovatelia",
+    "noFollowing": "Zatiaľ nikoho nesleduje",
+    "backToProfile": "Späť na profil",
+    "joined": "Pripojil sa {{when}}",
+    "pageTitle": "{{type}} používateľa {{name}}",
+    "typeFollowers": "Sledovatelia",
+    "typeFollowing": "Sledované"
+  },
+  "profile": {
+    "changeAvatar": "Zmeniť avatar",
+    "memberSince": "Členom od:",
+    "editProfile": "Upraviť profil",
+    "noProjects": "Zatiaľ žiadne verejné projekty",
+    "dragToReorder": "Potiahnutím zmeňte poradie",
+    "defaultName": "Používateľ",
+    "private": "Tento profil je súkromný",
+    "privateOwn": "Váš profil je momentálne súkromný"
+  },
+  "about": {
+    "createProjects": "Vytvárať projekty",
+    "registeredUsers": "Registrovaní používatelia môžu ukladať projekty.",
+    "createAccount": "Použite tlačidlo Prihlásiť sa vyššie a na nasledujúcej stránke nájdite odkaz „Sign Up“ na vytvorenie účtu.",
+    "acknowledgementsIntro": "Tento softvér využíva kód z nasledujúcich open source projektov:",
+    "sinclairRomHeading": "Povolenie autorských práv k Sinclair ROM",
+    "sinclairRomText": "Spoločnosť Amstrad láskavo udelila povolenie na ďalšie šírenie svojho materiálu chráneného autorskými právami, ale tieto práva si ponecháva.",
+    "intro1": "Emulátor ZX Spectrum a programovacie prostredie pre prehliadač. Zdrojový kód je dostupný <srcLink>tu</srcLink>.",
+    "intro2": "Alternatívna webová stránka súvisiaca s touto je dostupná na <zxplayLink>zxplay.org</zxplayLink>. ZX Play je emulátor ZX Spectrum vhodný pre mobilné zariadenia, určený na hry.",
+    "legal": "Prečítajte si <privacyLink>zásady ochrany súkromia</privacyLink> a <termsLink>podmienky používania</termsLink> tejto webovej stránky."
+  },
+  "settings": {
+    "displayName": "Zobrazované meno",
+    "displayNamePlaceholder": "Ako vás máme oslovovať",
+    "displayNameHelp": "Takto vás bude aplikácia oslovovať",
+    "fullName": "Celé meno",
+    "fullNamePlaceholder": "Vaše celé meno (voliteľné)",
+    "email": "E-mailová adresa",
+    "emailPlaceholder": "vas@email.com (voliteľné)",
+    "bio": "O mne",
+    "bioPlaceholder": "Povedzte nám niečo o sebe...",
+    "profileUrl": "URL profilu",
+    "profileUrlPlaceholder": "vasa-jedinecna-url",
+    "publicProfile": "Verejný profil",
+    "viewPublicProfile": "Zobraziť verejný profil",
+    "saveChanges": "Uložiť zmeny",
+    "charsCount": "{{count}}/500 znakov",
+    "profileUrlPreview": "Váš profil bude na: {{url}}",
+    "publicState": "Verejný",
+    "privateState": "Súkromný",
+    "publicHelp": "Váš profil a verejné projekty sú viditeľné pre každého",
+    "privateHelp": "Váš profil je skrytý pred verejnosťou"
+  },
+  "avatar": {
+    "chooseTitle": "Vyberte si avatar",
+    "selection": "Výber",
+    "unique": "Každý vzor je jedinečný pre vaše používateľské meno.",
+    "createOwn": "Vytvorte si vlastný",
+    "randomize": "Náhodne",
+    "select": "Vybrať",
+    "drawTitle": "Nakreslite si avatar",
+    "clear": "Vymazať",
+    "fill": "Vyplniť",
+    "flip": "Prevrátiť",
+    "colors": "Farby",
+    "preview": "Náhľad",
+    "useThis": "Použiť tento avatar",
+    "page": "Strana {{current}}/{{total}}",
+    "tip": "Tip: Pomocou tlačidiel so šípkami prechádzajte ďalšie vzory alebo kliknite na Náhodne pre prekvapenie!"
+  },
+  "editor": {
+    "projectCopied": "Projekt skopírovaný",
+    "renameTitle": "Premenovať projekt",
+    "projectName": "Názov projektu",
+    "urlSlug": "URL slug",
+    "copyTitle": "Kopírovať projekt",
+    "newProjectName": "Názov nového projektu",
+    "copiedDetail": "Vytvorené „{{name}}“",
+    "deleteConfirm": "Naozaj chcete tento projekt natrvalo odstrániť?",
+    "projectBy": "Autor projektu:",
+    "renameNameHelp": "Aktualizujte alebo zadajte text na premenovanie projektu.",
+    "renameSlugHelp": "Voliteľné: Vlastný URL slug pre projekt. Nechajte prázdne pre automatické vygenerovanie z názvu.",
+    "copyNameHelp": "Zadajte názov pre svoju kópiu tohto projektu."
+  },
+  "projectList": {
+    "title": "Názov projektu",
+    "compiler": "Kompilátor",
+    "created": "Vytvorené",
+    "updated": "Aktualizované"
+  },
+  "feed": {
+    "none": "Zatiaľ žiadna aktivita",
+    "loginPrompt": "Prihláste sa, aby ste videli svoj informačný kanál",
+    "subtitle": "Najnovšie projekty od používateľov, ktorých sledujete",
+    "showing": "(zobrazené {{first}} – {{last}} z {{total}})",
+    "by": "od",
+    "updated": "Aktualizované",
+    "followHint": "Sledujte ďalších používateľov, aby sa tu zobrazili ich verejné projekty"
+  },
+  "newProject": {
+    "title": "Nový projekt {{lang}}",
+    "create": "Vytvoriť projekt"
+  },
+  "visibility": {
+    "makePublic": "Zverejniť",
+    "makePublicTitle": "Zverejniť projekt?",
+    "copied": "Skopírované!",
+    "copyLink": "Kopírovať odkaz",
+    "warning": "Zverejnením projektu umožníte komukoľvek zobraziť a spustiť váš kód.",
+    "oncePublic": "Po zverejnení bude váš projekt dostupný cez zdieľateľný odkaz. Kedykoľvek ho môžete znova nastaviť ako súkromný.",
+    "profileNote": "Váš projekt bude viditeľný na vašom verejnom profile, ak je aj váš profil verejný."
+  },
+  "pages": {
+    "yourProfile": "Váš profil",
+    "yourProjects": "Vaše projekty",
+    "lineNumbers": "Čísla riadkov"
+  }
+}

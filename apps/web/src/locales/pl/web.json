@@ -1,0 +1,160 @@
+{
+  "nav": {
+    "project": "Projekt",
+    "newProject": "Nowy projekt",
+    "openProject": "Otwórz projekt",
+    "downloadTap": "Pobierz TAP",
+    "fullScreen": "Pełny ekran",
+    "yourProfile": "Twój profil",
+    "profileSettings": "Ustawienia profilu",
+    "feed": "Aktualności",
+    "publicProfiles": "Profile publiczne",
+    "view": "Widok",
+    "info": "Informacje",
+    "aboutThisSite": "O tej stronie",
+    "privacyPolicy": "Polityka prywatności",
+    "termsOfUse": "Warunki użytkowania",
+    "reset": "Resetuj",
+    "other": "Inne"
+  },
+  "errorPage": {
+    "errorTitle": "Błąd",
+    "notFoundTitle": "Nie znaleziono",
+    "notFoundBody": "Nie znaleziono żądanej strony.",
+    "title": "Przepraszamy, wystąpił nieoczekiwany błąd.",
+    "messageLabel": "Komunikat błędu:",
+    "buttonsPrompt": "Naciśnij jeden z poniższych przycisków:",
+    "reload": "Odśwież",
+    "reloadTitle": "Odśwież tę stronę",
+    "restart": "Uruchom ponownie",
+    "restartTitle": "Wróć na stronę główną",
+    "goBack": "Wstecz",
+    "goBackTitle": "Wróć do poprzedniej strony"
+  },
+  "home": {
+    "tabEmulator": "Emulator"
+  },
+  "profiles": {
+    "title": "Profile publiczne",
+    "none": "Brak publicznych profili"
+  },
+  "follow": {
+    "networkTitle": "Sieć użytkownika {{name}}",
+    "followersTab": "Obserwujący ({{count}})",
+    "followingTab": "Obserwowani ({{count}})",
+    "noFollowers": "Brak obserwujących",
+    "noFollowing": "Nie obserwujesz jeszcze nikogo",
+    "backToProfile": "Powrót do profilu",
+    "joined": "Dołączył(a) {{when}}",
+    "pageTitle": "{{type}} użytkownika {{name}}",
+    "typeFollowers": "Obserwujący",
+    "typeFollowing": "Obserwowani"
+  },
+  "profile": {
+    "changeAvatar": "Zmień awatar",
+    "memberSince": "Członek od:",
+    "editProfile": "Edytuj profil",
+    "noProjects": "Brak publicznych projektów",
+    "dragToReorder": "Przeciągnij, aby zmienić kolejność",
+    "defaultName": "Użytkownik",
+    "private": "Ten profil jest prywatny",
+    "privateOwn": "Twój profil jest obecnie prywatny"
+  },
+  "about": {
+    "createProjects": "Twórz projekty",
+    "registeredUsers": "Zarejestrowani użytkownicy mogą zapisywać projekty.",
+    "createAccount": "Użyj przycisku logowania powyżej i poszukaj odnośnika „Sign Up” na kolejnej stronie, aby założyć konto.",
+    "acknowledgementsIntro": "To oprogramowanie korzysta z kodu następujących projektów open source:",
+    "sinclairRomHeading": "Zgoda na prawa autorskie do ROM-u Sinclair",
+    "sinclairRomText": "Amstrad uprzejmie wyraził zgodę na redystrybucję swoich materiałów objętych prawem autorskim, zachowując jednak to prawo autorskie.",
+    "intro1": "Emulator ZX Spectrum i środowisko programistyczne dla przeglądarki. Kod źródłowy dostępny <srcLink>tutaj</srcLink>.",
+    "intro2": "Alternatywna, powiązana strona jest dostępna pod adresem <zxplayLink>zxplay.org</zxplayLink>. ZX Play to przyjazny dla urządzeń mobilnych emulator ZX Spectrum, przeznaczony do gier.",
+    "legal": "Zapoznaj się z <privacyLink>polityką prywatności</privacyLink> oraz <termsLink>warunkami użytkowania</termsLink> tej strony."
+  },
+  "settings": {
+    "displayName": "Nazwa wyświetlana",
+    "displayNamePlaceholder": "Jak chcesz być nazywany(a)",
+    "displayNameHelp": "Tak będziesz adresowany(a) w aplikacji",
+    "fullName": "Imię i nazwisko",
+    "fullNamePlaceholder": "Twoje imię i nazwisko (opcjonalnie)",
+    "email": "Adres e-mail",
+    "emailPlaceholder": "twoj@email.com (opcjonalnie)",
+    "bio": "O sobie",
+    "bioPlaceholder": "Opowiedz coś o sobie...",
+    "profileUrl": "Adres URL profilu",
+    "profileUrlPlaceholder": "twoj-unikalny-adres",
+    "publicProfile": "Profil publiczny",
+    "viewPublicProfile": "Zobacz profil publiczny",
+    "saveChanges": "Zapisz zmiany",
+    "charsCount": "{{count}}/500 znaków",
+    "profileUrlPreview": "Twój profil będzie dostępny pod adresem: {{url}}",
+    "publicState": "Publiczny",
+    "privateState": "Prywatny",
+    "publicHelp": "Twój profil i publiczne projekty są widoczne dla wszystkich",
+    "privateHelp": "Twój profil jest ukryty przed publicznym widokiem"
+  },
+  "avatar": {
+    "chooseTitle": "Wybierz swój awatar",
+    "selection": "Wybór",
+    "unique": "Każdy wzór jest unikalny dla Twojej nazwy użytkownika.",
+    "createOwn": "Stwórz własny",
+    "randomize": "Losuj",
+    "select": "Wybierz",
+    "drawTitle": "Narysuj swój awatar",
+    "clear": "Wyczyść",
+    "fill": "Wypełnij",
+    "flip": "Odwróć",
+    "colors": "Kolory",
+    "preview": "Podgląd",
+    "useThis": "Użyj tego awatara",
+    "page": "Strona {{current}}/{{total}}",
+    "tip": "Wskazówka: użyj przycisków strzałek, aby przeglądać więcej wzorów, lub kliknij Losuj dla niespodzianki!"
+  },
+  "editor": {
+    "projectCopied": "Projekt skopiowany",
+    "renameTitle": "Zmień nazwę projektu",
+    "projectName": "Nazwa projektu",
+    "urlSlug": "Identyfikator URL",
+    "copyTitle": "Kopiuj projekt",
+    "newProjectName": "Nazwa nowego projektu",
+    "copiedDetail": "Utworzono „{{name}}”",
+    "deleteConfirm": "Czy na pewno chcesz trwale usunąć ten projekt?",
+    "projectBy": "Autor projektu:",
+    "renameNameHelp": "Zaktualizuj lub wpisz tekst, aby zmienić nazwę projektu.",
+    "renameSlugHelp": "Opcjonalnie: własny identyfikator URL projektu. Pozostaw puste, aby wygenerować automatycznie z tytułu.",
+    "copyNameHelp": "Wpisz nazwę dla swojej kopii tego projektu."
+  },
+  "projectList": {
+    "title": "Tytuł projektu",
+    "compiler": "Kompilator",
+    "created": "Utworzono",
+    "updated": "Zaktualizowano"
+  },
+  "feed": {
+    "none": "Brak aktywności",
+    "loginPrompt": "Zaloguj się, aby zobaczyć swoje aktualności",
+    "subtitle": "Najnowsze projekty użytkowników, których obserwujesz",
+    "showing": "(wyświetlono {{first}} - {{last}} z {{total}})",
+    "by": "autor:",
+    "updated": "Zaktualizowano",
+    "followHint": "Obserwuj innych użytkowników, aby zobaczyć tutaj ich publiczne projekty"
+  },
+  "newProject": {
+    "title": "Nowy projekt {{lang}}",
+    "create": "Utwórz projekt"
+  },
+  "visibility": {
+    "makePublic": "Udostępnij publicznie",
+    "makePublicTitle": "Udostępnić projekt publicznie?",
+    "copied": "Skopiowano!",
+    "copyLink": "Kopiuj odnośnik",
+    "warning": "Udostępnienie projektu publicznie pozwoli każdemu wyświetlać i uruchamiać Twój kod.",
+    "oncePublic": "Po udostępnieniu projekt będzie dostępny poprzez odnośnik do udostępniania. Możesz w każdej chwili ponownie ustawić go jako prywatny.",
+    "profileNote": "Twój projekt będzie widoczny na Twoim profilu publicznym, jeśli profil również jest publiczny."
+  },
+  "pages": {
+    "yourProfile": "Twój profil",
+    "yourProjects": "Twoje projekty",
+    "lineNumbers": "Numery wierszy"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "language": "Język",
+  "nav": {
+    "home": "Strona główna",
+    "about": "O nas",
+    "search": "Szukaj",
+    "explore": "Przeglądaj",
+    "profile": "Profil",
+    "logIn": "Zaloguj się",
+    "logOut": "Wyloguj się",
+    "settings": "Ustawienia"
+  },
+  "actions": {
+    "save": "Zapisz",
+    "cancel": "Anuluj",
+    "delete": "Usuń",
+    "edit": "Edytuj",
+    "play": "Uruchom",
+    "copy": "Kopiuj",
+    "rename": "Zmień nazwę",
+    "ok": "OK",
+    "close": "Zamknij",
+    "back": "Wstecz",
+    "follow": "Obserwuj",
+    "unfollow": "Przestań obserwować",
+    "loading": "Ładowanie…"
+  },
+  "errors": {
+    "notFound": "Nie znaleziono strony",
+    "generic": "Coś poszło nie tak.",
+    "userNotFound": "Nie znaleziono użytkownika"
+  },
+  "errorPage": {
+    "errorTitle": "Błąd",
+    "notFoundTitle": "Nie znaleziono",
+    "notFoundBody": "Nie znaleziono żądanej strony.",
+    "title": "Przepraszamy, wystąpił nieoczekiwany błąd.",
+    "messageLabel": "Komunikat błędu:",
+    "buttonsPrompt": "Naciśnij jeden z poniższych przycisków:",
+    "reload": "Odśwież",
+    "reloadTitle": "Odśwież tę stronę",
+    "restart": "Uruchom ponownie",
+    "restartTitle": "Wróć na stronę główną",
+    "goBack": "Wstecz",
+    "goBackTitle": "Wróć do poprzedniej strony"
+  },
+  "search": {
+    "results": "Wyniki wyszukiwania",
+    "title": "Tytuł",
+    "creator": "Twórca"
+  },
+  "acknowledgements": "Podziękowania"
+}

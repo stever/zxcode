@@ -1,0 +1,53 @@
+{
+  "language": "Idioma",
+  "nav": {
+    "home": "Início",
+    "about": "Sobre",
+    "search": "Pesquisar",
+    "explore": "Explorar",
+    "profile": "Perfil",
+    "logIn": "Iniciar sessão",
+    "logOut": "Terminar sessão",
+    "settings": "Definições"
+  },
+  "actions": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "play": "Jogar",
+    "copy": "Copiar",
+    "rename": "Renomear",
+    "ok": "OK",
+    "close": "Fechar",
+    "back": "Voltar",
+    "follow": "Seguir",
+    "unfollow": "Deixar de seguir",
+    "loading": "A carregar…"
+  },
+  "errors": {
+    "notFound": "Página não encontrada",
+    "generic": "Algo correu mal.",
+    "userNotFound": "Utilizador não encontrado"
+  },
+  "errorPage": {
+    "errorTitle": "Erro",
+    "notFoundTitle": "Não encontrado",
+    "notFoundBody": "Localização da página pedida não encontrada.",
+    "title": "Lamentamos, ocorreu um erro inesperado.",
+    "messageLabel": "A mensagem de erro é:",
+    "buttonsPrompt": "Prima um dos seguintes botões:",
+    "reload": "Recarregar",
+    "reloadTitle": "Recarregar esta página",
+    "restart": "Reiniciar",
+    "restartTitle": "Voltar à página inicial",
+    "goBack": "Voltar atrás",
+    "goBackTitle": "Voltar à página anterior"
+  },
+  "search": {
+    "results": "Resultados da pesquisa",
+    "title": "Título",
+    "creator": "Criador"
+  },
+  "acknowledgements": "Agradecimentos"
+}

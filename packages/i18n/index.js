@@ -6,8 +6,24 @@ import {LANGUAGE_CODES} from './languages';
 import commonEn from './locales/en/common.json';
 import commonEs from './locales/es/common.json';
 import commonRu from './locales/ru/common.json';
+import commonPt from './locales/pt/common.json';
+import commonPl from './locales/pl/common.json';
+import commonCs from './locales/cs/common.json';
+import commonSk from './locales/sk/common.json';
+import commonRo from './locales/ro/common.json';
+import commonBg from './locales/bg/common.json';
 
-const COMMON = {en: commonEn, es: commonEs, ru: commonRu};
+const COMMON = {
+    en: commonEn,
+    es: commonEs,
+    ru: commonRu,
+    pt: commonPt,
+    pl: commonPl,
+    cs: commonCs,
+    sk: commonSk,
+    ro: commonRo,
+    bg: commonBg,
+};
 
 /**
  * Initialise the shared i18next instance, merging an app's own strings on top of

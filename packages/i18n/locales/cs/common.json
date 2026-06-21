@@ -1,0 +1,53 @@
+{
+  "language": "Jazyk",
+  "nav": {
+    "home": "Domů",
+    "about": "O aplikaci",
+    "search": "Hledat",
+    "explore": "Procházet",
+    "profile": "Profil",
+    "logIn": "Přihlásit se",
+    "logOut": "Odhlásit se",
+    "settings": "Nastavení"
+  },
+  "actions": {
+    "save": "Uložit",
+    "cancel": "Zrušit",
+    "delete": "Smazat",
+    "edit": "Upravit",
+    "play": "Spustit",
+    "copy": "Kopírovat",
+    "rename": "Přejmenovat",
+    "ok": "OK",
+    "close": "Zavřít",
+    "back": "Zpět",
+    "follow": "Sledovat",
+    "unfollow": "Přestat sledovat",
+    "loading": "Načítání…"
+  },
+  "errors": {
+    "notFound": "Stránka nenalezena",
+    "generic": "Něco se pokazilo.",
+    "userNotFound": "Uživatel nenalezen"
+  },
+  "errorPage": {
+    "errorTitle": "Chyba",
+    "notFoundTitle": "Nenalezeno",
+    "notFoundBody": "Požadovaná stránka nebyla nalezena.",
+    "title": "Omlouváme se, došlo k neočekávané chybě.",
+    "messageLabel": "Chybová zpráva:",
+    "buttonsPrompt": "Stiskněte jedno z následujících tlačítek:",
+    "reload": "Znovu načíst",
+    "reloadTitle": "Znovu načíst tuto stránku",
+    "restart": "Restartovat",
+    "restartTitle": "Přejít na domovskou stránku",
+    "goBack": "Zpět",
+    "goBackTitle": "Přejít na předchozí stránku"
+  },
+  "search": {
+    "results": "Výsledky hledání",
+    "title": "Název",
+    "creator": "Autor"
+  },
+  "acknowledgements": "Poděkování"
+}

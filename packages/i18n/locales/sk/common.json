@@ -1,0 +1,53 @@
+{
+  "language": "Jazyk",
+  "nav": {
+    "home": "Domov",
+    "about": "O projekte",
+    "search": "Hľadať",
+    "explore": "Objavovať",
+    "profile": "Profil",
+    "logIn": "Prihlásiť sa",
+    "logOut": "Odhlásiť sa",
+    "settings": "Nastavenia"
+  },
+  "actions": {
+    "save": "Uložiť",
+    "cancel": "Zrušiť",
+    "delete": "Odstrániť",
+    "edit": "Upraviť",
+    "play": "Spustiť",
+    "copy": "Kopírovať",
+    "rename": "Premenovať",
+    "ok": "OK",
+    "close": "Zavrieť",
+    "back": "Späť",
+    "follow": "Sledovať",
+    "unfollow": "Prestať sledovať",
+    "loading": "Načítava sa…"
+  },
+  "errors": {
+    "notFound": "Stránka sa nenašla",
+    "generic": "Niečo sa pokazilo.",
+    "userNotFound": "Používateľ sa nenašiel"
+  },
+  "errorPage": {
+    "errorTitle": "Chyba",
+    "notFoundTitle": "Nenájdené",
+    "notFoundBody": "Požadovaná stránka sa nenašla.",
+    "title": "Prepáčte, vyskytla sa neočakávaná chyba.",
+    "messageLabel": "Chybová správa:",
+    "buttonsPrompt": "Stlačte jedno z nasledujúcich tlačidiel:",
+    "reload": "Obnoviť",
+    "reloadTitle": "Obnoviť túto stránku",
+    "restart": "Reštartovať",
+    "restartTitle": "Vrátiť sa na domovskú stránku",
+    "goBack": "Späť",
+    "goBackTitle": "Vrátiť sa na predchádzajúcu stránku"
+  },
+  "search": {
+    "results": "Výsledky hľadania",
+    "title": "Názov",
+    "creator": "Autor"
+  },
+  "acknowledgements": "Poďakovania"
+}

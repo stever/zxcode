@@ -1,0 +1,37 @@
+{
+  "nav": {
+    "fullScreen": "Pełny ekran",
+    "view": "Widok",
+    "info": "Informacje",
+    "aboutThisSite": "O tej stronie",
+    "linking": "Linkowanie do ZX Play",
+    "reset": "Resetuj"
+  },
+  "about": {
+    "intro1": "Przyjazny dla urządzeń mobilnych emulator ZX Spectrum dla przeglądarki. Kod źródłowy dostępny <srcLink>tutaj</srcLink>.",
+    "intro2": "Alternatywna, powiązana strona jest dostępna pod adresem <coderLink>zxcoder.org</coderLink>. ZX Coder umożliwia uruchamianie programów wprowadzanych za pośrednictwem stron internetowych.",
+    "acknowledgementsIntro": "To oprogramowanie korzysta z kodu następujących projektów open source:",
+    "sinclairRomHeading": "Zgoda na prawa autorskie do ROM-u Sinclair",
+    "sinclairRomText": "Amstrad uprzejmie wyraził zgodę na redystrybucję swoich materiałów objętych prawem autorskim, zachowując jednak to prawo autorskie."
+  },
+  "linking": {
+    "intro": "Możesz linkować bezpośrednio do ZX Play za pomocą parametrów URL, aby wczytać program lub obraz taśmy z grą z innego adresu URL.",
+    "example": "Przykład:",
+    "decompose": "Adres URL można rozłożyć na następujące części:",
+    "mainPart": "Część główna: ",
+    "softKeys": "Klawisze programowe: ",
+    "machineType": "Typ maszyny (48, 128, 5 dla pentagon): ",
+    "programUrl": "Adres URL programu/gry do wczytania: ",
+    "filtering": "Opcjonalne filtrowanie (domyślne 0 oznacza brak filtrowania, dobre stare piksele): ",
+    "buildOwn": "Możesz zbudować własny adres URL, ustawiając klawisze programowe, typ maszyny (domyślnie 48) oraz adres URL do pliku Z80, SNA, SZX, TZX lub TAP zawierającego wybraną grę lub program. Pamiętaj, że adres URL programu/gry do wczytania <b>musi</b> być hostowany w witrynie z włączonym CORS.",
+    "softKeySyntaxHeading": "Składnia klawiszy programowych",
+    "syntaxSimple": "Składnia jest prosta: klawisze są ułożone w rzędy, a rzędy są oddzielone przecinkami.",
+    "threeRows": "Zatem poprzedni ciąg ma 3 rzędy:",
+    "keyDefinition": "Klawisz jest definiowany przez swój znak WIELKĄ LITERĄ, a myślnik (-) oznacza puste miejsce.",
+    "exceptionsAre": "Wyjątki to:",
+    "enterKey": "Klawisz Enter: e (małe e)",
+    "capsShift": "Caps shift: c (małe c)",
+    "symbolShift": "Symbol shift: s (małe s)",
+    "space": "Spacja: _ (podkreślnik)"
+  }
+}

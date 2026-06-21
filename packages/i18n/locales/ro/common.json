@@ -1,0 +1,53 @@
+{
+  "language": "Limbă",
+  "nav": {
+    "home": "Acasă",
+    "about": "Despre",
+    "search": "Căutare",
+    "explore": "Explorează",
+    "profile": "Profil",
+    "logIn": "Autentificare",
+    "logOut": "Deconectare",
+    "settings": "Setări"
+  },
+  "actions": {
+    "save": "Salvează",
+    "cancel": "Anulează",
+    "delete": "Șterge",
+    "edit": "Editează",
+    "play": "Rulează",
+    "copy": "Copiază",
+    "rename": "Redenumește",
+    "ok": "OK",
+    "close": "Închide",
+    "back": "Înapoi",
+    "follow": "Urmărește",
+    "unfollow": "Nu mai urmări",
+    "loading": "Se încarcă…"
+  },
+  "errors": {
+    "notFound": "Pagina nu a fost găsită",
+    "generic": "Ceva nu a mers bine.",
+    "userNotFound": "Utilizatorul nu a fost găsit"
+  },
+  "errorPage": {
+    "errorTitle": "Eroare",
+    "notFoundTitle": "Negăsit",
+    "notFoundBody": "Locația paginii solicitate nu a fost găsită.",
+    "title": "Ne pare rău, a apărut o eroare neașteptată.",
+    "messageLabel": "Mesajul de eroare este:",
+    "buttonsPrompt": "Apasă unul dintre butoanele următoare:",
+    "reload": "Reîncarcă",
+    "reloadTitle": "Reîncarcă această pagină",
+    "restart": "Repornește",
+    "restartTitle": "Revino la pagina principală",
+    "goBack": "Înapoi",
+    "goBackTitle": "Revino la pagina anterioară"
+  },
+  "search": {
+    "results": "Rezultatele căutării",
+    "title": "Titlu",
+    "creator": "Autor"
+  },
+  "acknowledgements": "Mulțumiri"
+}
