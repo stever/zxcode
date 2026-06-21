@@ -11,8 +11,10 @@ import {
 } from "../redux/projectList/actions";
 import { Dropdown } from "primereact/dropdown";
 import { getLanguageLabel } from "../lib/lang";
+import { useTranslation } from "@zxplay/i18n";
 
 export default function ProjectList() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
 
   const projects = useSelector((state) => state?.projectList.projectList);
@@ -151,7 +153,7 @@ export default function ProjectList() {
     >
       <Column
         field="title"
-        header="Project Title"
+        header={t("projectList.title")}
         body={formatLinkName}
         className="col-width-34-mobile-70"
         sortable
@@ -159,7 +161,7 @@ export default function ProjectList() {
       {!isMobile && (
         <Column
           field="lang_title"
-          header="Compiler"
+          header={t("projectList.compiler")}
           className="col-width-22"
           sortable
         />
@@ -167,7 +169,7 @@ export default function ProjectList() {
       {!isMobile && (
         <Column
           field="created_at"
-          header="Created"
+          header={t("projectList.created")}
           body={formatCreated}
           className="col-width-22"
           sortable
@@ -175,7 +177,7 @@ export default function ProjectList() {
       )}
       <Column
         field="updated_at"
-        header="Updated"
+        header={t("projectList.updated")}
         body={formatUpdated}
         className="col-width-22-mobile-30"
         sortable

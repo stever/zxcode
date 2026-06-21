@@ -522,7 +522,7 @@ export default function PublicUserProfile() {
   if (!user) {
     return (
       <Card className="m-2">
-        <Message severity="warn" text="User not found" />
+        <Message severity="warn" text={t("errors.userNotFound")} />
       </Card>
     );
   }
@@ -647,7 +647,7 @@ export default function PublicUserProfile() {
                     {!user.profile_is_public && (
                       <Message
                         severity="warn"
-                        text="Your profile is currently private"
+                        text={t("profile.privateOwn")}
                         className="w-full text-left"
                       />
                     )}

@@ -29,8 +29,10 @@ import { InputText } from "primereact/inputtext";
 import { Divider } from "primereact/divider";
 import ProjectVisibilityToggle from "./ProjectVisibilityToggle";
 import LineNumbersToggle from "./LineNumbersToggle";
+import { useTranslation } from "@zxplay/i18n";
 
 export function ProjectEditor() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const cmRef = useRef(null);
@@ -117,7 +119,7 @@ export function ProjectEditor() {
   const deleteConfirm = (event) => {
     confirmPopup({
       target: event.currentTarget,
-      message: "Are you sure you want to permanently remove this project?",
+      message: t("editor.deleteConfirm"),
       icon: "pi pi-exclamation-triangle",
       accept: () => dispatch(deleteProject()),
       reject: () => {},
@@ -133,8 +135,8 @@ export function ProjectEditor() {
     if (toast.current) {
       toast.current.show({
         severity: "success",
-        summary: "Project Copied",
-        detail: `Created "${newTitle}"`,
+        summary: t("editor.projectCopied"),
+        detail: t("editor.copiedDetail", { name: newTitle }),
         life: 3000,
       });
     }
@@ -153,7 +155,7 @@ export function ProjectEditor() {
       />
 
       <Button
-        label="Play"
+        label={t("actions.play")}
         icon="pi pi-play"
         className={clsx("mt-2 mr-2", isMobile && "ml-2")}
         onClick={() => {
@@ -166,7 +168,7 @@ export function ProjectEditor() {
       {/* Show Copy button for non-owners (if logged in) */}
       {!isOwner && userId && (
         <Button
-          label="Copy"
+          label={t("actions.copy")}
           icon="pi pi-copy"
           className="p-button-outlined p-button-secondary mt-2 mr-2"
           onClick={() => {
@@ -180,14 +182,14 @@ export function ProjectEditor() {
       {isOwner && (
         <>
           <Button
-            label="Save"
+            label={t("actions.save")}
             icon="pi pi-save"
             className="p-button-outlined mt-2 mr-2"
             disabled={code === savedCode}
             onClick={() => dispatch(saveCodeChanges())}
           />
           <Button
-            label="Rename"
+            label={t("actions.rename")}
             icon="pi pi-eraser"
             className="p-button-outlined mt-2 mr-2"
             onClick={() => {
@@ -199,7 +201,7 @@ export function ProjectEditor() {
             }}
           />
           <Button
-            label="Delete"
+            label={t("actions.delete")}
             icon="pi pi-times"
             className="p-button-outlined p-button-danger mt-2 mr-2"
             onClick={(e) => deleteConfirm(e)}
@@ -219,7 +221,7 @@ export function ProjectEditor() {
               icon="pi pi-user"
               className="tag-user-icon project-divider-after"
             >
-              Project by:{" "}
+              {t("editor.projectBy")}{" "}
               {ownerProfileIsPublic ? (
                 <Link to={`/u/${ownerSlug}`} className="ml-1 text-white">
                   {ownerName || ownerSlug}
@@ -262,14 +264,14 @@ export function ProjectEditor() {
       </div>
       <ConfirmPopup />
       <Dialog
-        header="Rename Project"
+        header={t("editor.renameTitle")}
         visible={renameDialogVisible}
         className="editor-dialog-50vw"
         onHide={() => setRenameDialogVisible(false)}
         footer={
           <>
             <Button
-              label="Cancel"
+              label={t("actions.cancel")}
               icon="pi pi-times"
               onClick={() => {
                 setNewProjectName("");
@@ -279,7 +281,7 @@ export function ProjectEditor() {
               className="p-button-text"
             />
             <Button
-              label="OK"
+              label={t("actions.ok")}
               icon="pi pi-check"
               onClick={() => {
                 dispatch(renameProject(newProjectName, newProjectSlug));
@@ -294,7 +296,7 @@ export function ProjectEditor() {
       >
         <div className="flex flex-column gap-3">
           <div className="flex flex-column gap-2">
-            <label htmlFor="project-name">Project Name</label>
+            <label htmlFor="project-name">{t("editor.projectName")}</label>
             <InputText
               id="project-name"
               aria-describedby="project-name-help"
@@ -311,12 +313,10 @@ export function ProjectEditor() {
               }}
               ref={renameInputReference}
             />
-            <small id="project-name-help">
-              Update or enter text to rename the project.
-            </small>
+            <small id="project-name-help">{t("editor.renameNameHelp")}</small>
           </div>
           <div className="flex flex-column gap-2">
-            <label htmlFor="project-slug">URL Slug</label>
+            <label htmlFor="project-slug">{t("editor.urlSlug")}</label>
             <InputText
               id="project-slug"
               aria-describedby="project-slug-help"
@@ -332,22 +332,19 @@ export function ProjectEditor() {
                 }
               }}
             />
-            <small id="project-slug-help">
-              Optional: Custom URL slug for the project. Leave empty to
-              auto-generate from title.
-            </small>
+            <small id="project-slug-help">{t("editor.renameSlugHelp")}</small>
           </div>
         </div>
       </Dialog>
       <Dialog
-        header="Copy Project"
+        header={t("editor.copyTitle")}
         visible={copyDialogVisible}
         className="editor-dialog-50vw"
         onHide={() => setCopyDialogVisible(false)}
         footer={
           <>
             <Button
-              label="Cancel"
+              label={t("actions.cancel")}
               icon="pi pi-times"
               onClick={() => {
                 setCopyProjectName("");
@@ -356,7 +353,7 @@ export function ProjectEditor() {
               className="p-button-text"
             />
             <Button
-              label="Copy"
+              label={t("actions.copy")}
               icon="pi pi-copy"
               onClick={handleCopyProject}
               autoFocus
@@ -366,7 +363,7 @@ export function ProjectEditor() {
       >
         <div className="flex flex-column gap-3">
           <div className="flex flex-column gap-2">
-            <label htmlFor="copy-project-name">New Project Name</label>
+            <label htmlFor="copy-project-name">{t("editor.newProjectName")}</label>
             <InputText
               id="copy-project-name"
               aria-describedby="copy-project-name-help"
@@ -379,9 +376,7 @@ export function ProjectEditor() {
                 }
               }}
             />
-            <small id="copy-project-name-help">
-              Enter a name for your copy of this project.
-            </small>
+            <small id="copy-project-name-help">{t("editor.copyNameHelp")}</small>
           </div>
         </div>
       </Dialog>

@@ -7,6 +7,7 @@ import { InputText } from "primereact/inputtext";
 import { Button } from "primereact/button";
 import { createNewProject } from "../redux/project/actions";
 import { getLanguageLabel } from "../lib/lang";
+import { useTranslation } from "@zxplay/i18n";
 import { sep } from "../constants";
 
 NewProjectPage.propTypes = {
@@ -14,15 +15,16 @@ NewProjectPage.propTypes = {
 };
 
 export default function NewProjectPage(props) {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const [title, setTitle] = useState("");
   const lang = getLanguageLabel(props.type);
 
   return (
-    <Titled title={(s) => `New Project ${sep} ${s}`}>
+    <Titled title={(s) => `${t("nav.newProject")} ${sep} ${s}`}>
       <Card className="m-2">
-        <h1>New {lang} Project</h1>
-        <h3>Project Name</h3>
+        <h1>{t("newProject.title", { lang })}</h1>
+        <h3>{t("editor.projectName")}</h3>
         <div className="field">
           <InputText
             value={title}
@@ -36,7 +38,7 @@ export default function NewProjectPage(props) {
           />
         </div>
         <Button
-          label="Create Project"
+          label={t("newProject.create")}
           onClick={() => dispatch(createNewProject(props.type, title))}
         />
       </Card>

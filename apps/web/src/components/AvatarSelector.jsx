@@ -4,6 +4,7 @@ import { Button } from "primereact/button";
 import { TabView, TabPanel } from "primereact/tabview";
 import { generateRetroSpriteAvatar } from "../lib/retroSpriteAvatar";
 import AvatarPixelEditor from "./AvatarPixelEditor";
+import { useTranslation } from "@zxplay/i18n";
 
 export default function AvatarSelector({
   visible,
@@ -12,6 +13,7 @@ export default function AvatarSelector({
   onSelect,
   customAvatarData,
 }) {
+  const { t } = useTranslation();
   const [selectedVariant, setSelectedVariant] = useState(0);
   const [avatars, setAvatars] = useState([]);
   const [currentPage, setCurrentPage] = useState(0);
@@ -90,7 +92,7 @@ export default function AvatarSelector({
           <span
             className="text-sm px-1 avatar-button-min-80"
           >
-            Page {currentPage + 1}/{totalPages}
+            {t("avatar.page", { current: currentPage + 1, total: totalPages })}
           </span>
           <Button
             icon="pi pi-chevron-right"
@@ -103,18 +105,18 @@ export default function AvatarSelector({
         </div>
         <div className="flex gap-2">
           <Button
-            label="Randomize"
+            label={t("avatar.randomize")}
             icon="pi pi-refresh"
             className="p-button-outlined p-button-sm"
             onClick={handleRandomize}
           />
           <Button
-            label="Cancel"
+            label={t("actions.cancel")}
             className="p-button-text p-button-sm"
             onClick={onHide}
           />
           <Button
-            label="Select"
+            label={t("avatar.select")}
             icon="pi pi-check"
             className="p-button-sm"
             onClick={handleConfirm}
@@ -125,7 +127,7 @@ export default function AvatarSelector({
 
   return (
     <Dialog
-      header="Choose Your Avatar"
+      header={t("avatar.chooseTitle")}
       visible={visible}
       onHide={onHide}
       footer={footer}
@@ -135,9 +137,9 @@ export default function AvatarSelector({
         activeIndex={activeTab}
         onTabChange={(e) => setActiveTab(e.index)}
       >
-        <TabPanel header="Selection">
+        <TabPanel header={t("avatar.selection")}>
           <div className="text-center mb-5 mt-3">
-            <p className="text-500">Each pattern is unique to your username.</p>
+            <p className="text-500">{t("avatar.unique")}</p>
           </div>
 
           <div className="grid">
@@ -178,14 +180,11 @@ export default function AvatarSelector({
           </div>
 
           <div className="text-center mt-2 avatar-preview-centered">
-            <small className="text-500">
-              Tip: Use arrow buttons to browse more patterns, or click Randomize
-              for a surprise!
-            </small>
+            <small className="text-500">{t("avatar.tip")}</small>
           </div>
         </TabPanel>
 
-        <TabPanel header="Create Your Own">
+        <TabPanel header={t("avatar.createOwn")}>
           <AvatarPixelEditor
             identifier={identifier}
             onSave={handleCustomAvatarSave}

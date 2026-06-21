@@ -8,8 +8,10 @@ import { dashboardLock } from "../dashboard_lock";
 import { showLoading } from "../dashboard_loading";
 import LineNumbersToggle from "./LineNumbersToggle";
 import { Divider } from "primereact/divider";
+import { useTranslation } from "@zxplay/i18n";
 
 export function DemoAssemblyEditor() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const cmRef = useRef(null);
   const asmCode = useSelector((state) => state?.demo.asmCode);
@@ -47,7 +49,7 @@ export function DemoAssemblyEditor() {
         onChange={(cm, _) => dispatch(setAssemblyCode(cm.getValue()))}
       />
       <Button
-        label="Play"
+        label={t("actions.play")}
         icon="pi pi-play"
         className="margin-top-8"
         onClick={() => {

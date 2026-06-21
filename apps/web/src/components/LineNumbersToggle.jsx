@@ -2,8 +2,10 @@ import React from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { InputSwitch } from "primereact/inputswitch";
 import { toggleLineNumbers } from "../redux/app/actions";
+import { useTranslation } from "@zxplay/i18n";
 
 export default function LineNumbersToggle() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const lineNumbers = useSelector((state) => state?.app?.lineNumbers || false);
 
@@ -14,7 +16,7 @@ export default function LineNumbersToggle() {
   return (
     <div className="flex align-items-center gap-2">
       <i className="pi pi-list" />
-      <span>Line Numbers</span>
+      <span>{t("pages.lineNumbers")}</span>
       <InputSwitch
         checked={lineNumbers}
         onChange={(e) => handleToggle(e.value)}

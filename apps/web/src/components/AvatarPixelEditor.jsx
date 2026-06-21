@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "primereact/button";
+import { useTranslation } from "@zxplay/i18n";
 
 // ZX Spectrum color palette
 const SPECTRUM_COLORS = [
@@ -21,6 +22,7 @@ const SPECTRUM_COLORS = [
 ];
 
 export default function AvatarPixelEditor({ identifier, onSave, onCancel, customAvatarData }) {
+  const { t } = useTranslation();
   const [grid, setGrid] = useState(() => {
     // Initialize empty 8x8 grid
     return Array(8)
@@ -151,7 +153,7 @@ export default function AvatarPixelEditor({ identifier, onSave, onCancel, custom
         {/* Left side - Drawing canvas */}
         <div className="flex-grow-1">
           <div className="mb-2">
-            <h4 className="m-1">Draw Your Avatar</h4>
+            <h4 className="m-1">{t("avatar.drawTitle")}</h4>
           </div>
 
           <div
@@ -197,25 +199,25 @@ export default function AvatarPixelEditor({ identifier, onSave, onCancel, custom
           {/* Tools */}
           <div className="mt-3 flex gap-2">
             <Button
-              label="Clear"
+              label={t("avatar.clear")}
               icon="pi pi-trash"
               className="p-button-sm p-button-outlined"
               onClick={clearGrid}
             />
             <Button
-              label="Fill"
+              label={t("avatar.fill")}
               icon="pi pi-stop"
               className="p-button-sm p-button-outlined"
               onClick={fillGrid}
             />
             <Button
-              label="Flip"
+              label={t("avatar.flip")}
               icon="pi pi-arrows-h"
               className="p-button-sm p-button-outlined"
               onClick={flipHorizontal}
             />
             <Button
-              label="Flip"
+              label={t("avatar.flip")}
               icon="pi pi-arrows-v"
               className="p-button-sm p-button-outlined"
               onClick={flipVertical}
@@ -225,7 +227,7 @@ export default function AvatarPixelEditor({ identifier, onSave, onCancel, custom
 
         {/* Right side - Color palette and preview */}
         <div style={{ width: "200px" }}>
-          <h4 className="m-0 mb-2">Colors</h4>
+          <h4 className="m-0 mb-2">{t("avatar.colors")}</h4>
 
           {/* Tool selection */}
           <div className="flex gap-1 mb-2">
@@ -278,7 +280,7 @@ export default function AvatarPixelEditor({ identifier, onSave, onCancel, custom
           </div>
 
           {/* Preview */}
-          <h4 className="mt-3 mb-2">Preview</h4>
+          <h4 className="mt-3 mb-2">{t("avatar.preview")}</h4>
           <div
             style={{
               padding: "8px",
@@ -303,12 +305,12 @@ export default function AvatarPixelEditor({ identifier, onSave, onCancel, custom
       {/* Action buttons */}
       <div className="flex justify-content-end gap-2 mt-3">
         <Button
-          label="Cancel"
+          label={t("actions.cancel")}
           className="p-button-text p-button-sm"
           onClick={onCancel}
         />
         <Button
-          label="Use This Avatar"
+          label={t("avatar.useThis")}
           icon="pi pi-check"
           className="p-button-sm"
           onClick={handleSave}

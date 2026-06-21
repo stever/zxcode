@@ -57,7 +57,8 @@
     "noProjects": "Aún no hay proyectos públicos",
     "dragToReorder": "Arrastra para reordenar",
     "defaultName": "Usuario",
-    "private": "Este perfil es privado"
+    "private": "Este perfil es privado",
+    "privateOwn": "Tu perfil es actualmente privado"
   },
   "about": {
     "createProjects": "Crear proyectos",
@@ -91,5 +92,69 @@
     "privateState": "Privado",
     "publicHelp": "Tu perfil y tus proyectos públicos son visibles para todos",
     "privateHelp": "Tu perfil está oculto a la vista pública"
+  },
+  "avatar": {
+    "chooseTitle": "Elige tu avatar",
+    "selection": "Selección",
+    "unique": "Cada patrón es único para tu nombre de usuario.",
+    "createOwn": "Crea el tuyo",
+    "randomize": "Aleatorio",
+    "select": "Seleccionar",
+    "drawTitle": "Dibuja tu avatar",
+    "clear": "Borrar",
+    "fill": "Rellenar",
+    "flip": "Voltear",
+    "colors": "Colores",
+    "preview": "Vista previa",
+    "useThis": "Usar este avatar",
+    "page": "Página {{current}}/{{total}}",
+    "tip": "Consejo: usa las flechas para ver más patrones, o pulsa Aleatorio para una sorpresa."
+  },
+  "editor": {
+    "projectCopied": "Proyecto copiado",
+    "renameTitle": "Renombrar proyecto",
+    "projectName": "Nombre del proyecto",
+    "urlSlug": "URL (slug)",
+    "copyTitle": "Copiar proyecto",
+    "newProjectName": "Nombre del nuevo proyecto",
+    "copiedDetail": "Se creó «{{name}}»",
+    "deleteConfirm": "¿Seguro que quieres eliminar este proyecto de forma permanente?",
+    "projectBy": "Proyecto de:",
+    "renameNameHelp": "Actualiza o introduce texto para renombrar el proyecto.",
+    "renameSlugHelp": "Opcional: slug de URL personalizado para el proyecto. Déjalo vacío para generarlo automáticamente a partir del título.",
+    "copyNameHelp": "Introduce un nombre para tu copia de este proyecto."
+  },
+  "projectList": {
+    "title": "Título del proyecto",
+    "compiler": "Compilador",
+    "created": "Creado",
+    "updated": "Actualizado"
+  },
+  "feed": {
+    "none": "Aún no hay actividad",
+    "loginPrompt": "Inicia sesión para ver tus novedades",
+    "subtitle": "Proyectos recientes de los usuarios que sigues",
+    "showing": "(mostrando {{first}} - {{last}} de {{total}})",
+    "by": "por",
+    "updated": "Actualizado",
+    "followHint": "Sigue a otros usuarios para ver aquí sus proyectos públicos"
+  },
+  "newProject": {
+    "title": "Nuevo proyecto de {{lang}}",
+    "create": "Crear proyecto"
+  },
+  "visibility": {
+    "makePublic": "Hacer público",
+    "makePublicTitle": "¿Hacer público el proyecto?",
+    "copied": "¡Copiado!",
+    "copyLink": "Copiar enlace",
+    "warning": "Hacer público tu proyecto permitirá que cualquiera vea y ejecute tu código.",
+    "oncePublic": "Una vez público, tu proyecto será accesible mediante un enlace para compartir. Puedes volver a hacerlo privado en cualquier momento.",
+    "profileNote": "Tu proyecto será visible en tu perfil público si tu perfil también es público."
+  },
+  "pages": {
+    "yourProfile": "Tu perfil",
+    "yourProjects": "Tus proyectos",
+    "lineNumbers": "Números de línea"
   }
 }

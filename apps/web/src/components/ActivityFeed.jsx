@@ -11,6 +11,7 @@ import { formatDistanceToNow } from "date-fns";
 import { fetchActivityFeed } from "../redux/social/actions";
 import { getLanguageLabel } from "../lib/lang";
 import ProjectThumbnail from "./ProjectThumbnail";
+import { useTranslation } from "@zxplay/i18n";
 import { sep } from "../constants";
 
 function getLanguageColor(lang) {
@@ -27,6 +28,7 @@ function getLanguageColor(lang) {
 }
 
 export default function ActivityFeed() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
 
   const currentUserId = useSelector((state) => state?.identity.userId);
@@ -51,10 +53,7 @@ export default function ActivityFeed() {
   if (!currentUserId) {
     return (
       <Card className="m-2">
-        <Message
-          severity="info"
-          text="Please log in to view your activity feed"
-        />
+        <Message severity="info" text={t("feed.loginPrompt")} />
       </Card>
     );
   }
@@ -70,14 +69,19 @@ export default function ActivityFeed() {
   return (
     <Titled title={(s) => `Feed ${sep} ${s}`}>
       <div className="m-2">
-        <Card title="Feed">
+        <Card title={t("nav.feed")}>
           <p className="text-500 mb-4">
-            Recent projects from users you follow
+            {t("feed.subtitle")}
             {feedTotalCount > 0 && (
               <span className="ml-2">
-                (showing {feedPage * feedPageSize + 1} -{" "}
-                {Math.min((feedPage + 1) * feedPageSize, feedTotalCount)} of{" "}
-                {feedTotalCount})
+                {t("feed.showing", {
+                  first: feedPage * feedPageSize + 1,
+                  last: Math.min(
+                    (feedPage + 1) * feedPageSize,
+                    feedTotalCount
+                  ),
+                  total: feedTotalCount,
+                })}
               </span>
             )}
           </p>
@@ -126,13 +130,13 @@ export default function ActivityFeed() {
 
                             <div className="mt-auto text-400 text-sm relative z-1">
                               <div>
-                                by @
+                                {t("feed.by")} @
                                 {userSlug ||
                                   project.owner?.greeting_name ||
                                   "unknown"}
                               </div>
                               <div>
-                                Updated{" "}
+                                {t("feed.updated")}{" "}
                                 {formatDistanceToNow(
                                   new Date(project.updated_at),
                                   { addSuffix: true }
@@ -160,10 +164,8 @@ export default function ActivityFeed() {
           ) : (
             <div className="text-center py-4">
               <i className="pi pi-inbox text-4xl text-300 mb-3" />
-              <p className="text-500">No activity yet</p>
-              <p className="text-sm">
-                Follow other users to see their public projects here
-              </p>
+              <p className="text-500">{t("feed.none")}</p>
+              <p className="text-sm">{t("feed.followHint")}</p>
             </div>
           )}
         </Card>

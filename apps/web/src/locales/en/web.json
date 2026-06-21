@@ -57,7 +57,8 @@
     "noProjects": "No public projects yet",
     "dragToReorder": "Drag to reorder",
     "defaultName": "User",
-    "private": "This profile is private"
+    "private": "This profile is private",
+    "privateOwn": "Your profile is currently private"
   },
   "about": {
     "createProjects": "Create Projects",
@@ -91,5 +92,69 @@
     "privateState": "Private",
     "publicHelp": "Your profile and public projects are visible to everyone",
     "privateHelp": "Your profile is hidden from public view"
+  },
+  "avatar": {
+    "chooseTitle": "Choose Your Avatar",
+    "selection": "Selection",
+    "unique": "Each pattern is unique to your username.",
+    "createOwn": "Create Your Own",
+    "randomize": "Randomize",
+    "select": "Select",
+    "drawTitle": "Draw Your Avatar",
+    "clear": "Clear",
+    "fill": "Fill",
+    "flip": "Flip",
+    "colors": "Colors",
+    "preview": "Preview",
+    "useThis": "Use This Avatar",
+    "page": "Page {{current}}/{{total}}",
+    "tip": "Tip: Use arrow buttons to browse more patterns, or click Randomize for a surprise!"
+  },
+  "editor": {
+    "projectCopied": "Project Copied",
+    "renameTitle": "Rename Project",
+    "projectName": "Project Name",
+    "urlSlug": "URL Slug",
+    "copyTitle": "Copy Project",
+    "newProjectName": "New Project Name",
+    "copiedDetail": "Created \"{{name}}\"",
+    "deleteConfirm": "Are you sure you want to permanently remove this project?",
+    "projectBy": "Project by:",
+    "renameNameHelp": "Update or enter text to rename the project.",
+    "renameSlugHelp": "Optional: Custom URL slug for the project. Leave empty to auto-generate from title.",
+    "copyNameHelp": "Enter a name for your copy of this project."
+  },
+  "projectList": {
+    "title": "Project Title",
+    "compiler": "Compiler",
+    "created": "Created",
+    "updated": "Updated"
+  },
+  "feed": {
+    "none": "No activity yet",
+    "loginPrompt": "Please log in to view your activity feed",
+    "subtitle": "Recent projects from users you follow",
+    "showing": "(showing {{first}} - {{last}} of {{total}})",
+    "by": "by",
+    "updated": "Updated",
+    "followHint": "Follow other users to see their public projects here"
+  },
+  "newProject": {
+    "title": "New {{lang}} Project",
+    "create": "Create Project"
+  },
+  "visibility": {
+    "makePublic": "Make Public",
+    "makePublicTitle": "Make Project Public?",
+    "copied": "Copied!",
+    "copyLink": "Copy Link",
+    "warning": "Making your project public will allow anyone to view and run your code.",
+    "oncePublic": "Once public, your project will be accessible via a shareable link. You can make it private again at any time.",
+    "profileNote": "Your project will be visible on your public profile if your profile is also public."
+  },
+  "pages": {
+    "yourProfile": "Your Profile",
+    "yourProjects": "Your Projects",
+    "lineNumbers": "Line Numbers"
   }
 }

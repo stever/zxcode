@@ -6,6 +6,7 @@ import { Dialog } from "primereact/dialog";
 import { Message } from "primereact/message";
 import gql from "graphql-tag";
 import { gqlFetch } from "../graphql_fetch";
+import { useTranslation } from "@zxplay/i18n";
 
 const UPDATE_PROJECT_VISIBILITY = gql`
   mutation ($project_id: uuid!, $is_public: Boolean!) {
@@ -24,6 +25,7 @@ const UPDATE_PROJECT_VISIBILITY = gql`
 `;
 
 export default function ProjectVisibilityToggle({ project, userId }) {
+  const { t } = useTranslation();
   const [isPublic, setIsPublic] = useState(project?.is_public || false);
   const [showDialog, setShowDialog] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
@@ -80,13 +82,13 @@ export default function ProjectVisibilityToggle({ project, userId }) {
   const dialogFooter = (
     <div>
       <Button
-        label="Cancel"
+        label={t("actions.cancel")}
         icon="pi pi-times"
         onClick={() => setShowDialog(false)}
         className="p-button-text"
       />
       <Button
-        label="Make Public"
+        label={t("visibility.makePublic")}
         icon="pi pi-globe"
         onClick={() => updateVisibility(true)}
         loading={updating}
@@ -99,7 +101,7 @@ export default function ProjectVisibilityToggle({ project, userId }) {
     <div className="flex align-items-center gap-3">
       <div className="flex align-items-center gap-2">
         <i className={isPublic ? "pi pi-globe" : "pi pi-lock"} />
-        <span>{isPublic ? "Public" : "Private"}</span>
+        <span>{isPublic ? t("settings.publicState") : t("settings.privateState")}</span>
         <InputSwitch
           checked={isPublic}
           onChange={(e) => handleToggle(e.value)}
@@ -111,7 +113,7 @@ export default function ProjectVisibilityToggle({ project, userId }) {
         <div className="flex align-items-center gap-2">
           <Button
             icon={copied ? "pi pi-check" : "pi pi-copy"}
-            label={copied ? "Copied!" : "Copy Link"}
+            label={copied ? t("visibility.copied") : t("visibility.copyLink")}
             onClick={copyToClipboard}
             className="p-button-sm p-button-outlined"
           />
@@ -119,7 +121,7 @@ export default function ProjectVisibilityToggle({ project, userId }) {
       )}
 
       <Dialog
-        header="Make Project Public?"
+        header={t("visibility.makePublicTitle")}
         visible={showDialog}
         className="dialog-width-450"
         footer={dialogFooter}
@@ -128,16 +130,14 @@ export default function ProjectVisibilityToggle({ project, userId }) {
         <div className="mb-3">
           <Message
             severity="warn"
-            text="Making your project public will allow anyone to view and run your code."
+            text={t("visibility.warning")}
           />
         </div>
         <p>
-          Once public, your project will be accessible via a shareable link. You
-          can make it private again at any time.
+          {t("visibility.oncePublic")}
         </p>
         <p className="text-xs text-color-secondary mt-2">
-          Your project will be visible on your public profile if your profile is
-          also public.
+          {t("visibility.profileNote")}
         </p>
       </Dialog>
     </div>

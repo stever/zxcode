@@ -13,9 +13,11 @@ import {
 } from "../redux/project/actions";
 import { showToastsForErrorItems } from "../errors";
 import { getLanguageLabel } from "../lib/lang";
+import { useTranslation } from "@zxplay/i18n";
 import { sep } from "../constants";
 
 export default function ProjectPage({ projectId }) {
+  const { t } = useTranslation();
   const { id } = useParams();
   // Use the prop if provided, otherwise use the param
   const effectiveId = projectId || id;
@@ -69,7 +71,7 @@ export default function ProjectPage({ projectId }) {
                   activeIndex={selectedTabIndex}
                   onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}
                 >
-                  <TabPanel header="Emulator">
+                  <TabPanel header={t("home.tabEmulator")}>
                     <Emulator zoom={zoom} width={width} />
                   </TabPanel>
                   <TabPanel header={editorTitle}>
