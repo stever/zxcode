@@ -40,6 +40,7 @@ import ProjectThumbnail from "./ProjectThumbnail";
 import { generateRetroAvatar } from "../lib/avatar";
 import { generateRetroSpriteAvatar } from "../lib/retroSpriteAvatar";
 import AvatarSelector from "./AvatarSelector";
+import { useTranslation } from "@zxplay/i18n";
 
 const UPDATE_PROJECT_ORDER = gql`
   mutation UpdateProjectOrder($projectId: uuid!, $displayOrder: Int!) {
@@ -205,7 +206,7 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
             zIndex: 10,
             border: "2px solid #3a3a3a",
           }}
-          title="Drag to reorder"
+          title={t("profile.dragToReorder")}
           onClick={(e) => e.stopPropagation()}
         >
           <i
@@ -253,6 +254,7 @@ function getLanguageColor(lang) {
 }
 
 export default function PublicUserProfile() {
+  const { t } = useTranslation();
   const { id } = useParams(); // This could be either slug or UUID
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -528,12 +530,12 @@ export default function PublicUserProfile() {
   if (!user.profile_is_public && !isOwnProfile) {
     return (
       <Card className="m-2">
-        <Message severity="info" text="This profile is private" />
+        <Message severity="info" text={t("profile.private")} />
       </Card>
     );
   }
 
-  const displayName = user.greeting_name || "User";
+  const displayName = user.greeting_name || t("profile.defaultName");
   const memberSince = formatDistanceToNow(new Date(user.created_at), {
     addSuffix: true,
   });
@@ -572,7 +574,7 @@ export default function PublicUserProfile() {
                       border: "2px solid #3a3a3a",
                     }}
                     onClick={() => setShowAvatarSelector(true)}
-                    title="Change avatar"
+                    title={t("profile.changeAvatar")}
                   >
                     <i
                       className="pi pi-cog"
@@ -590,7 +592,7 @@ export default function PublicUserProfile() {
 
               <div className="w-full">
                 <div className="flex justify-content-between mb-2">
-                  <span className="text-500">Member since:</span>
+                  <span className="text-500">{t("profile.memberSince")}</span>
                   <span>{memberSince}</span>
                 </div>
               </div>
@@ -598,7 +600,7 @@ export default function PublicUserProfile() {
               {!isOwnProfile && currentUserId && (
                 <>
                   <Button
-                    label={isFollowing ? "Unfollow" : "Follow"}
+                    label={isFollowing ? t("actions.unfollow") : t("actions.follow")}
                     icon={isFollowing ? "pi pi-user-minus" : "pi pi-user-plus"}
                     className="w-full mb-2 mt-4"
                     onClick={handleFollowToggle}
@@ -620,7 +622,7 @@ export default function PublicUserProfile() {
                 >
                   <i className="pi pi-users mb-1"></i>
                   <span className="font-bold text-lg">{followersCount}</span>
-                  <span className="text-sm">Followers</span>
+                  <span className="text-sm">{t("follow.typeFollowers")}</span>
                 </button>
                 <button
                   className="flex-1 p-button p-component p-button-outlined p-button-secondary p-button-sm flex flex-column align-items-center py-2"
@@ -628,7 +630,7 @@ export default function PublicUserProfile() {
                 >
                   <i className="pi pi-user-plus mb-1"></i>
                   <span className="font-bold text-lg">{followingCount}</span>
-                  <span className="text-sm">Following</span>
+                  <span className="text-sm">{t("follow.typeFollowing")}</span>
                 </button>
               </div>
 
@@ -637,7 +639,7 @@ export default function PublicUserProfile() {
                   <Divider />
                   <div className="w-full">
                     <Button
-                      label="Edit Profile"
+                      label={t("profile.editProfile")}
                       icon="pi pi-pencil"
                       className="w-full mb-2"
                       onClick={() => navigate("/settings/profile")}
@@ -756,7 +758,7 @@ export default function PublicUserProfile() {
             ) : (
               <div className="text-center py-4">
                 <i className="pi pi-inbox text-4xl text-300 mb-3" />
-                <p className="text-500">No public projects yet</p>
+                <p className="text-500">{t("profile.noProjects")}</p>
                 {isOwnProfile && (
                   <p className="text-sm">
                     Make your projects public to display them here

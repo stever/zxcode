@@ -2,37 +2,46 @@ import React from "react";
 import {Link} from "react-router-dom";
 import {Titled} from "react-titled";
 import {Card} from "primereact/card";
+import {useTranslation, Trans} from "@zxplay/i18n";
 import Constants, {sep} from "../constants";
 
 export default function AboutPage() {
+    const {t} = useTranslation();
     return (
-        <Titled title={(s) => `About ${sep} ${s}`}>
+        <Titled title={(s) => `${t("nav.aboutThisSite")} ${sep} ${s}`}>
             <Card className="m-2">
-                <h1>About This Site</h1>
+                <h1>{t("nav.aboutThisSite")}</h1>
                 <p>
-                    A ZX Spectrum emulator & programming environment for the browser.
-                    Source available <a href="https://github.com/zxplay/zxcoder" target="_blank">here</a>.
+                    <Trans
+                        i18nKey="about.intro1"
+                        components={{srcLink: <a href="https://github.com/zxplay/zxcoder" target="_blank" rel="noreferrer"/>}}
+                    />
                 </p>
                 <p>
-                    An alternative website, related to this one,
-                    is available at <a href="https://zxplay.org/" target="_blank">zxplay.org</a>.
-                    ZX Play is a mobile-friendly ZX Spectrum emulator, for games.
+                    <Trans
+                        i18nKey="about.intro2"
+                        components={{zxplayLink: <a href="https://zxplay.org/" target="_blank" rel="noreferrer"/>}}
+                    />
                 </p>
                 <p>
-                    Please read <Link to="/privacy-policy">privacy policy</Link>
-                    {' '}and <Link to="/terms-of-use">terms of use</Link>, for this website.
+                    <Trans
+                        i18nKey="about.legal"
+                        components={{
+                            privacyLink: <Link to="/privacy-policy"/>,
+                            termsLink: <Link to="/terms-of-use"/>,
+                        }}
+                    />
                 </p>
-                <h2>Create Projects</h2>
+                <h2>{t("about.createProjects")}</h2>
                 <p>
-                    Registered users can save projects.
+                    {t("about.registeredUsers")}
                 </p>
                 <p>
-                    Use the Sign-In button above and look for the "Sign Up" link on
-                    the proceeding page to create an account.
+                    {t("about.createAccount")}
                 </p>
-                <h2>Acknowledgements</h2>
+                <h2>{t("acknowledgements")}</h2>
                 <p>
-                    This software uses code from the following open source projects:
+                    {t("about.acknowledgementsIntro")}
                 </p>
                 <ul>
                     <li>
@@ -75,10 +84,9 @@ export default function AboutPage() {
                         <a href="https://github.com/primefaces/primereact/blob/master/LICENSE.md" target="_blank">LICENSE</a>.
                     </li>
                 </ul>
-                <h2>Sinclair ROM Copyright Permission</h2>
+                <h2>{t("about.sinclairRomHeading")}</h2>
                 <blockquote>
-                    Amstrad have kindly given their permission for the
-                    redistribution of their copyrighted material but retain that copyright.
+                    {t("about.sinclairRomText")}
                 </blockquote>
                 <a href="https://worldofspectrum.net/assets/amstrad-roms.txt" target="_blank">comp.sys.sinclair</a> 1999-08-31
             </Card>

@@ -49,5 +49,25 @@
     "pageTitle": "{{name}}'s {{type}}",
     "typeFollowers": "Followers",
     "typeFollowing": "Following"
+  },
+  "profile": {
+    "changeAvatar": "Change avatar",
+    "memberSince": "Member since:",
+    "editProfile": "Edit Profile",
+    "noProjects": "No public projects yet",
+    "dragToReorder": "Drag to reorder",
+    "defaultName": "User",
+    "private": "This profile is private"
+  },
+  "about": {
+    "createProjects": "Create Projects",
+    "registeredUsers": "Registered users can save projects.",
+    "createAccount": "Use the Sign-In button above and look for the \"Sign Up\" link on the proceeding page to create an account.",
+    "acknowledgementsIntro": "This software uses code from the following open source projects:",
+    "sinclairRomHeading": "Sinclair ROM Copyright Permission",
+    "sinclairRomText": "Amstrad have kindly given their permission for the redistribution of their copyrighted material but retain that copyright.",
+    "intro1": "A ZX Spectrum emulator & programming environment for the browser. Source available <srcLink>here</srcLink>.",
+    "intro2": "An alternative website, related to this one, is available at <zxplayLink>zxplay.org</zxplayLink>. ZX Play is a mobile-friendly ZX Spectrum emulator, for games.",
+    "legal": "Please read <privacyLink>privacy policy</privacyLink> and <termsLink>terms of use</termsLink>, for this website."
   }
 }
