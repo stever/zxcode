@@ -1,35 +1,17 @@
 import React, { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { Link } from "react-router-dom";
 import { Titled } from "react-titled";
 import { Card } from "primereact/card";
-import { Tag } from "primereact/tag";
 import { ProgressSpinner } from "primereact/progressspinner";
 import { Message } from "primereact/message";
 import { Paginator } from "primereact/paginator";
-import { formatDistanceToNow } from "date-fns";
 import { fetchActivityFeed } from "../redux/social/actions";
-import { getLanguageLabel } from "../lib/lang";
-import ProjectThumbnail from "./ProjectThumbnail";
-import { useTranslation, useDateFnsLocale } from "@zxplay/i18n";
+import ProjectCard from "./ProjectCard";
+import { useTranslation } from "@zxplay/i18n";
 import { sep } from "../constants";
-
-function getLanguageColor(lang) {
-  const colors = {
-    asm: "purple",
-    basic: "blue",
-    bas2tap: "blue",
-    c: "orange",
-    sdcc: "orange",
-    zmac: "purple",
-    zxbasic: "green",
-  };
-  return colors[lang] || "gray";
-}
 
 export default function ActivityFeed() {
   const { t } = useTranslation();
-  const locale = useDateFnsLocale();
   const dispatch = useDispatch();
 
   const currentUserId = useSelector((state) => state?.identity.userId);
@@ -89,7 +71,7 @@ export default function ActivityFeed() {
 
           {activityFeed.length > 0 ? (
             <>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 align-items-start">
                 {activityFeed.map((project) => {
                   const userSlug = project.owner?.slug;
                   const projectUrl =
@@ -98,59 +80,14 @@ export default function ActivityFeed() {
                       : `/projects/${project.project_id}`;
 
                   return (
-                    <div
+                    <ProjectCard
                       key={project.project_id}
-                      style={{
-                        flexBasis: "400px",
-                        flexGrow: 0,
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Link to={projectUrl} className="no-underline">
-                        <Card
-                          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
-                          style={{
-                            border: "none",
-                          }}
-                        >
-                          <div
-                            className="flex flex-column h-full relative"
-                            style={{ minHeight: "160px" }}
-                          >
-                            <ProjectThumbnail
-                              projectId={project.project_id}
-                              updatedAt={project.updated_at}
-                            />
-
-                            <h3 className="mb-2 text-white relative z-1">
-                              {project.title}
-                            </h3>
-
-                            <Tag
-                              value={getLanguageLabel(project.lang)}
-                              severity={getLanguageColor(project.lang)}
-                              className="lang-tag align-self-start mb-3 relative z-1"
-                            />
-
-                            <div className="mt-auto text-400 text-sm relative z-1">
-                              <div>
-                                {t("feed.by")} @
-                                {userSlug ||
-                                  project.owner?.greeting_name ||
-                                  "unknown"}
-                              </div>
-                              <div>
-                                {t("feed.updated")}{" "}
-                                {formatDistanceToNow(
-                                  new Date(project.updated_at),
-                                  { addSuffix: true, locale }
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </Card>
-                      </Link>
-                    </div>
+                      project={project}
+                      projectUrl={projectUrl}
+                      author={`@${
+                        userSlug || project.owner?.greeting_name || "unknown"
+                      }`}
+                    />
                   );
                 })}
               </div>

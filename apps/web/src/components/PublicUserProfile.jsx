@@ -37,12 +37,10 @@ import {
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { getLanguageLabel } from "../lib/lang";
-import ProjectThumbnail from "./ProjectThumbnail";
 import { generateRetroAvatar } from "../lib/avatar";
 import { generateRetroSpriteAvatar } from "../lib/retroSpriteAvatar";
 import AvatarSelector from "./AvatarSelector";
-import StarButton from "./StarButton";
+import ProjectCard, { ProjectCardBody } from "./ProjectCard";
 import { useTranslation, useDateFnsLocale } from "@zxplay/i18n";
 
 const UPDATE_PROJECT_ORDER = gql`
@@ -201,69 +199,9 @@ const GET_STARRED_PROJECTS = gql`
   }
 `;
 
-// Read-only project card used for other users' public projects and for starred
-// projects (which may belong to anyone, hence the optional author line).
-function ProjectCard({ project, projectUrl, showAuthor = false, onStarToggle }) {
-  const { t } = useTranslation();
-  const locale = useDateFnsLocale();
-
-  return (
-    <div style={{ flexBasis: "400px", flexGrow: 0, flexShrink: 0 }}>
-      <Link to={projectUrl} className="no-underline">
-        <Card
-          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
-          style={{ border: "none" }}
-        >
-          <div
-            className="flex flex-column h-full relative"
-            style={{ minHeight: "160px" }}
-          >
-            <ProjectThumbnail
-              projectId={project.project_id}
-              updatedAt={project.updated_at}
-            />
-
-            <div
-              className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
-              style={{ marginTop: "-0.5rem" }}
-            >
-              <Tag
-                value={getLanguageLabel(project.lang)}
-                severity={getLanguageColor(project.lang)}
-                className="lang-tag"
-              />
-              <StarButton
-                projectId={project.project_id}
-                onToggle={onStarToggle}
-              />
-            </div>
-
-            <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
-
-            {showAuthor && project.user?.greeting_name && (
-              <div className="mb-3 text-400 text-sm relative z-1">
-                {t("feed.by")} {project.user.greeting_name}
-              </div>
-            )}
-
-            <div className="text-400 text-sm relative z-1">
-              {t("feed.updated")}{" "}
-              {formatDistanceToNow(new Date(project.updated_at), {
-                addSuffix: true,
-                locale,
-              })}
-            </div>
-          </div>
-        </Card>
-      </Link>
-    </div>
-  );
-}
-
 // Sortable project card component for drag and drop
 function SortableProjectCard({ project, projectUrl, isDragging, onStarToggle }) {
   const { t } = useTranslation();
-  const locale = useDateFnsLocale();
   const navigate = useNavigate();
   const {
     attributes,
@@ -330,56 +268,10 @@ function SortableProjectCard({ project, projectUrl, isDragging, onStarToggle }) 
             style={{ fontSize: "12px", color: "#aaa" }}
           />
         </div>
-        <div
-          className="flex flex-column h-full relative"
-          style={{ minHeight: "160px" }}
-        >
-          <ProjectThumbnail
-            projectId={project.project_id}
-            updatedAt={project.updated_at}
-          />
-
-          <div
-            className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
-            style={{ marginTop: "-0.5rem" }}
-          >
-            <Tag
-              value={getLanguageLabel(project.lang)}
-              severity={getLanguageColor(project.lang)}
-              className="lang-tag"
-            />
-            <StarButton
-              projectId={project.project_id}
-              onToggle={onStarToggle}
-            />
-          </div>
-
-          <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
-
-          <div className="text-400 text-sm relative z-1">
-            {t("feed.updated")}{" "}
-            {formatDistanceToNow(new Date(project.updated_at), {
-              addSuffix: true,
-              locale,
-            })}
-          </div>
-        </div>
+        <ProjectCardBody project={project} onStarToggle={onStarToggle} />
       </Card>
     </div>
   );
-}
-
-function getLanguageColor(lang) {
-  const colors = {
-    asm: "purple",
-    basic: "blue",
-    bas2tap: "blue",
-    c: "orange",
-    sdcc: "orange",
-    zmac: "purple",
-    zxbasic: "green",
-  };
-  return colors[lang] || "gray";
 }
 
 export default function PublicUserProfile() {
@@ -1010,7 +902,7 @@ export default function PublicUserProfile() {
                           key={project.project_id}
                           project={project}
                           projectUrl={projectUrl}
-                          showAuthor
+                          author={project.user?.greeting_name}
                           onStarToggle={handleStarToggle}
                         />
                       );
