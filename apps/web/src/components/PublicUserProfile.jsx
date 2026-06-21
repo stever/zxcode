@@ -178,7 +178,7 @@ const GET_USER_BY_ID = gql`
 `;
 
 // Sortable project card component for drag and drop
-function SortableProjectCard({ project, projectUrl, isDragging }) {
+function SortableProjectCard({ project, projectUrl, isDragging, onStarToggle }) {
   const { t } = useTranslation();
   const locale = useDateFnsLocale();
   const navigate = useNavigate();
@@ -254,7 +254,10 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
           />
 
           <div className="absolute" style={{ top: "-0.5rem", left: 0, zIndex: 2 }}>
-            <StarButton projectId={project.project_id} />
+            <StarButton
+              projectId={project.project_id}
+              onToggle={onStarToggle}
+            />
           </div>
 
           <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
@@ -518,6 +521,31 @@ export default function PublicUserProfile() {
     }
   };
 
+  // Keep the Starred Projects section in sync when the viewer stars/unstars on
+  // their own profile (the profile data is a one-shot fetch, not a live query).
+  const handleStarToggle = (projectId, isStarred) => {
+    if (!isOwnProfile) return;
+
+    setStarredProjects((prev) => {
+      if (isStarred) {
+        if (prev.some((p) => p.project_id === projectId)) return prev;
+        const source =
+          projects.find((p) => p.project_id === projectId) ||
+          prev.find((p) => p.project_id === projectId);
+        if (!source) return prev;
+        const entry = {
+          ...source,
+          user: source.user || {
+            slug: user.slug,
+            greeting_name: user.greeting_name,
+          },
+        };
+        return [entry, ...prev];
+      }
+      return prev.filter((p) => p.project_id !== projectId);
+    });
+  };
+
   const handleDragEnd = async (event) => {
     const { active, over } = event;
 
@@ -748,6 +776,7 @@ export default function PublicUserProfile() {
                             project={project}
                             projectUrl={projectUrl}
                             isDragging={false}
+                            onStarToggle={handleStarToggle}
                           />
                         );
                       })}
@@ -861,7 +890,10 @@ export default function PublicUserProfile() {
                             />
 
                             <div className="absolute" style={{ top: "-0.5rem", left: 0, zIndex: 2 }}>
-                              <StarButton projectId={project.project_id} />
+                              <StarButton
+                                projectId={project.project_id}
+                                onToggle={handleStarToggle}
+                              />
                             </div>
 
                             <h3 className="mb-2 text-white relative z-1">

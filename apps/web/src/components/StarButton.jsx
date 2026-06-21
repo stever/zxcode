@@ -33,16 +33,22 @@ const GET_STAR_STATE = gql`
  * cards, the project page, or anywhere else without threading data through the
  * surrounding query. Toggling is optimistic and persisted via redux sagas.
  */
-export default function StarButton({ projectId, className }) {
+export default function StarButton({ projectId, className, onToggle }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const currentUserId = useSelector((state) => state?.identity.userId);
+  // Saga dispatches setStarredStatus once a star/unstar mutation commits; we key
+  // off it to reconcile a freshly-mounted button (e.g. a newly added starred
+  // card) with the DB, avoiding a stale read if it mounted mid-mutation.
+  const persistedStarred = useSelector(
+    (state) => state?.stars?.starredStatus?.[projectId]
+  );
 
   const [starred, setStarred] = useState(false);
   const [count, setCount] = useState(0);
 
-  // Load star state on mount and whenever the viewer's identity resolves
-  // (logging in must reflect their own starred state).
+  // Load star state on mount, when the viewer's identity resolves (logging in
+  // must reflect their own starred state), and when a mutation commits.
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
@@ -69,7 +75,7 @@ export default function StarButton({ projectId, className }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId, currentUserId]);
+  }, [projectId, currentUserId, persistedStarred]);
 
   const handleToggle = (e) => {
     // Star buttons frequently live inside clickable cards/links; never let the
@@ -83,10 +89,12 @@ export default function StarButton({ projectId, className }) {
       dispatch(unstarProject(projectId));
       setStarred(false);
       setCount((c) => Math.max(0, c - 1));
+      if (onToggle) onToggle(projectId, false);
     } else {
       dispatch(starProject(projectId));
       setStarred(true);
       setCount((c) => c + 1);
+      if (onToggle) onToggle(projectId, true);
     }
   };
 
