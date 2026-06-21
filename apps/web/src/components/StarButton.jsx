@@ -112,24 +112,31 @@ export default function StarButton({ projectId, className, onToggle }) {
     ? t("stars.unstar")
     : t("stars.star");
 
-  // Compact outlined buttons, used everywhere (project page and cards). Custom
-  // rather than PrimeReact's Button, whose icon-only variant forces a fixed
-  // square width and ignores horizontal padding. The star toggles; the count
-  // navigates to the stargazers page.
-  const outlined = {
+  // A GitHub-style split button: the star toggle and the count are joined into
+  // one outlined control, divided by a shared border. The star toggles; the
+  // count navigates to the stargazers page. Custom (rather than PrimeReact's
+  // SplitButton, which is a button + dropdown menu).
+  const segment = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     background: "transparent",
-    border: "1px solid #6c757d",
-    borderRadius: "6px",
-    padding: "0.3rem 0.4rem",
+    border: "none",
+    padding: "0.3rem 0.45rem",
     fontSize: "0.8rem",
     lineHeight: 1,
   };
 
   return (
-    <span className={`flex align-items-center gap-2 ${className || ""}`}>
+    <span
+      className={`inline-flex ${className || ""}`}
+      style={{
+        border: "1px solid #6c757d",
+        borderRadius: "6px",
+        overflow: "hidden",
+        alignItems: "stretch",
+      }}
+    >
       <button
         type="button"
         onClick={handleToggle}
@@ -138,7 +145,8 @@ export default function StarButton({ projectId, className, onToggle }) {
         aria-pressed={starred}
         aria-label={toggleTitle}
         style={{
-          ...outlined,
+          ...segment,
+          borderRight: "1px solid #6c757d",
           color: starred ? "#f5c518" : "#c0c0c0",
           cursor: currentUserId ? "pointer" : "default",
         }}
@@ -154,7 +162,7 @@ export default function StarButton({ projectId, className, onToggle }) {
         title={t("stars.viewStargazers")}
         aria-label={t("stars.viewStargazers")}
         style={{
-          ...outlined,
+          ...segment,
           color: "#c0c0c0",
           fontWeight: 700,
           cursor: "pointer",
