@@ -2,12 +2,10 @@ import React, {useState} from "react";
 import {useDispatch, useSelector} from "react-redux";
 import {useNavigate} from "react-router-dom";
 import {InputText} from "primereact/inputtext";
-import {Menubar} from "primereact/menubar";
-import {
-    viewFullScreen
-} from "../redux/jsspeccy/actions";
+import {Nav as Deck} from "@zxplay/ui";
+import {viewFullScreen} from "../redux/jsspeccy/actions";
 import {resetEmulator} from "../redux/app/actions";
-import {useTranslation, LanguageSwitcher} from "@zxplay/i18n";
+import {useTranslation} from "@zxplay/i18n";
 
 export default function Nav() {
     const dispatch = useDispatch();
@@ -18,53 +16,35 @@ export default function Nav() {
 
     const pathname = useSelector(state => state?.router.location.pathname);
     const emuVisible = pathname === '/';
-
     const isMobile = useSelector(state => state?.window.isMobile);
-    const className = isMobile ? '' : 'px-2 pt-2';
 
-    const items = getMenuItems(t, navigate, dispatch, emuVisible);
+    const model = getMenuItems(t, navigate, dispatch, emuVisible);
+
+    const search = (
+        <InputText
+            className="p-2"
+            placeholder={t('nav.search')}
+            type="text"
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchInput) {
+                    navigate(`/search?q=${searchInput}`);
+                }
+            }}/>
+    );
 
     return (
-        <div className={className}>
-            <Menubar
-                model={items}
-                start={<img alt="logo" src="/logo.png" height={"40"} className="mx-1"/>}
-                end={(
-                    <div className="flex align-items-center">
-                        <InputText
-                            className="mx-1 p-2"
-                            placeholder={t('nav.search')}
-                            type="text"
-                            onChange={(e) => setSearchInput(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && searchInput) {
-                                    navigate(`/search?q=${searchInput}`);
-                                }
-                            }}/>
-                        <LanguageSwitcher className="mx-1"/>
-                    </div>
-                )}
-                style={{
-                    borderRadius: isMobile ? 0 : '5px',
-                    borderColor: '#1E1E1E'
-                }}
-            />
-        </div>
+        <Deck
+            model={model}
+            brandTitle="ZX Play"
+            onBrand={() => navigate('/')}
+            isMobile={isMobile}
+            search={search}
+        />
     );
 }
 
 function getMenuItems(t, navigate, dispatch, emuVisible) {
-    const sep = {
-        separator: true
-    };
-
-    const homeButton = {
-        label: 'ZX Play',
-        command: () => {
-            navigate('/');
-        }
-    };
-
     const viewFullScreenMenuItem = {
         label: t('nav.fullScreen'),
         icon: 'pi pi-fw pi-window-maximize',
@@ -77,10 +57,8 @@ function getMenuItems(t, navigate, dispatch, emuVisible) {
     const viewMenu = {
         label: t('nav.view'),
         icon: 'pi pi-fw pi-eye',
-        items: []
+        items: [viewFullScreenMenuItem]
     };
-
-    viewMenu.items.push(viewFullScreenMenuItem);
 
     const infoMenu = {
         label: t('nav.info'),
@@ -100,20 +78,6 @@ function getMenuItems(t, navigate, dispatch, emuVisible) {
                     navigate('/info/linking');
                 }
             },
-            // {
-            //     label: 'Privacy Policy',
-            //     icon: 'pi pi-fw pi-eye',
-            //     command: () => {
-            //         navigate('/legal/privacy-policy');
-            //     }
-            // },
-            // {
-            //     label: 'Terms of Use',
-            //     icon: 'pi pi-fw pi-info-circle',
-            //     command: () => {
-            //         navigate('/legal/terms-of-use');
-            //     }
-            // }
         ]
     };
 
@@ -126,7 +90,6 @@ function getMenuItems(t, navigate, dispatch, emuVisible) {
     };
 
     return [
-        homeButton,
         viewMenu,
         infoMenu,
         resetButton,

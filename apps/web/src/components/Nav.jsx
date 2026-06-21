@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { Menubar } from "primereact/menubar";
+import { Nav as Deck } from "@zxplay/ui";
 import {
   pause,
   showOpenFileDialog,
@@ -12,7 +12,7 @@ import { getUserInfo } from "../redux/identity/actions";
 import { login, logout } from "../auth";
 import { resetEmulator } from "../redux/app/actions";
 import { getLanguageLabel } from "../lib/lang";
-import { useTranslation, LanguageSwitcher } from "@zxplay/i18n";
+import { useTranslation } from "@zxplay/i18n";
 import Constants from "../constants";
 
 export default function Nav() {
@@ -30,7 +30,7 @@ export default function Nav() {
   const userSlug = useSelector((state) => state?.identity.userSlug);
   const lang = useSelector((state) => state?.project.lang);
 
-  const items = getMenuItems(
+  const model = getMenuItems(
     t,
     navigate,
     userId,
@@ -41,39 +41,24 @@ export default function Nav() {
   );
 
   const isMobile = useSelector((state) => state?.window.isMobile);
-  const className = isMobile ? "" : "px-2 pt-2";
 
   useEffect(() => {
     dispatch(getUserInfo());
   }, []);
 
   return (
-    <div className={className}>
-      <Menubar
-        model={items}
-        start={
-          <img alt="logo" src="/logo.png" height={"40"} className="mx-1" />
-        }
-        end={<LanguageSwitcher className="mr-2" />}
-        style={{
-          borderRadius: isMobile ? 0 : "5px",
-          borderColor: "#1E1E1E",
-        }}
-      />
-    </div>
+    <Deck
+      model={model}
+      brandTitle="Code · ZX Play"
+      onBrand={() => navigate("/")}
+      isMobile={isMobile}
+    />
   );
 }
 
 function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible) {
   const sep = {
     separator: true,
-  };
-
-  const homeButton = {
-    label: "Code · ZX Play",
-    command: () => {
-      navigate("/");
-    },
   };
 
   const newPasmo = {
@@ -166,14 +151,6 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible)
       {
         separator: true,
       },
-      // {
-      //   label: "Upload TAP",
-      //   icon: "pi pi-fw pi-upload",
-      //   command: () => {
-      //     dispatch(showOpenFileDialog());
-      //     navigate("/");
-      //   },
-      // },
       {
         label: t("nav.downloadTap"),
         icon: "pi pi-fw pi-download",
@@ -287,12 +264,5 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible)
     },
   };
 
-  return [
-    homeButton,
-    projectMenu,
-    viewMenu,
-    infoMenu,
-    resetButton,
-    loginButton,
-  ];
+  return [projectMenu, viewMenu, infoMenu, resetButton, loginButton];
 }

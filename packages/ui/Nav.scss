@@ -1,0 +1,80 @@
+// Styling for the shared control deck. Tokens come from @zxplay/ui/theme.scss,
+// which both apps load before any component renders.
+
+.zx-deck {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+
+    .p-menubar {
+        border: 0;
+        border-radius: 0;
+        background: linear-gradient(var(--zx-surface), #1B1714);
+        padding: 0 1rem;
+        min-height: 56px;
+        gap: 0.5rem;
+    }
+
+    .p-menubar-start { display: flex; align-items: center; }
+
+    // brand: rainbow mark + wordmark, doubles as the home control
+    .zx-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.7rem;
+        padding: 0.4rem 0.6rem 0.4rem 0;
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+        color: var(--zx-text);
+        border-radius: 6px;
+    }
+    .zx-brand:focus-visible { outline: 2px solid var(--zx-cyan); outline-offset: 2px; }
+    .zx-mark {
+        width: 30px; height: 22px;
+        border-radius: 3px;
+        overflow: hidden;
+        background: #000;
+        flex: none;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+    .zx-mark i {
+        display: block;
+        height: 100%;
+        transform: skewX(-22deg) scale(1.4);
+        background: var(--zx-rainbow);
+    }
+    .zx-wordmark {
+        font-weight: 800;
+        font-size: 0.95rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    // top-level menu items: uppercase, letterspaced, quiet until hover
+    .p-menubar-root-list > .p-menuitem > .p-menuitem-link {
+        border-radius: 6px;
+        .p-menuitem-text {
+            text-transform: uppercase;
+            letter-spacing: 0.13em;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--zx-muted);
+        }
+        .p-menuitem-icon { color: var(--zx-faint); font-size: 0.8rem; }
+        &:hover .p-menuitem-text,
+        &:hover .p-menuitem-icon { color: var(--zx-text); }
+    }
+
+    .zx-deck-end { display: flex; align-items: center; gap: 0.5rem; }
+    .zx-lang .p-dropdown { background: var(--zx-ground); }
+
+    .zx-rule {
+        height: 3px;
+        border: 0;
+        margin: 0;
+        background: var(--zx-rainbow);
+        opacity: 0.9;
+    }
+}

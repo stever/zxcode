@@ -1,0 +1,82 @@
+// @zxplay/ui shared theme overlay.
+//
+// Loaded by both apps AFTER primereact's md-dark-indigo base theme. The base
+// supplies every component's CSS; this overlay redefines the theme's CSS
+// variables to the ZX Play token set, so the whole primereact surface retints
+// from one place and both apps stay in sync.
+//
+// The palette is the Sinclair machine's own: matte near-black ABS, off-white
+// silkscreen text, and the Spectrum colours used as a functional code
+// (cyan = focus/links, green = go/run, red = stop/reset, yellow = live).
+
+:root {
+    // ----- ZX Play tokens (consumed by shared components + nudges below) -----
+    --zx-ground:   #14110F;
+    --zx-surface:  #1E1A17;
+    --zx-surface-2:#2A2521;
+    --zx-surface-3:#322C27;
+    --zx-text:     #E8E2D9;
+    --zx-muted:    #8C857B;
+    --zx-faint:    #5C564E;
+    --zx-line:     rgba(232, 226, 217, 0.10);
+    --zx-line-2:   rgba(232, 226, 217, 0.16);
+
+    --zx-cyan:   #2BD4D4;   // primary: focus, links, selection
+    --zx-yellow: #E8C400;   // live
+    --zx-green:  #2FC04B;   // go / run
+    --zx-red:    #D8222A;   // stop / reset
+
+    --zx-rainbow: linear-gradient(90deg,
+        var(--zx-red) 0 25%, var(--zx-yellow) 25% 50%,
+        var(--zx-green) 50% 75%, var(--zx-cyan) 75% 100%);
+
+    --zx-sans: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --zx-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+    // ----- primereact theme variable overrides (the retint) -----
+    --font-family: var(--zx-sans);
+    --border-radius: 6px;
+
+    --primary-color: var(--zx-cyan);
+    --primary-color-text: #08110F;
+
+    --text-color: var(--zx-text);
+    --text-color-secondary: var(--zx-muted);
+
+    --surface-ground:  var(--zx-ground);
+    --surface-section: var(--zx-ground);
+    --surface-card:    var(--zx-surface);
+    --surface-overlay: var(--zx-surface-2);
+    --surface-border:  var(--zx-line-2);
+    --surface-hover:   rgba(232, 226, 217, 0.05);
+
+    --surface-a: var(--zx-surface);
+    --surface-b: var(--zx-ground);
+    --surface-c: rgba(232, 226, 217, 0.05);
+    --surface-d: var(--zx-line-2);
+    --surface-e: var(--zx-surface);
+    --surface-f: var(--zx-surface-3);
+
+    --surface-0:  var(--zx-ground);
+    --surface-50: var(--zx-surface-2);
+
+    --focus-ring: 0 0 0 2px var(--zx-ground), 0 0 0 4px rgba(43, 212, 212, 0.55);
+    --highlight-bg: rgba(43, 212, 212, 0.16);
+    --highlight-text-color: var(--zx-cyan);
+
+    color-scheme: dark;
+}
+
+// Selection picks up the primary accent.
+::selection { background: rgba(43, 212, 212, 0.28); }
+
+// Inputs and dropdowns: calmer borders, cyan focus.
+.p-inputtext:enabled:focus,
+.p-dropdown:not(.p-disabled).p-focus {
+    border-color: var(--zx-cyan);
+}
+
+// Primary buttons read as "go": the accent fill with dark text.
+.p-button:not(.p-button-secondary):not(.p-button-text):not(.p-button-outlined) {
+    font-weight: 600;
+}
