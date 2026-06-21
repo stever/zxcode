@@ -98,6 +98,11 @@ services:
     restart: always
     depends_on:
       - hasura
+    # Local dev: publish on host :5001 so the host Caddy's `/screenshots/*`
+    # reverse_proxy (localhost:5001) can reach it. Prod fronts this differently
+    # and should not expose the port.
+    ports:
+      - "5001:5001"
     environment:
       HASURA_URL: http://hasura:8080/v1/graphql
     # Untrusted execution: cap CPU/mem/processes and drop privileges. Root FS is
