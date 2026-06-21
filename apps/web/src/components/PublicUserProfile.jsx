@@ -7,6 +7,8 @@ import { Avatar } from "primereact/avatar";
 import { Button } from "primereact/button";
 import { Divider } from "primereact/divider";
 import { Tag } from "primereact/tag";
+import { TabView, TabPanel } from "primereact/tabview";
+import { Paginator } from "primereact/paginator";
 import { ProgressSpinner } from "primereact/progressspinner";
 import { Message } from "primereact/message";
 import gql from "graphql-tag";
@@ -86,31 +88,14 @@ const GET_USER_BY_SLUG = gql`
       slug
       avatar_variant
       custom_avatar_data
-      projects(
-        where: { is_public: { _eq: true } }
-        order_by: [{ display_order: asc }, { updated_at: desc }]
-      ) {
-        project_id
-        title
-        slug
-        lang
-        updated_at
-        created_at
-        display_order
+      projects_aggregate(where: { is_public: { _eq: true } }) {
+        aggregate {
+          count
+        }
       }
-      starred_projects(order_by: { created_at: desc }) {
-        created_at
-        project {
-          project_id
-          title
-          slug
-          lang
-          updated_at
-          is_public
-          user {
-            slug
-            greeting_name
-          }
+      starred_projects_aggregate {
+        aggregate {
+          count
         }
       }
       followers {
@@ -118,9 +103,6 @@ const GET_USER_BY_SLUG = gql`
       }
       following {
         following_id
-      }
-      followers {
-        follower_id
       }
     }
   }
@@ -137,31 +119,14 @@ const GET_USER_BY_ID = gql`
       slug
       avatar_variant
       custom_avatar_data
-      projects(
-        where: { is_public: { _eq: true } }
-        order_by: [{ display_order: asc }, { updated_at: desc }]
-      ) {
-        project_id
-        title
-        slug
-        lang
-        updated_at
-        created_at
-        display_order
+      projects_aggregate(where: { is_public: { _eq: true } }) {
+        aggregate {
+          count
+        }
       }
-      starred_projects(order_by: { created_at: desc }) {
-        created_at
-        project {
-          project_id
-          title
-          slug
-          lang
-          updated_at
-          is_public
-          user {
-            slug
-            greeting_name
-          }
+      starred_projects_aggregate {
+        aggregate {
+          count
         }
       }
       followers {
@@ -170,12 +135,130 @@ const GET_USER_BY_ID = gql`
       following {
         following_id
       }
-      followers {
-        follower_id
+    }
+  }
+`;
+
+// Number of project cards per page in each profile tab.
+const PAGE_SIZE = 8;
+
+// A page of the profile owner's public projects, ordered for display.
+const GET_PUBLIC_PROJECTS = gql`
+  query GetUserPublicProjects($user_id: uuid!, $limit: Int!, $offset: Int!) {
+    project_aggregate(
+      where: { owner_user_id: { _eq: $user_id }, is_public: { _eq: true } }
+    ) {
+      aggregate {
+        count
+      }
+    }
+    project(
+      where: { owner_user_id: { _eq: $user_id }, is_public: { _eq: true } }
+      order_by: [{ display_order: asc }, { updated_at: desc }]
+      limit: $limit
+      offset: $offset
+    ) {
+      project_id
+      title
+      slug
+      lang
+      updated_at
+      created_at
+      display_order
+    }
+  }
+`;
+
+// A page of the projects the profile owner has starred. RLS hides stars on
+// private projects, so this only returns currently-public projects.
+const GET_STARRED_PROJECTS = gql`
+  query GetUserStarredProjects($user_id: uuid!, $limit: Int!, $offset: Int!) {
+    project_star_aggregate(where: { user_id: { _eq: $user_id } }) {
+      aggregate {
+        count
+      }
+    }
+    project_star(
+      where: { user_id: { _eq: $user_id } }
+      order_by: { created_at: desc }
+      limit: $limit
+      offset: $offset
+    ) {
+      created_at
+      project {
+        project_id
+        title
+        slug
+        lang
+        updated_at
+        is_public
+        user {
+          slug
+          greeting_name
+        }
       }
     }
   }
 `;
+
+// Read-only project card used for other users' public projects and for starred
+// projects (which may belong to anyone, hence the optional author line).
+function ProjectCard({ project, projectUrl, showAuthor = false, onStarToggle }) {
+  const { t } = useTranslation();
+  const locale = useDateFnsLocale();
+
+  return (
+    <div style={{ flexBasis: "400px", flexGrow: 0, flexShrink: 0 }}>
+      <Link to={projectUrl} className="no-underline">
+        <Card
+          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
+          style={{ border: "none" }}
+        >
+          <div
+            className="flex flex-column h-full relative"
+            style={{ minHeight: "160px" }}
+          >
+            <ProjectThumbnail
+              projectId={project.project_id}
+              updatedAt={project.updated_at}
+            />
+
+            <div
+              className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
+              style={{ marginTop: "-0.5rem" }}
+            >
+              <Tag
+                value={getLanguageLabel(project.lang)}
+                severity={getLanguageColor(project.lang)}
+                className="lang-tag"
+              />
+              <StarButton
+                projectId={project.project_id}
+                onToggle={onStarToggle}
+              />
+            </div>
+
+            <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
+
+            {showAuthor && project.user?.greeting_name && (
+              <div className="mb-3 text-400 text-sm relative z-1">
+                {t("feed.by")} {project.user.greeting_name}
+              </div>
+            )}
+
+            <div className="text-400 text-sm relative z-1">
+              {t("feed.updated")}{" "}
+              {formatDistanceToNow(new Date(project.updated_at), {
+                addSuffix: true,
+                locale,
+              })}
+            </div>
+          </div>
+        </Card>
+      </Link>
+    </div>
+  );
+}
 
 // Sortable project card component for drag and drop
 function SortableProjectCard({ project, projectUrl, isDragging, onStarToggle }) {
@@ -248,18 +331,18 @@ function SortableProjectCard({ project, projectUrl, isDragging, onStarToggle }) 
           />
         </div>
         <div
-                            className="flex flex-column h-full relative"
-                            style={{ minHeight: "160px" }}
-                          >
+          className="flex flex-column h-full relative"
+          style={{ minHeight: "160px" }}
+        >
           <ProjectThumbnail
             projectId={project.project_id}
             updatedAt={project.updated_at}
           />
 
           <div
-                            className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
-                            style={{ marginTop: "-0.5rem" }}
-                          >
+            className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
+            style={{ marginTop: "-0.5rem" }}
+          >
             <Tag
               value={getLanguageLabel(project.lang)}
               severity={getLanguageColor(project.lang)}
@@ -312,8 +395,21 @@ export default function PublicUserProfile() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
-  const [projects, setProjects] = useState([]);
+
+  // Tabs: 0 = public projects, 1 = starred projects. Each list is fetched and
+  // paged independently of the profile query.
+  const [activeTab, setActiveTab] = useState(0);
+  const [publicProjects, setPublicProjects] = useState([]);
+  const [publicTotal, setPublicTotal] = useState(0);
+  const [publicPage, setPublicPage] = useState(0);
+  const [publicLoading, setPublicLoading] = useState(true);
   const [starredProjects, setStarredProjects] = useState([]);
+  const [starredTotal, setStarredTotal] = useState(0);
+  const [starredPage, setStarredPage] = useState(0);
+  const [starredLoading, setStarredLoading] = useState(true);
+  // Bumped to force a re-fetch of the starred list (on tab open, after toggles).
+  const [starredRefresh, setStarredRefresh] = useState(0);
+
   const [isSaving, setIsSaving] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [showAvatarSelector, setShowAvatarSelector] = useState(false);
@@ -362,14 +458,16 @@ export default function PublicUserProfile() {
         }
 
         setUser(userData);
-        setProjects(userData?.projects || []);
-
-        // Starred entries whose project is inaccessible (private / removed) come
-        // back with a null project under RLS; drop those.
-        const starred = (userData?.starred_projects || [])
-          .map((s) => s.project)
-          .filter((p) => p && p.is_public);
-        setStarredProjects(starred);
+        // Seed tab-header counts from the profile aggregates; the per-tab
+        // fetches below refine them. Reset paging for the newly-loaded profile.
+        setPublicTotal(
+          userData?.projects_aggregate?.aggregate?.count || 0
+        );
+        setStarredTotal(
+          userData?.starred_projects_aggregate?.aggregate?.count || 0
+        );
+        setPublicPage(0);
+        setStarredPage(0);
       } catch (err) {
         console.error("Failed to fetch user profile:", err);
         setError("Failed to load user profile");
@@ -415,6 +513,71 @@ export default function PublicUserProfile() {
       setAvatarUrl(generateRetroAvatar(identifier, 120, user));
     }
   }, [user]);
+
+  // Fetch a page of the owner's public projects.
+  useEffect(() => {
+    if (!user?.user_id) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setPublicLoading(true);
+        const response = await gqlFetch(null, GET_PUBLIC_PROJECTS, {
+          user_id: user.user_id,
+          limit: PAGE_SIZE,
+          offset: publicPage * PAGE_SIZE,
+        });
+        if (cancelled) return;
+        setPublicProjects(response?.data?.project || []);
+        setPublicTotal(
+          response?.data?.project_aggregate?.aggregate?.count || 0
+        );
+      } catch (err) {
+        if (!cancelled) setPublicProjects([]);
+      } finally {
+        if (!cancelled) setPublicLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.user_id, publicPage]);
+
+  // Fetch a page of the projects the owner has starred. Re-runs when the starred
+  // tab is opened or after a star/unstar (via starredRefresh).
+  useEffect(() => {
+    if (!user?.user_id) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setStarredLoading(true);
+        const response = await gqlFetch(null, GET_STARRED_PROJECTS, {
+          user_id: user.user_id,
+          limit: PAGE_SIZE,
+          offset: starredPage * PAGE_SIZE,
+        });
+        if (cancelled) return;
+        // RLS may return a null project for an inaccessible star; drop those.
+        const rows = (response?.data?.project_star || [])
+          .map((s) => s.project)
+          .filter((p) => p && p.is_public);
+        setStarredProjects(rows);
+        setStarredTotal(
+          response?.data?.project_star_aggregate?.aggregate?.count || 0
+        );
+      } catch (err) {
+        if (!cancelled) setStarredProjects([]);
+      } finally {
+        if (!cancelled) setStarredLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.user_id, starredPage, starredRefresh]);
 
   const handleAvatarSelect = async (variant) => {
     if (user) {
@@ -526,60 +689,59 @@ export default function PublicUserProfile() {
     }
   };
 
-  // Keep the Starred Projects section in sync when the viewer stars/unstars on
-  // their own profile (the profile data is a one-shot fetch, not a live query).
+  // Keep the starred tab's count (and list) in sync when the owner stars/unstars
+  // on their own profile. A newly starred project appears the next time the
+  // starred tab is fetched; unstarring removes it from the visible page now.
   const handleStarToggle = (projectId, isStarred) => {
     if (!isOwnProfile) return;
 
-    setStarredProjects((prev) => {
-      if (isStarred) {
-        if (prev.some((p) => p.project_id === projectId)) return prev;
-        const source =
-          projects.find((p) => p.project_id === projectId) ||
-          prev.find((p) => p.project_id === projectId);
-        if (!source) return prev;
-        const entry = {
-          ...source,
-          user: source.user || {
-            slug: user.slug,
-            greeting_name: user.greeting_name,
-          },
-        };
-        return [entry, ...prev];
-      }
-      return prev.filter((p) => p.project_id !== projectId);
-    });
+    setStarredTotal((n) => Math.max(0, n + (isStarred ? 1 : -1)));
+    if (!isStarred) {
+      setStarredProjects((prev) =>
+        prev.filter((p) => p.project_id !== projectId)
+      );
+    }
+  };
+
+  const handleTabChange = (e) => {
+    setActiveTab(e.index);
+    // Re-fetch the starred list when its tab is opened so projects starred from
+    // the public tab show up.
+    if (e.index === 1) setStarredRefresh((k) => k + 1);
   };
 
   const handleDragEnd = async (event) => {
     const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
-    if (active.id !== over.id) {
-      const oldIndex = projects.findIndex((p) => p.project_id === active.id);
-      const newIndex = projects.findIndex((p) => p.project_id === over.id);
+    const oldIndex = publicProjects.findIndex(
+      (p) => p.project_id === active.id
+    );
+    const newIndex = publicProjects.findIndex((p) => p.project_id === over.id);
 
-      const newProjects = arrayMove(projects, oldIndex, newIndex);
+    const newProjects = arrayMove(publicProjects, oldIndex, newIndex);
 
-      // Update local state immediately for responsiveness
-      setProjects(newProjects);
+    // Update local state immediately for responsiveness.
+    setPublicProjects(newProjects);
 
-      try {
-        setIsSaving(true);
-        // Update each project's display order
-        const updatePromises = newProjects.map((project, index) =>
-          gqlFetch(currentUserId, UPDATE_PROJECT_ORDER, {
-            projectId: project.project_id,
-            displayOrder: index,
-          })
-        );
-        await Promise.all(updatePromises);
-      } catch (error) {
-        console.error("Failed to update project order:", error);
-        // Revert on error
-        setProjects(projects);
-      } finally {
-        setIsSaving(false);
-      }
+    try {
+      setIsSaving(true);
+      // display_order is global, so offset by the current page. Reordering is
+      // therefore within a page; items keep their page's slot range.
+      const base = publicPage * PAGE_SIZE;
+      const updatePromises = newProjects.map((project, index) =>
+        gqlFetch(currentUserId, UPDATE_PROJECT_ORDER, {
+          projectId: project.project_id,
+          displayOrder: base + index,
+        })
+      );
+      await Promise.all(updatePromises);
+    } catch (error) {
+      console.error("Failed to update project order:", error);
+      // Revert on error.
+      setPublicProjects(publicProjects);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -740,218 +902,133 @@ export default function PublicUserProfile() {
         </div>
 
         <div className="col-12 lg:col-9 pt-2">
-          {projects.length > 0 && (
-          <Card
-            title={
-              <div className="flex align-items-center justify-content-between">
-                <span>
-                  {t("profile.publicProjects", {
-                    count: projects?.length || 0,
-                  })}
-                </span>
+          <Card>
+            <TabView activeIndex={activeTab} onTabChange={handleTabChange}>
+              <TabPanel
+                header={t("profile.publicProjects", { count: publicTotal })}
+              >
                 {isOwnProfile && isSaving && (
                   <Tag
                     severity="info"
                     value={t("profile.savingOrder")}
                     icon="pi pi-spin pi-spinner"
+                    className="mb-3"
                   />
                 )}
-              </div>
-            }
-          >
-            {projects && projects.length > 0 ? (
-              isOwnProfile ? (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={projects.map((p) => p.project_id)}
-                    strategy={rectSortingStrategy}
+                {publicLoading && publicProjects.length === 0 ? (
+                  <div className="flex justify-content-center py-4">
+                    <ProgressSpinner style={{ width: "40px", height: "40px" }} />
+                  </div>
+                ) : publicProjects.length === 0 ? (
+                  <div className="text-center py-4">
+                    <i className="pi pi-inbox text-4xl text-300 mb-3" />
+                    <p className="text-500">{t("profile.noProjects")}</p>
+                    {isOwnProfile && (
+                      <p className="text-sm">{t("profile.makePublicHint")}</p>
+                    )}
+                  </div>
+                ) : isOwnProfile ? (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
                   >
-                    <div className="flex flex-wrap gap-3 align-items-start">
-                      {projects.map((project) => {
-                        const projectUrl = project.slug
-                          ? `/u/${user.slug}/${project.slug}`
-                          : `/projects/${project.project_id}`;
-                        return (
-                          <SortableProjectCard
-                            key={project.project_id}
-                            project={project}
-                            projectUrl={projectUrl}
-                            isDragging={false}
-                            onStarToggle={handleStarToggle}
-                          />
-                        );
-                      })}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : (
-                <div className="flex flex-wrap gap-3 align-items-start">
-                  {projects.map((project) => {
-                    const projectUrl = project.slug
-                      ? `/u/${user.slug}/${project.slug}`
-                      : `/projects/${project.project_id}`;
-
-                    return (
-                      <div
-                        key={project.project_id}
-                        style={{
-                          flexBasis: "400px",
-                          flexGrow: 0,
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Link to={projectUrl} className="no-underline">
-                          <Card
-                            className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
-                            style={{
-                              border: "none",
-                            }}
-                          >
-                            <div
-                            className="flex flex-column h-full relative"
-                            style={{ minHeight: "160px" }}
-                          >
-                              <ProjectThumbnail
-                                projectId={project.project_id}
-                                updatedAt={project.updated_at}
-                              />
-
-                              <div
-                            className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
-                            style={{ marginTop: "-0.5rem" }}
-                          >
-                                <Tag
-                                  value={getLanguageLabel(project.lang)}
-                                  severity={getLanguageColor(project.lang)}
-                                  className="lang-tag"
-                                />
-                                <StarButton projectId={project.project_id} />
-                              </div>
-
-                              <h3 className="mb-2 text-white relative z-1">
-                                {project.title}
-                              </h3>
-
-                              <div className="text-400 text-sm relative z-1">
-                                {t("feed.updated")}{" "}
-                                {formatDistanceToNow(
-                                  new Date(project.updated_at),
-                                  { addSuffix: true, locale }
-                                )}
-                              </div>
-                            </div>
-                          </Card>
-                        </Link>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            ) : (
-              <div className="text-center py-4">
-                <i className="pi pi-inbox text-4xl text-300 mb-3" />
-                <p className="text-500">{t("profile.noProjects")}</p>
-                {isOwnProfile && (
-                  <p className="text-sm">{t("profile.makePublicHint")}</p>
-                )}
-              </div>
-            )}
-          </Card>
-          )}
-
-          {starredProjects.length > 0 && (
-          <Card
-            className="mt-3"
-            title={t("profile.starredProjects", {
-              count: starredProjects?.length || 0,
-            })}
-          >
-            {starredProjects && starredProjects.length > 0 ? (
-              <div className="flex flex-wrap gap-3 align-items-start">
-                {starredProjects.map((project) => {
-                  const ownerSlug = project.user?.slug;
-                  const projectUrl =
-                    project.slug && ownerSlug
-                      ? `/u/${ownerSlug}/${project.slug}`
-                      : `/projects/${project.project_id}`;
-
-                  return (
-                    <div
-                      key={project.project_id}
-                      style={{
-                        flexBasis: "400px",
-                        flexGrow: 0,
-                        flexShrink: 0,
-                      }}
+                    <SortableContext
+                      items={publicProjects.map((p) => p.project_id)}
+                      strategy={rectSortingStrategy}
                     >
-                      <Link to={projectUrl} className="no-underline">
-                        <Card
-                          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
-                          style={{ border: "none" }}
-                        >
-                          <div
-                            className="flex flex-column h-full relative"
-                            style={{ minHeight: "160px" }}
-                          >
-                            <ProjectThumbnail
-                              projectId={project.project_id}
-                              updatedAt={project.updated_at}
+                      <div className="flex flex-wrap gap-3 align-items-start">
+                        {publicProjects.map((project) => {
+                          const projectUrl = project.slug
+                            ? `/u/${user.slug}/${project.slug}`
+                            : `/projects/${project.project_id}`;
+                          return (
+                            <SortableProjectCard
+                              key={project.project_id}
+                              project={project}
+                              projectUrl={projectUrl}
+                              isDragging={false}
+                              onStarToggle={handleStarToggle}
                             />
-
-                            <div
-                            className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
-                            style={{ marginTop: "-0.5rem" }}
-                          >
-                              <Tag
-                                value={getLanguageLabel(project.lang)}
-                                severity={getLanguageColor(project.lang)}
-                                className="lang-tag"
-                              />
-                              <StarButton
-                                projectId={project.project_id}
-                                onToggle={handleStarToggle}
-                              />
-                            </div>
-
-                            <h3 className="mb-2 text-white relative z-1">
-                              {project.title}
-                            </h3>
-
-                            {project.user?.greeting_name && (
-                              <div className="mb-3 text-400 text-sm relative z-1">
-                                {t("feed.by")} {project.user.greeting_name}
-                              </div>
-                            )}
-
-                            <div className="text-400 text-sm relative z-1">
-                              {t("feed.updated")}{" "}
-                              {formatDistanceToNow(
-                                new Date(project.updated_at),
-                                { addSuffix: true, locale }
-                              )}
-                            </div>
-                          </div>
-                        </Card>
-                      </Link>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <i className="pi pi-star text-4xl text-300 mb-3" />
-                <p className="text-500">{t("profile.noStarred")}</p>
-                {isOwnProfile && (
-                  <p className="text-sm">{t("profile.noStarredOwn")}</p>
+                          );
+                        })}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                ) : (
+                  <div className="flex flex-wrap gap-3 align-items-start">
+                    {publicProjects.map((project) => {
+                      const projectUrl = project.slug
+                        ? `/u/${user.slug}/${project.slug}`
+                        : `/projects/${project.project_id}`;
+                      return (
+                        <ProjectCard
+                          key={project.project_id}
+                          project={project}
+                          projectUrl={projectUrl}
+                        />
+                      );
+                    })}
+                  </div>
                 )}
-              </div>
-            )}
+                {publicTotal > PAGE_SIZE && (
+                  <Paginator
+                    first={publicPage * PAGE_SIZE}
+                    rows={PAGE_SIZE}
+                    totalRecords={publicTotal}
+                    onPageChange={(e) => setPublicPage(e.page)}
+                    className="mt-3"
+                  />
+                )}
+              </TabPanel>
+
+              <TabPanel
+                header={t("profile.starredProjects", { count: starredTotal })}
+              >
+                {starredLoading && starredProjects.length === 0 ? (
+                  <div className="flex justify-content-center py-4">
+                    <ProgressSpinner style={{ width: "40px", height: "40px" }} />
+                  </div>
+                ) : starredProjects.length === 0 ? (
+                  <div className="text-center py-4">
+                    <i className="pi pi-star text-4xl text-300 mb-3" />
+                    <p className="text-500">{t("profile.noStarred")}</p>
+                    {isOwnProfile && (
+                      <p className="text-sm">{t("profile.noStarredOwn")}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-3 align-items-start">
+                    {starredProjects.map((project) => {
+                      const ownerSlug = project.user?.slug;
+                      const projectUrl =
+                        project.slug && ownerSlug
+                          ? `/u/${ownerSlug}/${project.slug}`
+                          : `/projects/${project.project_id}`;
+                      return (
+                        <ProjectCard
+                          key={project.project_id}
+                          project={project}
+                          projectUrl={projectUrl}
+                          showAuthor
+                          onStarToggle={handleStarToggle}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+                {starredTotal > PAGE_SIZE && (
+                  <Paginator
+                    first={starredPage * PAGE_SIZE}
+                    rows={PAGE_SIZE}
+                    totalRecords={starredTotal}
+                    onPageChange={(e) => setStarredPage(e.page)}
+                    className="mt-3"
+                  />
+                )}
+              </TabPanel>
+            </TabView>
           </Card>
-          )}
         </div>
       </div>
 
