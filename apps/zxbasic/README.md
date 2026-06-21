@@ -31,7 +31,7 @@ docker push ghcr.io/stever/zxcoder-api-zxbasic
 
 ```bash
 docker run \
-  --env=API_URL=https://zxcoder.org/api/v1/graphql \
+  --env=API_URL=https://code.zxplay.org/api/v1/graphql \
   --publish=80:8000 \
   --detach=true \
   --name=zxcoder-api-zxbasic \

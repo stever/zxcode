@@ -9,7 +9,7 @@
   },
   "about": {
     "intro1": "Emulátor ZX Spectrum vhodný pre mobilné zariadenia pre prehliadač. Zdrojový kód je dostupný <srcLink>tu</srcLink>.",
-    "intro2": "Alternatívna webová stránka súvisiaca s touto je dostupná na <coderLink>zxcoder.org</coderLink>. ZX Coder podporuje spúšťanie programov zadaných cez webové stránky.",
+    "intro2": "Alternatívna webová stránka súvisiaca s touto je dostupná na <coderLink>code.zxplay.org</coderLink>. ZX Coder podporuje spúšťanie programov zadaných cez webové stránky.",
     "acknowledgementsIntro": "Tento softvér využíva kód z nasledujúcich open source projektov:",
     "sinclairRomHeading": "Povolenie autorských práv k Sinclair ROM",
     "sinclairRomText": "Spoločnosť Amstrad láskavo udelila povolenie na ďalšie šírenie svojho materiálu chráneného autorskými právami, ale tieto práva si ponecháva."

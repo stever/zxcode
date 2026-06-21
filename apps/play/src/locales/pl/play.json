@@ -9,7 +9,7 @@
   },
   "about": {
     "intro1": "Przyjazny dla urządzeń mobilnych emulator ZX Spectrum dla przeglądarki. Kod źródłowy dostępny <srcLink>tutaj</srcLink>.",
-    "intro2": "Alternatywna, powiązana strona jest dostępna pod adresem <coderLink>zxcoder.org</coderLink>. ZX Coder umożliwia uruchamianie programów wprowadzanych za pośrednictwem stron internetowych.",
+    "intro2": "Alternatywna, powiązana strona jest dostępna pod adresem <coderLink>code.zxplay.org</coderLink>. ZX Coder umożliwia uruchamianie programów wprowadzanych za pośrednictwem stron internetowych.",
     "acknowledgementsIntro": "To oprogramowanie korzysta z kodu następujących projektów open source:",
     "sinclairRomHeading": "Zgoda na prawa autorskie do ROM-u Sinclair",
     "sinclairRomText": "Amstrad uprzejmie wyraził zgodę na redystrybucję swoich materiałów objętych prawem autorskim, zachowując jednak to prawo autorskie."

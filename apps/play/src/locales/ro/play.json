@@ -9,7 +9,7 @@
   },
   "about": {
     "intro1": "Un emulator ZX Spectrum optimizat pentru mobil, pentru browser. Codul sursă este disponibil <srcLink>aici</srcLink>.",
-    "intro2": "Un site alternativ, înrudit cu acesta, este disponibil la <coderLink>zxcoder.org</coderLink>. ZX Coder permite rularea programelor introduse prin pagini web.",
+    "intro2": "Un site alternativ, înrudit cu acesta, este disponibil la <coderLink>code.zxplay.org</coderLink>. ZX Coder permite rularea programelor introduse prin pagini web.",
     "acknowledgementsIntro": "Acest software folosește cod din următoarele proiecte open source:",
     "sinclairRomHeading": "Permisiune privind drepturile de autor pentru ROM-ul Sinclair",
     "sinclairRomText": "Amstrad a acordat cu amabilitate permisiunea de a redistribui materialul lor protejat prin drepturi de autor, dar își păstrează aceste drepturi."

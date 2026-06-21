@@ -19,7 +19,7 @@ export default function AboutPage() {
                 <p>
                     <Trans
                         i18nKey="about.intro2"
-                        components={{coderLink: <a href="https://zxcoder.org/" target="_blank" rel="noreferrer"/>}}
+                        components={{coderLink: <a href="https://code.zxplay.org/" target="_blank" rel="noreferrer"/>}}
                     />
                 </p>
                 <h2>{t("acknowledgements")}</h2>
