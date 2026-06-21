@@ -16,5 +16,38 @@
     "termsOfUse": "Условия использования",
     "reset": "Сброс",
     "other": "Прочее"
+  },
+  "errorPage": {
+    "errorTitle": "Ошибка",
+    "notFoundTitle": "Не найдено",
+    "notFoundBody": "Запрошенная страница не найдена.",
+    "title": "Произошла непредвиденная ошибка.",
+    "messageLabel": "Сообщение об ошибке:",
+    "buttonsPrompt": "Нажмите одну из следующих кнопок:",
+    "reload": "Перезагрузить",
+    "reloadTitle": "Перезагрузить эту страницу",
+    "restart": "Перезапустить",
+    "restartTitle": "Вернуться на главную страницу",
+    "goBack": "Назад",
+    "goBackTitle": "Вернуться на предыдущую страницу"
+  },
+  "home": {
+    "tabEmulator": "Эмулятор"
+  },
+  "profiles": {
+    "title": "Открытые профили",
+    "none": "Пока нет открытых профилей"
+  },
+  "follow": {
+    "networkTitle": "Сеть пользователя {{name}}",
+    "followersTab": "Подписчики ({{count}})",
+    "followingTab": "Подписки ({{count}})",
+    "noFollowers": "Пока нет подписчиков",
+    "noFollowing": "Пока ни на кого не подписан",
+    "backToProfile": "Назад к профилю",
+    "joined": "Присоединился {{when}}",
+    "pageTitle": "{{type}} — {{name}}",
+    "typeFollowers": "Подписчики",
+    "typeFollowing": "Подписки"
   }
 }

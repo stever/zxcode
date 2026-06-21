@@ -3,6 +3,7 @@ import PropTypes from "prop-types";
 import {Titled} from "react-titled";
 import {Card} from "primereact/card";
 import {Button} from "primereact/button";
+import {useTranslation} from "@zxplay/i18n";
 import {sep} from "../constants";
 
 ErrorPage.propTypes = {
@@ -10,6 +11,7 @@ ErrorPage.propTypes = {
 }
 
 export default function ErrorPage({msg}) {
+    const {t} = useTranslation();
 
     function handleReload() {
         window.location.reload();
@@ -24,34 +26,34 @@ export default function ErrorPage({msg}) {
     }
 
     return (
-        <Titled title={(s) => `Error ${sep} ${s}`}>
+        <Titled title={(s) => `${t("errorPage.errorTitle")} ${sep} ${s}`}>
             <Card className="m-2" style={{textAlign: 'center'}}>
                 <div className="m-4">
-                    <p>Sorry, an unexpected error occurred.</p>
-                    <p>Error message is:</p>
+                    <p>{t("errorPage.title")}</p>
+                    <p>{t("errorPage.messageLabel")}</p>
                     <div className="font-italic">{msg}</div>
                 </div>
                 <div>
-                    <p>Press one of the following buttons:</p>
+                    <p>{t("errorPage.buttonsPrompt")}</p>
                     <Button
                         type="button"
                         className="p-button-outlined mr-3"
-                        label="Reload"
-                        title="Reload this page"
+                        label={t("errorPage.reload")}
+                        title={t("errorPage.reloadTitle")}
                         onClick={handleReload}
                     />
                     <Button
                         type="button"
                         className="p-button-outlined mr-3"
-                        label="Restart"
-                        title="Return to home page"
+                        label={t("errorPage.restart")}
+                        title={t("errorPage.restartTitle")}
                         onClick={handleGoHome}
                     />
                     <Button
                         type="button"
                         className="p-button-outlined"
-                        label="Go Back"
-                        title="Go back to previous page"
+                        label={t("errorPage.goBack")}
+                        title={t("errorPage.goBackTitle")}
                         onClick={handleGoBack}
                     />
                 </div>

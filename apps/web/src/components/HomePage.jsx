@@ -9,8 +9,10 @@ import {setSelectedTabIndex} from "../redux/demo/actions";
 import {reset as resetProject, setErrorItems} from "../redux/project/actions";
 import {reset} from "../redux/jsspeccy/actions";
 import {showToastsForErrorItems} from "../errors";
+import {useTranslation} from "@zxplay/i18n";
 
 export default function HomePage() {
+    const {t} = useTranslation();
     const dispatch = useDispatch();
 
     const selectedTabIndex = useSelector(state => state?.demo.selectedTabIndex);
@@ -54,7 +56,7 @@ export default function HomePage() {
                                 <TabView
                                     activeIndex={selectedTabIndex}
                                     onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
-                                    <TabPanel header="Emulator">
+                                    <TabPanel header={t("home.tabEmulator")}>
                                         <Emulator zoom={zoom} width={width}/>
                                     </TabPanel>
                                     <TabPanel header="Sinclair BASIC">

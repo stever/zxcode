@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Titled } from "react-titled";
+import { useTranslation } from "@zxplay/i18n";
 import { Card } from "primereact/card";
 import { Avatar } from "primereact/avatar";
 import { Dropdown } from "primereact/dropdown";
@@ -128,6 +129,7 @@ function ProfileCard({ user }) {
 }
 
 export default function PublicProfiles() {
+  const { t } = useTranslation();
   const [profiles, setProfiles] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
@@ -169,9 +171,9 @@ export default function PublicProfiles() {
   }, [page, sort, hideEmpty]);
 
   return (
-    <Titled title={(s) => `Public Profiles ${sep} ${s}`}>
+    <Titled title={(s) => `${t("profiles.title")} ${sep} ${s}`}>
       <div className="m-2">
-        <Card title="Public Profiles">
+        <Card title={t("profiles.title")}>
           <div className="flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
             <p className="text-500 m-0">
               Browse public profiles on ZX Play
@@ -234,7 +236,7 @@ export default function PublicProfiles() {
           ) : (
             <div className="text-center py-4">
               <i className="pi pi-users text-4xl text-300 mb-3" />
-              <p className="text-500">No public profiles yet</p>
+              <p className="text-500">{t("profiles.none")}</p>
             </div>
           )}
         </Card>

@@ -25,5 +25,25 @@
     "notFound": "Página no encontrada",
     "generic": "Algo salió mal.",
     "userNotFound": "Usuario no encontrado"
-  }
+  },
+  "errorPage": {
+    "errorTitle": "Error",
+    "notFoundTitle": "No encontrado",
+    "notFoundBody": "No se ha encontrado la página solicitada.",
+    "title": "Lo sentimos, se ha producido un error inesperado.",
+    "messageLabel": "El mensaje de error es:",
+    "buttonsPrompt": "Pulsa uno de los siguientes botones:",
+    "reload": "Recargar",
+    "reloadTitle": "Recargar esta página",
+    "restart": "Reiniciar",
+    "restartTitle": "Volver a la página de inicio",
+    "goBack": "Volver",
+    "goBackTitle": "Volver a la página anterior"
+  },
+  "search": {
+    "results": "Resultados de búsqueda",
+    "title": "Título",
+    "creator": "Autor"
+  },
+  "acknowledgements": "Agradecimientos"
 }

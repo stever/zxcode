@@ -16,5 +16,38 @@
     "termsOfUse": "Terms of Use",
     "reset": "Reset",
     "other": "Other"
+  },
+  "errorPage": {
+    "errorTitle": "Error",
+    "notFoundTitle": "Not Found",
+    "notFoundBody": "Requested page location not found.",
+    "title": "Sorry, an unexpected error occurred.",
+    "messageLabel": "Error message is:",
+    "buttonsPrompt": "Press one of the following buttons:",
+    "reload": "Reload",
+    "reloadTitle": "Reload this page",
+    "restart": "Restart",
+    "restartTitle": "Return to home page",
+    "goBack": "Go Back",
+    "goBackTitle": "Go back to previous page"
+  },
+  "home": {
+    "tabEmulator": "Emulator"
+  },
+  "profiles": {
+    "title": "Public Profiles",
+    "none": "No public profiles yet"
+  },
+  "follow": {
+    "networkTitle": "{{name}}'s Network",
+    "followersTab": "Followers ({{count}})",
+    "followingTab": "Following ({{count}})",
+    "noFollowers": "No followers yet",
+    "noFollowing": "Not following anyone yet",
+    "backToProfile": "Back to Profile",
+    "joined": "Joined {{when}}",
+    "pageTitle": "{{name}}'s {{type}}",
+    "typeFollowers": "Followers",
+    "typeFollowing": "Following"
   }
 }

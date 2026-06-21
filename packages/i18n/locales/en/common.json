@@ -25,5 +25,25 @@
     "notFound": "Page not found",
     "generic": "Something went wrong.",
     "userNotFound": "User not found"
-  }
+  },
+  "errorPage": {
+    "errorTitle": "Error",
+    "notFoundTitle": "Not Found",
+    "notFoundBody": "Requested page location not found.",
+    "title": "Sorry, an unexpected error occurred.",
+    "messageLabel": "Error message is:",
+    "buttonsPrompt": "Press one of the following buttons:",
+    "reload": "Reload",
+    "reloadTitle": "Reload this page",
+    "restart": "Restart",
+    "restartTitle": "Return to home page",
+    "goBack": "Go Back",
+    "goBackTitle": "Go back to previous page"
+  },
+  "search": {
+    "results": "Search Results",
+    "title": "Title",
+    "creator": "Creator"
+  },
+  "acknowledgements": "Acknowledgements"
 }

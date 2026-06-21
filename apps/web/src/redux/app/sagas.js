@@ -2,6 +2,7 @@ import {select, takeLatest, put, call} from "redux-saga/effects";
 import gql from "graphql-tag";
 import {history} from "../store";
 import {gqlFetch} from "../../graphql_fetch";
+import {i18n} from "@zxplay/i18n";
 import {
     actionTypes,
     receivePrivacyPolicy,
@@ -125,21 +126,8 @@ function* handleResetEmulatorActions(_) {
 
 function* handleRequestTermsOfUseActions(_) {
     try {
-        const query = gql`
-            query {
-                text(where: {name: {_eq: "terms-of-use"}, lang: {_eq: "en"}}) {
-                    text
-                }
-            }
-        `;
-
-        const variables = {};
-        const userId = yield select((state) => state.identity.userId);
-        const response = yield call(gqlFetch, userId, query, variables);
-        console.assert(response?.data?.text, response);
-        console.assert(response?.data?.text.length === 1, response);
-        console.assert(response?.data?.text[0]?.text, response);
-        yield put(receiveTermsOfUse(response?.data?.text[0]?.text || '# Terms of Use\n\nTODO'));
+        const text = yield call(fetchLocalisedText, "terms-of-use");
+        yield put(receiveTermsOfUse(text || '# Terms of Use\n\nTODO'));
     } catch (e) {
         handleException(e);
     }
@@ -147,22 +135,32 @@ function* handleRequestTermsOfUseActions(_) {
 
 function* handleRequestPrivacyPolicyActions(_) {
     try {
-        const query = gql`
-            query {
-                text(where: {name: {_eq: "privacy-policy"}, lang: {_eq: "en"}}) {
-                    text
-                }
-            }
-        `;
-
-        const variables = {};
-        const userId = yield select((state) => state.identity.userId);
-        const response = yield call(gqlFetch, userId, query, variables);
-        console.assert(response?.data?.text, response);
-        console.assert(response?.data?.text.length === 1, response);
-        console.assert(response?.data?.text[0]?.text, response);
-        yield put(receivePrivacyPolicy(response?.data?.text[0]?.text || '# Privacy Policy\n\nTODO'));
+        const text = yield call(fetchLocalisedText, "privacy-policy");
+        yield put(receivePrivacyPolicy(text || '# Privacy Policy\n\nTODO'));
     } catch (e) {
         handleException(e);
     }
+}
+
+// Fetch a `text`-table entry in the active UI language, falling back to English
+// when no localised row exists yet (so es/ru content shows once it's added).
+function* fetchLocalisedText(name) {
+    const lang = (i18n.resolvedLanguage || i18n.language || 'en').split('-')[0];
+    const query = gql`
+        query GetText($name: String!, $langs: [String!]!) {
+            text(where: {name: {_eq: $name}, lang: {_in: $langs}}) {
+                lang
+                text
+            }
+        }
+    `;
+    const variables = {name, langs: [lang, "en"]};
+    const userId = yield select((state) => state.identity.userId);
+    const response = yield call(gqlFetch, userId, query, variables);
+    const rows = response?.data?.text || [];
+    const row =
+        rows.find((r) => r.lang === lang) ||
+        rows.find((r) => r.lang === "en") ||
+        rows[0];
+    return row?.text;
 }

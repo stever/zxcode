@@ -15,6 +15,7 @@ import { sep } from "../constants";
 import { formatDistanceToNow } from "date-fns";
 import { followUser, unfollowUser } from "../redux/social/actions";
 import { generateRetroAvatar } from "../lib/avatar";
+import { useTranslation } from "@zxplay/i18n";
 
 const GET_USER_WITH_FOLLOWS = gql`
   query GetUserWithFollows(
@@ -86,6 +87,7 @@ const CHECK_FOLLOWING_STATUS = gql`
 `;
 
 function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
+  const { t } = useTranslation();
   const isOwnProfile = currentUserId === user.user_id;
   // Fall back to the user id if a slug is missing; /u/<uuid> canonicalises to the slug.
   const profileUrl = `/u/${user.slug || user.user_id}`;
@@ -121,7 +123,7 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
         <div className="flex flex-column align-items-end">
           {!isOwnProfile && currentUserId && (
             <Button
-              label={isFollowing ? "Unfollow" : "Follow"}
+              label={isFollowing ? t("actions.unfollow") : t("actions.follow")}
               icon={isFollowing ? "pi pi-user-minus" : "pi pi-user-plus"}
               onClick={() => onFollowToggle(user.user_id)}
               severity={isFollowing ? "secondary" : "primary"}
@@ -133,9 +135,10 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
             />
           )}
           <span className="text-400 text-sm mt-2">
-            Joined{" "}
-            {formatDistanceToNow(new Date(user.created_at), {
-              addSuffix: true,
+            {t("follow.joined", {
+              when: formatDistanceToNow(new Date(user.created_at), {
+                addSuffix: true,
+              }),
             })}
           </span>
         </div>
@@ -148,6 +151,7 @@ export default function FollowList() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { t } = useTranslation();
 
   // Determine the type from the URL path
   const type = window.location.pathname.includes("/following")
@@ -274,23 +278,29 @@ export default function FollowList() {
   if (!user) {
     return (
       <Card className="m-2">
-        <Message severity="warn" text="User not found" />
+        <Message severity="warn" text={t("errors.userNotFound")} />
       </Card>
     );
   }
 
   const displayName = user.greeting_name || "User";
+  const typeLabel =
+    type === "following"
+      ? t("follow.typeFollowing")
+      : t("follow.typeFollowers");
 
   return (
     <Titled
-      title={(s) => `${displayName}'s ${type || "Followers"} ${sep} ${s}`}
+      title={(s) =>
+        `${t("follow.pageTitle", { name: displayName, type: typeLabel })} ${sep} ${s}`
+      }
     >
       <div className="m-2">
         <Card>
           <div className="mb-4">
             <Link to={`/u/${slug}`} className="no-underline">
               <Button
-                label="Back to Profile"
+                label={t("follow.backToProfile")}
                 icon="pi pi-arrow-left"
                 severity="secondary"
                 text
@@ -298,11 +308,11 @@ export default function FollowList() {
             </Link>
           </div>
 
-          <h2 className="mb-4">{displayName}'s Network</h2>
+          <h2 className="mb-4">{t("follow.networkTitle", { name: displayName })}</h2>
 
           <TabView activeIndex={activeIndex} onTabChange={handleTabChange}>
             <TabPanel
-              header={`Followers (${totalFollowers})`}
+              header={t("follow.followersTab", { count: totalFollowers })}
               leftIcon="pi pi-users"
             >
               {followers.length > 0 ? (
@@ -331,13 +341,13 @@ export default function FollowList() {
               ) : (
                 <div className="text-center py-4 mt-2">
                   <i className="pi pi-users text-4xl text-300 mb-3" />
-                  <p className="text-500">No followers yet</p>
+                  <p className="text-500">{t("follow.noFollowers")}</p>
                 </div>
               )}
             </TabPanel>
 
             <TabPanel
-              header={`Following (${totalFollowing})`}
+              header={t("follow.followingTab", { count: totalFollowing })}
               leftIcon="pi pi-user-plus"
             >
               {following.length > 0 ? (
@@ -368,7 +378,7 @@ export default function FollowList() {
               ) : (
                 <div className="text-center py-4 mt-2">
                   <i className="pi pi-user-plus text-4xl text-300 mb-3" />
-                  <p className="text-500">Not following anyone yet</p>
+                  <p className="text-500">{t("follow.noFollowing")}</p>
                 </div>
               )}
             </TabPanel>

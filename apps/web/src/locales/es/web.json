@@ -16,5 +16,38 @@
     "termsOfUse": "Términos de uso",
     "reset": "Reiniciar",
     "other": "Otros"
+  },
+  "errorPage": {
+    "errorTitle": "Error",
+    "notFoundTitle": "No encontrado",
+    "notFoundBody": "No se ha encontrado la página solicitada.",
+    "title": "Lo sentimos, se ha producido un error inesperado.",
+    "messageLabel": "El mensaje de error es:",
+    "buttonsPrompt": "Pulsa uno de los siguientes botones:",
+    "reload": "Recargar",
+    "reloadTitle": "Recargar esta página",
+    "restart": "Reiniciar",
+    "restartTitle": "Volver a la página de inicio",
+    "goBack": "Volver",
+    "goBackTitle": "Volver a la página anterior"
+  },
+  "home": {
+    "tabEmulator": "Emulador"
+  },
+  "profiles": {
+    "title": "Perfiles públicos",
+    "none": "Aún no hay perfiles públicos"
+  },
+  "follow": {
+    "networkTitle": "Red de {{name}}",
+    "followersTab": "Seguidores ({{count}})",
+    "followingTab": "Siguiendo ({{count}})",
+    "noFollowers": "Aún no hay seguidores",
+    "noFollowing": "Todavía no sigue a nadie",
+    "backToProfile": "Volver al perfil",
+    "joined": "Se unió {{when}}",
+    "pageTitle": "{{type}} de {{name}}",
+    "typeFollowers": "Seguidores",
+    "typeFollowing": "Siguiendo"
   }
 }

@@ -9,9 +9,11 @@ import axios from "axios";
 import {loadUrl} from "../redux/jsspeccy/actions";
 import {showLoading, hideLoading} from "../dashboard_loading";
 import {sep} from "../constants";
+import {useTranslation} from "@zxplay/i18n";
 
 export default function SearchPage() {
     const dispatch = useDispatch();
+    const {t} = useTranslation();
     const [results, setResults] = useState([]);
     const search = useSelector(state => state?.router.location.search);
 
@@ -77,10 +79,10 @@ export default function SearchPage() {
     return (
         <Titled title={(s) => `Search ${sep} ${s}`}>
             <Card className="m-2">
-                <h1>Search Results</h1>
+                <h1>{t("search.results")}</h1>
                 <DataTable value={results} responsiveLayout="scroll">
-                    <Column field="title" header="Title" body={itemTemplate}/>
-                    <Column field="creator" header="Creator"/>
+                    <Column field="title" header={t("search.title")} body={itemTemplate}/>
+                    <Column field="creator" header={t("search.creator")}/>
                 </DataTable>
                 <p className="mt-5 mb-0">
                     Search powered by <a href="https://archive.org/" target="_blank">
