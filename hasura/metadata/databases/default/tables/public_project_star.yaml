@@ -25,7 +25,13 @@ select_permissions:
         - user_id
         - project_id
         - created_at
-      filter: {}
+      # Stars are only visible while the project is public. Rows persist when a
+      # project is made private (so they return if it is published again) but
+      # they are hidden from counts, stargazer lists and starred-project listings.
+      filter:
+        project:
+          is_public:
+            _eq: true
       allow_aggregations: true
   - role: zxplay-user
     permission:
@@ -33,7 +39,16 @@ select_permissions:
         - user_id
         - project_id
         - created_at
-      filter: {}
+      # As public, plus the project owner can always see stars on their own
+      # projects even while private.
+      filter:
+        _or:
+          - project:
+              is_public:
+                _eq: true
+          - project:
+              owner_user_id:
+                _eq: X-Hasura-User-Id
       allow_aggregations: true
 delete_permissions:
   - role: zxplay-user

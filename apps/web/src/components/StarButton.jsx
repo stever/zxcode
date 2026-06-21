@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import gql from "graphql-tag";
 import { gqlFetch } from "../graphql_fetch";
 import { starProject, unstarProject } from "../redux/stars/actions";
@@ -36,6 +37,7 @@ const GET_STAR_STATE = gql`
 export default function StarButton({ projectId, className, onToggle }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const currentUserId = useSelector((state) => state?.identity.userId);
   // Saga dispatches setStarredStatus once a star/unstar mutation commits; we key
   // off it to reconcile a freshly-mounted button (e.g. a newly added starred
@@ -98,38 +100,68 @@ export default function StarButton({ projectId, className, onToggle }) {
     }
   };
 
-  const title = !currentUserId
+  const openStargazers = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigate(`/projects/${projectId}/stars`);
+  };
+
+  const toggleTitle = !currentUserId
     ? t("stars.loginToStar")
     : starred
     ? t("stars.unstar")
     : t("stars.star");
 
+  // Compact outlined buttons, used everywhere (project page and cards). Custom
+  // rather than PrimeReact's Button, whose icon-only variant forces a fixed
+  // square width and ignores horizontal padding. The star toggles; the count
+  // navigates to the stargazers page.
+  const outlined = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "transparent",
+    border: "1px solid #6c757d",
+    borderRadius: "6px",
+    padding: "0.3rem 0.4rem",
+    fontSize: "0.8rem",
+    lineHeight: 1,
+  };
+
   return (
-    <button
-      type="button"
-      className={className}
-      onClick={handleToggle}
-      title={title}
-      aria-pressed={starred}
-      aria-label={title}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.25rem",
-        background: "none",
-        border: "none",
-        padding: 0,
-        font: "inherit",
-        fontWeight: 700,
-        lineHeight: 1,
-        cursor: currentUserId ? "pointer" : "default",
-      }}
-    >
-      <i
-        className={`pi ${starred ? "pi-star-fill" : "pi-star"}`}
-        style={{ color: starred ? "#f5c518" : "#c0c0c0" }}
-      />
-      <span style={{ color: "#c0c0c0" }}>{count}</span>
-    </button>
+    <span className={`flex align-items-center gap-2 ${className || ""}`}>
+      <button
+        type="button"
+        onClick={handleToggle}
+        disabled={!currentUserId}
+        title={toggleTitle}
+        aria-pressed={starred}
+        aria-label={toggleTitle}
+        style={{
+          ...outlined,
+          color: starred ? "#f5c518" : "#c0c0c0",
+          cursor: currentUserId ? "pointer" : "default",
+        }}
+      >
+        <i
+          className={`pi ${starred ? "pi-star-fill" : "pi-star"}`}
+          style={{ display: "block", fontSize: "0.8rem" }}
+        />
+      </button>
+      <button
+        type="button"
+        onClick={openStargazers}
+        title={t("stars.viewStargazers")}
+        aria-label={t("stars.viewStargazers")}
+        style={{
+          ...outlined,
+          color: "#c0c0c0",
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        {count}
+      </button>
+    </span>
   );
 }

@@ -25,6 +25,7 @@ import UserProfileSettings from "./UserProfileSettings";
 import YourProjectsPage from "./YourProjectsPage";
 import ActivityFeed from "./ActivityFeed";
 import FollowList from "./FollowList";
+import Stargazers from "./Stargazers";
 import PublicProfiles from "./PublicProfiles";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
@@ -138,6 +139,7 @@ export default function App() {
                 }
               />
               <Route exact path="/projects/:id" element={<ProjectPage />} />
+              <Route exact path="/projects/:id/stars" element={<Stargazers />} />
               <Route exact path="/u/:id" element={<PublicUserProfile />} />
               <Route
                 exact

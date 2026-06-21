@@ -28,7 +28,12 @@
   "stars": {
     "star": "Star this project",
     "unstar": "Unstar this project",
-    "loginToStar": "Log in to star projects"
+    "loginToStar": "Log in to star projects",
+    "viewStargazers": "See who starred this",
+    "stargazers": "Stargazers",
+    "noStargazers": "No stars yet",
+    "backToProject": "Back to project",
+    "projectNotFound": "Project not found"
   },
   "errors": {
     "notFound": "Page not found",
