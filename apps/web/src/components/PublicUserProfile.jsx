@@ -253,6 +253,10 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
             updatedAt={project.updated_at}
           />
 
+          <div className="absolute" style={{ top: "-0.5rem", left: 0, zIndex: 2 }}>
+            <StarButton projectId={project.project_id} />
+          </div>
+
           <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
 
           <Tag
@@ -261,15 +265,12 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
             className="lang-tag align-self-start mb-3 relative z-1"
           />
 
-          <div className="mt-auto flex align-items-center justify-content-between gap-2 relative z-1">
-            <span className="text-400 text-sm">
-              {t("feed.updated")}{" "}
-              {formatDistanceToNow(new Date(project.updated_at), {
-                addSuffix: true,
-                locale,
-              })}
-            </span>
-            <StarButton projectId={project.project_id} />
+          <div className="mt-auto text-400 text-sm relative z-1">
+            {t("feed.updated")}{" "}
+            {formatDistanceToNow(new Date(project.updated_at), {
+              addSuffix: true,
+              locale,
+            })}
           </div>
         </div>
       </Card>
@@ -781,6 +782,10 @@ export default function PublicUserProfile() {
                                 updatedAt={project.updated_at}
                               />
 
+                              <div className="absolute" style={{ top: "-0.5rem", left: 0, zIndex: 2 }}>
+                                <StarButton projectId={project.project_id} />
+                              </div>
+
                               <h3 className="mb-2 text-white relative z-1">
                                 {project.title}
                               </h3>
@@ -791,15 +796,12 @@ export default function PublicUserProfile() {
                                 className="lang-tag align-self-start mb-3 relative z-1"
                               />
 
-                              <div className="mt-auto flex align-items-center justify-content-between gap-2 relative z-1">
-                                <span className="text-400 text-sm">
-                                  {t("feed.updated")}{" "}
-                                  {formatDistanceToNow(
-                                    new Date(project.updated_at),
-                                    { addSuffix: true, locale }
-                                  )}
-                                </span>
-                                <StarButton projectId={project.project_id} />
+                              <div className="mt-auto text-400 text-sm relative z-1">
+                                {t("feed.updated")}{" "}
+                                {formatDistanceToNow(
+                                  new Date(project.updated_at),
+                                  { addSuffix: true, locale }
+                                )}
                               </div>
                             </div>
                           </Card>
@@ -855,6 +857,10 @@ export default function PublicUserProfile() {
                               updatedAt={project.updated_at}
                             />
 
+                            <div className="absolute" style={{ top: "-0.5rem", left: 0, zIndex: 2 }}>
+                              <StarButton projectId={project.project_id} />
+                            </div>
+
                             <h3 className="mb-2 text-white relative z-1">
                               {project.title}
                             </h3>
@@ -873,15 +879,12 @@ export default function PublicUserProfile() {
                               )}
                             </div>
 
-                            <div className="mt-auto flex align-items-center justify-content-between gap-2 relative z-1">
-                              <span className="text-400 text-sm">
-                                {t("feed.updated")}{" "}
-                                {formatDistanceToNow(
-                                  new Date(project.updated_at),
-                                  { addSuffix: true, locale }
-                                )}
-                              </span>
-                              <StarButton projectId={project.project_id} />
+                            <div className="mt-auto text-400 text-sm relative z-1">
+                              {t("feed.updated")}{" "}
+                              {formatDistanceToNow(
+                                new Date(project.updated_at),
+                                { addSuffix: true, locale }
+                              )}
                             </div>
                           </div>
                         </Card>

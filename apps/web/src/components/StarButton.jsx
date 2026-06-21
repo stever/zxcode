@@ -33,7 +33,7 @@ const GET_STAR_STATE = gql`
  * cards, the project page, or anywhere else without threading data through the
  * surrounding query. Toggling is optimistic and persisted via redux sagas.
  */
-export default function StarButton({ projectId, className, size = "small" }) {
+export default function StarButton({ projectId, className }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const currentUserId = useSelector((state) => state?.identity.userId);
@@ -90,7 +90,6 @@ export default function StarButton({ projectId, className, size = "small" }) {
     }
   };
 
-  const sizeClass = size === "small" ? "p-button-sm" : "";
   const title = !currentUserId
     ? t("stars.loginToStar")
     : starred
@@ -100,19 +99,29 @@ export default function StarButton({ projectId, className, size = "small" }) {
   return (
     <button
       type="button"
-      className={`p-button p-component p-button-outlined ${
-        starred ? "" : "p-button-secondary"
-      } ${sizeClass} ${className || ""}`}
+      className={className}
       onClick={handleToggle}
       title={title}
       aria-pressed={starred}
       aria-label={title}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.25rem",
+        background: "none",
+        border: "none",
+        padding: 0,
+        font: "inherit",
+        fontWeight: 700,
+        lineHeight: 1,
+        cursor: currentUserId ? "pointer" : "default",
+      }}
     >
       <i
-        className={`pi ${starred ? "pi-star-fill" : "pi-star"} mr-2`}
-        style={starred ? { color: "#f5c518" } : {}}
+        className={`pi ${starred ? "pi-star-fill" : "pi-star"}`}
+        style={{ color: starred ? "#f5c518" : "#c0c0c0" }}
       />
-      <span className="font-bold">{count}</span>
+      <span style={{ color: "#c0c0c0" }}>{count}</span>
     </button>
   );
 }
