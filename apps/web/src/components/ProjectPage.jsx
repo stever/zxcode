@@ -102,7 +102,7 @@ export default function ProjectPage({ projectId }) {
                 className="col-fixed p-0 pt-1"
                 style={{ width: `${width}px` }}
               >
-                <div className="height-53 pt-3 pl-1 flex align-items-center justify-content-between pr-2">
+                <div className="height-53 pt-3 pl-1 flex align-items-center justify-content-between">
                   <h3 className="m-0">
                     {title ? t("home.projectLabel", { title }) : ""}
                   </h3>
