@@ -148,6 +148,7 @@ const GET_USER_BY_ID = gql`
 
 // Sortable project card component for drag and drop
 function SortableProjectCard({ project, projectUrl, isDragging }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const {
     attributes,
