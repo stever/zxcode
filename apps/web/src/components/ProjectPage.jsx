@@ -102,7 +102,7 @@ export default function ProjectPage({ projectId }) {
                 style={{ width: `${width}px` }}
               >
                 <div className="height-53 pt-3 pl-1">
-                  <h3>{title ? `Project: ${title}` : ""}</h3>
+                  <h3>{title ? t("home.projectLabel", { title }) : ""}</h3>
                 </div>
                 <Emulator zoom={zoom} width={width} />
               </div>
