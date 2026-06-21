@@ -27,6 +27,13 @@ jobs:
           - context: ./apps/auth/
             dockerfile: ./apps/auth/Dockerfile
             image: ghcr.io/stever/zxcode-auth
+          # Boriel ZX Basic compile API (migrated from the standalone
+          # zxcode-api-zxbasic repo). Keeps the original image name so the
+          # deploy is unchanged; needs this repo's Actions write access to the
+          # stever/zxcode-api-zxbasic GHCR package.
+          - context: ./apps/zxbasic/
+            dockerfile: ./apps/zxbasic/Dockerfile
+            image: ghcr.io/stever/zxcode-api-zxbasic
           - context: ./
             dockerfile: ./apps/gif-service/Dockerfile
             image: ghcr.io/stever/zxcode-gif-service

@@ -67,7 +67,9 @@ services:
       start_period: 20s
 
   zxbasic:
-    image: ghcr.io/stever/zxcode-api-zxbasic
+    build:
+      context: ./apps/zxbasic
+      dockerfile: Dockerfile
     restart: always
     mem_limit: 512m
     cpus: 1.0
