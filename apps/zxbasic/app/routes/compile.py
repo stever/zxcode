@@ -29,7 +29,10 @@ ZXBC_EXECUTABLE = os.path.join(os.path.dirname(sys.executable), 'zxbc')
 
 class SessionVars(BaseModel):
     x_hasura_role: str = Field(alias="x-hasura-role")
-    x_hasura_user_id: Optional[UUID] = Field(alias="x-hasura-user-id")
+    # Absent for the public/unauthenticated role (e.g. the bot rendering a public
+    # project). In pydantic v2 Optional[...] without a default is still required,
+    # so default to None to make the field genuinely optional.
+    x_hasura_user_id: Optional[UUID] = Field(default=None, alias="x-hasura-user-id")
 
 
 class Input(BaseModel):
