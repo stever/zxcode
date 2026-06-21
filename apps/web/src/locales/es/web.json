@@ -1,0 +1,20 @@
+{
+  "nav": {
+    "project": "Proyecto",
+    "newProject": "Nuevo proyecto",
+    "openProject": "Abrir proyecto",
+    "downloadTap": "Descargar TAP",
+    "fullScreen": "Pantalla completa",
+    "yourProfile": "Tu perfil",
+    "profileSettings": "Ajustes del perfil",
+    "feed": "Novedades",
+    "publicProfiles": "Perfiles públicos",
+    "view": "Ver",
+    "info": "Información",
+    "aboutThisSite": "Acerca de este sitio",
+    "privacyPolicy": "Política de privacidad",
+    "termsOfUse": "Términos de uso",
+    "reset": "Reiniciar",
+    "other": "Otros"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "language": "Language",
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "search": "Search",
+    "explore": "Explore",
+    "profile": "Profile",
+    "logIn": "Log in",
+    "logOut": "Log out",
+    "settings": "Settings"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "follow": "Follow",
+    "unfollow": "Unfollow",
+    "loading": "Loading…"
+  },
+  "errors": {
+    "notFound": "Page not found",
+    "generic": "Something went wrong.",
+    "userNotFound": "User not found"
+  }
+}

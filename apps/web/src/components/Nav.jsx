@@ -12,11 +12,13 @@ import { getUserInfo } from "../redux/identity/actions";
 import { login, logout } from "../auth";
 import { resetEmulator } from "../redux/app/actions";
 import { getLanguageLabel } from "../lib/lang";
+import { useTranslation, LanguageSwitcher } from "@zxplay/i18n";
 import Constants from "../constants";
 
 export default function Nav() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const pathname = useSelector((state) => state?.router.location.pathname);
   const selectedDemoTab = useSelector((state) => state?.demo.selectedTabIndex);
@@ -29,6 +31,7 @@ export default function Nav() {
   const lang = useSelector((state) => state?.project.lang);
 
   const items = getMenuItems(
+    t,
     navigate,
     userId,
     userSlug,
@@ -51,6 +54,7 @@ export default function Nav() {
         start={
           <img alt="logo" src="/logo.png" height={"40"} className="mx-1" />
         }
+        end={<LanguageSwitcher className="p-2 border-round" />}
         style={{
           borderRadius: isMobile ? 0 : "5px",
           borderColor: "#1E1E1E",
@@ -60,7 +64,7 @@ export default function Nav() {
   );
 }
 
-function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
+function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible) {
   const sep = {
     separator: true,
   };
@@ -128,7 +132,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
     },
   };
 
-  const otherMenu = { label: "Other", items: [] };
+  const otherMenu = { label: t("nav.other"), items: [] };
   otherMenu.items.push(newBas2Tap);
   otherMenu.items.push(newZmac);
   if (Constants.enableZ88dk) otherMenu.items.push(newZ88dk);
@@ -141,17 +145,17 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   newProjectItems.push(otherMenu);
 
   const projectMenu = {
-    label: "Project",
+    label: t("nav.project"),
     icon: "pi pi-fw pi-file",
     items: [
       {
-        label: "New Project",
+        label: t("nav.newProject"),
         icon: "pi pi-fw pi-plus",
         disabled: !userId,
         items: newProjectItems,
       },
       {
-        label: "Open Project",
+        label: t("nav.openProject"),
         icon: "pi pi-fw pi-folder-open",
         disabled: !userId,
         command: () => {
@@ -171,7 +175,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
       //   },
       // },
       {
-        label: "Download TAP",
+        label: t("nav.downloadTap"),
         icon: "pi pi-fw pi-download",
         disabled: typeof lang === "undefined",
         command: () => {
@@ -182,7 +186,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const viewFullScreenMenuItem = {
-    label: "Full Screen",
+    label: t("nav.fullScreen"),
     icon: "pi pi-fw pi-window-maximize",
     disabled: !emuVisible,
     command: () => {
@@ -191,7 +195,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const viewProfileMenuItem = {
-    label: "Your Profile",
+    label: t("nav.yourProfile"),
     icon: "pi pi-fw pi-user",
     disabled: !userId,
     command: () => {
@@ -201,7 +205,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const profileSettingsMenuItem = {
-    label: "Profile Settings",
+    label: t("nav.profileSettings"),
     icon: "pi pi-fw pi-cog",
     disabled: !userId,
     command: () => {
@@ -210,7 +214,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const feedMenuItem = {
-    label: "Feed",
+    label: t("nav.feed"),
     icon: "pi pi-fw pi-list",
     disabled: !userId,
     command: () => {
@@ -219,7 +223,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const publicProfilesMenuItem = {
-    label: "Public Profiles",
+    label: t("nav.publicProfiles"),
     icon: "pi pi-fw pi-users",
     command: () => {
       navigate(`/profiles`);
@@ -227,7 +231,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const viewMenu = {
-    label: "View",
+    label: t("nav.view"),
     icon: "pi pi-fw pi-eye",
     items: [],
   };
@@ -240,25 +244,25 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   viewMenu.items.push(profileSettingsMenuItem);
 
   const infoMenu = {
-    label: "Info",
+    label: t("nav.info"),
     icon: "pi pi-fw pi-info-circle",
     items: [
       {
-        label: "About This Site",
+        label: t("nav.aboutThisSite"),
         icon: "pi pi-fw pi-question-circle",
         command: () => {
           navigate("/about");
         },
       },
       {
-        label: "Privacy Policy",
+        label: t("nav.privacyPolicy"),
         icon: "pi pi-fw pi-eye",
         command: () => {
           navigate("/privacy-policy");
         },
       },
       {
-        label: "Terms of Use",
+        label: t("nav.termsOfUse"),
         icon: "pi pi-fw pi-info-circle",
         command: () => {
           navigate("/terms-of-use");
@@ -268,7 +272,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const resetButton = {
-    label: "Reset",
+    label: t("nav.reset"),
     icon: "pi pi-fw pi-power-off",
     command: () => {
       dispatch(resetEmulator());
@@ -276,7 +280,7 @@ function getMenuItems(navigate, userId, userSlug, dispatch, lang, emuVisible) {
   };
 
   const loginButton = {
-    label: userId ? "Sign-out" : "Sign-in",
+    label: userId ? t("nav.logOut") : t("nav.logIn"),
     icon: userId ? "pi pi-fw pi-sign-out" : "pi pi-fw pi-sign-in",
     command: () => {
       userId ? logout() : login();

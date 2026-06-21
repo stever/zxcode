@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "./i18n";  // initialise translations before anything renders
 import {Provider as ReduxProvider} from "react-redux";
 import {ReduxRouter as Router} from "@lagunovsky/redux-react-router";
 import {store, history} from "./redux/store";

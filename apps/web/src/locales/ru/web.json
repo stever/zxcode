@@ -1,0 +1,20 @@
+{
+  "nav": {
+    "project": "Проект",
+    "newProject": "Новый проект",
+    "openProject": "Открыть проект",
+    "downloadTap": "Скачать TAP",
+    "fullScreen": "Полный экран",
+    "yourProfile": "Ваш профиль",
+    "profileSettings": "Настройки профиля",
+    "feed": "Лента",
+    "publicProfiles": "Открытые профили",
+    "view": "Вид",
+    "info": "Информация",
+    "aboutThisSite": "Об этом сайте",
+    "privacyPolicy": "Политика конфиденциальности",
+    "termsOfUse": "Условия использования",
+    "reset": "Сброс",
+    "other": "Прочее"
+  }
+}

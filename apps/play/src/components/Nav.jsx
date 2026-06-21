@@ -7,10 +7,12 @@ import {
     viewFullScreen
 } from "../redux/jsspeccy/actions";
 import {resetEmulator} from "../redux/app/actions";
+import {useTranslation, LanguageSwitcher} from "@zxplay/i18n";
 
 export default function Nav() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const {t} = useTranslation();
 
     const [searchInput, setSearchInput] = useState('');
 
@@ -20,7 +22,7 @@ export default function Nav() {
     const isMobile = useSelector(state => state?.window.isMobile);
     const className = isMobile ? '' : 'px-2 pt-2';
 
-    const items = getMenuItems(navigate, dispatch, emuVisible);
+    const items = getMenuItems(t, navigate, dispatch, emuVisible);
 
     return (
         <div className={className}>
@@ -28,16 +30,19 @@ export default function Nav() {
                 model={items}
                 start={<img alt="logo" src="/logo.png" height={"40"} className="mx-1"/>}
                 end={(
-                    <InputText
-                        className="mx-1 p-2"
-                        placeholder="Search"
-                        type="text"
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && searchInput) {
-                                navigate(`/search?q=${searchInput}`);
-                            }
-                        }}/>
+                    <div className="flex align-items-center">
+                        <InputText
+                            className="mx-1 p-2"
+                            placeholder={t('nav.search')}
+                            type="text"
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && searchInput) {
+                                    navigate(`/search?q=${searchInput}`);
+                                }
+                            }}/>
+                        <LanguageSwitcher className="mx-1 p-2 border-round"/>
+                    </div>
                 )}
                 style={{
                     borderRadius: isMobile ? 0 : '5px',
@@ -48,7 +53,7 @@ export default function Nav() {
     );
 }
 
-function getMenuItems(navigate, dispatch, emuVisible) {
+function getMenuItems(t, navigate, dispatch, emuVisible) {
     const sep = {
         separator: true
     };
@@ -61,7 +66,7 @@ function getMenuItems(navigate, dispatch, emuVisible) {
     };
 
     const viewFullScreenMenuItem = {
-        label: 'Full Screen',
+        label: t('nav.fullScreen'),
         icon: 'pi pi-fw pi-window-maximize',
         disabled: !emuVisible,
         command: () => {
@@ -70,7 +75,7 @@ function getMenuItems(navigate, dispatch, emuVisible) {
     };
 
     const viewMenu = {
-        label: 'View',
+        label: t('nav.view'),
         icon: 'pi pi-fw pi-eye',
         items: []
     };
@@ -78,18 +83,18 @@ function getMenuItems(navigate, dispatch, emuVisible) {
     viewMenu.items.push(viewFullScreenMenuItem);
 
     const infoMenu = {
-        label: 'Info',
+        label: t('nav.info'),
         icon: 'pi pi-fw pi-info-circle',
         items: [
             {
-                label: 'About This Site',
+                label: t('nav.aboutThisSite'),
                 icon: 'pi pi-fw pi-question-circle',
                 command: () => {
                     navigate('/about');
                 }
             },
             {
-                label: 'Linking To ZX Play',
+                label: t('nav.linking'),
                 icon: 'pi pi-fw pi-link',
                 command: () => {
                     navigate('/info/linking');
@@ -113,7 +118,7 @@ function getMenuItems(navigate, dispatch, emuVisible) {
     };
 
     const resetButton = {
-        label: 'Reset',
+        label: t('nav.reset'),
         icon: 'pi pi-fw pi-power-off',
         command: () => {
             dispatch(resetEmulator());

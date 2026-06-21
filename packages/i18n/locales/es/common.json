@@ -1,0 +1,29 @@
+{
+  "language": "Idioma",
+  "nav": {
+    "home": "Inicio",
+    "about": "Acerca de",
+    "search": "Buscar",
+    "explore": "Explorar",
+    "profile": "Perfil",
+    "logIn": "Iniciar sesión",
+    "logOut": "Cerrar sesión",
+    "settings": "Ajustes"
+  },
+  "actions": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "close": "Cerrar",
+    "back": "Atrás",
+    "follow": "Seguir",
+    "unfollow": "Dejar de seguir",
+    "loading": "Cargando…"
+  },
+  "errors": {
+    "notFound": "Página no encontrada",
+    "generic": "Algo salió mal.",
+    "userNotFound": "Usuario no encontrado"
+  }
+}

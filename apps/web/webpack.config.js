@@ -93,7 +93,7 @@ module.exports = (env, _) => {
         // emulator package is consumed from source, so transpile it here.
         loaders.push({
             test: /\.jsx?$/,
-            include: /packages[/\\]emulator/,
+            include: /packages[/\\](emulator|i18n)/,
             use: babelLoader
         });
     }
