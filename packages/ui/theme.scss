@@ -111,6 +111,17 @@
     border-bottom-color: transparent;
 }
 
+// Language tags label a project; they aren't actions. The base theme renders
+// every tag as a filled cyan chip, which reads like a button next to the real
+// buttons. Give the language tag an outline instead: cyan border and text on a
+// transparent fill. Other tags (status, owner) keep the filled style.
+.p-tag.lang-tag {
+    background: transparent;
+    border: 1px solid var(--zx-cyan);
+    color: var(--zx-cyan);
+    font-weight: 600;
+}
+
 // Dropdown panels: match the header tone (the base theme uses a cooler grey)
 // and round the corners to fit the rest of the UI. Items shrink slightly to
 // relate to the menu bar.

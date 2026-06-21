@@ -227,7 +227,7 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
           <Tag
             value={getLanguageLabel(project.lang)}
             severity={getLanguageColor(project.lang)}
-            className="align-self-start mb-3 relative z-1"
+            className="lang-tag align-self-start mb-3 relative z-1"
           />
 
           <div className="mt-auto text-400 text-sm relative z-1">
@@ -746,7 +746,7 @@ export default function PublicUserProfile() {
                               <Tag
                                 value={getLanguageLabel(project.lang)}
                                 severity={getLanguageColor(project.lang)}
-                                className="align-self-start mb-3 relative z-1"
+                                className="lang-tag align-self-start mb-3 relative z-1"
                               />
 
                               <div className="mt-auto text-400 text-sm relative z-1">
