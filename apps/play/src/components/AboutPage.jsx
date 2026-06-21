@@ -13,7 +13,7 @@ export default function AboutPage() {
                 <p>
                     <Trans
                         i18nKey="about.intro1"
-                        components={{srcLink: <a href="https://github.com/zxplay/zxplay" target="_blank" rel="noreferrer"/>}}
+                        components={{srcLink: <a href="https://github.com/stever/zxcode" target="_blank" rel="noreferrer"/>}}
                     />
                 </p>
                 <p>
