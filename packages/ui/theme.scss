@@ -110,3 +110,15 @@
 .p-tabview .p-tabview-nav li .p-tabview-nav-link {
     border-bottom-color: transparent;
 }
+
+// Dropdown panels: match the header tone (the base theme uses a cooler grey)
+// and round the corners to fit the rest of the UI. Items shrink slightly to
+// relate to the menu bar.
+.p-dropdown-panel {
+    background: var(--zx-surface);
+    border: 1px solid var(--zx-line-2);
+    border-radius: 8px;
+    overflow: hidden;
+
+    .p-dropdown-item { font-size: 0.9rem; }
+}

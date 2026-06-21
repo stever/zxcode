@@ -56,9 +56,9 @@
         white-space: nowrap;
     }
 
-    // top-level menu items: uppercase, letterspaced, quiet until hover.
-    // Tighter horizontal padding than the theme's 1rem so the bar reads dense
-    // and deliberate rather than airy.
+    // top-level menu items: uppercase, letterspaced, legible at rest and
+    // brighter on hover. Tighter horizontal padding than the theme's 1rem so
+    // the bar reads dense and deliberate rather than airy.
     .p-menubar-root-list > .p-menuitem > .p-menuitem-link {
         padding: 0.6rem 0.75rem;
         border-radius: 6px;
@@ -67,11 +67,22 @@
             letter-spacing: 0.13em;
             font-size: 0.72rem;
             font-weight: 600;
-            color: var(--zx-muted);
+            color: #C2BBB0;
         }
-        .p-menuitem-icon { color: var(--zx-faint); font-size: 0.8rem; }
+        .p-menuitem-icon { color: var(--zx-muted); font-size: 0.8rem; }
         &:hover .p-menuitem-text,
         &:hover .p-menuitem-icon { color: var(--zx-text); }
+    }
+
+    // Submenu panels dropping from the bar: match the header tone, round the
+    // corners to fit the rest of the UI, and shrink items slightly so they
+    // relate to the bar without touching the (smaller) menu titles.
+    .p-submenu-list {
+        background: var(--zx-surface);
+        border: 1px solid var(--zx-line-2);
+        border-radius: 8px;
+        padding: 0.25rem;
+        .p-menuitem-text { font-size: 0.9rem; }
     }
 
     .zx-deck-end { display: flex; align-items: center; gap: 0.5rem; margin-right: 1rem; }
