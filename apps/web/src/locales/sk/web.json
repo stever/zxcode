@@ -32,14 +32,22 @@
     "goBackTitle": "Vrátiť sa na predchádzajúcu stránku"
   },
   "home": {
-    "tabEmulator": "Emulátor"
+    "tabEmulator": "Emulátor",
+    "tabSinclairBasic": "Sinclair BASIC",
+    "tabZ80Assembly": "Assembler Z80"
   },
   "profiles": {
     "title": "Verejné profily",
     "none": "Zatiaľ žiadne verejné profily",
     "projectsCount": "{{count}} verejných projektov",
     "followersCount": "{{count}} sledovateľov",
-    "followingCount": "{{count}} sledované"
+    "followingCount": "{{count}} sledované",
+    "intro": "Prechádzajte verejné profily na ZX Play",
+    "onlyWithProjects": "Iba s verejnými projektmi",
+    "sortRecent": "Nedávna aktivita",
+    "sortProjects": "Najviac verejných projektov",
+    "sortFollowers": "Najviac sledovateľov",
+    "sortNewest": "Najnovšie"
   },
   "follow": {
     "networkTitle": "Sieť používateľa {{name}}",
@@ -97,7 +105,14 @@
     "publicState": "Verejný",
     "privateState": "Súkromný",
     "publicHelp": "Váš profil a verejné projekty sú viditeľné pre každého",
-    "privateHelp": "Váš profil je skrytý pred verejnosťou"
+    "privateHelp": "Váš profil je skrytý pred verejnosťou",
+    "slugRequired": "URL identifikátor je povinný",
+    "slugInvalid": "Identifikátor musí mať aspoň 3 znaky: iba malé písmená, číslice a pomlčky",
+    "slugReserved": "Táto URL je rezervovaná a nedá sa použiť",
+    "slugTaken": "Táto URL je už obsadená",
+    "slugCheckFailed": "Nepodarilo sa overiť dostupnosť URL",
+    "saveSuccess": "Profil bol úspešne aktualizovaný!",
+    "saveFailed": "Nepodarilo sa uložiť zmeny profilu"
   },
   "avatar": {
     "chooseTitle": "Vyberte si avatar",
@@ -134,7 +149,8 @@
     "title": "Názov projektu",
     "compiler": "Kompilátor",
     "created": "Vytvorené",
-    "updated": "Aktualizované"
+    "updated": "Aktualizované",
+    "itemsPerPage": "Položiek na stránku:"
   },
   "feed": {
     "none": "Zatiaľ žiadna aktivita",
@@ -162,5 +178,23 @@
     "yourProfile": "Váš profil",
     "yourProjects": "Vaše projekty",
     "lineNumbers": "Čísla riadkov"
+  },
+  "publicProject": {
+    "loginRequired": "Pre zobrazenie tohto projektu sa prihláste",
+    "notFound": "Projekt sa nenašiel",
+    "loadFailed": "Nepodarilo sa načítať projekt"
+  },
+  "errors": {
+    "badRequest": "Neplatná požiadavka",
+    "conflict": "Konflikt",
+    "serverError": "Vnútorná chyba servera",
+    "serverErrorDetail": "Server nahlásil chybu. Požiadavku sa v tejto chvíli nepodarilo dokončiť.",
+    "httpError": "Chyba HTTP: {{statusCode}}",
+    "requestFailed": "Požiadavka na server zlyhala",
+    "requestFailedDetail": "Neočakávaná chyba výnimky pri spracovaní požiadavky.",
+    "projectRunError": "Spustenie projektu - Chyba",
+    "projectRunMessage": "Spustenie projektu - Správa",
+    "lineMsg": "Riadok {{line}}: {{msg}}",
+    "renderProblem": "Pri vykresľovaní tohto obsahu došlo k problému."
   }
 }

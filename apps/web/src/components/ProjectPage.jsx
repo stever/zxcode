@@ -59,7 +59,7 @@ export default function ProjectPage({ projectId }) {
   const className = isMobile ? "" : "mx-2 my-1";
 
   return (
-    <Titled title={(s) => `${title} ${sep} Project ${sep} ${s}`}>
+    <Titled title={(s) => `${title} ${sep} ${t("nav.project")} ${sep} ${s}`}>
       <Toast ref={toast} />
       <div className={className}>
         <div className="grid full-width-grid">

@@ -68,7 +68,7 @@ export default function ActivityFeed() {
   }
 
   return (
-    <Titled title={(s) => `Feed ${sep} ${s}`}>
+    <Titled title={(s) => `${t("nav.feed")} ${sep} ${s}`}>
       <div className="m-2">
         <Card title={t("nav.feed")}>
           <p className="text-500 mb-4">

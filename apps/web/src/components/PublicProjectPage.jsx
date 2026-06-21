@@ -8,6 +8,7 @@ import gql from "graphql-tag";
 import { gqlFetch } from "../graphql_fetch";
 import { loadProject } from "../redux/project/actions";
 import ProjectPage from "./ProjectPage";
+import { useTranslation } from "@zxplay/i18n";
 
 // Simple query to get project by slug
 // Hasura's RLS will handle filtering to only show projects the current user can access
@@ -25,6 +26,7 @@ const GET_PROJECT_BY_SLUG = gql`
 `;
 
 export default function PublicProjectPage() {
+  const { t } = useTranslation();
   const { userSlug, projectSlug } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -57,9 +59,9 @@ export default function PublicProjectPage() {
 
       if (!project) {
         if (!currentUserId) {
-          setError("Please log in to view this project");
+          setError(t("publicProject.loginRequired"));
         } else {
-          setError("Project not found");
+          setError(t("publicProject.notFound"));
         }
         return;
       }
@@ -70,7 +72,7 @@ export default function PublicProjectPage() {
 
     } catch (err) {
       console.error("Failed to fetch project:", err);
-      setError("Failed to load project");
+      setError(t("publicProject.loadFailed"));
     } finally {
       setLoading(false);
     }

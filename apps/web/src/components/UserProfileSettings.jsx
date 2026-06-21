@@ -137,17 +137,17 @@ export default function UserProfileSettings() {
 
   const validateSlug = async (slug) => {
     if (!slug) {
-      setSlugError("URL slug is required");
+      setSlugError(t("settings.slugRequired"));
       return false;
     }
 
     if (!isValidSlug(slug)) {
-      setSlugError("Slug must be 3+ characters, lowercase letters, numbers, and hyphens only");
+      setSlugError(t("settings.slugInvalid"));
       return false;
     }
 
     if (isReservedSlug(slug)) {
-      setSlugError("This URL is reserved and cannot be used");
+      setSlugError(t("settings.slugReserved"));
       return false;
     }
 
@@ -159,12 +159,12 @@ export default function UserProfileSettings() {
       });
 
       if (response?.data?.user?.length > 0) {
-        setSlugError("This URL is already taken");
+        setSlugError(t("settings.slugTaken"));
         return false;
       }
     } catch (error) {
       console.error("Failed to check slug availability:", error);
-      setSlugError("Failed to verify URL availability");
+      setSlugError(t("settings.slugCheckFailed"));
       return false;
     }
 
@@ -201,7 +201,7 @@ export default function UserProfileSettings() {
 
       if (response?.data?.update_user_by_pk) {
         setOriginalProfile(profile);
-        setSaveMessage({ severity: "success", text: "Profile updated successfully!" });
+        setSaveMessage({ severity: "success", text: t("settings.saveSuccess") });
 
         // Refresh user info in Redux store to update navigation
         // Add small delay to ensure database update is complete
@@ -214,7 +214,7 @@ export default function UserProfileSettings() {
       }
     } catch (error) {
       console.error("Failed to save profile:", error);
-      setSaveMessage({ severity: "error", text: "Failed to save profile changes" });
+      setSaveMessage({ severity: "error", text: t("settings.saveFailed") });
     } finally {
       setSaving(false);
     }

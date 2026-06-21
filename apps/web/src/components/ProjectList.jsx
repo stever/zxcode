@@ -109,7 +109,7 @@ export default function ProjectList() {
       return (
         <React.Fragment>
           <span className="user-select-none paginator-label">
-            Items per page:{" "}
+            {t("projectList.itemsPerPage")}{" "}
           </span>
           <Dropdown
             value={options.value}

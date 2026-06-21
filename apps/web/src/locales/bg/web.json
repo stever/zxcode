@@ -32,14 +32,22 @@
     "goBackTitle": "Върни се на предишната страница"
   },
   "home": {
-    "tabEmulator": "Емулатор"
+    "tabEmulator": "Емулатор",
+    "tabSinclairBasic": "Sinclair BASIC",
+    "tabZ80Assembly": "Асемблер Z80"
   },
   "profiles": {
     "title": "Публични профили",
     "none": "Все още няма публични профили",
     "projectsCount": "{{count}} публични проекта",
     "followersCount": "{{count}} последователи",
-    "followingCount": "{{count}} следвани"
+    "followingCount": "{{count}} следвани",
+    "intro": "Разгледайте публичните профили в ZX Play",
+    "onlyWithProjects": "Само с публични проекти",
+    "sortRecent": "Скорошна активност",
+    "sortProjects": "Най-много публични проекти",
+    "sortFollowers": "Най-много последователи",
+    "sortNewest": "Най-нови"
   },
   "follow": {
     "networkTitle": "Мрежа на {{name}}",
@@ -97,7 +105,14 @@
     "publicState": "Публичен",
     "privateState": "Частен",
     "publicHelp": "Профилът ви и публичните проекти са видими за всички",
-    "privateHelp": "Профилът ви е скрит от публичен изглед"
+    "privateHelp": "Профилът ви е скрит от публичен изглед",
+    "slugRequired": "URL идентификаторът е задължителен",
+    "slugInvalid": "Идентификаторът трябва да е поне 3 знака: само малки букви, цифри и тирета",
+    "slugReserved": "Този URL е запазен и не може да се използва",
+    "slugTaken": "Този URL вече е зает",
+    "slugCheckFailed": "Неуспешна проверка на наличността на URL",
+    "saveSuccess": "Профилът е актуализиран успешно!",
+    "saveFailed": "Неуспешно запазване на промените в профила"
   },
   "avatar": {
     "chooseTitle": "Изберете своя аватар",
@@ -134,7 +149,8 @@
     "title": "Заглавие на проекта",
     "compiler": "Компилатор",
     "created": "Създаден",
-    "updated": "Обновен"
+    "updated": "Обновен",
+    "itemsPerPage": "Елементи на страница:"
   },
   "feed": {
     "none": "Все още няма активност",
@@ -162,5 +178,23 @@
     "yourProfile": "Вашият профил",
     "yourProjects": "Вашите проекти",
     "lineNumbers": "Номера на редове"
+  },
+  "publicProject": {
+    "loginRequired": "Влезте, за да видите този проект",
+    "notFound": "Проектът не е намерен",
+    "loadFailed": "Неуспешно зареждане на проекта"
+  },
+  "errors": {
+    "badRequest": "Невалидна заявка",
+    "conflict": "Конфликт",
+    "serverError": "Вътрешна грешка на сървъра",
+    "serverErrorDetail": "Сървърът докладва грешка. Заявката не можа да бъде изпълнена в момента.",
+    "httpError": "HTTP грешка: {{statusCode}}",
+    "requestFailed": "Заявката към сървъра е неуспешна",
+    "requestFailedDetail": "Неочаквана грешка при изпълнение на заявката.",
+    "projectRunError": "Изпълнение на проекта - Грешка",
+    "projectRunMessage": "Изпълнение на проекта - Съобщение",
+    "lineMsg": "Ред {{line}}: {{msg}}",
+    "renderProblem": "Възникна проблем при показването на това съдържание."
   }
 }

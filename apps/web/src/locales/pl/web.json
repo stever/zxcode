@@ -32,14 +32,22 @@
     "goBackTitle": "Wróć do poprzedniej strony"
   },
   "home": {
-    "tabEmulator": "Emulator"
+    "tabEmulator": "Emulator",
+    "tabSinclairBasic": "Sinclair BASIC",
+    "tabZ80Assembly": "Asembler Z80"
   },
   "profiles": {
     "title": "Profile publiczne",
     "none": "Brak publicznych profili",
     "projectsCount": "{{count}} publicznych projektów",
     "followersCount": "{{count}} obserwujących",
-    "followingCount": "{{count}} obserwowanych"
+    "followingCount": "{{count}} obserwowanych",
+    "intro": "Przeglądaj profile publiczne w ZX Play",
+    "onlyWithProjects": "Tylko z projektami publicznymi",
+    "sortRecent": "Ostatnia aktywność",
+    "sortProjects": "Najwięcej projektów publicznych",
+    "sortFollowers": "Najwięcej obserwujących",
+    "sortNewest": "Najnowsze"
   },
   "follow": {
     "networkTitle": "Sieć użytkownika {{name}}",
@@ -97,7 +105,14 @@
     "publicState": "Publiczny",
     "privateState": "Prywatny",
     "publicHelp": "Twój profil i publiczne projekty są widoczne dla wszystkich",
-    "privateHelp": "Twój profil jest ukryty przed publicznym widokiem"
+    "privateHelp": "Twój profil jest ukryty przed publicznym widokiem",
+    "slugRequired": "Identyfikator URL jest wymagany",
+    "slugInvalid": "Identyfikator musi mieć min. 3 znaki: tylko małe litery, cyfry i myślniki",
+    "slugReserved": "Ten adres URL jest zarezerwowany i nie można go użyć",
+    "slugTaken": "Ten adres URL jest już zajęty",
+    "slugCheckFailed": "Nie udało się sprawdzić dostępności adresu URL",
+    "saveSuccess": "Profil zaktualizowany pomyślnie!",
+    "saveFailed": "Nie udało się zapisać zmian profilu"
   },
   "avatar": {
     "chooseTitle": "Wybierz swój awatar",
@@ -134,7 +149,8 @@
     "title": "Tytuł projektu",
     "compiler": "Kompilator",
     "created": "Utworzono",
-    "updated": "Zaktualizowano"
+    "updated": "Zaktualizowano",
+    "itemsPerPage": "Elementów na stronę:"
   },
   "feed": {
     "none": "Brak aktywności",
@@ -162,5 +178,23 @@
     "yourProfile": "Twój profil",
     "yourProjects": "Twoje projekty",
     "lineNumbers": "Numery wierszy"
+  },
+  "publicProject": {
+    "loginRequired": "Zaloguj się, aby zobaczyć ten projekt",
+    "notFound": "Nie znaleziono projektu",
+    "loadFailed": "Nie udało się załadować projektu"
+  },
+  "errors": {
+    "badRequest": "Nieprawidłowe żądanie",
+    "conflict": "Konflikt",
+    "serverError": "Wewnętrzny błąd serwera",
+    "serverErrorDetail": "Serwer zgłosił błąd. Nie udało się zrealizować żądania w tym momencie.",
+    "httpError": "Błąd HTTP: {{statusCode}}",
+    "requestFailed": "Żądanie do serwera nie powiodło się",
+    "requestFailedDetail": "Nieoczekiwany wyjątek podczas wykonywania żądania.",
+    "projectRunError": "Uruchomienie projektu - Błąd",
+    "projectRunMessage": "Uruchomienie projektu - Komunikat",
+    "lineMsg": "Wiersz {{line}}: {{msg}}",
+    "renderProblem": "Wystąpił problem podczas wyświetlania tej zawartości."
   }
 }

@@ -59,10 +59,10 @@ export default function HomePage() {
                                     <TabPanel header={t("home.tabEmulator")}>
                                         <Emulator zoom={zoom} width={width}/>
                                     </TabPanel>
-                                    <TabPanel header="Sinclair BASIC">
+                                    <TabPanel header={t("home.tabSinclairBasic")}>
                                         <DemoSinclairBasicEditor/>
                                     </TabPanel>
-                                    <TabPanel header="Z80 Assembly">
+                                    <TabPanel header={t("home.tabZ80Assembly")}>
                                         <DemoAssemblyEditor/>
                                     </TabPanel>
                                 </TabView>
@@ -78,10 +78,10 @@ export default function HomePage() {
                                 <TabView
                                     activeIndex={selectedTabIndex}
                                     onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
-                                    <TabPanel header="Sinclair BASIC">
+                                    <TabPanel header={t("home.tabSinclairBasic")}>
                                         <DemoSinclairBasicEditor/>
                                     </TabPanel>
-                                    <TabPanel header="Z80 Assembly">
+                                    <TabPanel header={t("home.tabZ80Assembly")}>
                                         <DemoAssemblyEditor/>
                                     </TabPanel>
                                 </TabView>

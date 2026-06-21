@@ -2,6 +2,7 @@ import React from "react";
 import {error} from "./redux/error/actions";
 import {store} from "./redux/store";
 import {dashboardUnlock} from "./dashboard_lock";
+import {i18n} from "@zxplay/i18n";
 
 export function handleError(title, data) {
     dashboardUnlock();
@@ -30,31 +31,30 @@ function getRequestError(e) {
 
         switch (statusCode) {
             case 400: return {
-                title: 'Bad Request',
+                title: i18n.t('errors.badRequest'),
                 description: e.response.data
             };
 
             case 409: return {
-                title: 'Conflict',
+                title: i18n.t('errors.conflict'),
                 description: e.response.data
             };
 
             case 500: return {
-                title: 'Internal Server Error',
-                description: 'The server reported an error. It was not ' +
-                    'possible to complete the request at this time.'
+                title: i18n.t('errors.serverError'),
+                description: i18n.t('errors.serverErrorDetail')
             };
 
             default: return {
-                title: `HTTP Error: ${statusCode}`,
+                title: i18n.t('errors.httpError', {statusCode}),
                 description: e.response.data
             }
         }
     }
 
     return {
-        title: 'Server Request Failed',
-        description: 'Unexpected exception error when making the request.'
+        title: i18n.t('errors.requestFailed'),
+        description: i18n.t('errors.requestFailedDetail')
     }
 }
 
@@ -112,7 +112,7 @@ function getBuildErrorWorkerToast(item) {
         msg = msg.substr(errorPrefix.length);
     }
 
-    msg = `Line ${item.line}: ${msg}`;
+    msg = i18n.t('errors.lineMsg', {line: item.line, msg});
 
     return {
         severity: isError ? 'error' : 'info',
@@ -125,7 +125,7 @@ function getBuildErrorToastContent(msg, isError) {
     return (
         <div className="p-toast-message-text">
             <span className="p-toast-summary">
-                Project Run - {isError ? 'Error' : 'Message'}
+                {isError ? i18n.t('errors.projectRunError') : i18n.t('errors.projectRunMessage')}
             </span>
             <div className="p-toast-detail">
                 {msg}

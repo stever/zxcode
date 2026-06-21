@@ -5,8 +5,10 @@ import {Titled} from "react-titled";
 import {Card} from "primereact/card";
 import {requestTermsOfUse} from "../redux/app/actions";
 import {sep} from "../constants";
+import {useTranslation} from "@zxplay/i18n";
 
 export default function InfoLegacyTerms() {
+    const {t} = useTranslation();
     const dispatch = useDispatch();
 
     const text = useSelector(state => state?.app.termsOfUse);
@@ -18,7 +20,7 @@ export default function InfoLegacyTerms() {
     }, []);
 
     return (
-        <Titled title={(s) => `Terms of Use ${sep} ${s}`}>
+        <Titled title={(s) => `${t("nav.termsOfUse")} ${sep} ${s}`}>
             <Card className="m-2">
                 <ReactMarkdown>
                     {text}

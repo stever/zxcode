@@ -32,14 +32,22 @@
     "goBackTitle": "Вернуться на предыдущую страницу"
   },
   "home": {
-    "tabEmulator": "Эмулятор"
+    "tabEmulator": "Эмулятор",
+    "tabSinclairBasic": "Sinclair BASIC",
+    "tabZ80Assembly": "Ассемблер Z80"
   },
   "profiles": {
     "title": "Открытые профили",
     "none": "Пока нет открытых профилей",
     "projectsCount": "{{count}} открытых проектов",
     "followersCount": "{{count}} подписчиков",
-    "followingCount": "{{count}} подписок"
+    "followingCount": "{{count}} подписок",
+    "intro": "Просматривайте открытые профили на ZX Play",
+    "onlyWithProjects": "Только с открытыми проектами",
+    "sortRecent": "Недавняя активность",
+    "sortProjects": "Больше всего открытых проектов",
+    "sortFollowers": "Больше всего подписчиков",
+    "sortNewest": "Новейшие"
   },
   "follow": {
     "networkTitle": "Сеть пользователя {{name}}",
@@ -97,7 +105,14 @@
     "publicState": "Открытый",
     "privateState": "Закрытый",
     "publicHelp": "Ваш профиль и открытые проекты видны всем",
-    "privateHelp": "Ваш профиль скрыт от посторонних"
+    "privateHelp": "Ваш профиль скрыт от посторонних",
+    "slugRequired": "Требуется URL-идентификатор",
+    "slugInvalid": "Идентификатор должен содержать минимум 3 символа: только строчные буквы, цифры и дефисы",
+    "slugReserved": "Этот URL зарезервирован и не может быть использован",
+    "slugTaken": "Этот URL уже занят",
+    "slugCheckFailed": "Не удалось проверить доступность URL",
+    "saveSuccess": "Профиль успешно обновлён!",
+    "saveFailed": "Не удалось сохранить изменения профиля"
   },
   "avatar": {
     "chooseTitle": "Выберите аватар",
@@ -134,7 +149,8 @@
     "title": "Название проекта",
     "compiler": "Компилятор",
     "created": "Создан",
-    "updated": "Обновлён"
+    "updated": "Обновлён",
+    "itemsPerPage": "Элементов на странице:"
   },
   "feed": {
     "none": "Пока нет активности",
@@ -162,5 +178,23 @@
     "yourProfile": "Ваш профиль",
     "yourProjects": "Ваши проекты",
     "lineNumbers": "Номера строк"
+  },
+  "publicProject": {
+    "loginRequired": "Войдите, чтобы просмотреть этот проект",
+    "notFound": "Проект не найден",
+    "loadFailed": "Не удалось загрузить проект"
+  },
+  "errors": {
+    "badRequest": "Неверный запрос",
+    "conflict": "Конфликт",
+    "serverError": "Внутренняя ошибка сервера",
+    "serverErrorDetail": "Сервер сообщил об ошибке. Не удалось выполнить запрос в данный момент.",
+    "httpError": "Ошибка HTTP: {{statusCode}}",
+    "requestFailed": "Запрос к серверу не выполнен",
+    "requestFailedDetail": "Непредвиденная ошибка при выполнении запроса.",
+    "projectRunError": "Запуск проекта — Ошибка",
+    "projectRunMessage": "Запуск проекта — Сообщение",
+    "lineMsg": "Строка {{line}}: {{msg}}",
+    "renderProblem": "При отображении этого содержимого возникла проблема."
   }
 }

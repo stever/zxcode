@@ -32,14 +32,22 @@
     "goBackTitle": "Go back to previous page"
   },
   "home": {
-    "tabEmulator": "Emulator"
+    "tabEmulator": "Emulator",
+    "tabSinclairBasic": "Sinclair BASIC",
+    "tabZ80Assembly": "Z80 Assembly"
   },
   "profiles": {
     "title": "Public Profiles",
     "none": "No public profiles yet",
     "projectsCount": "{{count}} public projects",
     "followersCount": "{{count}} followers",
-    "followingCount": "{{count}} following"
+    "followingCount": "{{count}} following",
+    "intro": "Browse public profiles on ZX Play",
+    "onlyWithProjects": "Only with public projects",
+    "sortRecent": "Recent activity",
+    "sortProjects": "Most public projects",
+    "sortFollowers": "Most followers",
+    "sortNewest": "Newest"
   },
   "follow": {
     "networkTitle": "{{name}}'s Network",
@@ -97,7 +105,14 @@
     "publicState": "Public",
     "privateState": "Private",
     "publicHelp": "Your profile and public projects are visible to everyone",
-    "privateHelp": "Your profile is hidden from public view"
+    "privateHelp": "Your profile is hidden from public view",
+    "slugRequired": "URL slug is required",
+    "slugInvalid": "Slug must be 3+ characters, lowercase letters, numbers, and hyphens only",
+    "slugReserved": "This URL is reserved and cannot be used",
+    "slugTaken": "This URL is already taken",
+    "slugCheckFailed": "Failed to verify URL availability",
+    "saveSuccess": "Profile updated successfully!",
+    "saveFailed": "Failed to save profile changes"
   },
   "avatar": {
     "chooseTitle": "Choose Your Avatar",
@@ -134,7 +149,8 @@
     "title": "Project Title",
     "compiler": "Compiler",
     "created": "Created",
-    "updated": "Updated"
+    "updated": "Updated",
+    "itemsPerPage": "Items per page:"
   },
   "feed": {
     "none": "No activity yet",
@@ -162,5 +178,23 @@
     "yourProfile": "Your Profile",
     "yourProjects": "Your Projects",
     "lineNumbers": "Line Numbers"
+  },
+  "publicProject": {
+    "loginRequired": "Please log in to view this project",
+    "notFound": "Project not found",
+    "loadFailed": "Failed to load project"
+  },
+  "errors": {
+    "badRequest": "Bad Request",
+    "conflict": "Conflict",
+    "serverError": "Internal Server Error",
+    "serverErrorDetail": "The server reported an error. It was not possible to complete the request at this time.",
+    "httpError": "HTTP Error: {{statusCode}}",
+    "requestFailed": "Server Request Failed",
+    "requestFailedDetail": "Unexpected exception error when making the request.",
+    "projectRunError": "Project Run - Error",
+    "projectRunMessage": "Project Run - Message",
+    "lineMsg": "Line {{line}}: {{msg}}",
+    "renderProblem": "There was a problem in rendering this content."
   }
 }

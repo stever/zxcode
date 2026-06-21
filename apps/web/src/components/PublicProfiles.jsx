@@ -55,22 +55,22 @@ const GET_PUBLIC_PROFILES = gql`
 
 const SORT_OPTIONS = [
   {
-    label: "Recent activity",
+    labelKey: "profiles.sortRecent",
     value: "recent",
     orderBy: [{ projects_aggregate: { max: { updated_at: "desc_nulls_last" } } }],
   },
   {
-    label: "Most public projects",
+    labelKey: "profiles.sortProjects",
     value: "projects",
     orderBy: [{ projects_aggregate: { count: "desc" } }],
   },
   {
-    label: "Most followers",
+    labelKey: "profiles.sortFollowers",
     value: "followers",
     orderBy: [{ followers_aggregate: { count: "desc" } }],
   },
   {
-    label: "Newest",
+    labelKey: "profiles.sortNewest",
     value: "newest",
     orderBy: [{ created_at: "desc" }],
   },
@@ -180,7 +180,7 @@ export default function PublicProfiles() {
         <Card title={t("profiles.title")}>
           <div className="flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
             <p className="text-500 m-0">
-              Browse public profiles on ZX Play
+              {t("profiles.intro")}
               {totalCount > 0 && (
                 <span className="ml-2">
                   (showing {page * pageSize + 1} -{" "}
@@ -199,12 +199,15 @@ export default function PublicProfiles() {
                   }}
                 />
                 <label htmlFor="hideEmpty" className="text-500 text-sm">
-                  Only with public projects
+                  {t("profiles.onlyWithProjects")}
                 </label>
               </div>
               <Dropdown
                 value={sort}
-                options={SORT_OPTIONS}
+                options={SORT_OPTIONS.map((o) => ({
+                  ...o,
+                  label: t(o.labelKey),
+                }))}
                 style={{ width: "16rem" }}
                 onChange={(e) => {
                   setSort(e.value);

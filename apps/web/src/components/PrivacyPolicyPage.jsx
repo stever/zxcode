@@ -5,8 +5,10 @@ import {Titled} from "react-titled";
 import {Card} from "primereact/card";
 import {requestPrivacyPolicy} from "../redux/app/actions";
 import {sep} from "../constants";
+import {useTranslation} from "@zxplay/i18n";
 
 export default function PrivacyPolicyPage() {
+    const {t} = useTranslation();
     const dispatch = useDispatch();
 
     const text = useSelector(state => state?.app.privacyPolicy);
@@ -18,7 +20,7 @@ export default function PrivacyPolicyPage() {
     }, []);
 
     return (
-        <Titled title={(s) => `Privacy Policy ${sep} ${s}`}>
+        <Titled title={(s) => `${t("nav.privacyPolicy")} ${sep} ${s}`}>
             <Card className="m-2">
                 <ReactMarkdown>
                     {text}

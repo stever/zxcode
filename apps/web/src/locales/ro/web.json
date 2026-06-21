@@ -32,14 +32,22 @@
     "goBackTitle": "Revino la pagina anterioară"
   },
   "home": {
-    "tabEmulator": "Emulator"
+    "tabEmulator": "Emulator",
+    "tabSinclairBasic": "Sinclair BASIC",
+    "tabZ80Assembly": "Asamblare Z80"
   },
   "profiles": {
     "title": "Profiluri publice",
     "none": "Încă nu există profiluri publice",
     "projectsCount": "{{count}} proiecte publice",
     "followersCount": "{{count}} urmăritori",
-    "followingCount": "{{count}} urmăriți"
+    "followingCount": "{{count}} urmăriți",
+    "intro": "Răsfoiește profilurile publice pe ZX Play",
+    "onlyWithProjects": "Doar cu proiecte publice",
+    "sortRecent": "Activitate recentă",
+    "sortProjects": "Cele mai multe proiecte publice",
+    "sortFollowers": "Cei mai mulți urmăritori",
+    "sortNewest": "Cele mai noi"
   },
   "follow": {
     "networkTitle": "Rețeaua lui {{name}}",
@@ -97,7 +105,14 @@
     "publicState": "Public",
     "privateState": "Privat",
     "publicHelp": "Profilul tău și proiectele publice sunt vizibile pentru toată lumea",
-    "privateHelp": "Profilul tău este ascuns din vizualizarea publică"
+    "privateHelp": "Profilul tău este ascuns din vizualizarea publică",
+    "slugRequired": "Identificatorul URL este obligatoriu",
+    "slugInvalid": "Identificatorul trebuie să aibă minim 3 caractere: doar litere mici, cifre și cratime",
+    "slugReserved": "Acest URL este rezervat și nu poate fi folosit",
+    "slugTaken": "Acest URL este deja folosit",
+    "slugCheckFailed": "Verificarea disponibilității URL-ului a eșuat",
+    "saveSuccess": "Profil actualizat cu succes!",
+    "saveFailed": "Salvarea modificărilor profilului a eșuat"
   },
   "avatar": {
     "chooseTitle": "Alege-ți avatarul",
@@ -134,7 +149,8 @@
     "title": "Titlul proiectului",
     "compiler": "Compilator",
     "created": "Creat",
-    "updated": "Actualizat"
+    "updated": "Actualizat",
+    "itemsPerPage": "Elemente pe pagină:"
   },
   "feed": {
     "none": "Încă nu există activitate",
@@ -162,5 +178,23 @@
     "yourProfile": "Profilul tău",
     "yourProjects": "Proiectele tale",
     "lineNumbers": "Numere de linie"
+  },
+  "publicProject": {
+    "loginRequired": "Autentifică-te pentru a vedea acest proiect",
+    "notFound": "Proiectul nu a fost găsit",
+    "loadFailed": "Încărcarea proiectului a eșuat"
+  },
+  "errors": {
+    "badRequest": "Cerere greșită",
+    "conflict": "Conflict",
+    "serverError": "Eroare internă de server",
+    "serverErrorDetail": "Serverul a raportat o eroare. Cererea nu a putut fi finalizată în acest moment.",
+    "httpError": "Eroare HTTP: {{statusCode}}",
+    "requestFailed": "Cererea către server a eșuat",
+    "requestFailedDetail": "Eroare de excepție neașteptată la efectuarea cererii.",
+    "projectRunError": "Rularea proiectului - Eroare",
+    "projectRunMessage": "Rularea proiectului - Mesaj",
+    "lineMsg": "Linia {{line}}: {{msg}}",
+    "renderProblem": "A apărut o problemă la afișarea acestui conținut."
   }
 }

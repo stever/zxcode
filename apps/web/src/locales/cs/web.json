@@ -32,14 +32,22 @@
     "goBackTitle": "Přejít na předchozí stránku"
   },
   "home": {
-    "tabEmulator": "Emulátor"
+    "tabEmulator": "Emulátor",
+    "tabSinclairBasic": "Sinclair BASIC",
+    "tabZ80Assembly": "Assembler Z80"
   },
   "profiles": {
     "title": "Veřejné profily",
     "none": "Zatím žádné veřejné profily",
     "projectsCount": "{{count}} veřejných projektů",
     "followersCount": "{{count}} sledujících",
-    "followingCount": "{{count}} sledováno"
+    "followingCount": "{{count}} sledováno",
+    "intro": "Procházejte veřejné profily na ZX Play",
+    "onlyWithProjects": "Pouze s veřejnými projekty",
+    "sortRecent": "Nedávná aktivita",
+    "sortProjects": "Nejvíce veřejných projektů",
+    "sortFollowers": "Nejvíce sledujících",
+    "sortNewest": "Nejnovější"
   },
   "follow": {
     "networkTitle": "Síť uživatele {{name}}",
@@ -97,7 +105,14 @@
     "publicState": "Veřejný",
     "privateState": "Soukromý",
     "publicHelp": "Váš profil a veřejné projekty jsou viditelné pro všechny",
-    "privateHelp": "Váš profil je skryt před veřejností"
+    "privateHelp": "Váš profil je skryt před veřejností",
+    "slugRequired": "URL identifikátor je povinný",
+    "slugInvalid": "Identifikátor musí mít alespoň 3 znaky: pouze malá písmena, číslice a pomlčky",
+    "slugReserved": "Tato URL je rezervovaná a nelze ji použít",
+    "slugTaken": "Tato URL je již obsazená",
+    "slugCheckFailed": "Nepodařilo se ověřit dostupnost URL",
+    "saveSuccess": "Profil byl úspěšně aktualizován!",
+    "saveFailed": "Nepodařilo se uložit změny profilu"
   },
   "avatar": {
     "chooseTitle": "Vyberte si avatar",
@@ -134,7 +149,8 @@
     "title": "Název projektu",
     "compiler": "Kompilátor",
     "created": "Vytvořeno",
-    "updated": "Aktualizováno"
+    "updated": "Aktualizováno",
+    "itemsPerPage": "Položek na stránku:"
   },
   "feed": {
     "none": "Zatím žádná aktivita",
@@ -162,5 +178,23 @@
     "yourProfile": "Váš profil",
     "yourProjects": "Vaše projekty",
     "lineNumbers": "Čísla řádků"
+  },
+  "publicProject": {
+    "loginRequired": "Pro zobrazení tohoto projektu se přihlaste",
+    "notFound": "Projekt nenalezen",
+    "loadFailed": "Nepodařilo se načíst projekt"
+  },
+  "errors": {
+    "badRequest": "Neplatný požadavek",
+    "conflict": "Konflikt",
+    "serverError": "Vnitřní chyba serveru",
+    "serverErrorDetail": "Server nahlásil chybu. Požadavek se v tuto chvíli nepodařilo dokončit.",
+    "httpError": "Chyba HTTP: {{statusCode}}",
+    "requestFailed": "Požadavek na server selhal",
+    "requestFailedDetail": "Neočekávaná chyba výjimky při zpracování požadavku.",
+    "projectRunError": "Spuštění projektu - Chyba",
+    "projectRunMessage": "Spuštění projektu - Zpráva",
+    "lineMsg": "Řádek {{line}}: {{msg}}",
+    "renderProblem": "Při vykreslování tohoto obsahu došlo k problému."
   }
 }
