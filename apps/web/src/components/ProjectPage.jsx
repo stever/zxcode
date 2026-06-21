@@ -6,6 +6,7 @@ import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 import { Emulator } from "./Emulator";
 import { ProjectEditor } from "./ProjectEditor";
+import StarButton from "./StarButton";
 import {
   loadProject,
   setSelectedTabIndex,
@@ -101,8 +102,11 @@ export default function ProjectPage({ projectId }) {
                 className="col-fixed p-0 pt-1"
                 style={{ width: `${width}px` }}
               >
-                <div className="height-53 pt-3 pl-1">
-                  <h3>{title ? t("home.projectLabel", { title }) : ""}</h3>
+                <div className="height-53 pt-3 pl-1 flex align-items-center justify-content-between pr-2">
+                  <h3 className="m-0">
+                    {title ? t("home.projectLabel", { title }) : ""}
+                  </h3>
+                  {effectiveId && <StarButton projectId={effectiveId} />}
                 </div>
                 <Emulator zoom={zoom} width={width} />
               </div>

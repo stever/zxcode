@@ -34,7 +34,8 @@
   "home": {
     "tabEmulator": "Emulator",
     "tabSinclairBasic": "Sinclair BASIC",
-    "tabZ80Assembly": "Z80 Assembly"
+    "tabZ80Assembly": "Z80 Assembly",
+    "projectLabel": "Project: {{title}}"
   },
   "profiles": {
     "title": "Public Profiles",
@@ -72,7 +73,10 @@
     "privateOwn": "Your profile is currently private",
     "publicProjects": "Public Projects ({{count}})",
     "savingOrder": "Saving order...",
-    "makePublicHint": "Make your projects public to display them here"
+    "makePublicHint": "Make your projects public to display them here",
+    "starredProjects": "Starred Projects ({{count}})",
+    "noStarred": "No starred projects yet",
+    "noStarredOwn": "Projects you star will appear here"
   },
   "about": {
     "createProjects": "Create Projects",

@@ -14,6 +14,7 @@ import identityReducer from "./identity/reducers";
 import projectReducer from "./project/reducers";
 import projectListReducer from "./projectList/reducers";
 import socialReducer from "./social/reducers";
+import starsReducer from "./stars/reducers";
 import subscriberReducer from "./subscriber/reducers";
 import windowReducer from "./window/reducers";
 
@@ -26,6 +27,7 @@ import * as jsspeccySagas from "./jsspeccy/sagas";
 import * as projectSagas from "./project/sagas";
 import * as projectListSagas from "./projectList/sagas";
 import * as socialSagas from "./social/sagas";
+import * as starsSagas from "./stars/sagas";
 import * as subscriberSagas from "./subscriber/sagas";
 import * as windowSagas from "./window/sagas";
 
@@ -68,6 +70,7 @@ const rootReducer = combineReducers({
     project: projectReducer,
     projectList: projectListReducer,
     social: socialReducer,
+    stars: starsReducer,
     subscriber: subscriberReducer,
     window: windowReducer,
 });
@@ -97,6 +100,7 @@ collectSagas(jsspeccySagas);
 collectSagas(projectSagas);
 collectSagas(projectListSagas);
 collectSagas(socialSagas);
+collectSagas(starsSagas);
 collectSagas(subscriberSagas);
 collectSagas(windowSagas);
 

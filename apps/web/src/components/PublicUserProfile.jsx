@@ -40,6 +40,7 @@ import ProjectThumbnail from "./ProjectThumbnail";
 import { generateRetroAvatar } from "../lib/avatar";
 import { generateRetroSpriteAvatar } from "../lib/retroSpriteAvatar";
 import AvatarSelector from "./AvatarSelector";
+import StarButton from "./StarButton";
 import { useTranslation, useDateFnsLocale } from "@zxplay/i18n";
 
 const UPDATE_PROJECT_ORDER = gql`
@@ -97,6 +98,21 @@ const GET_USER_BY_SLUG = gql`
         created_at
         display_order
       }
+      starred_projects(order_by: { created_at: desc }) {
+        created_at
+        project {
+          project_id
+          title
+          slug
+          lang
+          updated_at
+          is_public
+          user {
+            slug
+            greeting_name
+          }
+        }
+      }
       followers {
         follower_id
       }
@@ -132,6 +148,21 @@ const GET_USER_BY_ID = gql`
         updated_at
         created_at
         display_order
+      }
+      starred_projects(order_by: { created_at: desc }) {
+        created_at
+        project {
+          project_id
+          title
+          slug
+          lang
+          updated_at
+          is_public
+          user {
+            slug
+            greeting_name
+          }
+        }
       }
       followers {
         follower_id
@@ -230,12 +261,15 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
             className="lang-tag align-self-start mb-3 relative z-1"
           />
 
-          <div className="mt-auto text-400 text-sm relative z-1">
-            {t("feed.updated")}{" "}
-            {formatDistanceToNow(new Date(project.updated_at), {
-              addSuffix: true,
-              locale,
-            })}
+          <div className="mt-auto flex align-items-center justify-content-between gap-2 relative z-1">
+            <span className="text-400 text-sm">
+              {t("feed.updated")}{" "}
+              {formatDistanceToNow(new Date(project.updated_at), {
+                addSuffix: true,
+                locale,
+              })}
+            </span>
+            <StarButton projectId={project.project_id} />
           </div>
         </div>
       </Card>
@@ -270,6 +304,7 @@ export default function PublicUserProfile() {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [projects, setProjects] = useState([]);
+  const [starredProjects, setStarredProjects] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [showAvatarSelector, setShowAvatarSelector] = useState(false);
@@ -319,6 +354,13 @@ export default function PublicUserProfile() {
 
         setUser(userData);
         setProjects(userData?.projects || []);
+
+        // Starred entries whose project is inaccessible (private / removed) come
+        // back with a null project under RLS; drop those.
+        const starred = (userData?.starred_projects || [])
+          .map((s) => s.project)
+          .filter((p) => p && p.is_public);
+        setStarredProjects(starred);
       } catch (err) {
         console.error("Failed to fetch user profile:", err);
         setError("Failed to load user profile");
@@ -749,12 +791,15 @@ export default function PublicUserProfile() {
                                 className="lang-tag align-self-start mb-3 relative z-1"
                               />
 
-                              <div className="mt-auto text-400 text-sm relative z-1">
-                                {t("feed.updated")}{" "}
-                                {formatDistanceToNow(
-                                  new Date(project.updated_at),
-                                  { addSuffix: true, locale }
-                                )}
+                              <div className="mt-auto flex align-items-center justify-content-between gap-2 relative z-1">
+                                <span className="text-400 text-sm">
+                                  {t("feed.updated")}{" "}
+                                  {formatDistanceToNow(
+                                    new Date(project.updated_at),
+                                    { addSuffix: true, locale }
+                                  )}
+                                </span>
+                                <StarButton projectId={project.project_id} />
                               </div>
                             </div>
                           </Card>
@@ -770,6 +815,87 @@ export default function PublicUserProfile() {
                 <p className="text-500">{t("profile.noProjects")}</p>
                 {isOwnProfile && (
                   <p className="text-sm">{t("profile.makePublicHint")}</p>
+                )}
+              </div>
+            )}
+          </Card>
+
+          <Card
+            className="mt-3"
+            title={t("profile.starredProjects", {
+              count: starredProjects?.length || 0,
+            })}
+          >
+            {starredProjects && starredProjects.length > 0 ? (
+              <div className="flex flex-wrap gap-3">
+                {starredProjects.map((project) => {
+                  const ownerSlug = project.user?.slug;
+                  const projectUrl =
+                    project.slug && ownerSlug
+                      ? `/u/${ownerSlug}/${project.slug}`
+                      : `/projects/${project.project_id}`;
+
+                  return (
+                    <div
+                      key={project.project_id}
+                      style={{
+                        flexBasis: "400px",
+                        flexGrow: 0,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Link to={projectUrl} className="no-underline">
+                        <Card
+                          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
+                          style={{ border: "none" }}
+                        >
+                          <div className="flex flex-column h-full relative">
+                            <ProjectThumbnail
+                              projectId={project.project_id}
+                              updatedAt={project.updated_at}
+                            />
+
+                            <h3 className="mb-2 text-white relative z-1">
+                              {project.title}
+                            </h3>
+
+                            <div className="flex align-items-center gap-2 mb-3 relative z-1">
+                              <Tag
+                                value={getLanguageLabel(project.lang)}
+                                severity={getLanguageColor(project.lang)}
+                                className="lang-tag"
+                              />
+                              {project.user?.greeting_name && (
+                                <span className="text-400 text-sm">
+                                  {t("feed.by")}{" "}
+                                  {project.user.greeting_name}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-auto flex align-items-center justify-content-between gap-2 relative z-1">
+                              <span className="text-400 text-sm">
+                                {t("feed.updated")}{" "}
+                                {formatDistanceToNow(
+                                  new Date(project.updated_at),
+                                  { addSuffix: true, locale }
+                                )}
+                              </span>
+                              <StarButton projectId={project.project_id} />
+                            </div>
+                          </div>
+                        </Card>
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <i className="pi pi-star text-4xl text-300 mb-3" />
+                <p className="text-500">{t("profile.noStarred")}</p>
+                {isOwnProfile && (
+                  <p className="text-sm">{t("profile.noStarredOwn")}</p>
                 )}
               </div>
             )}

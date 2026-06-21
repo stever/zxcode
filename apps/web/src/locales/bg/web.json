@@ -34,7 +34,8 @@
   "home": {
     "tabEmulator": "Емулатор",
     "tabSinclairBasic": "Sinclair BASIC",
-    "tabZ80Assembly": "Асемблер Z80"
+    "tabZ80Assembly": "Асемблер Z80",
+    "projectLabel": "Проект: {{title}}"
   },
   "profiles": {
     "title": "Публични профили",

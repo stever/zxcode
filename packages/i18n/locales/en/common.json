@@ -25,6 +25,11 @@
     "unfollow": "Unfollow",
     "loading": "Loading…"
   },
+  "stars": {
+    "star": "Star this project",
+    "unstar": "Unstar this project",
+    "loginToStar": "Log in to star projects"
+  },
   "errors": {
     "notFound": "Page not found",
     "generic": "Something went wrong.",

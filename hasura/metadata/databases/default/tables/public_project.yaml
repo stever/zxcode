@@ -8,6 +8,14 @@ object_relationships:
   - name: user
     using:
       foreign_key_constraint_on: owner_user_id
+array_relationships:
+  - name: stars
+    using:
+      foreign_key_constraint_on:
+        column: project_id
+        table:
+          name: project_star
+          schema: public
 insert_permissions:
   - role: zxplay-user
     permission:
