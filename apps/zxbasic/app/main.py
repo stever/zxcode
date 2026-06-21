@@ -4,6 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.routes.compile import compile_endpoint
 from app.process_monitor import process_monitor
@@ -54,11 +55,29 @@ app.add_middleware(
 )
 
 
+# This service is a Hasura action webhook. Hasura requires error responses to be
+# shaped as {"message": ...} (parsed into ActionWebhookErrorResponse); FastAPI's
+# default {"detail": ...} makes Hasura fail with
+# 'ActionWebhookErrorResponse ... key "message" not found' and the bot/UI never
+# gets a clean failure (e.g. a normal "compilation failed"). Reshape both
+# HTTPException and request-validation errors into Hasura's format.
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    message = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": message},
+    )
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content=jsonable_encoder({"detail": exc.errors(), "body": exc.body}),
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "message": "Invalid compile request.",
+            "extensions": {"errors": jsonable_encoder(exc.errors())},
+        },
     )
 
 
