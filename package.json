@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "turbo run dev --filter=web --filter=proxy --filter=auth",
     "dev:all": "turbo run dev",
+    "dev:web": "turbo run dev --filter=web",
+    "dev:play": "turbo run dev --filter=play",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "build": "turbo run build"
