@@ -73,7 +73,10 @@
     "privateOwn": "Tu perfil es actualmente privado",
     "publicProjects": "Proyectos públicos ({{count}})",
     "savingOrder": "Guardando orden...",
-    "makePublicHint": "Haz públicos tus proyectos para mostrarlos aquí"
+    "makePublicHint": "Haz públicos tus proyectos para mostrarlos aquí",
+    "starredProjects": "Proyectos destacados ({{count}})",
+    "noStarred": "Aún no hay proyectos destacados",
+    "noStarredOwn": "Los proyectos que destaques aparecerán aquí"
   },
   "about": {
     "createProjects": "Crear proyectos",

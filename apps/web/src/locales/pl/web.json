@@ -73,7 +73,10 @@
     "privateOwn": "Twój profil jest obecnie prywatny",
     "publicProjects": "Projekty publiczne ({{count}})",
     "savingOrder": "Zapisywanie kolejności...",
-    "makePublicHint": "Ustaw projekty jako publiczne, aby wyświetlić je tutaj"
+    "makePublicHint": "Ustaw projekty jako publiczne, aby wyświetlić je tutaj",
+    "starredProjects": "Ulubione projekty ({{count}})",
+    "noStarred": "Brak ulubionych projektów",
+    "noStarredOwn": "Projekty oznaczone gwiazdką pojawią się tutaj"
   },
   "about": {
     "createProjects": "Twórz projekty",

@@ -73,7 +73,10 @@
     "privateOwn": "Profilul tău este momentan privat",
     "publicProjects": "Proiecte publice ({{count}})",
     "savingOrder": "Se salvează ordinea...",
-    "makePublicHint": "Faceți proiectele publice pentru a le afișa aici"
+    "makePublicHint": "Faceți proiectele publice pentru a le afișa aici",
+    "starredProjects": "Proiecte favorite ({{count}})",
+    "noStarred": "Încă nu există proiecte favorite",
+    "noStarredOwn": "Proiectele pe care le marcați vor apărea aici"
   },
   "about": {
     "createProjects": "Creează proiecte",

@@ -73,7 +73,10 @@
     "privateOwn": "Váš profil je momentálně soukromý",
     "publicProjects": "Veřejné projekty ({{count}})",
     "savingOrder": "Ukládání pořadí...",
-    "makePublicHint": "Zveřejněte své projekty, aby se zde zobrazily"
+    "makePublicHint": "Zveřejněte své projekty, aby se zde zobrazily",
+    "starredProjects": "Oblíbené projekty ({{count}})",
+    "noStarred": "Zatím žádné oblíbené projekty",
+    "noStarredOwn": "Projekty, které označíte hvězdičkou, se zobrazí zde"
   },
   "about": {
     "createProjects": "Vytváření projektů",
