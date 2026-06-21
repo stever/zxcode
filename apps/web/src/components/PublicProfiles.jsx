@@ -201,6 +201,7 @@ export default function PublicProfiles() {
               <Dropdown
                 value={sort}
                 options={SORT_OPTIONS}
+                style={{ width: "16rem" }}
                 onChange={(e) => {
                   setSort(e.value);
                   setPage(0);

@@ -51,7 +51,7 @@ export function DemoSinclairBasicEditor() {
             <Button
                 label={t("actions.play")}
                 icon="pi pi-play"
-                className="margin-top-8"
+                className="zx-run margin-top-8"
                 onClick={() => {
                     dashboardLock();
                     showLoading();

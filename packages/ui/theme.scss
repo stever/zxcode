@@ -70,10 +70,13 @@
 // Selection picks up the primary accent.
 ::selection { background: rgba(43, 212, 212, 0.28); }
 
-// Inputs and dropdowns: calmer borders, cyan focus.
+// Inputs and dropdowns on focus: a single clean cyan edge. The base theme
+// doubles up (1px cyan border plus an inset cyan box-shadow), which reads heavy
+// on a transparent control; replace the inset with one soft outer ring.
 .p-inputtext:enabled:focus,
 .p-dropdown:not(.p-disabled).p-focus {
     border-color: var(--zx-cyan);
+    box-shadow: 0 0 0 2px rgba(43, 212, 212, 0.25);
 }
 
 .p-button {
@@ -81,17 +84,29 @@
 }
 
 // Run / play actions use the Spectrum green (go), with dark text, per the
-// functional colour code. Apply `zx-run` to the button.
+// functional colour code. Hold the green through every state so the button
+// never flips to the cyan primary on hover, focus or active.
 .p-button.zx-run {
     background: var(--zx-green);
     border-color: var(--zx-green);
     color: #06210D;
 
     .p-button-icon { color: #06210D; }
+}
+.p-button.zx-run:enabled:hover,
+.p-button.zx-run:enabled:active,
+.p-button.zx-run:enabled:focus,
+.p-button.zx-run:focus,
+.p-button.zx-run:focus-visible {
+    background: #43D65F;
+    border-color: #43D65F;
+    color: #06210D;
+    box-shadow: 0 0 0 2px rgba(47, 192, 75, 0.35);
+}
 
-    &:enabled:hover {
-        background: #43D65F;
-        border-color: #43D65F;
-        color: #06210D;
-    }
+// Tabs: an inactive tab's underline should be the same line that runs behind
+// the whole strip, so only the active tab's cyan underline stands out. Make the
+// inactive underline transparent and let the nav's border show through.
+.p-tabview .p-tabview-nav li .p-tabview-nav-link {
+    border-bottom-color: transparent;
 }
