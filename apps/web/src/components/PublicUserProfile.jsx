@@ -707,6 +707,7 @@ export default function PublicUserProfile() {
         </div>
 
         <div className="col-12 lg:col-9 pt-2">
+          {projects.length > 0 && (
           <Card
             title={
               <div className="flex align-items-center justify-content-between">
@@ -821,7 +822,9 @@ export default function PublicUserProfile() {
               </div>
             )}
           </Card>
+          )}
 
+          {starredProjects.length > 0 && (
           <Card
             className="mt-3"
             title={t("profile.starredProjects", {
@@ -903,6 +906,7 @@ export default function PublicUserProfile() {
               </div>
             )}
           </Card>
+          )}
         </div>
       </div>
 
