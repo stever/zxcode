@@ -20,13 +20,16 @@ export default function ProjectThumbnail({ projectId, updatedAt }) {
     <div
       className="absolute"
       style={{
-        top: "-5px",
+        // Vertically centred so the padding around the (tilted) screenshot stays
+        // balanced regardless of card height, keeping cards of differing content
+        // lengths visually consistent.
+        top: "50%",
         right: "-5px",
         width: "160px",
         height: "120px",
         background: "#000",
         borderRadius: "20px",
-        transform: "rotate(12deg)",
+        transform: "translateY(-50%) rotate(12deg)",
         overflow: "hidden",
         // Screenshots are the real content, so show them opaque; the cartridge
         // fallback keeps its original faded decoration look.

@@ -247,13 +247,24 @@ function SortableProjectCard({ project, projectUrl, isDragging, onStarToggle }) 
             style={{ fontSize: "12px", color: "#aaa" }}
           />
         </div>
-        <div className="flex flex-column h-full relative">
+        <div
+                            className="flex flex-column h-full relative"
+                            style={{ minHeight: "160px" }}
+                          >
           <ProjectThumbnail
             projectId={project.project_id}
             updatedAt={project.updated_at}
           />
 
-          <div className="absolute" style={{ top: "-0.5rem", left: 0, zIndex: 2 }}>
+          <div
+                            className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
+                            style={{ marginTop: "-0.5rem" }}
+                          >
+            <Tag
+              value={getLanguageLabel(project.lang)}
+              severity={getLanguageColor(project.lang)}
+              className="lang-tag"
+            />
             <StarButton
               projectId={project.project_id}
               onToggle={onStarToggle}
@@ -262,13 +273,7 @@ function SortableProjectCard({ project, projectUrl, isDragging, onStarToggle }) 
 
           <h3 className="mb-2 text-white relative z-1">{project.title}</h3>
 
-          <Tag
-            value={getLanguageLabel(project.lang)}
-            severity={getLanguageColor(project.lang)}
-            className="lang-tag align-self-start mb-3 relative z-1"
-          />
-
-          <div className="mt-auto text-400 text-sm relative z-1">
+          <div className="text-400 text-sm relative z-1">
             {t("feed.updated")}{" "}
             {formatDistanceToNow(new Date(project.updated_at), {
               addSuffix: true,
@@ -765,7 +770,7 @@ export default function PublicUserProfile() {
                     items={projects.map((p) => p.project_id)}
                     strategy={rectSortingStrategy}
                   >
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-3 align-items-start">
                       {projects.map((project) => {
                         const projectUrl = project.slug
                           ? `/u/${user.slug}/${project.slug}`
@@ -784,7 +789,7 @@ export default function PublicUserProfile() {
                   </SortableContext>
                 </DndContext>
               ) : (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-3 align-items-start">
                   {projects.map((project) => {
                     const projectUrl = project.slug
                       ? `/u/${user.slug}/${project.slug}`
@@ -806,13 +811,24 @@ export default function PublicUserProfile() {
                               border: "none",
                             }}
                           >
-                            <div className="flex flex-column h-full relative">
+                            <div
+                            className="flex flex-column h-full relative"
+                            style={{ minHeight: "160px" }}
+                          >
                               <ProjectThumbnail
                                 projectId={project.project_id}
                                 updatedAt={project.updated_at}
                               />
 
-                              <div className="absolute" style={{ top: "-0.5rem", left: 0, zIndex: 2 }}>
+                              <div
+                            className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
+                            style={{ marginTop: "-0.5rem" }}
+                          >
+                                <Tag
+                                  value={getLanguageLabel(project.lang)}
+                                  severity={getLanguageColor(project.lang)}
+                                  className="lang-tag"
+                                />
                                 <StarButton projectId={project.project_id} />
                               </div>
 
@@ -820,13 +836,7 @@ export default function PublicUserProfile() {
                                 {project.title}
                               </h3>
 
-                              <Tag
-                                value={getLanguageLabel(project.lang)}
-                                severity={getLanguageColor(project.lang)}
-                                className="lang-tag align-self-start mb-3 relative z-1"
-                              />
-
-                              <div className="mt-auto text-400 text-sm relative z-1">
+                              <div className="text-400 text-sm relative z-1">
                                 {t("feed.updated")}{" "}
                                 {formatDistanceToNow(
                                   new Date(project.updated_at),
@@ -861,7 +871,7 @@ export default function PublicUserProfile() {
             })}
           >
             {starredProjects && starredProjects.length > 0 ? (
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 align-items-start">
                 {starredProjects.map((project) => {
                   const ownerSlug = project.user?.slug;
                   const projectUrl =
@@ -883,13 +893,24 @@ export default function PublicUserProfile() {
                           className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
                           style={{ border: "none" }}
                         >
-                          <div className="flex flex-column h-full relative">
+                          <div
+                            className="flex flex-column h-full relative"
+                            style={{ minHeight: "160px" }}
+                          >
                             <ProjectThumbnail
                               projectId={project.project_id}
                               updatedAt={project.updated_at}
                             />
 
-                            <div className="absolute" style={{ top: "-0.5rem", left: 0, zIndex: 2 }}>
+                            <div
+                            className="flex align-items-stretch gap-2 mb-2 align-self-start relative z-1"
+                            style={{ marginTop: "-0.5rem" }}
+                          >
+                              <Tag
+                                value={getLanguageLabel(project.lang)}
+                                severity={getLanguageColor(project.lang)}
+                                className="lang-tag"
+                              />
                               <StarButton
                                 projectId={project.project_id}
                                 onToggle={handleStarToggle}
@@ -900,21 +921,13 @@ export default function PublicUserProfile() {
                               {project.title}
                             </h3>
 
-                            <div className="flex align-items-center gap-2 mb-3 relative z-1">
-                              <Tag
-                                value={getLanguageLabel(project.lang)}
-                                severity={getLanguageColor(project.lang)}
-                                className="lang-tag"
-                              />
-                              {project.user?.greeting_name && (
-                                <span className="text-400 text-sm">
-                                  {t("feed.by")}{" "}
-                                  {project.user.greeting_name}
-                                </span>
-                              )}
-                            </div>
+                            {project.user?.greeting_name && (
+                              <div className="mb-3 text-400 text-sm relative z-1">
+                                {t("feed.by")} {project.user.greeting_name}
+                              </div>
+                            )}
 
-                            <div className="mt-auto text-400 text-sm relative z-1">
+                            <div className="text-400 text-sm relative z-1">
                               {t("feed.updated")}{" "}
                               {formatDistanceToNow(
                                 new Date(project.updated_at),

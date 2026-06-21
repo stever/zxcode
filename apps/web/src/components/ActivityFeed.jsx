@@ -113,7 +113,10 @@ export default function ActivityFeed() {
                             border: "none",
                           }}
                         >
-                          <div className="flex flex-column h-full relative">
+                          <div
+                            className="flex flex-column h-full relative"
+                            style={{ minHeight: "160px" }}
+                          >
                             <ProjectThumbnail
                               projectId={project.project_id}
                               updatedAt={project.updated_at}
