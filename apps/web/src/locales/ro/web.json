@@ -36,7 +36,10 @@
   },
   "profiles": {
     "title": "Profiluri publice",
-    "none": "Încă nu există profiluri publice"
+    "none": "Încă nu există profiluri publice",
+    "projectsCount": "{{count}} proiecte publice",
+    "followersCount": "{{count}} urmăritori",
+    "followingCount": "{{count}} urmăriți"
   },
   "follow": {
     "networkTitle": "Rețeaua lui {{name}}",
@@ -58,7 +61,10 @@
     "dragToReorder": "Trage pentru a reordona",
     "defaultName": "Utilizator",
     "private": "Acest profil este privat",
-    "privateOwn": "Profilul tău este momentan privat"
+    "privateOwn": "Profilul tău este momentan privat",
+    "publicProjects": "Proiecte publice ({{count}})",
+    "savingOrder": "Se salvează ordinea...",
+    "makePublicHint": "Faceți proiectele publice pentru a le afișa aici"
   },
   "about": {
     "createProjects": "Creează proiecte",

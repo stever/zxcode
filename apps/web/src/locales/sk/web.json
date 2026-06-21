@@ -36,7 +36,10 @@
   },
   "profiles": {
     "title": "Verejné profily",
-    "none": "Zatiaľ žiadne verejné profily"
+    "none": "Zatiaľ žiadne verejné profily",
+    "projectsCount": "{{count}} verejných projektov",
+    "followersCount": "{{count}} sledovateľov",
+    "followingCount": "{{count}} sledované"
   },
   "follow": {
     "networkTitle": "Sieť používateľa {{name}}",
@@ -58,7 +61,10 @@
     "dragToReorder": "Potiahnutím zmeňte poradie",
     "defaultName": "Používateľ",
     "private": "Tento profil je súkromný",
-    "privateOwn": "Váš profil je momentálne súkromný"
+    "privateOwn": "Váš profil je momentálne súkromný",
+    "publicProjects": "Verejné projekty ({{count}})",
+    "savingOrder": "Ukladanie poradia...",
+    "makePublicHint": "Zverejnite svoje projekty, aby sa tu zobrazili"
   },
   "about": {
     "createProjects": "Vytvárať projekty",

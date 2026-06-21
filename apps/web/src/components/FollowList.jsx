@@ -15,7 +15,7 @@ import { sep } from "../constants";
 import { formatDistanceToNow } from "date-fns";
 import { followUser, unfollowUser } from "../redux/social/actions";
 import { generateRetroAvatar } from "../lib/avatar";
-import { useTranslation } from "@zxplay/i18n";
+import { useTranslation, useDateFnsLocale } from "@zxplay/i18n";
 
 const GET_USER_WITH_FOLLOWS = gql`
   query GetUserWithFollows(
@@ -88,6 +88,7 @@ const CHECK_FOLLOWING_STATUS = gql`
 
 function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
   const { t } = useTranslation();
+  const locale = useDateFnsLocale();
   const isOwnProfile = currentUserId === user.user_id;
   // Fall back to the user id if a slug is missing; /u/<uuid> canonicalises to the slug.
   const profileUrl = `/u/${user.slug || user.user_id}`;
@@ -138,6 +139,7 @@ function UserCard({ user, isFollowing, onFollowToggle, currentUserId }) {
             {t("follow.joined", {
               when: formatDistanceToNow(new Date(user.created_at), {
                 addSuffix: true,
+                locale,
               }),
             })}
           </span>

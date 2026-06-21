@@ -36,7 +36,10 @@
   },
   "profiles": {
     "title": "Открытые профили",
-    "none": "Пока нет открытых профилей"
+    "none": "Пока нет открытых профилей",
+    "projectsCount": "{{count}} открытых проектов",
+    "followersCount": "{{count}} подписчиков",
+    "followingCount": "{{count}} подписок"
   },
   "follow": {
     "networkTitle": "Сеть пользователя {{name}}",
@@ -58,7 +61,10 @@
     "dragToReorder": "Перетащите, чтобы изменить порядок",
     "defaultName": "Пользователь",
     "private": "Этот профиль закрыт",
-    "privateOwn": "Ваш профиль сейчас закрыт"
+    "privateOwn": "Ваш профиль сейчас закрыт",
+    "publicProjects": "Открытые проекты ({{count}})",
+    "savingOrder": "Сохранение порядка...",
+    "makePublicHint": "Сделайте проекты открытыми, чтобы показать их здесь"
   },
   "about": {
     "createProjects": "Создание проектов",

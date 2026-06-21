@@ -68,4 +68,5 @@ export function initI18n(appResources = {}) {
 export {i18n};
 export {SUPPORTED_LANGUAGES, LANGUAGE_CODES} from './languages';
 export {LanguageSwitcher} from './LanguageSwitcher';
+export {useDateFnsLocale} from './dateLocale';
 export {useTranslation, Trans, Translation} from 'react-i18next';

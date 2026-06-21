@@ -11,10 +11,11 @@ import {
 } from "../redux/projectList/actions";
 import { Dropdown } from "primereact/dropdown";
 import { getLanguageLabel } from "../lib/lang";
-import { useTranslation } from "@zxplay/i18n";
+import { useTranslation, useDateFnsLocale } from "@zxplay/i18n";
 
 export default function ProjectList() {
   const { t } = useTranslation();
+  const locale = useDateFnsLocale();
   const dispatch = useDispatch();
 
   const projects = useSelector((state) => state?.projectList.projectList);
@@ -64,12 +65,12 @@ export default function ProjectList() {
 
   function formatCreated(data) {
     const date = new Date(data["created_at"]);
-    return formatDistance(date, now, { addSuffix: true });
+    return formatDistance(date, now, { addSuffix: true, locale });
   }
 
   function formatUpdated(data) {
     const date = new Date(data["updated_at"]);
-    return formatDistance(date, now, { addSuffix: true });
+    return formatDistance(date, now, { addSuffix: true, locale });
   }
 
   const onPage = (event) => {

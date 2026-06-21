@@ -10,6 +10,7 @@
     "react-i18next": "^15.4.0"
   },
   "peerDependencies": {
+    "date-fns": ">=4",
     "primereact": ">=9",
     "react": ">=18"
   }

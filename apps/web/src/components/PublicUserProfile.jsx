@@ -40,7 +40,7 @@ import ProjectThumbnail from "./ProjectThumbnail";
 import { generateRetroAvatar } from "../lib/avatar";
 import { generateRetroSpriteAvatar } from "../lib/retroSpriteAvatar";
 import AvatarSelector from "./AvatarSelector";
-import { useTranslation } from "@zxplay/i18n";
+import { useTranslation, useDateFnsLocale } from "@zxplay/i18n";
 
 const UPDATE_PROJECT_ORDER = gql`
   mutation UpdateProjectOrder($projectId: uuid!, $displayOrder: Int!) {
@@ -149,6 +149,7 @@ const GET_USER_BY_ID = gql`
 // Sortable project card component for drag and drop
 function SortableProjectCard({ project, projectUrl, isDragging }) {
   const { t } = useTranslation();
+  const locale = useDateFnsLocale();
   const navigate = useNavigate();
   const {
     attributes,
@@ -230,9 +231,10 @@ function SortableProjectCard({ project, projectUrl, isDragging }) {
           />
 
           <div className="mt-auto text-400 text-sm relative z-1">
-            Updated{" "}
+            {t("feed.updated")}{" "}
             {formatDistanceToNow(new Date(project.updated_at), {
               addSuffix: true,
+              locale,
             })}
           </div>
         </div>
@@ -256,6 +258,7 @@ function getLanguageColor(lang) {
 
 export default function PublicUserProfile() {
   const { t } = useTranslation();
+  const locale = useDateFnsLocale();
   const { id } = useParams(); // This could be either slug or UUID
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -539,6 +542,7 @@ export default function PublicUserProfile() {
   const displayName = user.greeting_name || t("profile.defaultName");
   const memberSince = formatDistanceToNow(new Date(user.created_at), {
     addSuffix: true,
+    locale,
   });
 
   return (
@@ -663,11 +667,15 @@ export default function PublicUserProfile() {
           <Card
             title={
               <div className="flex align-items-center justify-content-between">
-                <span>Public Projects ({projects?.length || 0})</span>
+                <span>
+                  {t("profile.publicProjects", {
+                    count: projects?.length || 0,
+                  })}
+                </span>
                 {isOwnProfile && isSaving && (
                   <Tag
                     severity="info"
-                    value="Saving order..."
+                    value={t("profile.savingOrder")}
                     icon="pi pi-spin pi-spinner"
                   />
                 )}
@@ -742,10 +750,10 @@ export default function PublicUserProfile() {
                               />
 
                               <div className="mt-auto text-400 text-sm relative z-1">
-                                Updated{" "}
+                                {t("feed.updated")}{" "}
                                 {formatDistanceToNow(
                                   new Date(project.updated_at),
-                                  { addSuffix: true }
+                                  { addSuffix: true, locale }
                                 )}
                               </div>
                             </div>
@@ -761,9 +769,7 @@ export default function PublicUserProfile() {
                 <i className="pi pi-inbox text-4xl text-300 mb-3" />
                 <p className="text-500">{t("profile.noProjects")}</p>
                 {isOwnProfile && (
-                  <p className="text-sm">
-                    Make your projects public to display them here
-                  </p>
+                  <p className="text-sm">{t("profile.makePublicHint")}</p>
                 )}
               </div>
             )}

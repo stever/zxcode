@@ -11,7 +11,7 @@ import { formatDistanceToNow } from "date-fns";
 import { fetchActivityFeed } from "../redux/social/actions";
 import { getLanguageLabel } from "../lib/lang";
 import ProjectThumbnail from "./ProjectThumbnail";
-import { useTranslation } from "@zxplay/i18n";
+import { useTranslation, useDateFnsLocale } from "@zxplay/i18n";
 import { sep } from "../constants";
 
 function getLanguageColor(lang) {
@@ -29,6 +29,7 @@ function getLanguageColor(lang) {
 
 export default function ActivityFeed() {
   const { t } = useTranslation();
+  const locale = useDateFnsLocale();
   const dispatch = useDispatch();
 
   const currentUserId = useSelector((state) => state?.identity.userId);
@@ -139,7 +140,7 @@ export default function ActivityFeed() {
                                 {t("feed.updated")}{" "}
                                 {formatDistanceToNow(
                                   new Date(project.updated_at),
-                                  { addSuffix: true }
+                                  { addSuffix: true, locale }
                                 )}
                               </div>
                             </div>

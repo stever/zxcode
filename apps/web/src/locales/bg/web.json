@@ -36,7 +36,10 @@
   },
   "profiles": {
     "title": "Публични профили",
-    "none": "Все още няма публични профили"
+    "none": "Все още няма публични профили",
+    "projectsCount": "{{count}} публични проекта",
+    "followersCount": "{{count}} последователи",
+    "followingCount": "{{count}} следвани"
   },
   "follow": {
     "networkTitle": "Мрежа на {{name}}",
@@ -58,7 +61,10 @@
     "dragToReorder": "Плъзнете за пренареждане",
     "defaultName": "Потребител",
     "private": "Този профил е частен",
-    "privateOwn": "Профилът ви в момента е частен"
+    "privateOwn": "Профилът ви в момента е частен",
+    "publicProjects": "Публични проекти ({{count}})",
+    "savingOrder": "Запазване на реда...",
+    "makePublicHint": "Направете проектите си публични, за да се показват тук"
   },
   "about": {
     "createProjects": "Създаване на проекти",

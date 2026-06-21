@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Titled } from "react-titled";
-import { useTranslation } from "@zxplay/i18n";
+import { useTranslation, useDateFnsLocale } from "@zxplay/i18n";
 import { Card } from "primereact/card";
 import { Avatar } from "primereact/avatar";
 import { Dropdown } from "primereact/dropdown";
@@ -77,6 +77,8 @@ const SORT_OPTIONS = [
 ];
 
 function ProfileCard({ user }) {
+  const { t } = useTranslation();
+  const locale = useDateFnsLocale();
   const projectCount = user.projects_aggregate?.aggregate?.count || 0;
   const followerCount = user.followers_aggregate?.aggregate?.count || 0;
   const followingCount = user.following_aggregate?.aggregate?.count || 0;
@@ -108,16 +110,18 @@ function ProfileCard({ user }) {
               <p className="text-400 m-0 mt-2 text-sm">{user.bio}</p>
             )}
             <div className="text-400 text-sm mt-2">
-              <span>{projectCount} public projects</span>
+              <span>{t("profiles.projectsCount", { count: projectCount })}</span>
               <span className="mx-2">·</span>
-              <span>{followerCount} followers</span>
+              <span>{t("profiles.followersCount", { count: followerCount })}</span>
               <span className="mx-2">·</span>
-              <span>{followingCount} following</span>
+              <span>{t("profiles.followingCount", { count: followingCount })}</span>
               <span className="mx-2">·</span>
               <span>
-                Joined{" "}
-                {formatDistanceToNow(new Date(user.created_at), {
-                  addSuffix: true,
+                {t("follow.joined", {
+                  when: formatDistanceToNow(new Date(user.created_at), {
+                    addSuffix: true,
+                    locale,
+                  }),
                 })}
               </span>
             </div>

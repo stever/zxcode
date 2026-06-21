@@ -36,7 +36,10 @@
   },
   "profiles": {
     "title": "Profile publiczne",
-    "none": "Brak publicznych profili"
+    "none": "Brak publicznych profili",
+    "projectsCount": "{{count}} publicznych projektów",
+    "followersCount": "{{count}} obserwujących",
+    "followingCount": "{{count}} obserwowanych"
   },
   "follow": {
     "networkTitle": "Sieć użytkownika {{name}}",
@@ -58,7 +61,10 @@
     "dragToReorder": "Przeciągnij, aby zmienić kolejność",
     "defaultName": "Użytkownik",
     "private": "Ten profil jest prywatny",
-    "privateOwn": "Twój profil jest obecnie prywatny"
+    "privateOwn": "Twój profil jest obecnie prywatny",
+    "publicProjects": "Projekty publiczne ({{count}})",
+    "savingOrder": "Zapisywanie kolejności...",
+    "makePublicHint": "Ustaw projekty jako publiczne, aby wyświetlić je tutaj"
   },
   "about": {
     "createProjects": "Twórz projekty",
