@@ -142,9 +142,19 @@ code {
 }
 
 .desktop .CodeMirror {
-    height: calc(100vh - 177px) !important;
+    /* Match the fixed-size emulator frame on the right:
+       screen (zoom 2 = 480px) + keyboard (256px) + 2px frame border = 738px. */
+    box-sizing: border-box;
+    height: 738px !important;
+    max-height: 738px !important;
     border: 1px solid #5B5B5B;
     border-radius: 5px;
+}
+
+.desktop .emulator-frame {
+    border: 1px solid #5B5B5B;
+    border-radius: 5px;
+    overflow: hidden;
 }
 
 .mobile .CodeMirror {

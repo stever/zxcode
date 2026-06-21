@@ -21,9 +21,9 @@ export function Emulator(props) {
     }, []);
 
     return (
-        <>
+        <div className="emulator-frame">
             <div id="jsspeccy-screen"/>
             <Keyboard width={width}/>
-        </>
+        </div>
     )
 }

@@ -17,7 +17,8 @@ export function Keyboard(props) {
     }, []);
 
     let style = {
-        imageRendering: 'auto'
+        imageRendering: 'auto',
+        display: 'block'
     };
 
     if (!isMobile) {
