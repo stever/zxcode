@@ -209,6 +209,7 @@ export default function PublicProfiles() {
                   label: t(o.labelKey),
                 }))}
                 style={{ width: "16rem" }}
+                scrollHeight="20rem"
                 onChange={(e) => {
                   setSort(e.value);
                   setPage(0);
