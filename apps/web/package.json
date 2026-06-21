@@ -36,6 +36,7 @@
     "@lagunovsky/redux-react-router": "^4.5.0",
     "@zxplay/emulator": "*",
     "@zxplay/i18n": "*",
+    "@zxplay/ui": "*",
     "axios": "^1.12.2",
     "bas2tap": "^0.0.1-alpha.4",
     "clsx": "^2.1.1",

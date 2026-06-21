@@ -9,7 +9,7 @@ import "primeflex/primeflex.css";
 import ErrorBoundary from "./ErrorBoundary";
 import RenderEmulator from "./RenderEmulator";
 import LoadingScreen from "./LoadingScreen";
-import LockScreen from "./LockScreen";
+import { LockScreen } from "@zxplay/ui";
 import Nav from "./Nav";
 import HomePage from "./HomePage";
 import MaxWidth from "./MaxWidth";

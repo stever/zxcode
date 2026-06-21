@@ -69,7 +69,7 @@ module.exports = (env, _) => {
         // emulator package is consumed from source, so transpile it here.
         loaders.push({
             test: /\.jsx?$/,
-            include: /packages[/\\](emulator|i18n)/,
+            include: /packages[/\\](emulator|i18n|ui)/,
             use: babelLoader
         });
     }
@@ -98,18 +98,7 @@ module.exports = (env, _) => {
             resolve: {
                 extensions: ['.js', '.jsx'],
                 alias: {
-                    fs: false,
-                    // Force single copies of React and React Router. apps/play
-                    // is on React 18 / react-router 6, but shares hoisted libs
-                    // (react-redux, @lagunovsky/redux-react-router) with
-                    // apps/web's React 19 / react-router 7 at the repo root.
-                    // Without these aliases both versions get bundled, breaking
-                    // hooks and the Router context ("useNavigate may be used
-                    // only in the context of a <Router>").
-                    react: path.resolve(__dirname, 'node_modules/react'),
-                    'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
-                    'react-router': path.resolve(__dirname, 'node_modules/react-router'),
-                    'react-router-dom': path.resolve(__dirname, 'node_modules/react-router-dom')
+                    fs: false
                 }
             }
         }
