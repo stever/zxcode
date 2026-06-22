@@ -36,8 +36,13 @@ export function* watchForUnsubscribeActionActions() {
 // Action handlers
 // -----------------------------------------------------------------------------
 
-function* handleSetUserInfo() {
-    yield put(connectClient());
+function* handleSetUserInfo(action) {
+    // Login is optional. Only open an authenticated subscription connection for
+    // a known user; anonymous identities (userId null) must not be forced to
+    // log in via the connectClient -> refreshToken 401 -> login() path.
+    if (action.userInfo && action.userInfo.userId) {
+        yield put(connectClient());
+    }
 }
 
 function* handleConnectClient() {
