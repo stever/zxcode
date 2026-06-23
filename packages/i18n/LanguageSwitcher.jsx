@@ -12,6 +12,13 @@ export function LanguageSwitcher({className, style}) {
     const active = (i18n.resolvedLanguage || i18n.language || 'en').split('-')[0];
     const value = SUPPORTED_LANGUAGES.some((l) => l.code === active) ? active : 'en';
 
+    // Pin the user's own language to the top; the rest stay in endonym order.
+    const options = React.useMemo(() => {
+        const current = SUPPORTED_LANGUAGES.find((l) => l.code === value);
+        const rest = SUPPORTED_LANGUAGES.filter((l) => l.code !== value);
+        return current ? [current, ...rest] : SUPPORTED_LANGUAGES;
+    }, [value]);
+
     const selectedTemplate = () => (
         <span className="flex align-items-center gap-2">
             <span
@@ -35,10 +42,10 @@ export function LanguageSwitcher({className, style}) {
             className={className}
             style={{width: '6.25rem', ...style}}
             value={value}
-            options={SUPPORTED_LANGUAGES}
+            options={options}
             optionLabel="label"
             optionValue="code"
-            scrollHeight="500px"
+            scrollHeight="min(40rem, 80vh)"
             onChange={(e) => i18n.changeLanguage(e.value)}
             valueTemplate={selectedTemplate}
             pt={{
