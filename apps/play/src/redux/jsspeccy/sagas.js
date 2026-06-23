@@ -128,8 +128,7 @@ function* handleRenderEmulatorActions(action) {
         const emuParams = {
             zoom,
             machine: machine || 48, // 48, 128 or 5 (Pentagon)
-            autoLoadTapes: true,
-            tapeAutoLoadMode: 'default' // or usr0
+            autoLoadTapes: true
         };
 
         let doFilter = false;

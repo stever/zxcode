@@ -25,7 +25,6 @@ export class Emulator extends EventEmitter {
         this.isRunning = false;
         this.isInitiallyPaused = (!opts.autoStart);
         this.autoLoadTapes = opts.autoLoadTapes || false;
-        this.tapeAutoLoadMode = opts.tapeAutoLoadMode || 'default';  // or usr0
         this.tapeIsPlaying = false;
         this.tapeTrapsEnabled = ('tapeTrapsEnabled' in opts) ? opts.tapeTrapsEnabled : true;
 
@@ -91,11 +90,7 @@ export class Emulator extends EventEmitter {
                             /* Pentagon boots to a menu, but its ROM/timing isn't
                                covered by the keypress autoload, so keep driving it
                                via the tapeloader snapshot. */
-                            const TAPE_LOADERS = {
-                                'default': '../tapeloaders/tape_pentagon.szx',
-                                'usr0': '../tapeloaders/tape_pentagon_usr0.szx',
-                            };
-                            this.openUrl(new URL(TAPE_LOADERS[this.tapeAutoLoadMode], scriptUrl));
+                            this.openUrl(new URL('../tapeloaders/tape_pentagon.szx', scriptUrl));
                         } else {
                             /* 48K and 128K: cold-boot and drive the ROM with injected
                                keypresses (the keys differ per machine - see

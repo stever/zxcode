@@ -27,7 +27,6 @@ export const JSSpeccy = (container, opts) => {
         machine: opts.machine || 48,
         autoStart: opts.autoStart || false,
         autoLoadTapes: opts.autoLoadTapes || false,
-        tapeAutoLoadMode: opts.tapeAutoLoadMode || 'default',
         openUrl: opts.openUrl,
         tapeTrapsEnabled: ('tapeTrapsEnabled' in opts) ? opts.tapeTrapsEnabled : true,
     });
