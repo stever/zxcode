@@ -87,23 +87,24 @@ export class Emulator extends EventEmitter {
                     break;
                 case 'fileOpened':
                     if (e.data.mediaType == 'tape' && this.autoLoadTapes) {
-                        if (this.machineType == 48) {
-                            /* 48K boots to BASIC, so cold-boot and type LOAD ""
-                               ourselves. The tapeloader snapshots park the machine
-                               in a captured state that breaks some games' loaders
-                               (e.g. report 5 "Out of screen"); a cold boot matches a
-                               real load. */
+                        if (this.machineType == 5) {
+                            /* Pentagon boots to a menu, but its ROM/timing isn't
+                               covered by the keypress autoload, so keep driving it
+                               via the tapeloader snapshot. */
+                            const TAPE_LOADERS = {
+                                'default': '../tapeloaders/tape_pentagon.szx',
+                                'usr0': '../tapeloaders/tape_pentagon_usr0.szx',
+                            };
+                            this.openUrl(new URL(TAPE_LOADERS[this.tapeAutoLoadMode], scriptUrl));
+                        } else {
+                            /* 48K and 128K: cold-boot and drive the ROM with injected
+                               keypresses (the keys differ per machine - see
+                               beginAutoTypeLoad). The tapeloader snapshots park the
+                               machine in a captured state that breaks some games'
+                               loaders (e.g. report 5 "Out of screen"); a cold boot
+                               matches a real load. */
                             this.reset();
                             this.beginAutoTypeLoad();
-                        } else {
-                            /* 128K/Pentagon boot to a menu where a typed LOAD ""
-                               wouldn't apply, so drive them via the per-machine
-                               tapeloader snapshot. */
-                            const TAPE_LOADERS_BY_MACHINE = {
-                                '128': {'default': '../tapeloaders/tape_128.szx', 'usr0': '../tapeloaders/tape_128_usr0.szx'},
-                                '5': {'default': '../tapeloaders/tape_pentagon.szx', 'usr0': '../tapeloaders/tape_pentagon_usr0.szx'},
-                            };
-                            this.openUrl(new URL(TAPE_LOADERS_BY_MACHINE[this.machineType][this.tapeAutoLoadMode], scriptUrl));
                         }
                         if (!this.tapeTrapsEnabled) {
                             this.playTape();
@@ -227,13 +228,12 @@ export class Emulator extends EventEmitter {
         this.worker.postMessage({message: 'reset'});
     }
 
-    /* Cold-boot autoload for 48K: type LOAD "" + ENTER by injecting the matrix
-       keypresses. Driven off completed emulator frames (not wall-clock time), so
-       the keystrokes only advance while the CPU is actually executing - they wait
-       for the machine to start and the ROM to boot rather than guessing. Tune the
-       frame counts if the keystrokes land before the ROM is ready or get merged. */
+    /* Cold-boot autoload by injecting matrix keypresses. Driven off completed
+       emulator frames (not wall-clock time), so the keystrokes only advance while
+       the CPU is actually executing - they wait for the machine to start and the
+       ROM to boot rather than guessing. The keys differ per machine; tune the frame
+       counts if the keystrokes land before the ROM is ready or get merged. */
     beginAutoTypeLoad() {
-        const BOOT_FRAMES = 120;  // ~2.4s of execution for the ROM to reach the input loop
         const HOLD_FRAMES = 5;    // frames each key/chord is held down
         const GAP_FRAMES = 5;     // frames between keystrokes so the ROM debounces
 
@@ -242,11 +242,22 @@ export class Emulator extends EventEmitter {
         const J = {row: 6, mask: 0x08};
         const ENTER = {row: 6, mask: 0x01};
 
-        /* LOAD "" : J = the LOAD keyword, " = symbol-shift + P (x2), then ENTER */
-        const chords = [[J], [SYMBOL_SHIFT, P], [SYMBOL_SHIFT, P], [ENTER]];
+        let bootFrames, chords;
+        if (this.machineType == 128) {
+            /* 128K boots to a menu with "Tape Loader" highlighted; pressing ENTER
+               selects it, which runs LOAD "". The menu takes longer to appear than
+               the 48K BASIC prompt, so wait more frames before the keypress. */
+            bootFrames = 200;  // ~4s for the copyright screen and menu to come up
+            chords = [[ENTER]];
+        } else {
+            /* 48K boots straight to BASIC: type LOAD "" (J = the LOAD keyword,
+               " = symbol-shift + P twice) then ENTER. */
+            bootFrames = 120;  // ~2.4s for the ROM to reach the input loop
+            chords = [[J], [SYMBOL_SHIFT, P], [SYMBOL_SHIFT, P], [ENTER]];
+        }
 
         const actions = [];
-        let frame = BOOT_FRAMES;
+        let frame = bootFrames;
         for (const chord of chords) {
             actions.push({frame, message: 'keyDown', keys: chord});
             frame += HOLD_FRAMES;
