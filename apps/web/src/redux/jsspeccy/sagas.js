@@ -292,7 +292,11 @@ function* handleSetMachineActions(action) {
     try {
         // jsspeccy may not be rendered yet; the redux state still records the
         // choice so the menu reflects it and the emulator boots with it later.
-        jsspeccy?.setMachine(action.machine);
+        if (!jsspeccy) return;
+        jsspeccy.setMachine(action.machine);
+        // Switching model leaves the machine running mid-execution under the new
+        // ROM/paging, so cold-boot the selected machine like the menu-bar Reset.
+        yield put(reset());
     } catch (e) {
         handleException(e);
     }
