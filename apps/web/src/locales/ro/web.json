@@ -15,7 +15,10 @@
     "privacyPolicy": "Politica de confidențialitate",
     "termsOfUse": "Termeni de utilizare",
     "reset": "Resetează",
-    "other": "Altele"
+    "other": "Altele",
+    "machine": "Mașină",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "errorPage": {
     "errorTitle": "Eroare",

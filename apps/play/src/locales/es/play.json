@@ -5,7 +5,10 @@
     "info": "Información",
     "aboutThisSite": "Acerca de este sitio",
     "linking": "Enlazar con ZX Play",
-    "reset": "Reiniciar"
+    "reset": "Reiniciar",
+    "machine": "Máquina",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "about": {
     "intro1": "Un emulador de ZX Spectrum adaptado a móviles para el navegador. Código fuente disponible <srcLink>aquí</srcLink>.",

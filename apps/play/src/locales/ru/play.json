@@ -5,7 +5,10 @@
     "info": "Информация",
     "aboutThisSite": "Об этом сайте",
     "linking": "Ссылки на ZX Play",
-    "reset": "Сброс"
+    "reset": "Сброс",
+    "machine": "Машина",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "about": {
     "intro1": "Эмулятор ZX Spectrum для мобильных устройств в браузере. Исходный код доступен <srcLink>здесь</srcLink>.",

@@ -15,7 +15,10 @@
     "privacyPolicy": "Política de privacidade",
     "termsOfUse": "Termos de utilização",
     "reset": "Repor",
-    "other": "Outro"
+    "other": "Outro",
+    "machine": "Máquina",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "errorPage": {
     "errorTitle": "Erro",

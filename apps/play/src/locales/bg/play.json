@@ -5,7 +5,10 @@
     "info": "Информация",
     "aboutThisSite": "Относно този сайт",
     "linking": "Връзки към ZX Play",
-    "reset": "Нулиране"
+    "reset": "Нулиране",
+    "machine": "Машина",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "about": {
     "intro1": "Удобен за мобилни устройства емулатор на ZX Spectrum за браузъра. Изходният код е достъпен <srcLink>тук</srcLink>.",

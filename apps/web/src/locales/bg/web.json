@@ -15,7 +15,10 @@
     "privacyPolicy": "Политика за поверителност",
     "termsOfUse": "Условия за ползване",
     "reset": "Нулиране",
-    "other": "Други"
+    "other": "Други",
+    "machine": "Машина",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "errorPage": {
     "errorTitle": "Грешка",

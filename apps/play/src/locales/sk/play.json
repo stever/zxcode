@@ -5,7 +5,10 @@
     "info": "Informácie",
     "aboutThisSite": "O tejto stránke",
     "linking": "Odkazovanie na ZX Play",
-    "reset": "Resetovať"
+    "reset": "Resetovať",
+    "machine": "Stroj",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "about": {
     "intro1": "Emulátor ZX Spectrum vhodný pre mobilné zariadenia pre prehliadač. Zdrojový kód je dostupný <srcLink>tu</srcLink>.",

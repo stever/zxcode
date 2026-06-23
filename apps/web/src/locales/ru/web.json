@@ -15,7 +15,10 @@
     "privacyPolicy": "Политика конфиденциальности",
     "termsOfUse": "Условия использования",
     "reset": "Сброс",
-    "other": "Прочее"
+    "other": "Прочее",
+    "machine": "Машина",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "errorPage": {
     "errorTitle": "Ошибка",

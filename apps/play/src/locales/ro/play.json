@@ -5,7 +5,10 @@
     "info": "Informații",
     "aboutThisSite": "Despre acest site",
     "linking": "Conectare către ZX Play",
-    "reset": "Resetează"
+    "reset": "Resetează",
+    "machine": "Mașină",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "about": {
     "intro1": "Un emulator ZX Spectrum optimizat pentru mobil, pentru browser. Codul sursă este disponibil <srcLink>aici</srcLink>.",

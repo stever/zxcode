@@ -1,0 +1,40 @@
+{
+  "nav": {
+    "fullScreen": "Schermo intero",
+    "view": "Visualizza",
+    "info": "Info",
+    "aboutThisSite": "Informazioni su questo sito",
+    "linking": "Collegamento a ZX Play",
+    "reset": "Reimposta",
+    "machine": "Macchina",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
+  },
+  "about": {
+    "intro1": "Un emulatore ZX Spectrum ottimizzato per dispositivi mobili per il browser. Sorgente disponibile <srcLink>qui</srcLink>.",
+    "intro2": "Un sito web alternativo, collegato a questo, è disponibile su <coderLink>code.zxplay.org</coderLink>. ZX Coder supporta l'esecuzione di programmi inseriti tramite pagine web.",
+    "acknowledgementsIntro": "Questo software utilizza codice dai seguenti progetti open source:",
+    "sinclairRomHeading": "Permesso sul copyright della ROM Sinclair",
+    "sinclairRomText": "Amstrad ha gentilmente concesso il permesso per la ridistribuzione del proprio materiale protetto da copyright, ma ne mantiene il copyright."
+  },
+  "linking": {
+    "intro": "Puoi collegarti direttamente a ZX Play usando i parametri URL per caricare un programma o l'immagine di un nastro di gioco da un altro URL.",
+    "example": "Esempio:",
+    "decompose": "L'URL può essere scomposto in queste parti:",
+    "mainPart": "Parte principale: ",
+    "softKeys": "Tasti software: ",
+    "machineType": "Tipo di macchina (48, 128, 5 per pentagon): ",
+    "programUrl": "URL del programma/gioco da caricare: ",
+    "filtering": "Filtraggio facoltativo (il valore predefinito 0 non è filtrato, i buoni vecchi pixel): ",
+    "buildOwn": "Puoi creare il tuo URL impostando i tasti software, il tipo di macchina (predefinito 48) e un URL per un file Z80, SNA, SZX, TZX o TAP contenente il gioco o programma desiderato. Nota che l'URL del programma/gioco da caricare <b>deve</b> essere ospitato su un sito web con CORS abilitato.",
+    "softKeySyntaxHeading": "Sintassi dei tasti software",
+    "syntaxSimple": "La sintassi è semplice: i tasti sono disposti in righe e le righe sono separate da virgole.",
+    "threeRows": "Quindi, la stringa precedente ha 3 righe:",
+    "keyDefinition": "Un tasto è definito dal suo carattere MAIUSCOLO, e un trattino (-) indica uno spazio vuoto.",
+    "exceptionsAre": "Le eccezioni sono:",
+    "enterKey": "Tasto Invio: e (e minuscola)",
+    "capsShift": "Caps shift: c (c minuscola)",
+    "symbolShift": "Symbol shift: s (s minuscola)",
+    "space": "Spazio: _ (trattino basso)"
+  }
+}

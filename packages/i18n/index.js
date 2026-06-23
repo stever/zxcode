@@ -3,26 +3,30 @@ import {initReactI18next} from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 import {LANGUAGE_CODES} from './languages';
+import commonBg from './locales/bg/common.json';
+import commonCs from './locales/cs/common.json';
+import commonEl from './locales/el/common.json';
 import commonEn from './locales/en/common.json';
 import commonEs from './locales/es/common.json';
-import commonRu from './locales/ru/common.json';
-import commonPt from './locales/pt/common.json';
+import commonIt from './locales/it/common.json';
 import commonPl from './locales/pl/common.json';
-import commonCs from './locales/cs/common.json';
-import commonSk from './locales/sk/common.json';
+import commonPt from './locales/pt/common.json';
 import commonRo from './locales/ro/common.json';
-import commonBg from './locales/bg/common.json';
+import commonRu from './locales/ru/common.json';
+import commonSk from './locales/sk/common.json';
 
 const COMMON = {
+    bg: commonBg,
+    cs: commonCs,
+    el: commonEl,
     en: commonEn,
     es: commonEs,
-    ru: commonRu,
-    pt: commonPt,
+    it: commonIt,
     pl: commonPl,
-    cs: commonCs,
-    sk: commonSk,
+    pt: commonPt,
     ro: commonRo,
-    bg: commonBg,
+    ru: commonRu,
+    sk: commonSk,
 };
 
 /**

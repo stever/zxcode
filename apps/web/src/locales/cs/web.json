@@ -15,7 +15,10 @@
     "privacyPolicy": "Zásady ochrany soukromí",
     "termsOfUse": "Podmínky použití",
     "reset": "Resetovat",
-    "other": "Ostatní"
+    "other": "Ostatní",
+    "machine": "Stroj",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "errorPage": {
     "errorTitle": "Chyba",

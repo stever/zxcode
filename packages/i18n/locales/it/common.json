@@ -1,0 +1,63 @@
+{
+  "language": "Lingua",
+  "nav": {
+    "home": "Home",
+    "about": "Informazioni",
+    "search": "Cerca",
+    "explore": "Esplora",
+    "profile": "Profilo",
+    "logIn": "Accedi",
+    "logOut": "Esci",
+    "settings": "Impostazioni"
+  },
+  "actions": {
+    "save": "Salva",
+    "cancel": "Annulla",
+    "delete": "Elimina",
+    "edit": "Modifica",
+    "play": "Avvia",
+    "copy": "Copia",
+    "rename": "Rinomina",
+    "ok": "OK",
+    "close": "Chiudi",
+    "back": "Indietro",
+    "follow": "Segui",
+    "unfollow": "Non seguire più",
+    "loading": "Caricamento…"
+  },
+  "stars": {
+    "star": "Aggiungi questo progetto ai preferiti",
+    "unstar": "Rimuovi questo progetto dai preferiti",
+    "loginToStar": "Accedi per aggiungere progetti ai preferiti",
+    "viewStargazers": "Guarda chi ha aggiunto ai preferiti",
+    "stargazers": "Preferiti da",
+    "noStargazers": "Ancora nessun preferito",
+    "backToProject": "Torna al progetto",
+    "projectNotFound": "Progetto non trovato"
+  },
+  "errors": {
+    "notFound": "Pagina non trovata",
+    "generic": "Qualcosa è andato storto.",
+    "userNotFound": "Utente non trovato"
+  },
+  "errorPage": {
+    "errorTitle": "Errore",
+    "notFoundTitle": "Non trovato",
+    "notFoundBody": "Posizione della pagina richiesta non trovata.",
+    "title": "Spiacenti, si è verificato un errore imprevisto.",
+    "messageLabel": "Il messaggio di errore è:",
+    "buttonsPrompt": "Premi uno dei seguenti pulsanti:",
+    "reload": "Ricarica",
+    "reloadTitle": "Ricarica questa pagina",
+    "restart": "Riavvia",
+    "restartTitle": "Torna alla home page",
+    "goBack": "Torna indietro",
+    "goBackTitle": "Torna alla pagina precedente"
+  },
+  "search": {
+    "results": "Risultati della ricerca",
+    "title": "Titolo",
+    "creator": "Autore"
+  },
+  "acknowledgements": "Riconoscimenti"
+}
