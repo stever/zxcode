@@ -5,6 +5,7 @@ export const actionTypes = {
     receiveTermsOfUse: 'app/receiveTermsOfUse',
     requestPrivacyPolicy: 'app/requestPrivacyPolicy',
     receivePrivacyPolicy: 'app/receivePrivacyPolicy',
+    setMachine: 'app/setMachine',
 };
 
 export const showActiveEmulator = () => ({
@@ -13,4 +14,9 @@ export const showActiveEmulator = () => ({
 
 export const resetEmulator = () => ({
     type: actionTypes.resetEmulator
+})
+
+export const setMachine = (machine) => ({
+    type: actionTypes.setMachine,
+    machine
 })

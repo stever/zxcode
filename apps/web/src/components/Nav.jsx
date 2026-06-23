@@ -10,7 +10,7 @@ import {
 import { downloadProjectTap } from "../redux/eightbit/actions";
 import { getUserInfo } from "../redux/identity/actions";
 import { login, logout } from "../auth";
-import { resetEmulator } from "../redux/app/actions";
+import { resetEmulator, setMachine } from "../redux/app/actions";
 import { getLanguageLabel } from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
 import Constants from "../constants";
@@ -29,6 +29,8 @@ export default function Nav() {
   const userId = useSelector((state) => state?.identity.userId);
   const userSlug = useSelector((state) => state?.identity.userSlug);
   const lang = useSelector((state) => state?.project.lang);
+  const machine = useSelector((state) => state?.app.machine);
+  const machineLocked = useSelector((state) => state?.app.machineLocked);
 
   const model = getMenuItems(
     t,
@@ -37,7 +39,9 @@ export default function Nav() {
     userSlug,
     dispatch,
     lang,
-    emuVisible
+    emuVisible,
+    machine,
+    machineLocked
   );
 
   const isMobile = useSelector((state) => state?.window.isMobile);
@@ -56,7 +60,7 @@ export default function Nav() {
   );
 }
 
-function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible) {
+function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible, machine, machineLocked) {
   const sep = {
     separator: true,
   };
@@ -248,6 +252,29 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible)
     ],
   };
 
+  const machineMenu = {
+    label: t("nav.machine"),
+    icon: "pi pi-fw pi-desktop",
+    items: [
+      {
+        label: t("nav.machine48"),
+        icon: machine === 48 ? "pi pi-fw pi-check" : "pi pi-fw",
+        disabled: machineLocked,
+        command: () => {
+          dispatch(setMachine(48));
+        },
+      },
+      {
+        label: t("nav.machine128"),
+        icon: machine === 128 ? "pi pi-fw pi-check" : "pi pi-fw",
+        disabled: machineLocked,
+        command: () => {
+          dispatch(setMachine(128));
+        },
+      },
+    ],
+  };
+
   const resetButton = {
     label: t("nav.reset"),
     icon: "pi pi-fw pi-power-off",
@@ -264,5 +291,5 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible)
     },
   };
 
-  return [projectMenu, viewMenu, infoMenu, resetButton, loginButton];
+  return [projectMenu, viewMenu, machineMenu, infoMenu, resetButton, loginButton];
 }

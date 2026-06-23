@@ -6,6 +6,7 @@ export const actionTypes = {
     requestPrivacyPolicy: 'app/requestPrivacyPolicy',
     receivePrivacyPolicy: 'app/receivePrivacyPolicy',
     toggleLineNumbers: 'app/toggleLineNumbers',
+    setMachine: 'app/setMachine',
 };
 
 export const showActiveEmulator = () => ({
@@ -37,4 +38,9 @@ export const receivePrivacyPolicy = (text) => ({
 export const toggleLineNumbers = (enabled) => ({
     type: actionTypes.toggleLineNumbers,
     enabled
+})
+
+export const setMachine = (machine) => ({
+    type: actionTypes.setMachine,
+    machine
 })

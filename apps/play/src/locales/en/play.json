@@ -5,7 +5,10 @@
     "info": "Info",
     "aboutThisSite": "About This Site",
     "linking": "Linking To ZX Play",
-    "reset": "Reset"
+    "reset": "Reset",
+    "machine": "Machine",
+    "machine48": "Spectrum 48K",
+    "machine128": "Spectrum 128K"
   },
   "about": {
     "intro1": "A mobile-friendly ZX Spectrum emulator for the browser. Source available <srcLink>here</srcLink>.",

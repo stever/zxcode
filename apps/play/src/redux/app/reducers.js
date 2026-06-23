@@ -1,12 +1,48 @@
+import queryString from "query-string";
 import {actionTypes} from "./actions";
 
 // -----------------------------------------------------------------------------
 // Initial state
 // -----------------------------------------------------------------------------
 
+const MACHINE_KEY = 'machine';
+
+const parseMachine = (value) => {
+    if (value === '128' || value === 128) return 128;
+    if (value === '5' || value === 5) return 5;
+    if (value === '48' || value === 48) return 48;
+    return undefined;
+};
+
+// The "m" query parameter overrides and locks the choice; otherwise use the
+// persisted preference, falling back to the 48K default.
+const loadMachineState = () => {
+    try {
+        const fromUrl = parseMachine(queryString.parse(location.search).m);
+        if (fromUrl !== undefined) {
+            return {machine: fromUrl, machineLocked: true};
+        }
+    } catch (e) {
+        console.error('Failed to read machine query parameter:', e);
+    }
+    try {
+        const saved = parseMachine(localStorage.getItem(MACHINE_KEY));
+        if (saved !== undefined) {
+            return {machine: saved, machineLocked: false};
+        }
+    } catch (e) {
+        console.error('Failed to load machine preference:', e);
+    }
+    return {machine: 48, machineLocked: false};
+};
+
+const machineState = loadMachineState();
+
 const initialState = {
     privacyPolicy: undefined,
-    termsOfUse: undefined
+    termsOfUse: undefined,
+    machine: machineState.machine,
+    machineLocked: machineState.machineLocked
 };
 
 // -----------------------------------------------------------------------------
@@ -27,6 +63,19 @@ function receiveTermsOfUse(state, action) {
     }
 }
 
+function setMachine(state, action) {
+    if (state.machineLocked) return state;
+    try {
+        localStorage.setItem(MACHINE_KEY, String(action.machine));
+    } catch (e) {
+        console.error('Failed to save machine preference:', e);
+    }
+    return {
+        ...state,
+        machine: action.machine
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Reducer
 // -----------------------------------------------------------------------------
@@ -34,6 +83,7 @@ function receiveTermsOfUse(state, action) {
 const actionsMap = {
     [actionTypes.receivePrivacyPolicy]: receivePrivacyPolicy,
     [actionTypes.receiveTermsOfUse]: receiveTermsOfUse,
+    [actionTypes.setMachine]: setMachine,
 };
 
 export default function reducer(state = initialState, action) {

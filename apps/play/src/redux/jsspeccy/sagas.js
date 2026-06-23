@@ -1,4 +1,4 @@
-import {take, takeLatest, put, call} from "redux-saga/effects";
+import {take, takeLatest, put, call, select} from "redux-saga/effects";
 import {eventChannel} from "redux-saga";
 import queryString from "query-string";
 import {JSSpeccy} from "@zxplay/emulator";
@@ -11,7 +11,7 @@ import {
     reset,
     start
 } from "./actions";
-import {showActiveEmulator} from "../app/actions";
+import {showActiveEmulator, actionTypes as appActionTypes} from "../app/actions";
 import {handleException} from "../../errors";
 
 // -----------------------------------------------------------------------------
@@ -101,6 +101,11 @@ export function* watchForLocationChanges() {
     yield takeLatest('@@router/ON_LOCATION_CHANGED', handleLocationChanges);
 }
 
+// noinspection JSUnusedGlobalSymbols
+export function* watchForSetMachineActions() {
+    yield takeLatest(appActionTypes.setMachine, handleSetMachineActions);
+}
+
 // -----------------------------------------------------------------------------
 // Action handlers
 // -----------------------------------------------------------------------------
@@ -116,9 +121,13 @@ function* handleRenderEmulatorActions(action) {
         target.style.margin = '0px';
         target.style.backgroundColor = '#fff';
 
+        // Boot with the selected machine: the "m" query parameter (incl. Pentagon
+        // m=5) if present, otherwise the persisted menu choice, else the default.
+        const machine = yield select((state) => state?.app.machine);
+
         const emuParams = {
             zoom,
-            machine: 48, // or 128
+            machine: machine || 48, // 48, 128 or 5 (Pentagon)
             autoLoadTapes: true,
             tapeAutoLoadMode: 'default' // or usr0
         };
@@ -126,10 +135,6 @@ function* handleRenderEmulatorActions(action) {
         let doFilter = false;
 
         const parsed = queryString.parse(location.search);
-
-        if (parsed.m && (parsed.m === '48' || parsed.m === '128' || parsed.m === '5')) {
-            emuParams.machine = parsed.m;
-        }
 
         if (parsed.u) {
             emuParams.openUrl = parsed.u;
@@ -276,6 +281,16 @@ function* handleOpenUrlActions(action) {
         jsspeccy.reset();
         setTimeout(() => jsspeccy.start(), 100);
         setTimeout(() => jsspeccy.openUrl(action.url), 100);
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleSetMachineActions(action) {
+    try {
+        // jsspeccy may not be rendered yet; the redux state still records the
+        // choice so the menu reflects it and the emulator boots with it later.
+        jsspeccy?.setMachine(action.machine);
     } catch (e) {
         handleException(e);
     }

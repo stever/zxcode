@@ -4,7 +4,7 @@ import {useNavigate} from "react-router-dom";
 import {InputText} from "primereact/inputtext";
 import {Nav as Deck} from "@zxplay/ui";
 import {viewFullScreen} from "../redux/jsspeccy/actions";
-import {resetEmulator} from "../redux/app/actions";
+import {resetEmulator, setMachine} from "../redux/app/actions";
 import {useTranslation} from "@zxplay/i18n";
 
 export default function Nav() {
@@ -17,8 +17,10 @@ export default function Nav() {
     const pathname = useSelector(state => state?.router.location.pathname);
     const emuVisible = pathname === '/';
     const isMobile = useSelector(state => state?.window.isMobile);
+    const machine = useSelector(state => state?.app.machine);
+    const machineLocked = useSelector(state => state?.app.machineLocked);
 
-    const model = getMenuItems(t, navigate, dispatch, emuVisible);
+    const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked);
 
     const search = (
         <InputText
@@ -44,7 +46,7 @@ export default function Nav() {
     );
 }
 
-function getMenuItems(t, navigate, dispatch, emuVisible) {
+function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked) {
     const viewFullScreenMenuItem = {
         label: t('nav.fullScreen'),
         icon: 'pi pi-fw pi-window-maximize',
@@ -81,6 +83,29 @@ function getMenuItems(t, navigate, dispatch, emuVisible) {
         ]
     };
 
+    const machineMenu = {
+        label: t('nav.machine'),
+        icon: 'pi pi-fw pi-desktop',
+        items: [
+            {
+                label: t('nav.machine48'),
+                icon: machine === 48 ? 'pi pi-fw pi-check' : 'pi pi-fw',
+                disabled: machineLocked,
+                command: () => {
+                    dispatch(setMachine(48));
+                }
+            },
+            {
+                label: t('nav.machine128'),
+                icon: machine === 128 ? 'pi pi-fw pi-check' : 'pi pi-fw',
+                disabled: machineLocked,
+                command: () => {
+                    dispatch(setMachine(128));
+                }
+            },
+        ]
+    };
+
     const resetButton = {
         label: t('nav.reset'),
         icon: 'pi pi-fw pi-power-off',
@@ -91,6 +116,7 @@ function getMenuItems(t, navigate, dispatch, emuVisible) {
 
     return [
         viewMenu,
+        machineMenu,
         infoMenu,
         resetButton,
     ];
