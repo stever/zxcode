@@ -240,9 +240,11 @@ export class Emulator extends EventEmitter {
         let bootFrames, chords;
         if (this.machineType == 128) {
             /* 128K boots to a menu with "Tape Loader" highlighted; pressing ENTER
-               selects it, which runs LOAD "". The menu takes longer to appear than
-               the 48K BASIC prompt, so wait more frames before the keypress. */
-            bootFrames = 200;  // ~4s for the copyright screen and menu to come up
+               selects it, which runs LOAD "". The menu (standard 128 ROM, no RAM
+               test) is ready in about the same time as the 48K BASIC prompt. Press
+               too early and the keypress lands before the menu scans the keyboard
+               and is lost, so this is the floor worth trusting without measuring. */
+            bootFrames = 120;  // ~2.4s for the menu to come up and start scanning
             chords = [[ENTER]];
         } else {
             /* 48K boots straight to BASIC: type LOAD "" (J = the LOAD keyword,
