@@ -1,7 +1,6 @@
-import React, {useState} from "react";
+import React from "react";
 import {useDispatch, useSelector} from "react-redux";
 import {useNavigate} from "react-router-dom";
-import {InputText} from "primereact/inputtext";
 import {Nav as Deck} from "@zxplay/ui";
 import {viewFullScreen} from "../redux/jsspeccy/actions";
 import {resetEmulator, setMachine} from "../redux/app/actions";
@@ -12,8 +11,6 @@ export default function Nav() {
     const navigate = useNavigate();
     const {t} = useTranslation();
 
-    const [searchInput, setSearchInput] = useState('');
-
     const pathname = useSelector(state => state?.router.location.pathname);
     const emuVisible = pathname === '/';
     const isMobile = useSelector(state => state?.window.isMobile);
@@ -22,26 +19,12 @@ export default function Nav() {
 
     const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked);
 
-    const search = (
-        <InputText
-            className="p-2"
-            placeholder={t('nav.search')}
-            type="text"
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter' && searchInput) {
-                    navigate(`/search?q=${searchInput}`);
-                }
-            }}/>
-    );
-
     return (
         <Deck
             model={model}
             brandTitle="ZX Play"
             onBrand={() => navigate('/')}
             isMobile={isMobile}
-            search={search}
         />
     );
 }

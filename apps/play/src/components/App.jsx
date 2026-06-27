@@ -16,7 +16,6 @@ import HomePage from "./HomePage";
 import MaxWidth from "./MaxWidth";
 import AboutPage from "./AboutPage";
 import LinkingPage from "./LinkingPage";
-import SearchPage from "./SearchPage";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
 import clsx from "clsx";
@@ -42,7 +41,6 @@ export default function App() {
                             <Route exact path="/" element={<HomePage/>}/>
                             <Route exact path="/about" element={<MaxWidth><AboutPage/></MaxWidth>}/>
                             <Route exact path="/info/linking" element={<MaxWidth><LinkingPage/></MaxWidth>}/>
-                            <Route path="/search" element={<SearchPage/>}/>
                             <Route path="*" element={<ErrorNotFoundPage/>}/>
                         </Routes>
                     </ErrorBoundary>

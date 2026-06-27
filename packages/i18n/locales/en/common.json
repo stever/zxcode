@@ -3,7 +3,6 @@
   "nav": {
     "home": "Home",
     "about": "About",
-    "search": "Search",
     "explore": "Explore",
     "profile": "Profile",
     "logIn": "Log in",
@@ -53,11 +52,6 @@
     "restartTitle": "Return to home page",
     "goBack": "Go Back",
     "goBackTitle": "Go back to previous page"
-  },
-  "search": {
-    "results": "Search Results",
-    "title": "Title",
-    "creator": "Creator"
   },
   "acknowledgements": "Acknowledgements"
 }

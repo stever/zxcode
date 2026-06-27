@@ -3,7 +3,6 @@
   "nav": {
     "home": "Strona główna",
     "about": "O nas",
-    "search": "Szukaj",
     "explore": "Przeglądaj",
     "profile": "Profil",
     "logIn": "Zaloguj się",
@@ -43,11 +42,6 @@
     "restartTitle": "Wróć na stronę główną",
     "goBack": "Wstecz",
     "goBackTitle": "Wróć do poprzedniej strony"
-  },
-  "search": {
-    "results": "Wyniki wyszukiwania",
-    "title": "Tytuł",
-    "creator": "Twórca"
   },
   "acknowledgements": "Podziękowania"
 }

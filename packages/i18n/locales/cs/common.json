@@ -3,7 +3,6 @@
   "nav": {
     "home": "Domů",
     "about": "O aplikaci",
-    "search": "Hledat",
     "explore": "Procházet",
     "profile": "Profil",
     "logIn": "Přihlásit se",
@@ -43,11 +42,6 @@
     "restartTitle": "Přejít na domovskou stránku",
     "goBack": "Zpět",
     "goBackTitle": "Přejít na předchozí stránku"
-  },
-  "search": {
-    "results": "Výsledky hledání",
-    "title": "Název",
-    "creator": "Autor"
   },
   "acknowledgements": "Poděkování"
 }

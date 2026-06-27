@@ -3,7 +3,6 @@
   "nav": {
     "home": "Domov",
     "about": "O projekte",
-    "search": "Hľadať",
     "explore": "Objavovať",
     "profile": "Profil",
     "logIn": "Prihlásiť sa",
@@ -43,11 +42,6 @@
     "restartTitle": "Vrátiť sa na domovskú stránku",
     "goBack": "Späť",
     "goBackTitle": "Vrátiť sa na predchádzajúcu stránku"
-  },
-  "search": {
-    "results": "Výsledky hľadania",
-    "title": "Názov",
-    "creator": "Autor"
   },
   "acknowledgements": "Poďakovania"
 }

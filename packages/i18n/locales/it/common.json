@@ -3,7 +3,6 @@
   "nav": {
     "home": "Home",
     "about": "Informazioni",
-    "search": "Cerca",
     "explore": "Esplora",
     "profile": "Profilo",
     "logIn": "Accedi",
@@ -53,11 +52,6 @@
     "restartTitle": "Torna alla home page",
     "goBack": "Torna indietro",
     "goBackTitle": "Torna alla pagina precedente"
-  },
-  "search": {
-    "results": "Risultati della ricerca",
-    "title": "Titolo",
-    "creator": "Autore"
   },
   "acknowledgements": "Riconoscimenti"
 }

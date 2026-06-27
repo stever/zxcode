@@ -6,7 +6,6 @@ import {
     actionTypes,
     handleClick,
     openTAPFile,
-    openUrl,
     pause,
     reset,
     start
@@ -31,11 +30,6 @@ export function* watchForLoadEmulatorActions() {
 // noinspection JSUnusedGlobalSymbols
 export function* watchForLoadTapActions() {
     yield takeLatest(actionTypes.loadTap, handleLoadTapActions);
-}
-
-// noinspection JSUnusedGlobalSymbols
-export function* watchForLoadUrlActions() {
-    yield takeLatest(actionTypes.loadUrl, handleLoadUrlActions);
 }
 
 // noinspection JSUnusedGlobalSymbols
@@ -178,18 +172,6 @@ function* handleLoadTapActions(action) {
         yield put(reset());
         yield put(start());
         yield put(openTAPFile(action.tap.buffer));
-    } catch (e) {
-        handleException(e);
-    }
-}
-
-function* handleLoadUrlActions(action) {
-    try {
-        yield put(showActiveEmulator());
-        yield put(reset());
-        yield put(start());
-        yield put(openUrl(action.url));
-        yield put(start()); // NOTE: Extra call to start was required here.
     } catch (e) {
         handleException(e);
     }

@@ -3,7 +3,6 @@
   "nav": {
     "home": "Acasă",
     "about": "Despre",
-    "search": "Căutare",
     "explore": "Explorează",
     "profile": "Profil",
     "logIn": "Autentificare",
@@ -43,11 +42,6 @@
     "restartTitle": "Revino la pagina principală",
     "goBack": "Înapoi",
     "goBackTitle": "Revino la pagina anterioară"
-  },
-  "search": {
-    "results": "Rezultatele căutării",
-    "title": "Titlu",
-    "creator": "Autor"
   },
   "acknowledgements": "Mulțumiri"
 }
