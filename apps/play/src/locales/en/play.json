@@ -8,7 +8,10 @@
     "reset": "Reset",
     "machine": "Machine",
     "machine48": "Spectrum 48K",
-    "machine128": "Spectrum 128K"
+    "machine128": "Spectrum 128K",
+    "keyboardSide": "Keyboard Side",
+    "keyboardSideLeft": "Left",
+    "keyboardSideRight": "Right"
   },
   "about": {
     "intro1": "A mobile-friendly ZX Spectrum emulator for the browser. Source available <srcLink>here</srcLink>.",

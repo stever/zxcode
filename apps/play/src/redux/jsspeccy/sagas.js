@@ -76,6 +76,11 @@ export function* watchForOpenFileDialogActions() {
 }
 
 // noinspection JSUnusedGlobalSymbols
+export function* watchForSetZoomActions() {
+    yield takeLatest(actionTypes.setZoom, handleSetZoomActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
 export function* watchForViewFullScreenActions() {
     yield takeLatest(actionTypes.viewFullScreen, handleViewFullScreenActions);
 }
@@ -111,7 +116,9 @@ function* handleRenderEmulatorActions(action) {
 
         console.assert(target === undefined);
         target = document.createElement('div');
-        target.style.width = `${width}px`;
+        // Wrap the emulator's own (zoom-sized) container rather than pinning a
+        // fixed width, so the responsive layout can size the screen via setZoom.
+        target.style.width = 'fit-content';
         target.style.margin = '0px';
         target.style.backgroundColor = '#fff';
 
@@ -161,6 +168,10 @@ function* handleLoadEmulatorActions(action) {
         const fragment = document.createDocumentFragment();
         fragment.appendChild(target);
         action.target.appendChild(fragment);
+        // Apply any zoom requested before the emulator finished mounting.
+        if (jsspeccy && currentZoom && !document.fullscreenElement) {
+            jsspeccy.setZoom(currentZoom);
+        }
     } catch (e) {
         handleException(e);
     }
@@ -240,6 +251,21 @@ function* handleOpenFileDialogActions(_) {
     }
 }
 
+function* handleSetZoomActions(action) {
+    try {
+        // Remember the requested zoom so it can be re-applied once the emulator
+        // is mounted (loadEmulator), in case it isn't ready yet.
+        currentZoom = action.zoom;
+        if (!jsspeccy) return;
+        // setZoom would drop out of fullscreen, so leave the size alone while the
+        // user is in fullscreen mode.
+        if (document.fullscreenElement) return;
+        jsspeccy.setZoom(action.zoom);
+    } catch (e) {
+        handleException(e);
+    }
+}
+
 function* handleViewFullScreenActions(_) {
     try {
         jsspeccy.start();
@@ -307,6 +333,7 @@ function* handleLocationChanges(action) {
 let target = undefined;
 let jsspeccy = undefined;
 let previousPath = undefined;
+let currentZoom = undefined;
 
 function getClickEventChannel() {
     return eventChannel(emit => {

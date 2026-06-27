@@ -6,6 +6,7 @@ export const actionTypes = {
     requestPrivacyPolicy: 'app/requestPrivacyPolicy',
     receivePrivacyPolicy: 'app/receivePrivacyPolicy',
     setMachine: 'app/setMachine',
+    setKeyboardSide: 'app/setKeyboardSide',
 };
 
 export const showActiveEmulator = () => ({
@@ -19,4 +20,9 @@ export const resetEmulator = () => ({
 export const setMachine = (machine) => ({
     type: actionTypes.setMachine,
     machine
+})
+
+export const setKeyboardSide = (side) => ({
+    type: actionTypes.setKeyboardSide,
+    side
 })

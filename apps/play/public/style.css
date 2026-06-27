@@ -11,7 +11,8 @@
 body {
     background-color: #444;
     overflow-y: scroll;
-    height: 100vh;
+    overflow-x: hidden;
+    min-height: 100vh;
     font-family: Roboto, Helvetica Neue Light, Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
 }
 
@@ -87,6 +88,12 @@ code {
 .desktop #jsspeccy-screen > div > div,
 .desktop #jsspeccy-screen > div > div > canvas {
     border-radius: 5px 5px 0 0;
+}
+
+.emulator-flat #jsspeccy-screen > div,
+.emulator-flat #jsspeccy-screen > div > div,
+.emulator-flat #jsspeccy-screen > div > div > canvas {
+    border-radius: 0 !important;
 }
 
 #jsspeccy-screen > div {

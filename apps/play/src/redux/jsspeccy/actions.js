@@ -8,6 +8,7 @@ export const actionTypes = {
     start: 'jsspeccy/start',
     exit: 'jsspeccy/exit',
     showOpenFileDialog: 'jsspeccy/openFileDialog',
+    setZoom: 'jsspeccy/setZoom',
     viewFullScreen: 'jsspeccy/viewFullScreen',
     openTAPFile: 'jsspeccy/openTAPFile',
     openUrl: 'jsspeccy/openUrl',
@@ -51,6 +52,11 @@ export const exit = () => ({
 
 export const showOpenFileDialog = () => ({
     type: actionTypes.showOpenFileDialog
+});
+
+export const setZoom = (zoom) => ({
+    type: actionTypes.setZoom,
+    zoom
 });
 
 export const viewFullScreen = () => ({

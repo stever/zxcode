@@ -3,7 +3,7 @@ import {useDispatch, useSelector} from "react-redux";
 import {useNavigate} from "react-router-dom";
 import {Nav as Deck} from "@zxplay/ui";
 import {viewFullScreen} from "../redux/jsspeccy/actions";
-import {resetEmulator, setMachine} from "../redux/app/actions";
+import {resetEmulator, setMachine, setKeyboardSide} from "../redux/app/actions";
 import {useTranslation} from "@zxplay/i18n";
 
 export default function Nav() {
@@ -16,8 +16,9 @@ export default function Nav() {
     const isMobile = useSelector(state => state?.window.isMobile);
     const machine = useSelector(state => state?.app.machine);
     const machineLocked = useSelector(state => state?.app.machineLocked);
+    const keyboardSide = useSelector(state => state?.app.keyboardSide);
 
-    const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked);
+    const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide);
 
     return (
         <Deck
@@ -29,7 +30,7 @@ export default function Nav() {
     );
 }
 
-function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked) {
+function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide) {
     const viewFullScreenMenuItem = {
         label: t('nav.fullScreen'),
         icon: 'pi pi-fw pi-window-maximize',
@@ -39,10 +40,31 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked)
         }
     };
 
+    const keyboardSideMenuItem = {
+        label: t('nav.keyboardSide'),
+        icon: 'pi pi-fw pi-arrows-h',
+        items: [
+            {
+                label: t('nav.keyboardSideRight'),
+                icon: keyboardSide === 'right' ? 'pi pi-fw pi-check' : 'pi pi-fw',
+                command: () => {
+                    dispatch(setKeyboardSide('right'));
+                }
+            },
+            {
+                label: t('nav.keyboardSideLeft'),
+                icon: keyboardSide === 'left' ? 'pi pi-fw pi-check' : 'pi pi-fw',
+                command: () => {
+                    dispatch(setKeyboardSide('left'));
+                }
+            },
+        ]
+    };
+
     const viewMenu = {
         label: t('nav.view'),
         icon: 'pi pi-fw pi-eye',
-        items: [viewFullScreenMenuItem]
+        items: [viewFullScreenMenuItem, keyboardSideMenuItem]
     };
 
     const infoMenu = {

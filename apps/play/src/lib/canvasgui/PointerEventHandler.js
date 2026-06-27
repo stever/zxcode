@@ -60,8 +60,16 @@ export class PointerEventHandler {
     }
 
     _notifyEvent(e, type, pointerId) {
-        const x = e.pageX - e.target.offsetLeft;
-        const y = e.pageY - e.target.offsetTop;
+        // Map viewport coordinates to the canvas's internal coordinate space.
+        // Using getBoundingClientRect (rather than pageX - offsetLeft) keeps this
+        // correct wherever the canvas sits in a responsive layout, and the
+        // internal/CSS scale ratio lets the canvas be CSS-scaled freely.
+        const canvas = e.target;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width ? canvas.width / rect.width : 1;
+        const scaleY = rect.height ? canvas.height / rect.height : 1;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
 
         if (this.logNofityEvent) {
             console.log("notifyEvent: type=" + type + ", pid=" + pointerId + ", x=" + x + ", y=" + y);

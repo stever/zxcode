@@ -1,38 +1,54 @@
 import React, {useEffect} from "react";
 import PropTypes from "prop-types";
 import {ImageButton, SingleWindow} from "../lib/canvasgui";
-import {useSelector} from "react-redux";
 
 Keyboard.propTypes = {
-    width: PropTypes.number
+    cssWidth: PropTypes.number,
+    cssHeight: PropTypes.number,
+    keystr: PropTypes.string,
+    rounded: PropTypes.bool
 }
 
+// The keyboard is drawn once at this internal resolution and then CSS-scaled to
+// whatever size the responsive layout asks for. PointerEventHandler maps touches
+// back through the internal/CSS scale ratio, so scaling is safe.
+const BASE_WIDTH = 640;
+
 export function Keyboard(props) {
-    const width = props.width || 960;
-    const isMobile = useSelector(state => state?.window.isMobile);
+    const keystr = props.keystr;
 
     useEffect(() => {
-        renderKeyboard(width);
-    }, []);
+        renderKeyboard(BASE_WIDTH, keystr);
+    }, [keystr]);
+
+    const cssWidth = props.cssWidth || BASE_WIDTH;
+    const cssHeight = props.cssHeight;
 
     let style = {
-        imageRendering: 'auto'
+        imageRendering: 'auto',
+        display: 'block',
+        width: `${cssWidth}px`
     };
 
-    if (!isMobile) {
+    if (cssHeight) {
+        style.height = `${cssHeight}px`;
+    }
+
+    if (props.rounded) {
         style.borderRadius = '0 0 5px 5px';
     }
 
     return (
         <div id="guiparent" style={{
-            width: `${width}px`,
+            width: `${cssWidth}px`,
+            ...(cssHeight ? {height: `${cssHeight}px`} : {}),
             margin: 0,
             backgroundColor: "#444",
             padding: 0,
         }}>
             <canvas
                 id="virtkeys"
-                width={width}
+                width={BASE_WIDTH}
                 style={style}
             />
         </div>
@@ -92,16 +108,18 @@ class MyImageButton extends ImageButton {
     }
 }
 
-function renderKeyboard(width) {
-    let keystr = '1234567890,QWERTYUIOP,ASDFGHJKLe,cZXCVBNMs_';
-    // let keystr = '-W-P,ASDe,123456789M';    // snake
-    // let keystr = 'GH-e,OP-Z';    // manic miner
-    // let keystr = 'OPeZ'; // manic miner simple
+function renderKeyboard(width, keystr) {
+    if (!keystr) {
+        keystr = '1234567890,QWERTYUIOP,ASDFGHJKLe,cZXCVBNMs_';
+        // let keystr = '-W-P,ASDe,123456789M';    // snake
+        // let keystr = 'GH-e,OP-Z';    // manic miner
+        // let keystr = 'OPeZ'; // manic miner simple
 
-    const url = new URL(window.location.href);
-    for (const [key, value] of url.searchParams) {
-        if (key === 'k') {
-            keystr = value;
+        const url = new URL(window.location.href);
+        for (const [key, value] of url.searchParams) {
+            if (key === 'k') {
+                keystr = value;
+            }
         }
     }
 
