@@ -12,7 +12,6 @@ export default function HomePage() {
 
     const width = useSelector(state => state?.window.width);
     const height = useSelector(state => state?.window.height);
-    const isMobile = useSelector(state => state?.window.isMobile);
     const keyConfig = useSelector(state => state?.app.keyConfig);
     const keyboardSide = useSelector(state => state?.app.keyboardSide);
 
@@ -58,31 +57,18 @@ export default function HomePage() {
         };
     }, [isSide]);
 
-    const containerStyle = {
-        display: 'flex',
-        justifyContent: 'center',
-        width: '100%',
-        margin: 0,
-        ...(isSide
-            ? {alignItems: 'center', height: `${Math.max(0, height - navHeight)}px`}
-            // Keep the desktop's original top spacing; phones sit flush.
-            : {alignItems: 'flex-start', paddingTop: isMobile ? 0 : '8px'})
-    };
-
     return (
         <>
             <Toast ref={toast}/>
-            <div style={containerStyle}>
-                <Emulator
-                    mode={layout.mode}
-                    screenW={layout.screenW}
-                    screenH={layout.screenH}
-                    kbW={layout.kbW}
-                    kbH={layout.kbH}
-                    side={layout.side}
-                    keystr={keyConfig.keystr}
-                />
-            </div>
+            <Emulator
+                mode={layout.mode}
+                height={height}
+                kbW={layout.kbW}
+                kbH={layout.kbH}
+                colW={layout.colW}
+                side={layout.side}
+                keystr={keyConfig.keystr}
+            />
         </>
     )
 }

@@ -6,14 +6,17 @@ import {viewFullScreen} from "../redux/jsspeccy/actions";
 import {resetEmulator, setMachine, setKeyboardSide} from "../redux/app/actions";
 import {useTranslation} from "@zxplay/i18n";
 
-export default function Nav() {
+export default function Nav({compact = false} = {}) {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const {t} = useTranslation();
 
     const pathname = useSelector(state => state?.router.location.pathname);
     const emuVisible = pathname === '/';
-    const isMobile = useSelector(state => state?.window.isMobile);
+    const isMobileState = useSelector(state => state?.window.isMobile);
+    // compact forces the collapsed (hamburger) menubar so it fits a narrow
+    // landscape column.
+    const isMobile = compact || isMobileState;
     const machine = useSelector(state => state?.app.machine);
     const machineLocked = useSelector(state => state?.app.machineLocked);
     const keyboardSide = useSelector(state => state?.app.keyboardSide);

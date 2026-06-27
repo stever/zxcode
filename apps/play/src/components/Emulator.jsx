@@ -2,14 +2,15 @@ import React, {useEffect} from "react";
 import PropTypes from "prop-types";
 import {useDispatch, useSelector} from "react-redux";
 import {Keyboard} from "./Keyboard";
+import Nav from "./Nav";
 import {loadEmulator} from "../redux/jsspeccy/actions";
 
 Emulator.propTypes = {
     mode: PropTypes.oneOf(['stacked', 'side']),
-    screenW: PropTypes.number,
-    screenH: PropTypes.number,
+    height: PropTypes.number,
     kbW: PropTypes.number,
     kbH: PropTypes.number,
+    colW: PropTypes.number,
     side: PropTypes.oneOf(['left', 'right']),
     keystr: PropTypes.string
 }
@@ -23,29 +24,59 @@ export function Emulator(props) {
         dispatch(loadEmulator(elem));
     }, []);
 
-    const {mode, kbW, kbH, side, keystr} = props;
+    const {mode, height, kbW, kbH, colW, side, keystr} = props;
     const isSide = mode === 'side';
 
-    // Stacked: screen above keyboard. Side: beside it, keyboard on the chosen
-    // side (right-handed default = keyboard on the right).
-    const flexDirection = isSide
-        ? (side === 'left' ? 'row-reverse' : 'row')
-        : 'column';
+    // The screen DOM is appended into #jsspeccy-screen once and must stay
+    // mounted across layout changes, so it is always the first child here.
+    const screen = <div id="jsspeccy-screen" style={{flex: '0 0 auto'}}/>;
+    const keyboard = <Keyboard cssWidth={kbW} cssHeight={kbH} keystr={keystr} rounded={!isSide && !isMobile}/>;
 
-    // The rounded "window" chrome only suits a stacked desktop window, not a
-    // phone (portrait or landscape). emulator-flat strips the corner radius the
-    // .desktop CSS would otherwise apply.
-    const rounded = !isSide && !isMobile;
+    if (isSide) {
+        // Screen fills the full height; nav + keyboard share the opposite side.
+        return (
+            <div className="emulator-flat" style={{
+                display: 'flex',
+                flexDirection: side === 'left' ? 'row-reverse' : 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                height: height ? `${height}px` : '100vh',
+            }}>
+                {screen}
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    width: colW ? `${colW}px` : 'auto',
+                    height: '100%',
+                }}>
+                    <Nav compact/>
+                    <div style={{
+                        flex: '1 1 auto',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: 0,
+                    }}>
+                        {keyboard}
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     return (
-        <div className={rounded ? undefined : 'emulator-flat'} style={{
+        <div style={{
             display: 'flex',
-            flexDirection,
+            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
+            width: '100%',
+            // Keep the desktop's original top spacing; phones sit flush.
+            paddingTop: isMobile ? 0 : '8px',
         }}>
-            <div id="jsspeccy-screen" style={{flex: '0 0 auto'}}/>
-            <Keyboard cssWidth={kbW} cssHeight={kbH} keystr={keystr} rounded={rounded}/>
+            {screen}
+            {keyboard}
         </div>
     )
 }
