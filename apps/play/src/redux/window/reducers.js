@@ -1,4 +1,5 @@
 import { actionTypes } from './actions';
+import { viewportSize } from './sagas';
 
 const mobileMaxWidth = 768;
 
@@ -6,10 +7,12 @@ const mobileMaxWidth = 768;
 // Initial state
 // -----------------------------------------------------------------------------
 
+const initial = viewportSize();
+
 const initialState = {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    isMobile: window.innerWidth <= mobileMaxWidth,
+    width: initial.width,
+    height: initial.height,
+    isMobile: initial.width <= mobileMaxWidth,
 };
 
 // -----------------------------------------------------------------------------
