@@ -21,6 +21,27 @@
 
     .p-menubar-start { display: flex; align-items: center; margin-left: 1rem; }
 
+    // Collapsed (hamburger) mode: push the toggle to the right, opposite the
+    // brand, with a gutter matching the brand's left margin.
+    &.zx-deck--collapsed .p-menubar-button {
+        margin-left: auto;
+        margin-right: 1rem;
+    }
+
+    // The collapsed menu (with the language list folded in) can be taller than a
+    // short landscape viewport. Cap it to the viewport and scroll internally so
+    // every language stays reachable even while body scrolling is locked.
+    // flex-wrap:nowrap is essential: primereact's root list is a wrapping flex
+    // column, so a max-height would otherwise wrap overflowing items into a
+    // second (clipped) column instead of scrolling.
+    &.zx-deck--collapsed .p-menubar-root-list {
+        flex-wrap: nowrap;
+        max-height: calc(100vh - 56px);
+        max-height: calc(100dvh - 56px);
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
     // brand: rainbow mark + wordmark, doubles as the home control
     .zx-brand {
         display: inline-flex;
