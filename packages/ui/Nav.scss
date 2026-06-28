@@ -42,6 +42,57 @@
         overflow-x: hidden;
     }
 
+    // Caller-forced collapse (isMobile), used by the landscape side column. The
+    // prebuilt primereact theme only collapses the menubar under its own
+    // `@media (max-width: 960px)`, and this primereact version ignores the
+    // `breakpoint` prop, so on a viewport wider than 960px the forced hamburger
+    // never takes effect: the toggle stays hidden and the bar lays its items out
+    // horizontally in the narrow column. Re-assert the mobile menu here, keyed
+    // off the class rather than the viewport width, so the side column always
+    // gets a working hamburger.
+    &.zx-deck--mobile {
+        .p-menubar { position: relative; }
+
+        .p-menubar-button {
+            display: flex;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            color: var(--zx-muted);
+
+            &:hover { color: var(--zx-text); background: rgba(255, 255, 255, 0.04); }
+        }
+
+        .p-menubar-root-list {
+            position: absolute;
+            display: none;
+            flex-direction: column;
+            width: 100%;
+            padding: 0.5rem 0;
+            background: var(--zx-surface);
+            border: 1px solid var(--zx-line-2);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+
+            > .p-menuitem { width: 100%; position: static; }
+        }
+
+        .p-menubar.p-menubar-mobile-active .p-menubar-root-list {
+            display: flex;
+            top: 100%;
+            left: 0;
+            z-index: 1;
+        }
+
+        // Submenus drop inline (static) instead of as desktop flyouts, which
+        // would overflow the column.
+        .p-submenu-list {
+            width: 100%;
+            position: static;
+            box-shadow: none;
+            border: 0;
+        }
+    }
+
     // brand: rainbow mark + wordmark, doubles as the home control
     .zx-brand {
         display: inline-flex;

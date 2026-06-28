@@ -58,10 +58,10 @@ export function Nav({model, brandTitle = "ZX Play", onBrand, isMobile = false, s
 
     const menuModel = collapsed ? [...(model || []), languageItem] : model;
 
-    // Force collapse when the caller asks (e.g. a narrow side column) by pushing
-    // the breakpoint past any real viewport.
-    const breakpoint = isMobile ? '99999px' : `${MOBILE_BREAKPOINT}px`;
-
+    // Collapse is driven by CSS, not primereact: the natural narrow case by the
+    // theme's `@media (max-width: 960px)`, and the caller-forced case (isMobile)
+    // by the `.zx-deck--mobile` rules in Nav.scss. The Menubar `breakpoint` prop
+    // is unsupported in this primereact version, so it is deliberately not set.
     const showLangInEnd = !collapsed;
     const end = (search || showLangInEnd) ? (
         <div className="zx-deck-end">
@@ -76,7 +76,7 @@ export function Nav({model, brandTitle = "ZX Play", onBrand, isMobile = false, s
 
     return (
         <div className={classNames}>
-            <Menubar model={menuModel} start={brand} end={end} breakpoint={breakpoint}/>
+            <Menubar model={menuModel} start={brand} end={end}/>
             <hr className="zx-rule"/>
         </div>
     );
