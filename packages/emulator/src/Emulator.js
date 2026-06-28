@@ -9,15 +9,6 @@ import { AudioHandler } from './AudioHandler.js';
 
 const scriptUrl = document.currentScript.src;
 
-// Hosts that serve emulator files without CORS headers, so a browser fetch is
-// blocked. When an app passes opts.corsProxyBase, openUrl rewrites URLs on these
-// hosts to a same-origin proxy path (`<base>/<host>/<path>`) that the app's
-// server reverse-proxies with CORS added. Keep this list in sync with the proxy
-// routes (apps/play Caddyfile and webpack devServer.proxy).
-const CORS_PROXY_HOSTS = new Set([
-    'spectrumcomputing.co.uk',
-]);
-
 export class Emulator extends EventEmitter {
     constructor(canvas, opts) {
         super();
@@ -36,7 +27,6 @@ export class Emulator extends EventEmitter {
         this.autoLoadTapes = opts.autoLoadTapes || false;
         this.tapeIsPlaying = false;
         this.tapeTrapsEnabled = ('tapeTrapsEnabled' in opts) ? opts.tapeTrapsEnabled : true;
-        this.corsProxyBase = opts.corsProxyBase || null;
 
         this.msPerFrame = 20;
 
@@ -360,22 +350,26 @@ export class Emulator extends EventEmitter {
         } else if (cleanName.endsWith('.zip')) {
             return async arrayBuffer => {
                 const zip = await JSZip.loadAsync(arrayBuffer);
-                const entries = [];
+                const openers = [];
                 zip.forEach((path, file) => {
                     if (path.startsWith('__MACOSX/')) return;
                     const opener = this.getFileOpener(path);
                     if (opener) {
-                        entries.push({path, file, opener});
+                        const boundOpener = async () => {
+                            const buf = await file.async('arraybuffer');
+                            return opener(buf);
+                        };
+                        openers.push(boundOpener);
                     }
                 });
-                if (entries.length == 0) {
+                if (openers.length == 1) {
+                    return openers[0]();
+                } else if (openers.length == 0) {
                     throw 'No loadable files found inside ZIP file: ' + filename;
+                } else {
+                    // TODO: prompt to choose a file
+                    throw 'Multiple loadable files found inside ZIP file: ' + filename;
                 }
-                // When several loadable files are present, prefer the first .tap
-                // listed, otherwise fall back to the first loadable file.
-                const chosen = entries.find(e => e.path.toLowerCase().endsWith('.tap')) || entries[0];
-                const buf = await chosen.file.async('arraybuffer');
-                return chosen.opener(buf);
             }
         }
     }
@@ -390,36 +384,10 @@ export class Emulator extends EventEmitter {
         }
     }
 
-    // Rewrite URLs on known non-CORS hosts to the same-origin proxy, when the
-    // host app has configured one. Other URLs are returned unchanged.
-    proxyUrl(url) {
-        if (!this.corsProxyBase) return url;
-        let parsed;
-        try {
-            parsed = new URL(url, window.location.href);
-        } catch (e) {
-            return url;
-        }
-        if (CORS_PROXY_HOSTS.has(parsed.hostname)) {
-            return `${this.corsProxyBase}/${parsed.hostname}${parsed.pathname}${parsed.search}`;
-        }
-        return url;
-    }
-
     async openUrl(url) {
         const opener = this.getFileOpener(url.toString());
         if (opener) {
-            let response;
-            try {
-                response = await fetch(this.proxyUrl(url.toString()));
-            } catch (e) {
-                // A network/CORS failure rejects fetch with an opaque TypeError;
-                // surface something actionable instead.
-                throw 'Could not fetch ' + url + ' - the host may not allow cross-origin requests (CORS).';
-            }
-            if (!response.ok) {
-                throw 'Could not fetch ' + url + ' (HTTP ' + response.status + ')';
-            }
+            const response = await fetch(url);
             const buf = await response.arrayBuffer();
             return opener(buf);
         } else {

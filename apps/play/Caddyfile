@@ -1,18 +1,7 @@
 :8080 {
-	# Same-origin proxy for allowlisted file hosts that don't send CORS headers.
-	# One route per host keeps the upstream hardcoded (no open-proxy/SSRF). Keep
-	# the host list in sync with CORS_PROXY_HOSTS in the emulator and the
-	# webpack devServer.proxy list. handle_path strips the matched prefix.
-	handle_path /cors/spectrumcomputing.co.uk/* {
-		reverse_proxy https://spectrumcomputing.co.uk {
-			header_up Host spectrumcomputing.co.uk
-		}
-		header Access-Control-Allow-Origin *
-	}
-
-	route {
-		root * /srv
-		try_files {path} {path}/ /index.html
-		file_server
-	}
+    route {
+        root * /srv
+        try_files {path} {path}/ /index.html
+        file_server
+    }
 }
