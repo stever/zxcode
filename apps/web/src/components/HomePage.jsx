@@ -18,11 +18,14 @@ export default function HomePage() {
     const selectedTabIndex = useSelector(state => state?.demo.selectedTabIndex);
     const errorItems = useSelector(state => state?.project.errorItems);
     const isMobile = useSelector(state => state?.window.isMobile);
+    const windowWidth = useSelector(state => state?.window.width);
 
     const toast = useRef(null);
 
-    const zoom = 2;
-    const width = zoom * 320;
+    // On a phone the emulator must fit the viewport, or the right-hand keys fall
+    // off-screen; on desktop keep the original 640px (2x) size.
+    const width = isMobile ? Math.min(640, windowWidth) : 640;
+    const zoom = width / 320;
 
     useEffect(() => {
         dispatch(resetProject());

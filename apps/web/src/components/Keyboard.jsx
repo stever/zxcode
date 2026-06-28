@@ -11,10 +11,12 @@ export function Keyboard(props) {
     const width = props.width || 960;
     const isMobile = useSelector(state => state?.window.isMobile);
 
+    // Redraw at the current (responsive) width so a viewport/orientation change
+    // keeps every key on-screen.
     useEffect(() => {
         const win = renderKeyboard(width);
         return () => win.destroy();
-    }, []);
+    }, [width]);
 
     let style = {
         imageRendering: 'auto',
