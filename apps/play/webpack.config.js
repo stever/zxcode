@@ -88,7 +88,19 @@ module.exports = (env, _) => {
                 historyApiFallback: true,
                 devMiddleware: {
                     writeToDisk: true
-                }
+                },
+                // Same-origin proxy for allowlisted non-CORS file hosts. Mirrors
+                // the /cors/<host> routes in the production Caddyfile. Keep the
+                // host list in sync with CORS_PROXY_HOSTS in the emulator.
+                proxy: [
+                    {
+                        context: ['/cors/spectrumcomputing.co.uk'],
+                        target: 'https://spectrumcomputing.co.uk',
+                        changeOrigin: true,
+                        secure: true,
+                        pathRewrite: {'^/cors/spectrumcomputing\\.co\\.uk': ''}
+                    }
+                ]
             },
             module: {
                 rules: loaders

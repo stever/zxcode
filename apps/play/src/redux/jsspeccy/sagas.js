@@ -129,7 +129,11 @@ function* handleRenderEmulatorActions(action) {
         const emuParams = {
             zoom,
             machine: machine || 48, // 48, 128 or 5 (Pentagon)
-            autoLoadTapes: true
+            autoLoadTapes: true,
+            // Route fetches for allowlisted non-CORS hosts through our own origin
+            // (Caddy in prod, webpack devServer.proxy in dev) so they aren't
+            // blocked by the browser.
+            corsProxyBase: '/cors'
         };
 
         let doFilter = false;

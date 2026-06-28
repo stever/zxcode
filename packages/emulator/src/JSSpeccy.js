@@ -29,6 +29,7 @@ export const JSSpeccy = (container, opts) => {
         autoLoadTapes: opts.autoLoadTapes || false,
         openUrl: opts.openUrl,
         tapeTrapsEnabled: ('tapeTrapsEnabled' in opts) ? opts.tapeTrapsEnabled : true,
+        corsProxyBase: opts.corsProxyBase,
     });
 
     const ui = new UIController(container, emu, {zoom: opts.zoom || 1, sandbox: opts.sandbox});
