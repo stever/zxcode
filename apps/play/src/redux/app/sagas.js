@@ -1,7 +1,8 @@
 import {takeLatest, put} from "redux-saga/effects";
+import queryString from "query-string";
 import {history} from "../store";
 import {actionTypes} from "./actions";
-import {reset} from "../jsspeccy/actions";
+import {reset, openUrl} from "../jsspeccy/actions";
 import {handleException} from "../../errors";
 
 // -----------------------------------------------------------------------------
@@ -32,8 +33,17 @@ function* handleShowActiveEmulatorActions(_) {
 
 function* handleResetEmulatorActions(_) {
     try {
-        history.push('/');
-        yield put(reset());
+        // Keep the existing query parameters so Reset reloads the same
+        // configuration (tape URL, machine, keys) instead of dropping back to a
+        // bare machine.
+        history.push({pathname: '/', search: location.search});
+        const url = queryString.parse(location.search).u;
+        if (url) {
+            // Cold-boot the machine and re-load the configured tape.
+            yield put(openUrl(url));
+        } else {
+            yield put(reset());
+        }
     } catch (e) {
         handleException(e);
     }
