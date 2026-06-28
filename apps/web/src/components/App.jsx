@@ -30,11 +30,16 @@ import PublicProfiles from "./PublicProfiles";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
 import clsx from "clsx";
+import { computeMode } from "../lib/layout";
 
 export default function App() {
   const err = useSelector((state) => state?.error.msg);
-  const isMobile = useSelector((state) => state?.window.isMobile);
-  const className = clsx("pb-1", isMobile ? "mobile" : "desktop");
+  const width = useSelector((state) => state?.window.width);
+  const height = useSelector((state) => state?.window.height);
+  // The body class drives the editor height and emulator-frame CSS, so it must
+  // follow the layout mode (height-aware), not raw width.
+  const mode = computeMode(width, height);
+  const className = clsx("pb-1", mode === "tab" ? "mobile" : "desktop");
 
   return (
     <Titled title={() => "Code · ZX Play"}>
