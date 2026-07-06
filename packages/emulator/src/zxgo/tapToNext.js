@@ -61,6 +61,26 @@ export function makeNEX(bin, org = 0x8000, entry = org) {
 
   const banks = [[2, bank2]];
   if (usesBank0) banks.push([0, bank0]);
+  // (bank 0 may also be added below to host the USR-environment stub)
+
+  // High-org code arrives via a BASIC loader's RANDOMIZE USR on tape, so it
+  // may assume that environment and RET at the end (Boriel BASIC's runtime
+  // does exactly this — the RET lands on a garbage stack and crashes to a
+  // reboot). When bank 0 ($C000) is free, enter through a small stub there
+  // that sets IY, opens channel 2, CALLs the entry and then holds the final
+  // screen; programs that own bank 0 get direct entry (they overwhelmingly
+  // run forever rather than RET).
+  let pc = entry;
+  if (!usesBank0) {
+    const w = (off, v) => { bank0[off] = v & 0xFF; bank0[off + 1] = (v >> 8) & 0xFF; };
+    bank0[0] = 0xFD; bank0[1] = 0x21; w(2, 0x5C3A);   // LD IY,$5C3A
+    bank0[4] = 0x3E; bank0[5] = 0x02;                 // LD A,2
+    bank0[6] = 0xCD; w(7, 0x1601);                    // CALL $1601 CHAN-OPEN
+    bank0[9] = 0xCD; w(10, entry);                    // CALL entry (RET-safe)
+    bank0[12] = 0x18; bank0[13] = 0xFE;               // JR $ — hold the screen
+    banks.push([0, bank0]);
+    pc = 0xC000;
+  }
 
   const header = new Uint8Array(512);
   const w16 = (off, v) => { header[off] = v & 0xFF; header[off + 1] = v >> 8; };
@@ -71,7 +91,7 @@ export function makeNEX(bin, org = 0x8000, entry = org) {
   header[10] = 0;                                     // no loading screen
   header[11] = 0;                                     // border black
   w16(12, 0x7FFE);                                    // SP (top of bank 5 slot)
-  w16(14, entry);                                     // PC = entry point
+  w16(14, pc);                                        // PC = entry (or the stub)
   w16(16, 0);                                         // numfiles
   for (const [id] of banks) header[18 + id] = 1;      // bank-present flags
   header[139] = 0;                                    // entry bank at $C000
