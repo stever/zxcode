@@ -326,6 +326,10 @@ function* handleOpenUrlActions(action) {
 
 function* handleSetMachineActions(action) {
     try {
+        // Bring the emulator into view like the navbar Reset does, so picking
+        // a machine from another page shows it booting rather than switching
+        // invisibly in the background.
+        yield put(showActiveEmulator());
         // jsspeccy may not be rendered yet; the redux state still records the
         // choice so the menu reflects it and the emulator boots with it later.
         if (!jsspeccy) return;
