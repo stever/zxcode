@@ -9,6 +9,7 @@ import "primeflex/primeflex.css";
 import "@zxplay/ui/theme.scss";
 import ErrorBoundary from "./ErrorBoundary";
 import RenderEmulator from "./RenderEmulator";
+import FpsCounter from "./FpsCounter";
 import LoadingScreen from "./LoadingScreen";
 import {LockScreen} from "@zxplay/ui";
 import Nav from "./Nav";
@@ -41,6 +42,7 @@ export default function App() {
     return (
         <Titled title={() => 'ZX Play'}>
             <RenderEmulator/>
+            <FpsCounter/>
             <LoadingScreen/>
             <LockScreen/>
             <div className={sideHome ? undefined : className}>

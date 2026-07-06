@@ -305,6 +305,16 @@ export class GoEmulator extends EventEmitter {
             owed = Math.floor(this.acc / 20);
             this.acc -= owed * 20;
         }
+        // Emulated-frames-per-second, published once a second for the page's
+        // discreet FPS readout (50 = full speed; counts frames EXECUTED, so a
+        // late rAF that catches up with 2 frames isn't a spurious dip).
+        this.fpsCount = (this.fpsCount || 0) + (owed || 0);
+        if (!this.fpsT) this.fpsT = t;
+        if (t - this.fpsT >= 1000) {
+            window.__zxgoFps = Math.round(this.fpsCount * 1000 / (t - this.fpsT));
+            this.fpsCount = 0;
+            this.fpsT = t;
+        }
         if (owed && globalThis.zxFrame) {
             for (let i = 1; i < owed; i++) globalThis.zxFrame();
             // No destination buffer until the core has reported its frame
