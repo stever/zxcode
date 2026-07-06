@@ -423,13 +423,6 @@ export class GoEmulator extends EventEmitter {
         if (globalThis.zxReset) globalThis.zxReset();
     }
 
-    loadSnapshot(snapshot) {
-        // Struct-based snapshot loading was a JSSpeccy3 internal; no app code
-        // calls it (the file/url paths below go straight to the core).
-        console.warn('zxgo: loadSnapshot(struct) is not supported');
-        return Promise.resolve({ mediaType: 'snapshot' });
-    }
-
     loadSnapshotBytes(arrayBuffer, ext) {
         const res = globalThis.zxLoadSnapshot(new Uint8Array(arrayBuffer), ext);
         if (res === '48' || res === '128') {

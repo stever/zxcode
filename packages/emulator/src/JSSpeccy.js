@@ -11,33 +11,16 @@ import exitFullscreenIcon from './ui/icons/exitfullscreen.svg';
 import tapePlayIcon from './ui/icons/tape_play.svg';
 import tapePauseIcon from './ui/icons/tape_pause.svg';
 
-import { Emulator } from "./Emulator";
 import { GoEmulator } from "./zxgo/GoEmulator";
 
-// Engine selection during the JSSpeccy3 -> zx_go migration. Precedence: the
-// ?engine= query param (explicit user override / rollback escape hatch), then
-// the app's opts.engine, then the shared default. Both engines implement the
-// same surface, so everything below is agnostic.
-const selectedEngine = (opts) => {
-    try {
-        const q = new URLSearchParams(window.location.search).get('engine');
-        if (q) return q;
-    } catch (e) { /* no window/location (tests) */ }
-    return opts.engine || 'jsspeccy';
-};
-
 export const JSSpeccy = (container, opts) => {
-    // let benchmarkRunCount = 0;
-    // let benchmarkRenderCount = 0;
     opts = opts || {};
 
     const canvas = document.createElement('canvas');
     canvas.width = 320;
     canvas.height = 240;
-    // canvas.style.imageRendering = 'pixelated';
 
-    const EmulatorEngine = selectedEngine(opts) === 'zxgo' ? GoEmulator : Emulator;
-    const emu = new EmulatorEngine(canvas, {
+    const emu = new GoEmulator(canvas, {
         machine: opts.machine || 48,
         autoStart: opts.autoStart || false,
         autoLoadTapes: opts.autoLoadTapes || false,
@@ -97,8 +80,8 @@ export const JSSpeccy = (container, opts) => {
         emu.setMachine(128);
     });
 
-    const machinePentagonItem = machineMenu.addItem('Pentagon 128', () => {
-        emu.setMachine(5);
+    const machineNextItem = machineMenu.addItem('ZX Spectrum Next', () => {
+        emu.setMachine('next');
     });
 
     const displayMenu = ui.menuBar.addMenu('Display');
@@ -138,15 +121,15 @@ export const JSSpeccy = (container, opts) => {
         if (type == 48) {
             machine48Item.setBullet();
             machine128Item.unsetBullet();
-            machinePentagonItem.unsetBullet();
+            machineNextItem.unsetBullet();
         } else if (type == 128) {
             machine48Item.unsetBullet();
             machine128Item.setBullet();
-            machinePentagonItem.unsetBullet();
-        } else { // pentagon
+            machineNextItem.unsetBullet();
+        } else { // next
             machine48Item.unsetBullet();
             machine128Item.unsetBullet();
-            machinePentagonItem.setBullet();
+            machineNextItem.setBullet();
         }
     });
 
@@ -257,7 +240,6 @@ export const JSSpeccy = (container, opts) => {
         openFileDialog: () => openFileDialog(),
         openUrl: (url) => emu.openUrl(url).catch((err) => {alert(err)}),
         openTAPFile: (data) => emu.openTAPFile(data),
-        loadSnapshotFromStruct: (snapshot) => emu.loadSnapshot(snapshot),
         onReady: (callback) => {
             if (emu.isReady) {
                 callback();
