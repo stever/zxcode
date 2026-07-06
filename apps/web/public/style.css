@@ -138,15 +138,15 @@ code {
 .CodeMirror {
     font-family: monospace !important;
     font-size: 16px !important;
-    max-height: 736px !important;
+    max-height: 768px !important;
 }
 
 .desktop .CodeMirror {
     /* Match the fixed-size emulator frame on the right:
-       screen (zoom 2 = 480px) + keyboard (256px) + 2px frame border = 738px. */
+       screen (zoom 2 = 512px) + keyboard (256px) + 2px frame border = 770px. */
     box-sizing: border-box;
-    height: 738px !important;
-    max-height: 738px !important;
+    height: 770px !important;
+    max-height: 770px !important;
     border: 1px solid #5B5B5B;
     border-radius: 5px;
 }
