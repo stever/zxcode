@@ -436,6 +436,32 @@ func setupWasmExports() {
 		return roms.GetModelName(e.model)
 	}))
 
+	// zxMacroActive() -> bool. True while a keystroke macro (nexload / BASIC
+	// load / tape auto-run) is still driving the machine. Headless renderers
+	// (gif-service) use it to skip the boot-and-typing dead time and start
+	// capturing at the program's own first frames.
+	g.Set("zxMacroActive", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		e := wasmEmu
+		return e != nil && e.nexloadMacro != nil
+	}))
+
+	// zxAudioDebug() -> {events, mult, speaker} (diagnostic).
+	g.Set("zxAudioDebug", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		e := wasmEmu
+		if e == nil || e.ula == nil {
+			return js.ValueOf(map[string]any{"events": -1, "mult": -1, "speaker": false})
+		}
+		mult := 1
+		if e.cpu != nil {
+			mult = e.cpu.SpeedMultiplier()
+		}
+		return js.ValueOf(map[string]any{
+			"events":  e.ula.LastAudioEventCount,
+			"mult":    mult,
+			"speaker": e.ula.Speaker,
+		})
+	}))
+
 	// zxAudioLevel() -> peak |beeper sample| since last call (diagnostic).
 	g.Set("zxAudioLevel", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		return int(audio.LastPeak())

@@ -105,7 +105,11 @@ func newCommandLineMacro(cmd string, tailFrames int) *nexloadMacro {
 // Spaces are typed literally (NEXLOAD takes the rest of the line as the
 // filename, so no quoting is needed).
 func newNexloadMacro(sdPath string) *nexloadMacro {
-	return newCommandLineMacro(".nexload "+sdPath, 1500)
+	// Short tail: the macro's job ends at the typed ENTER (keys are released
+	// on entering the tail step); the machine runs on regardless. Headless
+	// renderers poll zxMacroActive to know when the typing is over, so a
+	// long tail would just delay their capture start.
+	return newCommandLineMacro(".nexload "+sdPath, 100)
 }
 
 
@@ -130,8 +134,9 @@ func (m *nexloadMacro) tick(e *emulator) bool {
 	}
 	m.frame++
 	if s.waitMenu {
-		// Safety timeout so a failed/absent boot can't wedge the macro.
-		if e.cpu.PC == nextMenuLoopPC || m.frame > 900 {
+		// Safety timeout so a failed/absent boot can't wedge the macro. A
+		// cold NextZXOS boot can take ~2500 frames; allow ample margin.
+		if e.cpu.PC == nextMenuLoopPC || m.frame > 4000 {
 			m.idx++
 			m.frame = 0
 		}
@@ -261,7 +266,7 @@ func (e *emulator) importAndRunBas(data []byte) error {
 	slog.Info("bas import: LOADing via the NextZXOS command line", "bytes", len(data))
 	// Arm the macro before releasing pause (see startNexloadMacro).
 	e.reboot()
-	e.nexloadMacro = newCommandLineMacro(`load "/imported/program.bas"`, 1500)
+	e.nexloadMacro = newCommandLineMacro(`load "/imported/program.bas"`, 100)
 	e.paused.Store(false)
 	return nil
 }

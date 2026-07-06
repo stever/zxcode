@@ -137,6 +137,9 @@ type ULA struct {
 	// them to the audio system. Reset at start of every frame.
 	audioEvents            []audioEvent
 	frameStartTstate       uint64
+	// LastAudioEventCount is how many speaker toggles the previous frame
+	// recorded — a diagnostic for audio-silence investigations.
+	LastAudioEventCount int
 	frameStartSpeakerState bool
 
 	// dc models the capacitor-coupled audio output: it high-pass-filters the
@@ -1468,7 +1471,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 		// waveform sample-accurately (event-timed, like the beeper).
 		if u.audio != nil && u.mem.TStates != nil {
 			if rec, ok := u.nextDAC.(interface{ Record(int) }); ok {
-				rec.Record(int(*u.mem.TStates - u.frameStartTstate))
+				rec.Record(u.audioFrameOffset())
 			}
 		}
 		return
@@ -1480,7 +1483,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// (claiming $FB is why Covox and the ZX Printer can't both be on at once).
 	if u.speccyDAC != nil && u.speccyDAC.Handles(byte(addr&0xFF)) {
 		if u.audio != nil && u.mem.TStates != nil {
-			u.speccyDAC.Record(int(*u.mem.TStates-u.frameStartTstate), val)
+			u.speccyDAC.Record(u.audioFrameOffset(), val)
 		}
 		return
 	}
@@ -1519,9 +1522,8 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 		if newSpeakerState != u.Speaker {
 			u.Speaker = newSpeakerState
 			if u.audio != nil && u.mem.TStates != nil {
-				offset := int(*u.mem.TStates - u.frameStartTstate)
 				u.audioEvents = append(u.audioEvents, audioEvent{
-					tstateOffset: offset,
+					tstateOffset: u.audioFrameOffset(),
 					state:        newSpeakerState,
 				})
 			}
@@ -1808,6 +1810,23 @@ func (u *ULA) SetTapePlayer(tp *TapePlayer) {
 	}
 }
 
+// audioFrameOffset returns the current position within the frame on the
+// 3.5MHz audio timeline. The Next's T-state counter advances at the NR07
+// turbo multiplier (up to 8x at 28MHz), but the per-frame waveform
+// reconstruction (generateSquareWaveFrame, the DAC GenerateFrame paths)
+// integrates over a 3.5MHz frame window — unscaled offsets fall past the
+// window's end and every event is dropped, which silenced the Next's
+// beeper/DACs whenever the CPU ran turbo.
+func (u *ULA) audioFrameOffset() int {
+	off := int(*u.mem.TStates - u.frameStartTstate)
+	if u.mem.SpeedMultiplier != nil {
+		if m := u.mem.SpeedMultiplier(); m > 1 {
+			off /= m
+		}
+	}
+	return off
+}
+
 // tapeLevel advances the tape player to the current CPU T-state and returns the
 // live EAR level. Called from every port-$FE read so edge-timed loaders (the
 // ROM's LD-BYTES and games' custom turbo loaders alike) sample real pulses
@@ -1837,7 +1856,7 @@ func (u *ULA) tapeLevel() bool {
 	u.lastTapeTstate = now
 	// Record EAR transitions so flushAudioFrame can reproduce the loading sound.
 	if u.audio != nil && playing && u.TapeIn != prev {
-		if off := int(now - u.frameStartTstate); off >= 0 && off < 69888 {
+		if off := u.audioFrameOffset(); off >= 0 && off < 69888 {
 			u.tapeAudioEvents = append(u.tapeAudioEvents, audioEvent{tstateOffset: off, state: u.TapeIn})
 		}
 	}
@@ -1938,6 +1957,7 @@ func (u *ULA) flushAudioFrame() {
 		}
 		return
 	}
+	u.LastAudioEventCount = len(u.audioEvents)
 	samples, finalState := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState)
 	// Mix the SpecDrum/Covox DAC frame (event-timed, sample-accurate) into the
 	// beeper waveform before pushing it.

@@ -2,6 +2,7 @@ import GIFEncoder from 'gif-encoder-2';
 import { spawn } from 'child_process';
 import { tmpdir } from 'os';
 import { Emulator } from './emulator.js';
+import { NextEmulator } from './emulator-next.js';
 import { FrameDecoder } from './frame-decoder.js';
 import { readFile, unlink, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
@@ -18,6 +19,8 @@ interface AudioFrame {
     left: Float32Array;
     right: Float32Array;
 }
+
+export type MachineType = number | 'next';
 
 export interface GIFGeneratorOptions {
     maxDurationMs: number;
@@ -255,6 +258,133 @@ export class GIFGenerator {
         return { frames: frames.slice(start, keep), audio: audio.slice(start, keep) };
     }
 
+    /**
+     * Next path: boot real NextZXOS on the zx_go core (the sites' engine,
+     * hosted under Node), deliver the compiled TAP the way the sites do
+     * (PLUS3DOS LOAD for BASIC, generated .nex via .nexload for machine
+     * code), and capture from the moment the boot-and-typing macro hands
+     * over. Frames come back as fixed-size 320x256 RGBA composites (the
+     * Next's video modes change the raw frame size mid-run).
+     */
+    private async captureFramesNext(
+        tapData: Buffer,
+        captureAudio: boolean,
+    ): Promise<{ frames: Uint8Array[]; audio: AudioFrame[] }> {
+        const emu = new NextEmulator();
+        console.log('Booting Spectrum Next (zx_go core) for render');
+        await emu.boot();
+        emu.runTAP(tapData);
+
+        // Skip the NextZXOS boot + command typing. Generous frame cap as a
+        // backstop; the macro normally completes in ~4500 frames.
+        const macroDeadline = Date.now() + 300_000;
+        let skipped = 0;
+        while (emu.macroActive()) {
+            emu.runFrame();
+            skipped++;
+            if (skipped > 15000 || Date.now() > macroDeadline) {
+                throw new Error('Next boot macro did not complete');
+            }
+        }
+        console.log(`Next macro complete after ${skipped} skipped frames`);
+
+        const maxFrames = Math.floor(this.options.maxDurationMs / 20);
+        const staleStop = this.options.staleFrameThreshold;
+        const tailFrames = 25;
+        const renderDeadline = Date.now() + Math.max(this.options.maxDurationMs * 20, 300_000);
+
+        const frames: Uint8Array[] = [];
+        const audio: AudioFrame[] = [];
+        let previousFrame: Uint8Array | null = null;
+        let staleCount = 0;
+        let lastChangeIndex = -1;
+
+        for (let f = 0; f < maxFrames; f++) {
+            if (Date.now() > renderDeadline) {
+                console.warn(`Next render wall-clock budget exceeded after ${f} frames; stopping`);
+                break;
+            }
+            const { rgba, audio: mono } = emu.runFrame();
+            frames.push(rgba);
+
+            let audioSilent = true;
+            if (captureAudio) {
+                audio.push({ left: mono, right: mono });
+                audioSilent = this.isAudioSilent(mono, mono);
+            }
+            const videoStatic =
+                previousFrame !== null && this.areFramesIdentical(rgba, previousFrame);
+            if (videoStatic && audioSilent) {
+                staleCount++;
+                if (staleCount >= staleStop) {
+                    console.log(`Next program settled after ${f + 1} captured frames`);
+                    break;
+                }
+            } else {
+                staleCount = 0;
+                lastChangeIndex = f;
+            }
+            previousFrame = rgba;
+        }
+
+        if (lastChangeIndex < 0) {
+            const keepStatic = Math.min(frames.length, tailFrames);
+            return { frames: frames.slice(0, keepStatic), audio: audio.slice(0, keepStatic) };
+        }
+        const keep = Math.min(frames.length, lastChangeIndex + 1 + tailFrames);
+        console.log(`Next capture: ${frames.length} frames, keeping 0..${keep}`);
+        return { frames: frames.slice(0, keep), audio: audio.slice(0, keep) };
+    }
+
+    // Frame adapter: dimensions + a raw-frame -> RGBA converter, letting the
+    // encoders serve both the classic path (0x6600 buffers via FrameDecoder)
+    // and the Next path (already-composited RGBA, integer-upscaled).
+    private frameAdapter(machineType: MachineType): {
+        width: number; height: number; toRGBA: (frame: Uint8Array) => Uint8Array;
+    } {
+        if (machineType === 'next') {
+            const scale = this.options.scale;
+            const w = NextEmulator.BOX_W, h = NextEmulator.BOX_H;
+            return {
+                width: w * scale,
+                height: h * scale,
+                toRGBA: (frame) => this.scaleRGBA(frame, w, h, scale),
+            };
+        }
+        return {
+            width: this.decoder.getWidth(),
+            height: this.decoder.getHeight(),
+            toRGBA: (frame) => this.decoder.decode(frame),
+        };
+    }
+
+    private scaleRGBA(src: Uint8Array, w: number, h: number, scale: number): Uint8Array {
+        if (scale === 1) return src;
+        const out = new Uint8Array(w * scale * h * scale * 4);
+        const outW = w * scale;
+        for (let y = 0; y < h * scale; y++) {
+            const sy = (y / scale) | 0;
+            for (let x = 0; x < outW; x++) {
+                const sx = (x / scale) | 0;
+                const si = (sy * w + sx) * 4;
+                const di = (y * outW + x) * 4;
+                out[di] = src[si]; out[di + 1] = src[si + 1];
+                out[di + 2] = src[si + 2]; out[di + 3] = 255;
+            }
+        }
+        return out;
+    }
+
+    private captureFor(
+        tapData: Buffer,
+        machineType: MachineType,
+        captureAudio: boolean,
+    ): Promise<{ frames: Uint8Array[]; audio: AudioFrame[] }> {
+        return machineType === 'next'
+            ? this.captureFramesNext(tapData, captureAudio)
+            : this.captureFrames(tapData, machineType as number, captureAudio);
+    }
+
     private isAudioSilent(left: Float32Array, right: Float32Array): boolean {
         return this.channelFlat(left) && this.channelFlat(right);
     }
@@ -273,29 +403,30 @@ export class GIFGenerator {
     }
 
     /** Render the program to an animated GIF (25fps to keep size sane). GIF carries no audio. */
-    async generateFromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
-        const { frames } = await this.captureFrames(tapData, machineType, false);
+    async generateFromTAP(tapData: Buffer, machineType: MachineType = 48): Promise<Buffer> {
+        const { frames } = await this.captureFor(tapData, machineType, false);
+        const fit = this.frameAdapter(machineType);
 
         // The core runs at 50fps; encode every 2nd frame (25fps) to halve GIF
         // size and encode time with little visible loss.
         const frameStep = 2;
-        const encoder = new GIFEncoder(this.decoder.getWidth(), this.decoder.getHeight(), 'neuquant');
+        const encoder = new GIFEncoder(fit.width, fit.height, 'neuquant');
         encoder.setDelay(20 * frameStep);
         encoder.setRepeat(0); // loop forever
         encoder.setQuality(10);
         encoder.start();
 
         for (let i = 0; i < frames.length; i += frameStep) {
-            encoder.addFrame(this.decoder.decode(frames[i]));
+            encoder.addFrame(fit.toRGBA(frames[i]));
         }
         encoder.finish();
         return Buffer.from(encoder.out.getData());
     }
 
     /** Render the program to an H.264 MP4 at the full 50fps, with AAC audio. */
-    async generateMp4FromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
-        const { frames, audio } = await this.captureFrames(tapData, machineType, true);
-        return this.encodeMp4(frames, audio, 50);
+    async generateMp4FromTAP(tapData: Buffer, machineType: MachineType = 48): Promise<Buffer> {
+        const { frames, audio } = await this.captureFor(tapData, machineType, true);
+        return this.encodeMp4(frames, audio, 50, this.frameAdapter(machineType));
     }
 
     // Concatenate per-frame stereo audio into one interleaved (L,R,L,R) f32 buffer.
@@ -313,9 +444,14 @@ export class GIFGenerator {
     }
 
     /** Pipe decoded RGBA frames through ffmpeg to a temporary MP4 and return it. */
-    private async encodeMp4(frames: Uint8Array[], audio: AudioFrame[], fps: number): Promise<Buffer> {
-        const width = this.decoder.getWidth();
-        const height = this.decoder.getHeight();
+    private async encodeMp4(
+        frames: Uint8Array[],
+        audio: AudioFrame[],
+        fps: number,
+        fit: { width: number; height: number; toRGBA: (frame: Uint8Array) => Uint8Array },
+    ): Promise<Buffer> {
+        const width = fit.width;
+        const height = fit.height;
         const outPath = join(tmpdir(), `zxplay-${process.pid}-${Date.now()}.mp4`);
 
         // Only attach an audio track when the program actually made a sound;
@@ -357,7 +493,7 @@ export class GIFGenerator {
         });
 
         for (const raw of frames) {
-            const rgba = this.decoder.decode(raw);
+            const rgba = fit.toRGBA(raw);
             if (!ff.stdin.write(rgba)) {
                 await new Promise<void>((resolve) => ff.stdin.once('drain', () => resolve()));
             }
@@ -373,20 +509,23 @@ export class GIFGenerator {
     }
 
     /** Render a representative still frame to a 4:3 PNG (Spectrum border included). */
-    async generatePngFromTAP(tapData: Buffer, machineType: number = 48): Promise<Buffer> {
-        const { frames } = await this.captureFrames(tapData, machineType, false);
+    async generatePngFromTAP(tapData: Buffer, machineType: MachineType = 48): Promise<Buffer> {
+        const { frames } = await this.captureFor(tapData, machineType, false);
         const frame = frames[frames.length - 1] ?? frames[0];
         if (!frame) throw new Error('No frame captured');
-        return this.encodePng(frame);
+        return this.encodePng(frame, this.frameAdapter(machineType));
     }
 
     /** ffmpeg-encode one decoded frame to a PNG at its native 4:3 size (border
      *  included). The card fills it with object-fit: cover, so the outer border
      *  is cropped to the square crop, not the screen. */
-    private async encodePng(frame: Uint8Array): Promise<Buffer> {
-        const width = this.decoder.getWidth();
-        const height = this.decoder.getHeight();
-        const rgba = this.decoder.decode(frame);
+    private async encodePng(
+        frame: Uint8Array,
+        fit: { width: number; height: number; toRGBA: (frame: Uint8Array) => Uint8Array },
+    ): Promise<Buffer> {
+        const width = fit.width;
+        const height = fit.height;
+        const rgba = fit.toRGBA(frame);
         const outPath = join(tmpdir(), `zxshot-${process.pid}-${Date.now()}.png`);
 
         const args = [
