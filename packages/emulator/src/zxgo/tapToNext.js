@@ -13,12 +13,42 @@
 // makeNEX is ported from the retrogamecoders/8bitworkshop fork's
 // ZXNextPlatform.makeNEX (GPLv3) — canonical copy: packages/emulator-core/nex.js.
 
-export function makeNEX(bin, org = 0x8000) {
+export function makeNEX(bin, org = 0x8000, entry = org) {
   const BANK = 0x4000;
+  // Code below $8000 (the classic `org 30000` convention — bank 5 alongside
+  // the screen and system variables) cannot be shipped as a bank-5 image:
+  // .nex banks are whole 16K, and zero-filling the rest of bank 5 would
+  // stomp the sysvars that ROM routines (RST $10 printing etc.) depend on.
+  // Instead stage the code in bank 2 behind a stub at $8000 that relocates
+  // it to its true org and CALLS the entry point emulating the BASIC
+  // loader's RANDOMIZE USR environment: these programs are written as USR
+  // routines, so they assume IY = sysvars, an open print channel, and a
+  // sane stack to RET to. After the RET, hold so the output stays visible
+  // (the 48K equivalent leaves you at the report; use Reset to leave).
+  if (org >= 0x5B00 && org < 0x8000) {
+    if (org + bin.length > 0x8000)
+      throw new Error(`zxnext: low-org program crosses $8000 (org ${org}, ${bin.length} bytes)`);
+    if (bin.length > BANK - 32)
+      throw new Error(`zxnext: low-org program too large to stage (${bin.length} bytes)`);
+    const staged = new Uint8Array(32 + bin.length);
+    const w = (off, v) => { staged[off] = v & 0xFF; staged[off + 1] = (v >> 8) & 0xFF; };
+    staged[0] = 0xFD; staged[1] = 0x21; w(2, 0x5C3A); // LD IY,$5C3A (ERR-NR: ROM convention)
+    staged[4] = 0x3E; staged[5] = 0x02;               // LD A,2 (upper screen stream)
+    staged[6] = 0xCD; w(7, 0x1601);                   // CALL $1601 CHAN-OPEN (ROM3 is paged)
+    staged[9] = 0x21; w(10, 0x8020);                  // LD HL, staging area
+    staged[12] = 0x11; w(13, org);                    // LD DE, org
+    staged[15] = 0x01; w(16, bin.length);             // LD BC, length
+    staged[18] = 0xED; staged[19] = 0xB0;             // LDIR
+    staged[20] = 0xCD; w(21, entry);                  // CALL entry (RET-safe)
+    staged[23] = 0x18; staged[24] = 0xFE;             // JR $ — hold the final screen
+    staged.set(bin, 32);
+    return makeNEX(staged, 0x8000, 0x8000);
+  }
   if (org < 0x8000 || org >= 0xC000)
-    throw new Error(`zxnext: org $${org.toString(16)} unsupported (need $8000-$BFFF)`);
+    throw new Error(`zxnext: org $${org.toString(16)} unsupported (need $5B00-$BFFF)`);
   if (org + bin.length > 0x10000)
     throw new Error(`zxnext: program overruns $FFFF (org $${org.toString(16)}, ${bin.length} bytes)`);
+  if (entry < org || entry >= org + bin.length) entry = org;
 
   const bank2 = new Uint8Array(BANK); // $8000-$BFFF
   const bank0 = new Uint8Array(BANK); // $C000-$FFFF (entry bank 0)
@@ -41,7 +71,7 @@ export function makeNEX(bin, org = 0x8000) {
   header[10] = 0;                                     // no loading screen
   header[11] = 0;                                     // border black
   w16(12, 0x7FFE);                                    // SP (top of bank 5 slot)
-  w16(14, org);                                       // PC = entry point
+  w16(14, entry);                                     // PC = entry point
   w16(16, 0);                                         // numfiles
   for (const [id] of banks) header[18 + id] = 1;      // bank-present flags
   header[139] = 0;                                    // entry bank at $C000
@@ -92,8 +122,9 @@ export function parseTAP(bytes) {
 }
 
 // Wrap a tokenised BASIC program as a PLUS3DOS file (the on-disk format
-// NextZXOS expects for autoexec.bas). autostartLine >= 0x8000 means "no
-// autostart" in tape-header convention and is passed through unchanged.
+// NextZXOS LOADs from SD). autostartLine >= 0x8000 means "no autostart" in
+// tape-header convention and is passed through unchanged; with an autostart
+// line the program runs as soon as the command-line macro LOADs it.
 export function plus3dosProgram(prog, autostartLine, varsOffset) {
   const out = new Uint8Array(128 + prog.length);
   const sig = 'PLUS3DOS';
@@ -116,6 +147,21 @@ export function plus3dosProgram(prog, autostartLine, varsOffset) {
   return out;
 }
 
+// findUsrEntry scans a tokenised BASIC loader for `USR n` (the token $C0
+// followed by ASCII digits) and returns n — the real entry point of a
+// loader-style tape, which need not equal the code block's load address.
+export function findUsrEntry(prog) {
+  for (let i = 0; i < prog.length; i++) {
+    if (prog[i] !== 0xC0) continue;
+    let j = i + 1, n = 0, seen = false;
+    while (j < prog.length && prog[j] >= 0x30 && prog[j] <= 0x39) {
+      n = n * 10 + (prog[j] - 0x30); seen = true; j++;
+    }
+    if (seen && n >= 0x4000 && n < 0x10000) return n;
+  }
+  return null;
+}
+
 // Translate TAP bytes into a Next delivery. Returns
 //   { kind: 'bas', name, data }   for zxRunBas, or
 //   { kind: 'nex', name, data }   for zxRunNex.
@@ -125,25 +171,45 @@ export function tapToNext(bytes) {
   if (!entries.length) {
     throw new Error('no loadable blocks found in the tape file');
   }
-  // Prefer a machine-code block in the .nex-able window: an asm project's
-  // TAP is (BASIC loader + code), and the loader is tape-specific junk on
-  // the Next, while the code block runs directly.
-  const code = entries.find(e => e.type === 3 && e.param1 >= 0x8000 && e.param1 < 0xC000);
-  if (code) {
+  const codeBlocks = entries.filter(e => e.type === 3);
+  const basBlocks = entries.filter(e => e.type === 0);
+  // Any code block makes this a loader-style tape: the machine code is the
+  // program and the BASIC block (if any) is tape-loading scaffolding that
+  // must NOT be run on the Next. Entry point comes from the loader's
+  // RANDOMIZE USR when present, else the code's load address.
+  if (codeBlocks.length) {
+    const code = codeBlocks.find(e => e.param1 >= 0x5B00 && e.param1 < 0xC000);
+    if (!code) {
+      throw new Error('this tape\'s machine code loads outside $5B00-$BFFF, '
+        + 'which cannot be converted for the Next — load it on the 48K/128K instead');
+    }
+    const usr = basBlocks.length ? findUsrEntry(basBlocks[0].data) : null;
+    // Name must be a clean FAT 8.3 base: longer names get a `~1` alias on
+    // the SD card, and the nexload macro cannot type '~' on the Spectrum
+    // matrix — the typed path then misses the stored file ("No such file").
+    // pasmo also names its code block after the OUTPUT FILE ("output.tap"),
+    // so strip artefact extensions.
+    let base = (code.name || '').toLowerCase()
+      .replace(/\.(tap|tzx|nex|bin|out)$/, '')
+      .replace(/[^a-z0-9_-]/g, '')
+      .slice(0, 8);
+    if (!base) base = 'program';
     return {
       kind: 'nex',
-      name: (code.name || 'program') + '.nex',
-      data: makeNEX(code.data, code.param1),
+      name: base + '.nex',
+      data: makeNEX(code.data, code.param1, usr !== null ? usr : code.param1),
     };
   }
-  const bas = entries.find(e => e.type === 0);
-  if (bas) {
+  if (basBlocks.length) {
+    const bas = basBlocks[0];
+    let base = (bas.name || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 8);
+    if (!base) base = 'program';
     return {
       kind: 'bas',
-      name: (bas.name || 'program') + '.bas',
+      name: base + '.bas',
       data: plus3dosProgram(bas.data, bas.param1, bas.param2),
     };
   }
-  throw new Error('this tape has no BASIC program and no machine-code block at $8000-$BFFF, '
+  throw new Error('this tape has no BASIC program and no machine-code block, '
     + 'so it cannot be converted for the Next — load it on the 48K/128K instead');
 }

@@ -38,6 +38,8 @@ var nexKeyMatrix = func() map[rune][][2]int {
 		'/':  {sym, {0, 0x10}}, // SYMBOL SHIFT + V
 		'-':  {sym, {6, 0x08}}, // SYMBOL SHIFT + J
 		'\'': {sym, {4, 0x08}}, // SYMBOL SHIFT + 7
+		'"':  {sym, {5, 0x01}}, // SYMBOL SHIFT + P
+		':':  {sym, {0, 0x02}}, // SYMBOL SHIFT + Z
 	}
 	for r, k := range letters {
 		m[r] = [][2]int{k}
@@ -69,11 +71,11 @@ type nexloadMacro struct {
 	keyOn bool
 }
 
-// newNexloadMacro builds the macro that loads sdPath (an absolute SD-card path,
-// e.g. "/games/Next/Sonic/sonic.nex"). Timings mirror the verified headless
-// sequence. The cmd is typed lowercase; spaces are typed literally (NEXLOAD
-// takes the rest of the line as the filename, so no quoting is needed).
-func newNexloadMacro(sdPath string) *nexloadMacro {
+// newCommandLineMacro builds a macro that boots to the NextZXOS menu, opens
+// the Command Line, types cmd (lowercase — the SD card is FAT and NextZXOS
+// keywords are case-insensitive) and presses ENTER, then waits tailFrames for
+// the command to do its work. Timings mirror the verified headless sequence.
+func newCommandLineMacro(cmd string, tailFrames int) *nexloadMacro {
 	var steps []macroStep
 	hold := func(keys [][2]int, frames int) { steps = append(steps, macroStep{keys: keys, frames: frames}) }
 	wait := func(frames int) { steps = append(steps, macroStep{frames: frames}) }
@@ -85,34 +87,27 @@ func newNexloadMacro(sdPath string) *nexloadMacro {
 	wait(10)
 	hold([][2]int{{6, 0x01}}, 6) // ENTER -> command prompt
 	wait(92)
-	for _, c := range ".nexload " + strings.ToLower(sdPath) {
+	for _, c := range strings.ToLower(cmd) {
 		if keys, ok := nexKeyMatrix[c]; ok {
 			hold(keys, 4)
 			wait(10)
 		}
 	}
 	wait(15)
-	hold([][2]int{{6, 0x01}}, 6) // ENTER -> run NEXLOAD
-	wait(1500)                   // let the OS load and start the game
+	hold([][2]int{{6, 0x01}}, 6) // ENTER -> run the command
+	wait(tailFrames)
 
 	return &nexloadMacro{steps: steps}
 }
 
-// newBasicBootMacro boots NextZXOS to the point where it auto-runs
-// c:/nextzxos/autoexec.bas: reach the welcome prompt, press SPACE to start
-// NextZXOS, then wait while the OS runs the (autostart-lined) program. Unlike
-// newNexloadMacro it issues no command line — NextZXOS runs the autoexec itself.
-func newBasicBootMacro() *nexloadMacro {
-	var steps []macroStep
-	hold := func(keys [][2]int, frames int) { steps = append(steps, macroStep{keys: keys, frames: frames}) }
-	wait := func(frames int) { steps = append(steps, macroStep{frames: frames}) }
-
-	steps = append(steps, macroStep{waitMenu: true}) // boot to the welcome screen
-	hold([][2]int{{7, 0x01}}, 40)                    // SPACE -> start NextZXOS
-	wait(1500)                                       // let NextZXOS run autoexec.bas
-
-	return &nexloadMacro{steps: steps}
+// newNexloadMacro builds the macro that loads sdPath (an absolute SD-card path,
+// e.g. "/games/Next/Sonic/sonic.nex") via the genuine `.nexload` dot command.
+// Spaces are typed literally (NEXLOAD takes the rest of the line as the
+// filename, so no quoting is needed).
+func newNexloadMacro(sdPath string) *nexloadMacro {
+	return newCommandLineMacro(".nexload "+sdPath, 1500)
 }
+
 
 // tick advances the macro by one frame. It must be called once per executed
 // frame, after the frame runs, so keys pressed here are seen by the next
@@ -170,6 +165,39 @@ func (e *emulator) confirmImportNex(fileName string, data []byte) {
 	}, e.window).Show()
 }
 
+// neutralAutoexec is a PLUS3DOS-headered one-line program (9999 REM) with NO
+// autostart line. Written over c:/nextzxos/autoexec.bas by importAndRunNex:
+// a previous importAndRunBas leaves its auto-running program there, and every
+// later boot — including the reboot the nexload macro performs — would run
+// that stale program first and derail the macro's keystrokes. NextZXOS only
+// auto-RUNs an autoexec with an autostart line, so this one is inert.
+func neutralAutoexec() []byte {
+	prog := []byte{0x27, 0x0F, 0x02, 0x00, 0xEA, 0x0D} // 9999 REM
+	out := make([]byte, 128+len(prog))
+	copy(out, "PLUS3DOS")
+	out[8] = 0x1A
+	out[9] = 1
+	total := len(out)
+	out[11] = byte(total)
+	out[12] = byte(total >> 8)
+	out[13] = byte(total >> 16)
+	out[14] = byte(total >> 24)
+	out[15] = 0 // +3 BASIC header: type 0 = Program
+	out[16] = byte(len(prog))
+	out[17] = byte(len(prog) >> 8)
+	out[18] = 0x00
+	out[19] = 0x80 // autostart line $8000 = none
+	out[20] = out[16]
+	out[21] = out[17] // vars offset = program length
+	sum := 0
+	for i := 0; i < 127; i++ {
+		sum += int(out[i])
+	}
+	out[127] = byte(sum)
+	copy(out[128:], prog)
+	return out
+}
+
 // importAndRunNex copies data onto the SD card and starts the loader macro.
 // It runs on its own goroutine (the SD write can be large) with the emulator
 // paused so the in-memory image isn't modified mid-read.
@@ -178,6 +206,11 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 		return
 	}
 	e.paused.Store(true)
+	// Disarm any auto-running autoexec.bas left by importAndRunBas — the
+	// macro below reboots, and a stale program would run over it.
+	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "nextzxos", "autoexec.bas", neutralAutoexec()); err != nil {
+		slog.Warn("nex import: could not neutralise autoexec.bas", "err", err)
+	}
 	sdPath, err := sdcard.AddFileToFAT32(e.sdImageSrc.Bytes(), "imported", fileName, data)
 	if err != nil {
 		e.paused.Store(false)
@@ -198,18 +231,26 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 }
 
 // importAndRunBas writes data — a PLUS3DOS-headered, autostart-lined NextBASIC
-// program — to c:/nextzxos/autoexec.bas (overwriting any previous one) and
-// reboots so NextZXOS auto-runs it. Mirrors importAndRunNex but needs no
-// .nexload command: NextZXOS runs its own autoexec. Runs with the emulator
-// paused so the in-memory SD image isn't modified mid-read.
+// program — to c:/imported/program.bas and drives the NextZXOS Command Line
+// to LOAD it. The autostart line runs it on load, and when it ends (STOP, END
+// or falling off) the machine is left at the NextBASIC editor report WITH THE
+// PROGRAM OUTPUT STILL ON SCREEN — the 48K-like experience. (The previous
+// autoexec.bas approach lost the output: when an autoexec terminates,
+// NextZXOS immediately redraws its main menu, and no in-program trick
+// survives programs that end via STOP.) Runs with the emulator paused so the
+// in-memory SD image isn't modified mid-read.
 func (e *emulator) importAndRunBas(data []byte) error {
 	if e.sdImageSrc == nil {
 		return fmt.Errorf("no SD image mounted")
 	}
 	e.paused.Store(true)
-	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "nextzxos", "autoexec.bas", data); err != nil {
+	// Self-heal any auto-running autoexec.bas left by the earlier approach.
+	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "nextzxos", "autoexec.bas", neutralAutoexec()); err != nil {
+		slog.Warn("bas import: could not neutralise autoexec.bas", "err", err)
+	}
+	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "imported", "program.bas", data); err != nil {
 		e.paused.Store(false)
-		return fmt.Errorf("write autoexec.bas: %w", err)
+		return fmt.Errorf("write program.bas: %w", err)
 	}
 	// Persist so the program survives restarts (no-op on wasm: sdImagePath == "").
 	if e.sdImagePath != "" {
@@ -217,10 +258,10 @@ func (e *emulator) importAndRunBas(data []byte) error {
 			slog.Warn("bas import: persisting to the SD image failed", "err", err)
 		}
 	}
-	slog.Info("bas import: running via NextZXOS autoexec", "bytes", len(data))
+	slog.Info("bas import: LOADing via the NextZXOS command line", "bytes", len(data))
 	// Arm the macro before releasing pause (see startNexloadMacro).
 	e.reboot()
-	e.nexloadMacro = newBasicBootMacro()
+	e.nexloadMacro = newCommandLineMacro(`load "/imported/program.bas"`, 1500)
 	e.paused.Store(false)
 	return nil
 }

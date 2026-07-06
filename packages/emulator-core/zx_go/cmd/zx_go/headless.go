@@ -981,6 +981,34 @@ func runHeadless(f *cliFlags) {
 			}
 			rdbg.WaitIfPaused()
 			runOneFrameHeadless(emu, model)
+			// Drive queued keystroke macros (nexload / autoexec boot) the way
+			// the GUI and wasm run loops do — needed by ZX_GO_RUN_BAS_FILE.
+			if emu.kbd != nil {
+				emu.kbd.Tick()
+			}
+			if emu.nexloadMacro != nil && emu.nexloadMacro.tick(emu) {
+				emu.nexloadMacro = nil
+			}
+			// ZX_GO_RUN_BAS_FILE=path[@frame]: invoke the real importAndRunBas
+			// flow (write autoexec.bas + reboot + boot macro) at the given
+			// frame — reproduces the browser Play-button path headlessly.
+			if spec := os.Getenv("ZX_GO_RUN_BAS_FILE"); spec != "" {
+				path, at := spec, 3000
+				if k := strings.LastIndex(spec, "@"); k > 0 {
+					if v, aerr := strconv.Atoi(spec[k+1:]); aerr == nil {
+						path, at = spec[:k], v
+					}
+				}
+				if i == at {
+					if data, rerr := os.ReadFile(path); rerr != nil {
+						slog.Error("headless run-bas: read failed", "path", path, "err", rerr)
+					} else if berr := emu.importAndRunBas(data); berr != nil {
+						slog.Error("headless run-bas failed", "err", berr)
+					} else {
+						slog.Info("headless run-bas triggered", "frame", i, "path", path)
+					}
+				}
+			}
 			if os.Getenv("ZX_GO_RENDER_EVERY_FRAME") != "" {
 				emu.renderFrame() // GUI-parity probe
 			}

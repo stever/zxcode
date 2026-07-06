@@ -140,7 +140,12 @@ export class GoEmulator extends EventEmitter {
 
         this.initAudio(); // fire and forget; pump no-ops until it lands
 
-        console.info('[zxplay] emulator engine: zxgo (zx_go wasm core)');
+        // Bump ENGINE_REV whenever engine/translator behavior changes: the
+        // boot log then shows at a glance whether a dev server is serving a
+        // stale bundle (workspace-package edits don't reliably trigger
+        // webpack-dev-server rebuilds through the node_modules symlinks).
+        const ENGINE_REV = 'r5-cmdline-load';
+        console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`);
         loadGoRuntime().then(() => {
             console.info('[zxplay] zx_go core ready');
             this.setMachine(opts.machine || 128);
