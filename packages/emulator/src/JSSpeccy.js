@@ -240,6 +240,9 @@ export const JSSpeccy = (container, opts) => {
         openFileDialog: () => openFileDialog(),
         openUrl: (url) => emu.openUrl(url).catch((err) => {alert(err)}),
         openTAPFile: (data) => emu.openTAPFile(data),
+        onMachineChange: (callback) => {
+            emu.on('setMachine', callback);
+        },
         onReady: (callback) => {
             if (emu.isReady) {
                 callback();

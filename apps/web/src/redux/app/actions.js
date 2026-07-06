@@ -7,6 +7,7 @@ export const actionTypes = {
     receivePrivacyPolicy: 'app/receivePrivacyPolicy',
     toggleLineNumbers: 'app/toggleLineNumbers',
     setMachine: 'app/setMachine',
+    machineChanged: 'app/machineChanged',
 };
 
 export const showActiveEmulator = () => ({
@@ -42,5 +43,13 @@ export const toggleLineNumbers = (enabled) => ({
 
 export const setMachine = (machine) => ({
     type: actionTypes.setMachine,
+    machine
+});
+
+// State-only mirror of an engine-initiated machine switch (e.g. opening a
+// .tap on the Next auto-switches to the 128K): updates the menu checkmark
+// and persisted choice WITHOUT re-triggering the boot saga.
+export const machineChanged = (machine) => ({
+    type: actionTypes.machineChanged,
     machine
 })

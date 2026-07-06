@@ -12,8 +12,9 @@ import {
     start
 } from "./actions";
 import {reset as resetProject} from "../project/actions";
-import {showActiveEmulator, actionTypes as appActionTypes} from "../app/actions";
+import {showActiveEmulator, machineChanged, actionTypes as appActionTypes} from "../app/actions";
 import {handleException} from "../../errors";
+import {store} from "../store";
 
 // -----------------------------------------------------------------------------
 // Action watchers
@@ -135,7 +136,12 @@ function* handleRenderEmulatorActions(action) {
         const emuParams = {
             zoom,
             machine: machine || 48, // 48, 128 or 'next'
-            autoLoadTapes: true
+            autoLoadTapes: true,
+            // IDE mode: compiled TAPs opened while the Next is selected are
+            // translated to run ON the Next (autoexec-free LOAD / .nexload).
+            // Without this flag (the play site), tapes are classic media and
+            // opening one on the Next switches to the 128K instead.
+            tapToNext: true
         };
 
         let doFilter = false;
@@ -157,6 +163,11 @@ function* handleRenderEmulatorActions(action) {
         console.assert(jsspeccy === undefined);
         jsspeccy = JSSpeccy(target, emuParams);
         jsspeccy.hideUI();
+        // Keep the menu checkmark honest: the engine switches machine on its
+        // own (a .tap on the Next moves to the 128K, a .nex moves to the
+        // Next), and this mirrors those switches into app state without
+        // re-triggering the boot saga.
+        jsspeccy.onMachineChange((m) => store.dispatch(machineChanged(m)));
 
         if (doFilter) {
             // TODO: Investigate this option, and narrow the element selector.

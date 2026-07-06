@@ -121,6 +121,10 @@ export class GoEmulator extends EventEmitter {
         this.autoLoadTapes = opts.autoLoadTapes || false;
         this.tapeIsPlaying = false;
         this.tapeTrapsEnabled = ('tapeTrapsEnabled' in opts) ? opts.tapeTrapsEnabled : true;
+        // Opt-in (the IDE sets it): translate compiled TAPs for the Next
+        // (tapToNext.js). Without it, tapes are treated as classic media —
+        // opening one while the Next is selected switches to the 128K.
+        this.tapToNextEnabled = !!opts.tapToNext;
         this.machineType = null;
         this.isReady = false;
         this.onReadyHandlers = [];
@@ -144,7 +148,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r5-cmdline-load';
+        const ENGINE_REV = 'r7-tape-media-128';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`);
         loadGoRuntime().then(() => {
             console.info('[zxplay] zx_go core ready');
@@ -368,6 +372,24 @@ export class GoEmulator extends EventEmitter {
         this.emit('setMachine', type);
     }
 
+    // Machine construction runs in a Go goroutine; poll the core's reported
+    // model name until the requested machine has actually replaced the old
+    // one, so follow-up calls (zxRunNex, tape mounts) cannot land on the
+    // previous machine.
+    waitForModel(nameFragment, timeoutMs = 15000) {
+        return new Promise((resolve, reject) => {
+            const t0 = performance.now();
+            const poll = () => {
+                if ((globalThis.zxModel ? globalThis.zxModel() : '').includes(nameFragment)) return resolve();
+                if (performance.now() - t0 > timeoutMs) {
+                    return reject(new Error(`machine "${nameFragment}" did not come up`));
+                }
+                setTimeout(poll, 100);
+            };
+            poll();
+        });
+    }
+
     // Boot (or reboot) the ZX Spectrum Next: fetch the NextZXOS system assets
     // once (served from /next/ — staged, never committed; see
     // @zxplay/emulator-core LICENSES.md), register the ROMs and boot off the
@@ -395,15 +417,7 @@ export class GoEmulator extends EventEmitter {
         const err = globalThis.zxBootNext(this.nextAssets.sd);
         if (err) throw new Error(err);
         // Wait for the Next machine to replace the previous one (goroutine).
-        await new Promise((resolve, reject) => {
-            const t0 = performance.now();
-            const poll = () => {
-                if ((globalThis.zxModel ? globalThis.zxModel() : '').includes('Next')) return resolve();
-                if (performance.now() - t0 > 15000) return reject(new Error('Next machine did not come up'));
-                setTimeout(poll, 100);
-            };
-            poll();
-        });
+        await this.waitForModel('Next');
         this.machineType = 'next';
         this.emit('setMachine', 'next');
     }
@@ -435,23 +449,32 @@ export class GoEmulator extends EventEmitter {
 
     openTapeBytes(arrayBuffer) {
         const data = new Uint8Array(arrayBuffer);
-        // On the Next, tape loading is blocked by upstream core defects, but
-        // NextZXOS runs programs natively: translate the TAP into either an
-        // autoexec NextBASIC file or a generated .nex and use the OS routes
-        // (this is also how the IDE's Play button reaches the Next).
         if (this.machineType === 'next') {
-            try {
-                const next = tapToNext(data);
-                const err = (next.kind === 'bas')
-                    ? globalThis.zxRunBas(next.name, next.data)
-                    : globalThis.zxRunNex(next.name, next.data);
-                if (err) return Promise.reject(err);
-                this.emit('openedTapeFile');
-                return Promise.resolve({ mediaType: 'tape' });
-            } catch (e) {
-                return Promise.reject('Next: ' + (e.message || e));
+            if (this.tapToNextEnabled) {
+                // IDE mode: the TAP is a compiler artifact — translate it
+                // into NextZXOS's native delivery (a LOADable PLUS3DOS
+                // program or a generated .nex) so it runs ON the Next.
+                try {
+                    const next = tapToNext(data);
+                    const err = (next.kind === 'bas')
+                        ? globalThis.zxRunBas(next.name, next.data)
+                        : globalThis.zxRunNex(next.name, next.data);
+                    if (err) return Promise.reject(err);
+                    this.emit('openedTapeFile');
+                    return Promise.resolve({ mediaType: 'tape' });
+                } catch (e) {
+                    return Promise.reject('Next: ' + (e.message || e));
+                }
             }
+            // Player mode: a .tap is classic-machine media (the Next cannot
+            // tape-load in zx_go yet) — switch to the 128K and play it there.
+            this.setMachine(128);
+            return this.waitForModel('128').then(() => this.classicTapeLoad(data));
         }
+        return this.classicTapeLoad(data);
+    }
+
+    classicTapeLoad(data) {
         let err;
         if (this.autoLoadTapes) {
             // Reboot + drive LOAD"" / the 128 Tape Loader in the core (its

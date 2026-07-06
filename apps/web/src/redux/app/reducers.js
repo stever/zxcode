@@ -111,6 +111,7 @@ const actionsMap = {
     [actionTypes.receiveTermsOfUse]: receiveTermsOfUse,
     [actionTypes.toggleLineNumbers]: toggleLineNumbers,
     [actionTypes.setMachine]: setMachine,
+    [actionTypes.machineChanged]: setMachine,
 };
 
 export default function reducer(state = initialState, action) {

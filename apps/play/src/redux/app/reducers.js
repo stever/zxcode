@@ -131,6 +131,7 @@ const actionsMap = {
     [actionTypes.receivePrivacyPolicy]: receivePrivacyPolicy,
     [actionTypes.receiveTermsOfUse]: receiveTermsOfUse,
     [actionTypes.setMachine]: setMachine,
+    [actionTypes.machineChanged]: setMachine,
     [actionTypes.setKeyboardSide]: setKeyboardSide,
 };
 
