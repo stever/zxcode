@@ -73,7 +73,11 @@ export class Emulator {
     };
 
     async loadCore(): Promise<void> {
-        const wasmPath = join(__dirname, '../../..', 'apps/web/public/dist/jsspeccy-core.wasm');
+        // Frozen copy of the JSSpeccy3 AssemblyScript core (plus its ROMs in
+        // ../engine/roms). The sites' emulator engine is zx_go now and no
+        // longer produces this artifact; this service keeps the proven core
+        // for headless rendering until it is ported to zx_go.
+        const wasmPath = join(__dirname, '../engine/jsspeccy-core.wasm');
         const wasmBuffer = await readFile(wasmPath);
         const results: any = await WebAssembly.instantiate(wasmBuffer, {});
         this.core = results.instance.exports as unknown as EmulatorCore;
@@ -92,7 +96,7 @@ export class Emulator {
     }
 
     async loadRoms(): Promise<void> {
-        const romsPath = join(__dirname, '../../..', 'apps/web/public/roms');
+        const romsPath = join(__dirname, '../engine/roms');
         await this.loadRom(join(romsPath, '128-0.rom'), 8);
         await this.loadRom(join(romsPath, '128-1.rom'), 9);
         await this.loadRom(join(romsPath, '48.rom'), 10);

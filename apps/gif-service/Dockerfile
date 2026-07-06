@@ -1,5 +1,5 @@
-# Build context is the repo root, because the emulator loads the WASM core and
-# ROMs from apps/web/public (see emulator.ts paths relative to apps/gif-service).
+# Build context is the repo root (for the wasm CLI toolchains copied below);
+# the emulator core + ROMs are vendored in this service's engine/ directory.
 FROM node:22-slim
 
 # ffmpeg is required for MP4 output.
@@ -16,11 +16,9 @@ RUN npm install --omit=dev --no-audit --no-fund && npm install tsx typescript
 # Service source.
 COPY apps/gif-service/ ./
 
-# Emulator assets, sourced from the shared @zxplay/emulator package (the single
-# source of truth) but placed at the relative location the code expects
-# (apps/gif-service/src -> ../../.. -> /app -> apps/web/public/...).
-COPY packages/emulator/dist/jsspeccy-core.wasm /app/apps/web/public/dist/jsspeccy-core.wasm
-COPY packages/emulator/roms/ /app/apps/web/public/roms/
+# Emulator core + ROMs are vendored inside this service (engine/) — a frozen
+# JSSpeccy3 build; the sites' engine is zx_go and no longer produces it. The
+# `COPY apps/gif-service/ ./` above already brings engine/ along.
 
 # Emscripten/asm.js CLI toolchains for rendering zmac and sdcc projects, plus
 # the sdcc bundled filesystem (fssdcc.data: crt0, z80 stdlib, headers) and the
