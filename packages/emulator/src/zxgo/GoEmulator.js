@@ -326,23 +326,41 @@ export class GoEmulator extends EventEmitter {
             if (d.w) {
                 if (d.w !== this.frameW || d.h !== this.frameH) {
                     this.frameW = d.w; this.frameH = d.h;
-                    this.canvas.width = d.w; this.canvas.height = d.h;
                     this.frameBuf = new Uint8Array(d.w * d.h * 4);
                     this.imageData = new ImageData(new Uint8ClampedArray(this.frameBuf.buffer), d.w, d.h);
-                    // The Next's frame size is video-mode-dependent (taller
-                    // rasters; 640-wide half-width-pixel modes), while the
-                    // UI pins the canvas CSS box to the classic 320x240 at
-                    // the chosen zoom. Keep the UI's width and rescale the
-                    // CSS height to this frame's VISIBLE shape so the image
-                    // fits the layout without gaps or stretching. Frames
-                    // >=600px wide are half-width-pixel modes spanning the
-                    // same raster as 320, so halve their aspect width.
-                    const cssW = parseFloat(this.canvas.style.width) || d.w;
-                    const visW = d.w >= 600 ? d.w / 2 : d.w;
-                    this.canvas.style.height = (cssW * d.h / visW) + 'px';
+                    if (this.nextCompose) {
+                        // Raw frame goes to an offscreen canvas, composited
+                        // into the fixed 640x512 display box each tick.
+                        this.off = document.createElement('canvas');
+                        this.off.width = d.w; this.off.height = d.h;
+                        this.offCtx = this.off.getContext('2d');
+                    } else {
+                        // Classic path: the canvas IS the frame (320x240,
+                        // fixed per model), blitted directly.
+                        this.canvas.width = d.w; this.canvas.height = d.h;
+                        const cssW = parseFloat(this.canvas.style.width) || d.w;
+                        this.canvas.style.height = (cssW * d.h / d.w) + 'px';
+                    }
                 } else if (this.frameBuf) {
                     this.imageData.data.set(this.frameBuf);
-                    this.ctx.putImageData(this.imageData, 0, 0);
+                    if (this.nextCompose) {
+                        this.offCtx.putImageData(this.imageData, 0, 0);
+                        const g = this.ctx;
+                        // Bars in the frame's own border colour (corner
+                        // pixel), so they read as border, not letterboxing.
+                        g.fillStyle = 'rgb(' + this.frameBuf[0] + ',' + this.frameBuf[1] + ',' + this.frameBuf[2] + ')';
+                        g.fillRect(0, 0, 640, 512);
+                        g.imageSmoothingEnabled = false;
+                        // Frames >=600px wide are half-width-pixel modes
+                        // spanning the same visible raster as the 320 ones,
+                        // so everything maps to 640 wide x 2-per-line tall.
+                        const visW = this.frameW >= 600 ? this.frameW / 2 : this.frameW;
+                        let dw = 640, dh = Math.round(this.frameH * (640 / visW));
+                        if (dh > 512) { dw = Math.round(dw * 512 / dh); dh = 512; }
+                        g.drawImage(this.off, (640 - dw) >> 1, (512 - dh) >> 1, dw, dh);
+                    } else {
+                        this.ctx.putImageData(this.imageData, 0, 0);
+                    }
                 }
             }
         }
@@ -379,6 +397,9 @@ export class GoEmulator extends EventEmitter {
             });
             return;
         }
+        // Leaving the Next: back to the classic direct-blit display path.
+        this.nextCompose = false;
+        this.frameW = 0; this.frameH = 0; // force display reconfigure
         // 5 was Pentagon in the JSSpeccy3 engine — deliberately unsupported
         // here; old ?m=5 links get the closest supported machine.
         if (type != 48) type = 128;
@@ -426,6 +447,19 @@ export class GoEmulator extends EventEmitter {
             };
             poll();
         });
+        // Fixed display box for the Next. Its video modes change the frame
+        // size mid-session (240-line boot/menu timing, 256-line Layer 2,
+        // 640-wide half-width-pixel text modes), and resizing the canvas per
+        // mode reflows the page under the user. Instead compose every mode
+        // into one 640x512 canvas (2x the tallest common raster); the spare
+        // rows are painted in the frame's border colour so they read as
+        // border, not letterbox bars.
+        this.nextCompose = true;
+        this.frameW = 0; this.frameH = 0; // force display reconfigure
+        this.canvas.width = 640;
+        this.canvas.height = 512;
+        const cssW = parseFloat(this.canvas.style.width) || 640;
+        this.canvas.style.height = (cssW * 512 / 640) + 'px';
         this.machineType = 'next';
         this.emit('setMachine', 'next');
     }
