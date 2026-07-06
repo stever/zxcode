@@ -1,7 +1,6 @@
 # Build context is the repo root (for the wasm CLI toolchains copied below);
 # the emulator core + ROMs are vendored in this service's engine/ directory.
-# zx_go core -> WebAssembly for the Spectrum Next render path (the classic
-# path uses the frozen JSSpeccy3 core vendored in engine/).
+# zx_go core -> WebAssembly — the single emulation engine for all machines.
 FROM golang:1.25 AS wasmbuild
 WORKDIR /src
 COPY packages/emulator-core/zx_go ./zx_go
@@ -25,10 +24,9 @@ RUN npm install --omit=dev --no-audit --no-fund && npm install tsx typescript
 # Service source.
 COPY apps/gif-service/ ./
 
-# Emulator cores: engine/ (frozen JSSpeccy3 build for 48K/128K, vendored,
-# comes with the service COPY above) and engine/zxgo (zx_go for the Next,
-# from the golang stage). The Next also needs the licensed NextZXOS assets
-# staged into next-assets/ in the build context (never committed — see
+# Emulator core: zx_go (all machines), compiled by the golang stage into
+# engine/zxgo. The Next also needs the licensed NextZXOS assets staged into
+# next-assets/ in the build context (never committed — see
 # packages/emulator-core/LICENSES.md); they ride along with the COPY above
 # when present, or set NEXT_ASSETS_DIR at runtime.
 COPY --from=wasmbuild /out/ ./engine/zxgo/

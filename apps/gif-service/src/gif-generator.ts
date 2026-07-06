@@ -1,9 +1,7 @@
 import GIFEncoder from 'gif-encoder-2';
 import { spawn } from 'child_process';
 import { tmpdir } from 'os';
-import { Emulator } from './emulator.js';
-import { NextEmulator } from './emulator-next.js';
-import { FrameDecoder } from './frame-decoder.js';
+import { ZxGoEmulator } from './emulator-zxgo.js';
 import { readFile, unlink, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -30,8 +28,6 @@ export interface GIFGeneratorOptions {
 }
 
 export class GIFGenerator {
-    private emulator: Emulator;
-    private decoder: FrameDecoder;
     private options: GIFGeneratorOptions;
 
     constructor(options: Partial<GIFGeneratorOptions> = {}) {
@@ -41,13 +37,11 @@ export class GIFGenerator {
             ignoreInitialFrames: options.ignoreInitialFrames ?? 0,
             scale: options.scale ?? 2,
         };
-        this.emulator = new Emulator();
-        this.decoder = new FrameDecoder({ scale: this.options.scale });
     }
 
     async initialize(): Promise<void> {
-        await this.emulator.loadCore();
-        await this.emulator.loadRoms();
+        // The zx_go runtime loads lazily on first capture; kept for API
+        // compatibility with the routes.
     }
 
     private areFramesIdentical(frame1: Uint8Array, frame2: Uint8Array): boolean {
@@ -62,24 +56,24 @@ export class GIFGenerator {
         return true;
     }
 
-    // Count the set (non-zero) bitmap bytes on screen, i.e. how many pixel cells
-    // carry drawn content. The 0x6600 buffer is a 24-row top border, then 192
-    // rows of [16 left-border][32 (bitmap,attr) pairs][16 right-border], then a
-    // 24-row bottom border (see FrameDecoder). Only the bitmap byte of each pair
-    // is counted, so a blank/cleared screen reads ~0 regardless of paper colour,
-    // while text or graphics read higher.
-    private screenInk(a: Uint8Array): number {
-        let n = 0;
-        let p = 24 * 160; // skip top border
-        for (let row = 0; row < 192; row++) {
-            p += 16; // left border
-            for (let i = 0; i < 32; i++) {
-                if (a[p] !== 0) n++; // bitmap byte
-                p += 2; // step over this pair's attribute byte
-            }
-            p += 16; // right border
+    // Count "ink" pixels: how many pixels differ from the frame's dominant
+    // colour (sampled). On a cleared screen the paper dominates and the count
+    // is ~0; text and graphics read higher. The RGBA equivalent of the old
+    // core's bitmap-byte count, used by findProgramStart.
+    private screenInk(rgba: Uint8Array): number {
+        const counts = new Map<number, number>();
+        for (let i = 0; i < rgba.length; i += 32) { // every 8th pixel
+            const key = (rgba[i] << 16) | (rgba[i + 1] << 8) | rgba[i + 2];
+            counts.set(key, (counts.get(key) ?? 0) + 1);
         }
-        return n;
+        let dominant = 0, best = -1;
+        for (const [k, n] of counts) if (n > best) { best = n; dominant = k; }
+        const dr = (dominant >> 16) & 0xff, dg = (dominant >> 8) & 0xff, db = dominant & 0xff;
+        let ink = 0;
+        for (let i = 0; i < rgba.length; i += 16) { // every 4th pixel
+            if (rgba[i] !== dr || rgba[i + 1] !== dg || rgba[i + 2] !== db) ink++;
+        }
+        return ink;
     }
 
     // Pick the frame the clip should open on: the program's first own frame,
@@ -120,138 +114,77 @@ export class GIFGenerator {
         return clearedAt;
     }
 
-    // ZX Spectrum keyboard matrix cells.
-    private static readonly KEY = {
-        ENTER: [6, 0x01] as [number, number],
-        J: [6, 0x08] as [number, number], // produces the LOAD token in 48K K-mode
-        P: [5, 0x01] as [number, number],
-        SYMBOL_SHIFT: [7, 0x02] as [number, number],
-    };
-
-    // Hold a set of matrix cells down for a few frames, then release, leaving a
-    // gap so the ROM keyboard scan registers each press distinctly.
-    private pressKeys(keys: Array<[number, number]>, downFrames = 4, gapFrames = 4): void {
-        for (const [row, mask] of keys) this.emulator.rawKeyDown(row, mask);
-        for (let i = 0; i < downFrames; i++) this.emulator.runFrame();
-        for (const [row, mask] of keys) this.emulator.rawKeyUp(row, mask);
-        for (let i = 0; i < gapFrames; i++) this.emulator.runFrame();
-    }
-
     /**
-     * Boot the machine, load the tape, run the program, and return the kept raw
-     * frame buffers (50fps, trailing static trimmed). Shared by both encoders.
+     * Classic 48K/128K path on the zx_go core: boot from embedded ROMs, let
+     * the core's own keystroke macro drive LOAD"" / the 128 Tape Loader with
+     * the LD-BYTES trap loading blocks instantly. Capture runs THROUGH the
+     * boot-and-typing phase (stale-stop disarmed until the macro ends) and
+     * findProgramStart trims to the program's first own frame using the
+     * tape-block progression as the loader marker — the same opening-frame
+     * logic the service has always had.
      */
     private async captureFrames(
         tapData: Buffer,
         machineType: number,
         captureAudio: boolean,
     ): Promise<{ frames: Uint8Array[]; audio: AudioFrame[] }> {
-        this.emulator.setMachineType(machineType);
-        this.emulator.setTapeTraps(true); // instant block loading; no pulse playback needed
-        this.emulator.enableAudio(captureAudio ? SAMPLES_PER_FRAME : 0);
-        this.emulator.loadTAPFile(tapData);
-        this.emulator.reset();
+        const emu = new ZxGoEmulator();
+        console.log(`Booting ${machineType}K machine (zx_go core)`);
+        await emu.bootClassic(machineType === 128 ? 128 : 48);
+        emu.runTAPClassic(tapData);
 
-        console.log(`Booting ${machineType}K machine with tape traps enabled`);
-
-        // Boot, reach the LOAD prompt, then press the key that kicks off the
-        // instant trap-load. The trigger key is deliberately left held here: the
-        // capture loop below runs (and records) the frames during which the ROM
-        // registers the press and the program starts drawing, and releases it a
-        // few frames in. Releasing it here (as a pressKeys "gap") would swallow
-        // the program's opening frames, since a trap-loaded program can begin
-        // drawing within a frame or two of the keypress.
-        let triggerKey: [number, number];
-        if (machineType === 48) {
-            // 48K boots straight to the (C) screen with a K cursor and no loader
-            // window. Enter LOAD "" using single-key tokens: J = LOAD,
-            // SYMBOL SHIFT + P = the " character.
-            for (let i = 0; i < 100; i++) this.emulator.runFrame(); // ~2s to settle
-            this.pressKeys([GIFGenerator.KEY.J]);
-            this.pressKeys([GIFGenerator.KEY.SYMBOL_SHIFT, GIFGenerator.KEY.P]);
-            this.pressKeys([GIFGenerator.KEY.SYMBOL_SHIFT, GIFGenerator.KEY.P]);
-            triggerKey = GIFGenerator.KEY.ENTER;
-        } else {
-            // 128K boots to a menu with "Tape Loader" pre-selected; ENTER runs it.
-            // Note: leaves the loader's bottom-window UI on screen.
-            for (let i = 0; i < 150; i++) this.emulator.runFrame(); // ~3s to menu
-            triggerKey = GIFGenerator.KEY.ENTER;
-        }
-        this.emulator.rawKeyDown(triggerKey[0], triggerKey[1]);
-        const triggerReleaseFrame = 4; // hold the trigger ~4 frames so the ROM registers it
-
-        // Capture from the first frame after the trigger keypress so a program's
-        // opening draws (and one-shot startup audio, e.g. a launch beep) aren't
-        // lost in a pre-roll. With tape traps the blocks load instantly, so the
-        // first captured frames cover the loader handing off to the program.
-        // Stop once the screen has been static for `staleFrameThreshold`
-        // consecutive frames, then trim trailing static.
-        const maxFrames = Math.floor(this.options.maxDurationMs / 20);
+        const maxFrames = Math.floor(this.options.maxDurationMs / 20) + 600; // + boot margin
         const staleStop = this.options.staleFrameThreshold;
-        const tailFrames = 25; // ~0.5s of static tail kept for readability
-
-        // Hard wall-clock backstop independent of frame count: emulation is
-        // normally faster than real time, so generous headroom over the clip
-        // length still catches a pathologically slow program.
-        const renderDeadline = Date.now() + Math.max(this.options.maxDurationMs * 4, 60_000);
+        const tailFrames = 25;
+        const renderDeadline = Date.now() + Math.max(this.options.maxDurationMs * 20, 300_000);
 
         const frames: Uint8Array[] = [];
         const audio: AudioFrame[] = [];
         let previousFrame: Uint8Array | null = null;
         let staleCount = 0;
         let lastChangeIndex = -1;
-        let lastLoadFrame = -1; // last frame in which a tape-load trap fired
+        let lastLoadFrame = -1;
+        let prevBlock = emu.tapeBlock();
 
         for (let f = 0; f < maxFrames; f++) {
             if (Date.now() > renderDeadline) {
                 console.warn(`Render wall-clock budget exceeded after ${f} frames; stopping`);
                 break;
             }
-            // Release the load-trigger key once the ROM has had a few frames to
-            // register the press; the frames it was held for are captured above.
-            if (f === triggerReleaseFrame) {
-                this.emulator.rawKeyUp(triggerKey[0], triggerKey[1]);
-            }
-            const frameBuffer = new Uint8Array(this.emulator.runFrame());
-            frames.push(frameBuffer);
-            if (this.emulator.getTapeTrapsLastFrame() > 0) lastLoadFrame = f;
+            const { rgba, audio: mono } = emu.runFrame();
+            frames.push(rgba);
 
-            // Audio activity counts as a change: a tune over a static screen must
-            // not be cut short, nor its tail trimmed. Kept aligned 1:1 with frames.
+            const blk = emu.tapeBlock();
+            if (blk !== prevBlock) { lastLoadFrame = f; prevBlock = blk; }
+
             let audioSilent = true;
             if (captureAudio) {
-                const a = this.emulator.getLastAudio() ?? {
-                    left: new Float32Array(SAMPLES_PER_FRAME),
-                    right: new Float32Array(SAMPLES_PER_FRAME),
-                };
-                audio.push(a);
-                audioSilent = this.isAudioSilent(a.left, a.right);
+                audio.push({ left: mono, right: mono });
+                audioSilent = this.isAudioSilent(mono, mono);
             }
-
             const videoStatic =
-                previousFrame !== null && this.areFramesIdentical(frameBuffer, previousFrame);
-            if (videoStatic && audioSilent) {
+                previousFrame !== null && this.areFramesIdentical(rgba, previousFrame);
+            if (!videoStatic || !audioSilent) {
+                staleCount = 0;
+                lastChangeIndex = f;
+            } else if (emu.macroActive()) {
+                staleCount = 0; // boot/typing phase: never stale-stop here
+            } else {
                 staleCount++;
                 if (staleCount >= staleStop) {
                     console.log(`Program settled after ${f + 1} captured frames`);
                     break;
                 }
-            } else {
-                staleCount = 0;
-                lastChangeIndex = f;
             }
-            previousFrame = frameBuffer;
+            previousFrame = rgba;
         }
 
         if (lastChangeIndex < 0) {
-            // Nothing ever changed; keep a short clip so the output is not empty.
-            // There is no drawing to open on, so start at the first frame.
             const keepStatic = Math.min(frames.length, tailFrames);
             console.log(`Captured ${frames.length} frames, no changes; keeping ${keepStatic}`);
             return { frames: frames.slice(0, keepStatic), audio: audio.slice(0, keepStatic) };
         }
 
-        // Open on the program's first own frame, skipping the ROM loader.
         const start = this.findProgramStart(frames, lastLoadFrame, lastChangeIndex);
         const keep = Math.min(frames.length, lastChangeIndex + 1 + tailFrames);
         console.log(`Captured ${frames.length} frames, keeping ${start}..${keep}`);
@@ -259,24 +192,20 @@ export class GIFGenerator {
     }
 
     /**
-     * Next path: boot real NextZXOS on the zx_go core (the sites' engine,
-     * hosted under Node), deliver the compiled TAP the way the sites do
-     * (PLUS3DOS LOAD for BASIC, generated .nex via .nexload for machine
-     * code), and capture from the moment the boot-and-typing macro hands
-     * over. Frames come back as fixed-size 320x256 RGBA composites (the
-     * Next's video modes change the raw frame size mid-run).
+     * Next path: boot real NextZXOS, deliver the compiled TAP the way the
+     * sites do (PLUS3DOS LOAD for BASIC, generated .nex via .nexload for
+     * machine code), and capture from the moment the boot-and-typing macro
+     * hands over.
      */
     private async captureFramesNext(
         tapData: Buffer,
         captureAudio: boolean,
     ): Promise<{ frames: Uint8Array[]; audio: AudioFrame[] }> {
-        const emu = new NextEmulator();
+        const emu = new ZxGoEmulator();
         console.log('Booting Spectrum Next (zx_go core) for render');
         await emu.boot();
         emu.runTAP(tapData);
 
-        // Skip the NextZXOS boot + command typing. Generous frame cap as a
-        // backstop; the macro normally completes in ~4500 frames.
         const macroDeadline = Date.now() + 300_000;
         let skipped = 0;
         while (emu.macroActive()) {
@@ -336,25 +265,17 @@ export class GIFGenerator {
         return { frames: frames.slice(0, keep), audio: audio.slice(0, keep) };
     }
 
-    // Frame adapter: dimensions + a raw-frame -> RGBA converter, letting the
-    // encoders serve both the classic path (0x6600 buffers via FrameDecoder)
-    // and the Next path (already-composited RGBA, integer-upscaled).
-    private frameAdapter(machineType: MachineType): {
+    // Frame adapter: every machine renders through the same fixed 320x256
+    // composite (matching the sites' display box), integer-upscaled here.
+    private frameAdapter(_machineType: MachineType): {
         width: number; height: number; toRGBA: (frame: Uint8Array) => Uint8Array;
     } {
-        if (machineType === 'next') {
-            const scale = this.options.scale;
-            const w = NextEmulator.BOX_W, h = NextEmulator.BOX_H;
-            return {
-                width: w * scale,
-                height: h * scale,
-                toRGBA: (frame) => this.scaleRGBA(frame, w, h, scale),
-            };
-        }
+        const scale = this.options.scale;
+        const w = ZxGoEmulator.BOX_W, h = ZxGoEmulator.BOX_H;
         return {
-            width: this.decoder.getWidth(),
-            height: this.decoder.getHeight(),
-            toRGBA: (frame) => this.decoder.decode(frame),
+            width: w * scale,
+            height: h * scale,
+            toRGBA: (frame) => this.scaleRGBA(frame, w, h, scale),
         };
     }
 
@@ -554,108 +475,4 @@ export class GIFGenerator {
         return buffer;
     }
 
-    private async parseSZXSnapshot(data: Buffer): Promise<any> {
-        const file = new DataView(data.buffer, data.byteOffset, data.byteLength);
-
-        if (
-            String.fromCharCode(file.getUint8(0)) !== 'Z' ||
-            String.fromCharCode(file.getUint8(1)) !== 'X' ||
-            String.fromCharCode(file.getUint8(2)) !== 'S' ||
-            String.fromCharCode(file.getUint8(3)) !== 'T'
-        ) {
-            throw new Error('Invalid SZX file');
-        }
-
-        const machineId = file.getUint8(6);
-        const is48K = (machineId === 1);
-        const model = is48K ? 48 : 128;
-
-        const snapshot: any = {
-            model,
-            registers: {},
-            ulaState: {},
-            memoryPages: {},
-            tstates: 0,
-            halted: false,
-        };
-
-        let offset = 8;
-
-        while (offset < data.length) {
-            const blockId = String.fromCharCode(
-                file.getUint8(offset),
-                file.getUint8(offset + 1),
-                file.getUint8(offset + 2),
-                file.getUint8(offset + 3)
-            );
-            const blockSize = file.getUint32(offset + 4, true);
-            offset += 8;
-
-            switch (blockId) {
-                case 'Z80R':
-                    snapshot.registers = {
-                        AF: file.getUint16(offset, true),
-                        BC: file.getUint16(offset + 2, true),
-                        DE: file.getUint16(offset + 4, true),
-                        HL: file.getUint16(offset + 6, true),
-                        AF_: file.getUint16(offset + 8, true),
-                        BC_: file.getUint16(offset + 10, true),
-                        DE_: file.getUint16(offset + 12, true),
-                        HL_: file.getUint16(offset + 14, true),
-                        IX: file.getUint16(offset + 16, true),
-                        IY: file.getUint16(offset + 18, true),
-                        SP: file.getUint16(offset + 20, true),
-                        PC: file.getUint16(offset + 22, true),
-                        IR: (file.getUint8(offset + 24) << 8) | file.getUint8(offset + 25),
-                        iff1: !!file.getUint8(offset + 26),
-                        iff2: !!file.getUint8(offset + 27),
-                        im: file.getUint8(offset + 28),
-                    };
-                    snapshot.tstates = file.getUint32(offset + 29, true);
-                    snapshot.halted = !!file.getUint8(offset + 33);
-                    break;
-                case 'SPCR':
-                    snapshot.ulaState.borderColour = file.getUint8(offset);
-                    if (!is48K) {
-                        snapshot.ulaState.pagingFlags = file.getUint8(offset + 1);
-                    }
-                    break;
-                case 'RAMP':
-                    const flags = file.getUint16(offset, true);
-                    const page = file.getUint8(offset + 2);
-                    const isCompressed = !!(flags & 0x01);
-                    const pageData = new Uint8Array(data.buffer, data.byteOffset + offset + 3, blockSize - 3);
-
-                    if (isCompressed) {
-                        const decompressed = new Uint8Array(0x4000);
-                        let srcPtr = 0;
-                        let dstPtr = 0;
-                        while (dstPtr < 0x4000 && srcPtr < pageData.length) {
-                            if (
-                                srcPtr + 3 < pageData.length &&
-                                pageData[srcPtr] === 0xed &&
-                                pageData[srcPtr + 1] === 0xed
-                            ) {
-                                const count = pageData[srcPtr + 2];
-                                const value = pageData[srcPtr + 3];
-                                for (let i = 0; i < count && dstPtr < 0x4000; i++) {
-                                    decompressed[dstPtr++] = value;
-                                }
-                                srcPtr += 4;
-                            } else {
-                                decompressed[dstPtr++] = pageData[srcPtr++];
-                            }
-                        }
-                        snapshot.memoryPages[page] = decompressed;
-                    } else {
-                        snapshot.memoryPages[page] = new Uint8Array(pageData);
-                    }
-                    break;
-            }
-
-            offset += blockSize;
-        }
-
-        return snapshot;
-    }
 }

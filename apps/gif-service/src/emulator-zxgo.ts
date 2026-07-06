@@ -1,9 +1,8 @@
-// Spectrum Next emulation for headless rendering — the zx_go core (Go →
-// WebAssembly, the same engine the sites run) hosted under Node. The classic
-// 48K/128K render path keeps the frozen JSSpeccy3 core in ../engine (its
-// loader-skip heuristics are built on that core's tape-trap signals); this
-// class exists for what that core cannot do: boot real NextZXOS and run
-// programs on the Next.
+// Headless emulation for rendering — the zx_go core (Go → WebAssembly, the
+// same engine the sites run) hosted under Node. Drives every machine: the
+// 48K/128K classics (embedded ROMs, tape auto-run with the LD-BYTES trap)
+// and the Spectrum Next (real NextZXOS boot, programs delivered the way the
+// sites deliver them).
 //
 // Runtime assets:
 // - zx.wasm + wasm_exec.js: packages/emulator-core/dist in the repo, or
@@ -87,12 +86,12 @@ function loadRuntime(): Promise<void> {
     return runtimePromise;
 }
 
-export interface NextFrame {
+export interface ZxGoFrame {
     rgba: Uint8Array; // BOX_W x BOX_H fixed-size composite
     audio: Float32Array; // mono, SAMPLES_PER_FRAME
 }
 
-export class NextEmulator {
+export class ZxGoEmulator {
     private buf: Uint8Array = new Uint8Array(0);
     private w = 0;
     private h = 0;
@@ -122,6 +121,41 @@ export class NextEmulator {
         });
     }
 
+    /** Boot a classic machine (48 or 128) from the embedded ROMs. */
+    async bootClassic(model: 48 | 128): Promise<void> {
+        await loadRuntime();
+        const g = globalThis as any;
+        const err = g.zxBoot(String(model));
+        if (err) throw new Error(`zxBoot: ${err}`);
+        const frag = model === 48 ? '48K' : '128K';
+        await new Promise<void>((resolve, reject) => {
+            const t0 = Date.now();
+            const t = setInterval(() => {
+                if ((g.zxModel() || '').includes(frag)) { clearInterval(t); resolve(); }
+                else if (Date.now() - t0 > 30000) { clearInterval(t); reject(new Error(`${model}K machine did not come up`)); }
+            }, 25);
+        });
+    }
+
+    /**
+     * Classic tape auto-run: reboot, drive LOAD"" (48K) / the 128 Tape
+     * Loader via the core's keystroke macro, fast-loaded by the LD-BYTES
+     * trap. zxMacroActive covers the boot-and-typing phase.
+     */
+    runTAPClassic(tapData: Buffer): void {
+        const g = globalThis as any;
+        g.zxTapeTraps(true);
+        const err = g.zxLoadTap(new Uint8Array(tapData));
+        if (err) throw new Error(`tape auto-run failed: ${err}`);
+    }
+
+    /** Current tape block index — advances as the trap pulls blocks in, so
+     *  it marks the loader phase distinctly from the program running after. */
+    tapeBlock(): number {
+        const st = (globalThis as any).zxTapeStatus?.();
+        return st && st.inserted ? st.block : -1;
+    }
+
     /**
      * Deliver a compiled TAP the way the sites do: BASIC programs become a
      * PLUS3DOS file LOADed at the NextZXOS command line; machine code becomes
@@ -142,7 +176,7 @@ export class NextEmulator {
     }
 
     /** Run one frame; returns the fixed-size RGBA composite + mono audio. */
-    runFrame(): NextFrame {
+    runFrame(): ZxGoFrame {
         const g = globalThis as any;
         let d = g.zxFrame(this.buf.length ? this.buf : undefined);
         if (d.w * d.h * 4 !== this.buf.length) {

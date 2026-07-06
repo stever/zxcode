@@ -29,7 +29,7 @@ func new48TapeMacro() *nexloadMacro {
 	hold([][2]int{sym, p}, 4)          // SYMBOL SHIFT + P -> "
 	wait(12)
 	hold([][2]int{{6, 0x01}}, 6)       // ENTER -> run LOAD ""
-	wait(600)                          // fast-load the tape
+	wait(100)                          // the trap fast-load completes almost instantly
 	return &nexloadMacro{steps: steps}
 }
 
@@ -42,7 +42,7 @@ func new128TapeMacro() *nexloadMacro {
 
 	wait(250)                    // boot to the 128 menu (Tape Loader default)
 	hold([][2]int{{6, 0x01}}, 6) // ENTER -> Tape Loader (does LOAD "")
-	wait(600)                    // fast-load the tape
+	wait(100)                    // the trap fast-load completes almost instantly
 	return &nexloadMacro{steps: steps}
 }
 
