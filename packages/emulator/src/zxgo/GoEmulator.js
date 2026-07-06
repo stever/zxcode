@@ -338,15 +338,6 @@ export class GoEmulator extends EventEmitter {
             this.pumpAudio();
             this.pollTape();
             if (d.w) {
-                // The UI sets the canvas CSS box for a 320x240 frame (4:3);
-                // keep it matched to the display box's 640x512 shape instead,
-                // re-asserted here because the responsive layout re-runs
-                // setZoom on resize/rotation and would squash the image.
-                const cssW = parseFloat(this.canvas.style.width);
-                if (cssW) {
-                    const want = (cssW * DISPLAY_H / DISPLAY_W) + 'px';
-                    if (this.canvas.style.height !== want) this.canvas.style.height = want;
-                }
                 if (d.w !== this.frameW || d.h !== this.frameH) {
                     this.frameW = d.w; this.frameH = d.h;
                     this.frameBuf = new Uint8Array(d.w * d.h * 4);

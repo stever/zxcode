@@ -186,7 +186,12 @@ export class UIController extends EventEmitter {
         }
 
         const displayWidth = 320 * this.zoom;
-        const displayHeight = 240 * this.zoom;
+        // Derive the height from the canvas's actual shape rather than
+        // assuming 4:3: the zxgo engine renders into a fixed 640x512 display
+        // box (set before this controller is constructed), while JSSpeccy3's
+        // canvas is 320x240. Using the real ratio makes the element the right
+        // size on the very first layout instead of being corrected later.
+        const displayHeight = displayWidth * (this.canvas.height / this.canvas.width);
         this.canvas.style.width = '' + displayWidth + 'px';
         this.canvas.style.height = '' + displayHeight + 'px';
         this.appContainer.style.width = '' + displayWidth + 'px';
