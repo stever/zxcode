@@ -153,6 +153,10 @@ type ULA struct {
 	// loading sound is garbled. Silence is emitted instead.
 	fastLoad bool
 
+	// lastFlushFEReads snapshots feReadCount at each audio-frame flush so
+	// flushAudioFrame can rate-gate the audible tape mix (see there).
+	lastFlushFEReads uint64
+
 	// feReadCount is a monotonic count of port-$FE reads, used to detect
 	// active tape loading by its read rate (see ReadPort).
 	feReadCount uint64
@@ -1950,9 +1954,18 @@ func (u *ULA) flushAudioFrame() {
 		mixInt16(samples, gen.GenerateFrame(audio.SamplesPerFrame, tstatesPerFrame))
 	}
 	// Tape-loading sound: reconstruct the EAR waveform and mix it in (the
-	// audible pilot whistle + data screech). Only while a tape is playing, so
-	// there's no DC bias once loading finishes.
-	if u.tape != nil && u.tape.IsPlaying() {
+	// audible pilot whistle + data screech). Only while a tape is playing
+	// AND something is actually edge-timing it. The waveform is rebuilt
+	// from EAR levels sampled at port-$FE reads, so it is only faithful
+	// while a loader polls at tape rate (thousands of reads per frame).
+	// When the deck merely rolls — the 128 menu, the autoload macro still
+	// typing, a game running on after a trap fast-load — only the ~8
+	// keyboard-scan reads per frame sample it, and the reconstruction
+	// aliases the pilot tone into constant clicky noise (heard as a
+	// GSM-interference-like buzz for the whole tape duration).
+	feReads := u.feReadCount - u.lastFlushFEReads
+	u.lastFlushFEReads = u.feReadCount
+	if u.tape != nil && u.tape.IsPlaying() && feReads >= tapeAudioMinFEReads {
 		tapeSamples, finalTape := generateSquareWaveFrame(
 			u.tapeAudioEvents, u.frameStartTapeState, -tapeAudioAmplitude, tapeAudioAmplitude)
 		mixInt16(samples, tapeSamples)
@@ -2087,4 +2100,11 @@ const (
 	// Below the beeper so it's clearly the loading tone, not deafening, and
 	// leaves headroom for the beeper/AY in the saturating mix.
 	tapeAudioAmplitude int16 = 9000
+
+	// tapeAudioMinFEReads is the per-frame port-$FE read count above which
+	// the CPU is considered to be edge-timing the tape, making the
+	// read-sampled EAR reconstruction faithful enough to mix audibly. The
+	// same rate threshold the fast-load turbo uses to detect active
+	// loading (cmd's tapeLoadReadThreshold); keyboard scanning alone is ~8.
+	tapeAudioMinFEReads = 500
 )

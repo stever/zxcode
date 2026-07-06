@@ -221,8 +221,31 @@ export class GoEmulator extends EventEmitter {
             node.connect(actx.destination);
             node.port.onmessage = () => { // underrun: widen the cushion (max 120ms)
                 this.audioCushion = Math.min(this.audioCushion + 882, 5292);
+                this.audioUnderruns = (this.audioUnderruns || 0) + 1;
+                console.debug('[zxplay] audio underrun #' + this.audioUnderruns
+                    + ' - cushion now ' + Math.round(this.audioCushion / 44.1) + 'ms');
             };
             this.audioNode = node;
+            // Diagnostic hook: run window.__zxgoAudio() in the console.
+            window.__zxgoAudio = () => {
+                const actx = this.audioNode && this.audioNode.context;
+                const now = performance.now();
+                const dt = (now - (this.diagT0 || now)) / 1000;
+                const rate = dt > 0 ? Math.round((this.diagPulled || 0) / dt) : 0;
+                this.diagT0 = now; this.diagPulled = 0;
+                return {
+                    machine: this.machineType,
+                    contextState: actx ? actx.state : 'none',
+                    contextRate: actx ? actx.sampleRate : 0,
+                    cushionMs: Math.round(this.audioCushion / 44.1),
+                    bufferedMs: (actx && this.audioBase !== null)
+                        ? Math.round((this.audioProduced - (actx.currentTime - this.audioBase) * 44100) / 44.1)
+                        : -1,
+                    underruns: this.audioUnderruns || 0,
+                    pulledPerSec: rate, // since the previous __zxgoAudio() call
+                    lastChunkMin: this.diagMin, lastChunkMax: this.diagMax,
+                };
+            };
         } catch (e) {
             console.warn('zxgo: AudioWorklet init failed - no sound:', e);
         }
@@ -238,6 +261,14 @@ export class GoEmulator extends EventEmitter {
         const n = globalThis.zxPullAudio(this.audioPullU8);
         if (!n) return;
         const chunk = this.audioPullU8.slice(0, n * 2);
+        // Diagnostics: pull rate + amplitude range of the last chunk (see
+        // __zxgoAudio). A healthy idle stream pulls ~44100/s of near-zero
+        // samples; DC rails, steps and starvation all show up here.
+        this.diagPulled = (this.diagPulled || 0) + n;
+        const s16 = new Int16Array(chunk.buffer, 0, n);
+        let mn = 32767, mx = -32768;
+        for (let i = 0; i < n; i++) { const v = s16[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+        this.diagMin = mn; this.diagMax = mx;
         this.audioNode.port.postMessage(chunk.buffer, [chunk.buffer]);
     }
 
