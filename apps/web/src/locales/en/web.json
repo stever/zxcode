@@ -89,7 +89,7 @@
     "sinclairRomHeading": "Sinclair ROM Copyright Permission",
     "sinclairRomText": "Amstrad have kindly given their permission for the redistribution of their copyrighted material but retain that copyright.",
     "intro1": "A ZX Spectrum emulator & programming environment for the browser. Source available <srcLink>here</srcLink>.",
-    "intro2": "An alternative website, related to this one, is available at <zxplayLink>zxplay.org</zxplayLink>. ZX Play is a mobile-friendly ZX Spectrum emulator, for games.",
+    "intro2": "A related website is available at <zxplayLink>zxplay.org</zxplayLink>. ZX Play is a mobile-friendly ZX Spectrum emulator, for games.",
     "legal": "Please read <privacyLink>privacy policy</privacyLink> and <termsLink>terms of use</termsLink>, for this website."
   },
   "settings": {

@@ -89,7 +89,7 @@
     "sinclairRomHeading": "Разрешение за авторски права върху Sinclair ROM",
     "sinclairRomText": "Amstrad любезно дадоха разрешение за разпространение на защитения си с авторски права материал, но запазват тези авторски права.",
     "intro1": "Емулатор на ZX Spectrum и среда за програмиране в браузъра. Изходният код е достъпен <srcLink>тук</srcLink>.",
-    "intro2": "Свързан с този сайт алтернативен уебсайт е достъпен на <zxplayLink>zxplay.org</zxplayLink>. ZX Play е удобен за мобилни устройства емулатор на ZX Spectrum за игри.",
+    "intro2": "Свързан уебсайт е достъпен на <zxplayLink>zxplay.org</zxplayLink>. ZX Play е удобен за мобилни устройства емулатор на ZX Spectrum за игри.",
     "legal": "Моля, прочетете <privacyLink>политиката за поверителност</privacyLink> и <termsLink>условията за ползване</termsLink> на този уебсайт."
   },
   "settings": {
