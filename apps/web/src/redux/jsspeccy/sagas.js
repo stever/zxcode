@@ -134,8 +134,11 @@ function* handleRenderEmulatorActions(action) {
 
         const emuParams = {
             zoom,
-            machine: machine || 48, // 48, 128 or 5 (Pentagon)
-            autoLoadTapes: true
+            machine: machine || 48, // 48, 128 or 'next'
+            autoLoadTapes: true,
+            // zx_go engine by default; ?engine=jsspeccy is the rollback
+            // escape hatch until the JSSpeccy3 core is removed entirely.
+            engine: 'zxgo'
         };
 
         let doFilter = false;

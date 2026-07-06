@@ -14,16 +14,16 @@ import tapePauseIcon from './ui/icons/tape_pause.svg';
 import { Emulator } from "./Emulator";
 import { GoEmulator } from "./zxgo/GoEmulator";
 
-// Engine selection during the JSSpeccy3 -> zx_go migration: opts.engine wins,
-// then an ?engine= query param, defaulting to the incumbent jsspeccy engine.
-// Both engines implement the same surface, so everything below is agnostic.
+// Engine selection during the JSSpeccy3 -> zx_go migration. Precedence: the
+// ?engine= query param (explicit user override / rollback escape hatch), then
+// the app's opts.engine, then the shared default. Both engines implement the
+// same surface, so everything below is agnostic.
 const selectedEngine = (opts) => {
-    if (opts.engine) return opts.engine;
     try {
-        return new URLSearchParams(window.location.search).get('engine') || 'jsspeccy';
-    } catch (e) {
-        return 'jsspeccy';
-    }
+        const q = new URLSearchParams(window.location.search).get('engine');
+        if (q) return q;
+    } catch (e) { /* no window/location (tests) */ }
+    return opts.engine || 'jsspeccy';
 };
 
 export const JSSpeccy = (container, opts) => {
