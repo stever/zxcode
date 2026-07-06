@@ -10,8 +10,9 @@
     "./dist/jsspeccy-core.wasm": "./dist/jsspeccy-core.wasm"
   },
   "scripts": {
-    "build": "run-s build:wasm:release build:worker:release",
-    "build:debug": "run-s build:wasm:debug build:worker:debug",
+    "build": "run-s build:wasm:release build:worker:release build:zxgo",
+    "build:debug": "run-s build:wasm:debug build:worker:debug build:zxgo",
+    "build:zxgo": "npm --prefix ../emulator-core run build && mkdir -p dist && cp ../emulator-core/dist/zx.wasm ../emulator-core/dist/wasm_exec.js dist/",
     "build:core": "node src/generator/gencore.mjs src/generator/core.ts.in build/core.ts",
     "build:dist": "mkdir -p dist",
     "build:wasm:debug": "run-s build:core build:dist build:as:debug",

@@ -10,3 +10,10 @@ plan_*
 *.gif
 *.tap
 .mcp.json
+
+# Licensed ZX Spectrum Next system assets — never commit
+# (distribution basis + conditions: packages/emulator-core/LICENSES.md)
+enNextZX.rom
+enNxtmmc.rom
+enNextMF.rom
+*.mmc

@@ -12,6 +12,19 @@ import tapePlayIcon from './ui/icons/tape_play.svg';
 import tapePauseIcon from './ui/icons/tape_pause.svg';
 
 import { Emulator } from "./Emulator";
+import { GoEmulator } from "./zxgo/GoEmulator";
+
+// Engine selection during the JSSpeccy3 -> zx_go migration: opts.engine wins,
+// then an ?engine= query param, defaulting to the incumbent jsspeccy engine.
+// Both engines implement the same surface, so everything below is agnostic.
+const selectedEngine = (opts) => {
+    if (opts.engine) return opts.engine;
+    try {
+        return new URLSearchParams(window.location.search).get('engine') || 'jsspeccy';
+    } catch (e) {
+        return 'jsspeccy';
+    }
+};
 
 export const JSSpeccy = (container, opts) => {
     // let benchmarkRunCount = 0;
@@ -23,7 +36,8 @@ export const JSSpeccy = (container, opts) => {
     canvas.height = 240;
     // canvas.style.imageRendering = 'pixelated';
 
-    const emu = new Emulator(canvas, {
+    const EmulatorEngine = selectedEngine(opts) === 'zxgo' ? GoEmulator : Emulator;
+    const emu = new EmulatorEngine(canvas, {
         machine: opts.machine || 48,
         autoStart: opts.autoStart || false,
         autoLoadTapes: opts.autoLoadTapes || false,
