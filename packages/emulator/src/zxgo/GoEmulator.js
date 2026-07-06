@@ -25,6 +25,7 @@ import EventEmitter from 'events';
 import JSZip from 'jszip';
 
 import { StandardKeyboardHandler, RecreatedZXSpectrumHandler } from '../KeyboardHandler.js';
+import { tapToNext } from './tapToNext.js';
 
 const scriptUrl = document.currentScript.src;
 
@@ -64,72 +65,10 @@ function loadGoRuntime() {
 }
 
 // ---- AudioWorklet ----------------------------------------------------------
-// The worklet owns all buffering policy on the audio render thread: a ~40ms
-// startup/re-buffer cushion, hold-and-decay on underrun, drop-oldest at a
-// 200ms cap, and a linear-interpolating resampler for contexts that refuse
-// 44.1kHz. It reports underruns so the page can widen its production cushion.
-const ZX_WORKLET = `
-class ZXFeeder extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.cap = 8820;
-    this.buf = new Float32Array(this.cap);
-    this.head = 0; this.tail = 0; this.size = 0;
-    this.prev = 0; this.last = 0;
-    this.started = false;
-    this.step = 44100 / sampleRate;
-    this.phase = 0;
-    this.port.onmessage = (e) => {
-      const s = new Int16Array(e.data);
-      for (let i = 0; i < s.length; i++) {
-        if (this.size === this.cap) {
-          this.tail = (this.tail + 1) % this.cap; this.size--;
-        }
-        this.buf[this.head] = s[i] / 32768;
-        this.head = (this.head + 1) % this.cap;
-        this.size++;
-      }
-    };
-  }
-  process(inputs, outputs) {
-    const out = outputs[0][0];
-    if (!this.started) {
-      if (this.size < 1764) {
-        for (let i = 0; i < out.length; i++) {
-          this.prev = this.last = this.last * 0.996;
-          out[i] = this.last;
-        }
-        return true;
-      }
-      this.started = true;
-    }
-    let underran = false;
-    for (let i = 0; i < out.length; i++) {
-      this.phase += this.step;
-      while (this.phase >= 1 && this.size > 0) {
-        this.phase -= 1;
-        this.prev = this.last;
-        this.last = this.buf[this.tail];
-        this.tail = (this.tail + 1) % this.cap; this.size--;
-      }
-      if (this.phase >= 1) {
-        underran = true;
-        this.phase = 1;
-        this.prev = this.last = this.last * 0.996;
-        out[i] = this.last;
-      } else {
-        out[i] = this.prev + (this.last - this.prev) * this.phase;
-      }
-    }
-    if (underran) {
-      this.started = false;
-      this.port.postMessage(1);
-    }
-    return true;
-  }
-}
-registerProcessor('zx-feeder', ZXFeeder);
-`;
+// The worklet processor lives in zx-feeder.worklet.js, served from /dist as a
+// real static file: the sites run behind a CSP of script-src 'self', which
+// blocks blob:/data: worklet modules (the IDE behind the Caddy proxy was
+// silent because of exactly that).
 
 const SAMPLES_PER_FRAME = 882; // 44100 / 50: one emulated frame of mono audio
 
@@ -227,9 +166,10 @@ export class GoEmulator extends EventEmitter {
     async initAudio() {
         try {
             const actx = new AudioContext({ sampleRate: 44100 });
-            const url = URL.createObjectURL(new Blob([ZX_WORKLET], { type: 'application/javascript' }));
-            await actx.audioWorklet.addModule(url);
-            URL.revokeObjectURL(url);
+            // A real file served from /dist (CSP script-src 'self' compliant;
+            // blob:/data: module URLs are blocked behind the Caddy proxy).
+            await actx.audioWorklet.addModule(
+                new URL(`/dist/zx-feeder.worklet.js?ver=${window.zxplay_ver}`, scriptUrl));
             const node = new AudioWorkletNode(actx, 'zx-feeder',
                 { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
             node.connect(actx.destination);
@@ -240,29 +180,42 @@ export class GoEmulator extends EventEmitter {
                     + ' - cushion now ' + Math.round(this.audioCushion / 44.1) + 'ms');
             };
             this.audioNode = node;
-            // Diagnostic hook: run window.__zxgoAudio() in the console.
-            window.__zxgoAudio = () => {
-                const actx = this.audioNode && this.audioNode.context;
-                const now = performance.now();
-                const dt = (now - (this.diagT0 || now)) / 1000;
-                const rate = dt > 0 ? Math.round((this.diagPulled || 0) / dt) : 0;
-                this.diagT0 = now; this.diagPulled = 0;
-                return {
-                    machine: this.machineType,
-                    contextState: actx ? actx.state : 'none',
-                    contextRate: actx ? actx.sampleRate : 0,
-                    cushionMs: Math.round(this.audioCushion / 44.1),
-                    bufferedMs: (actx && this.audioBase !== null)
-                        ? Math.round((this.audioProduced - (actx.currentTime - this.audioBase) * 44100) / 44.1)
-                        : -1,
-                    underruns: this.audioUnderruns || 0,
-                    pulledPerSec: rate, // since the previous __zxgoAudio() call
-                    lastChunkMin: this.diagMin, lastChunkMax: this.diagMax,
-                };
-            };
+            // Browsers keep the context suspended until a user gesture, and
+            // the apps' own buttons (the IDE's Play, the nav items) never
+            // route through the emulator — so unlock on ANY page gesture.
+            // resumeAudio is idempotent; the capture-phase listeners are
+            // cheap and removed on exit.
+            this.gestureUnlock = () => this.resumeAudio();
+            document.addEventListener('click', this.gestureUnlock, true);
+            document.addEventListener('keydown', this.gestureUnlock, true);
+            document.addEventListener('touchend', this.gestureUnlock, true);
         } catch (e) {
-            console.warn('zxgo: AudioWorklet init failed - no sound:', e);
+            this.audioInitError = String((e && e.message) || e);
+            console.error('zxgo: AudioWorklet init FAILED - the emulator will be silent:', e);
         }
+        // Diagnostic hook: run window.__zxgoAudio() in the console. Installed
+        // whether or not init succeeded, so a failed pipeline can still be
+        // inspected (audioInitError says why).
+        window.__zxgoAudio = () => {
+            const actx = this.audioNode && this.audioNode.context;
+            const now = performance.now();
+            const dt = (now - (this.diagT0 || now)) / 1000;
+            const rate = dt > 0 ? Math.round((this.diagPulled || 0) / dt) : 0;
+            this.diagT0 = now; this.diagPulled = 0;
+            return {
+                machine: this.machineType,
+                audioInitError: this.audioInitError || null,
+                contextState: actx ? actx.state : 'none',
+                contextRate: actx ? actx.sampleRate : 0,
+                cushionMs: Math.round(this.audioCushion / 44.1),
+                bufferedMs: (actx && this.audioBase !== null)
+                    ? Math.round((this.audioProduced - (actx.currentTime - this.audioBase) * 44100) / 44.1)
+                    : -1,
+                underruns: this.audioUnderruns || 0,
+                pulledPerSec: rate, // since the previous __zxgoAudio() call
+                lastChunkMin: this.diagMin, lastChunkMax: this.diagMax,
+            };
+        };
     }
 
     resumeAudio() {
@@ -484,6 +437,23 @@ export class GoEmulator extends EventEmitter {
 
     openTapeBytes(arrayBuffer) {
         const data = new Uint8Array(arrayBuffer);
+        // On the Next, tape loading is blocked by upstream core defects, but
+        // NextZXOS runs programs natively: translate the TAP into either an
+        // autoexec NextBASIC file or a generated .nex and use the OS routes
+        // (this is also how the IDE's Play button reaches the Next).
+        if (this.machineType === 'next') {
+            try {
+                const next = tapToNext(data);
+                const err = (next.kind === 'bas')
+                    ? globalThis.zxRunBas(next.name, next.data)
+                    : globalThis.zxRunNex(next.name, next.data);
+                if (err) return Promise.reject(err);
+                this.emit('openedTapeFile');
+                return Promise.resolve({ mediaType: 'tape' });
+            } catch (e) {
+                return Promise.reject('Next: ' + (e.message || e));
+            }
+        }
         let err;
         if (this.autoLoadTapes) {
             // Reboot + drive LOAD"" / the 128 Tape Loader in the core (its
@@ -588,6 +558,12 @@ export class GoEmulator extends EventEmitter {
 
     exit() {
         this.pause();
+        if (this.gestureUnlock) {
+            document.removeEventListener('click', this.gestureUnlock, true);
+            document.removeEventListener('keydown', this.gestureUnlock, true);
+            document.removeEventListener('touchend', this.gestureUnlock, true);
+            this.gestureUnlock = null;
+        }
         // The Go runtime is a page-level singleton and keeps running (a fresh
         // GoEmulator reuses it); just release this instance's audio.
         if (this.audioNode) {
