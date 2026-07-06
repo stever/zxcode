@@ -148,8 +148,9 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r7-tape-media-128';
-        console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`);
+        const ENGINE_REV = 'r9-opts-forwarded';
+        console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
+            + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
             console.info('[zxplay] zx_go core ready');
             this.setMachine(opts.machine || 128);

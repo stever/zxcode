@@ -308,7 +308,11 @@ function* handleViewFullScreenActions(_) {
 
 function* handleOpenTAPFileActions(action) {
     try {
-        jsspeccy.openTAPFile(action.buffer);
+        jsspeccy.openTAPFile(action.buffer).catch((err) => {
+            // e.g. a program the Next translator cannot convert — surface it
+            // instead of silently doing nothing.
+            alert(err && err.message ? err.message : String(err));
+        });
     } catch (e) {
         handleException(e);
     }
