@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { GIFGenerator } from '../gif-generator.js';
+import { withRenderSlot } from '../concurrency.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -18,15 +19,18 @@ router.post('/tape-to-gif', upload.single('tape'), async (req, res) => {
             ? ('next' as const)
             : parseInt(req.query.machineType as string) || 128;
 
-        const generator = new GIFGenerator({
-            maxDurationMs: maxSeconds * 1000,
-            staleFrameThreshold: staleThreshold,
+        // Serialise every render through the one shared slot: the zx_go core is
+        // a single global wasm machine, so concurrent renders corrupt each
+        // other and sum their peak memory (OOM). See concurrency.ts.
+        const gifBuffer = await withRenderSlot(async () => {
+            const generator = new GIFGenerator({
+                maxDurationMs: maxSeconds * 1000,
+                staleFrameThreshold: staleThreshold,
+            });
+            await generator.initialize();
+            console.log(`Generating GIF from ${req.file!.originalname}...`);
+            return generator.generateFromTAP(req.file!.buffer, machineType);
         });
-
-        await generator.initialize();
-
-        console.log(`Generating GIF from ${req.file.originalname}...`);
-        const gifBuffer = await generator.generateFromTAP(req.file.buffer, machineType);
         console.log(`GIF generated: ${gifBuffer.length} bytes`);
 
         res.setHeader('Content-Type', 'image/gif');

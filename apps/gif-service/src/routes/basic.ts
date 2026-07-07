@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import zmakebas, { ZmakebasMessage } from 'zmakebas';
 import { GIFGenerator } from '../gif-generator.js';
+import { withRenderSlot } from '../concurrency.js';
 
 const router = Router();
 
@@ -51,24 +52,24 @@ async function handle(format: Format, req: Request, res: Response): Promise<void
             return;
         }
 
-        const generator = new GIFGenerator({
-            maxDurationMs: maxSeconds * 1000,
-            staleFrameThreshold: staleThreshold,
-            scale,
-        });
-        await generator.initialize();
-
-        console.log(`Generating ${format.toUpperCase()} from ${code.length} bytes of BASIC...`);
         const tap = Buffer.from(compiledTap);
-        if (format === 'mp4') {
-            const mp4 = await generator.generateMp4FromTAP(tap, machineType);
-            res.setHeader('Content-Type', 'video/mp4');
-            res.send(mp4);
-        } else {
-            const gif = await generator.generateFromTAP(tap, machineType);
-            res.setHeader('Content-Type', 'image/gif');
-            res.send(gif);
-        }
+        // Serialise every render through the one shared slot: the zx_go core is
+        // a single global wasm machine, so concurrent renders corrupt each
+        // other and sum their peak memory (OOM). See concurrency.ts.
+        const media = await withRenderSlot(async () => {
+            const generator = new GIFGenerator({
+                maxDurationMs: maxSeconds * 1000,
+                staleFrameThreshold: staleThreshold,
+                scale,
+            });
+            await generator.initialize();
+            console.log(`Generating ${format.toUpperCase()} from ${code.length} bytes of BASIC...`);
+            return format === 'mp4'
+                ? generator.generateMp4FromTAP(tap, machineType)
+                : generator.generateFromTAP(tap, machineType);
+        });
+        res.setHeader('Content-Type', format === 'mp4' ? 'video/mp4' : 'image/gif');
+        res.send(media);
     } catch (error: any) {
         console.error(`Error generating ${format} from BASIC:`, error);
         res.status(500).json({ error: error.message });

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { GIFGenerator } from '../gif-generator.js';
 import { fetchProject } from '../hasura.js';
 import { compileProjectIsolated } from '../compile-isolated.js';
+import { withRenderSlot } from '../concurrency.js';
 import { CompileError } from '../errors.js';
 
 const router = Router();
@@ -67,25 +68,25 @@ async function handle(format: Format, req: Request, res: Response): Promise<void
             throw err;
         }
 
-        const generator = new GIFGenerator({
-            maxDurationMs: maxSeconds * 1000,
-            staleFrameThreshold: staleThreshold,
-            scale,
+        // Serialise every render through the one shared slot: the zx_go core is
+        // a single global wasm machine, so concurrent renders corrupt each
+        // other and sum their peak memory (OOM). See concurrency.ts.
+        const media = await withRenderSlot(async () => {
+            const generator = new GIFGenerator({
+                maxDurationMs: maxSeconds * 1000,
+                staleFrameThreshold: staleThreshold,
+                scale,
+            });
+            await generator.initialize();
+            console.log(
+                `Generating ${format.toUpperCase()} from project ${ref.userSlug}/${ref.projectSlug} (lang=${project.lang})...`,
+            );
+            return format === 'mp4'
+                ? generator.generateMp4FromTAP(tap, machineType)
+                : generator.generateFromTAP(tap, machineType);
         });
-        await generator.initialize();
-
-        console.log(
-            `Generating ${format.toUpperCase()} from project ${ref.userSlug}/${ref.projectSlug} (lang=${project.lang})...`,
-        );
-        if (format === 'mp4') {
-            const mp4 = await generator.generateMp4FromTAP(tap, machineType);
-            res.setHeader('Content-Type', 'video/mp4');
-            res.send(mp4);
-        } else {
-            const gif = await generator.generateFromTAP(tap, machineType);
-            res.setHeader('Content-Type', 'image/gif');
-            res.send(gif);
-        }
+        res.setHeader('Content-Type', format === 'mp4' ? 'video/mp4' : 'image/gif');
+        res.send(media);
     } catch (error: any) {
         console.error(`Error generating ${format} from project:`, error);
         res.status(500).json({ error: error.message });
