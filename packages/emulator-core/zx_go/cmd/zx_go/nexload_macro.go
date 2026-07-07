@@ -34,6 +34,10 @@ var nexKeyMatrix = func() map[rune][][2]int {
 		'.':  {sym, {7, 0x04}}, // SYMBOL SHIFT + M
 		'/':  {sym, {0, 0x10}}, // SYMBOL SHIFT + V
 		'-':  {sym, {6, 0x08}}, // SYMBOL SHIFT + J
+		'_':  {sym, {4, 0x01}}, // SYMBOL SHIFT + 0 — appears in compiler temp
+		//                         names (tmp…); untypeable here meant the macro
+		//                         silently dropped it and NextZXOS then couldn't
+		//                         find the file ("No such file or dir").
 		'\'': {sym, {4, 0x08}}, // SYMBOL SHIFT + 7
 		'"':  {sym, {5, 0x01}}, // SYMBOL SHIFT + P
 		':':  {sym, {0, 0x02}}, // SYMBOL SHIFT + Z
@@ -88,6 +92,12 @@ func newCommandLineMacro(cmd string, tailFrames int) *nexloadMacro {
 		if keys, ok := nexKeyMatrix[c]; ok {
 			hold(keys, 4)
 			wait(10)
+		} else {
+			// A char the Spectrum matrix can't type is dropped, leaving a typed
+			// path that misses the file ("No such file or dir"). Names are
+			// sanitised to typeable chars upstream, so warn if that ever
+			// diverges from this matrix again rather than failing silently.
+			slog.Warn("nexload macro: unmappable char dropped from command", "char", string(c), "cmd", cmd)
 		}
 	}
 	wait(15)
