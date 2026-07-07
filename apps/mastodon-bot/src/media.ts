@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { MachineType } from './directives.js';
 import { ProjectRef } from './project.js';
 
 export type MediaResult =
@@ -57,15 +58,17 @@ async function requestMedia(
     }
 }
 
-function machineParam(machineType?: number): Record<string, string> {
+// Serialise the machine into the gif-service query. String(128) → "128",
+// String('next') → "next" — exactly the values the render routes expect.
+function machineParam(machineType?: MachineType): Record<string, string> {
     return machineType ? { machineType: String(machineType) } : {};
 }
 
-/** Compile and run inline source (BASIC or asm) via gif-service. */
+/** Compile and run inline source (BASIC, Boriel, asm, …) via gif-service. */
 export function sourceToMedia(
     code: string,
     lang: string,
-    machineType?: number,
+    machineType?: MachineType,
 ): Promise<MediaResult> {
     return requestMedia('/api/source-to-mp4', { code, lang }, code, machineParam(machineType));
 }
@@ -76,7 +79,7 @@ export function basicToMedia(code: string): Promise<MediaResult> {
 }
 
 /** Render a public code.zxplay.org project via gif-service. */
-export function projectToMedia(ref: ProjectRef, machineType?: number): Promise<MediaResult> {
+export function projectToMedia(ref: ProjectRef, machineType?: MachineType): Promise<MediaResult> {
     return requestMedia(
         '/api/project-to-mp4',
         { userSlug: ref.userSlug, projectSlug: ref.projectSlug },
