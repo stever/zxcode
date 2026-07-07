@@ -241,6 +241,7 @@ func TestCard_CMD24_WriteBlock(t *testing.T) {
 	img := make([]byte, 4096)
 	src, _ := NewImageSource(img, false)
 	c := NewCard(src)
+	c.SetSDHC(true) // this test addresses by LBA (arg == block number)
 	// Send CMD24 with LBA=2.
 	c.WriteCS(0xFE)
 	c.WriteData(0x40 | 24)

@@ -31,6 +31,7 @@ func TestCard_CMD25_WriteMultipleBlock(t *testing.T) {
 	img := make([]byte, 8192)
 	src, _ := NewImageSource(img, false)
 	c := NewCard(src)
+	c.SetSDHC(true) // this test addresses by LBA (arg == block number)
 
 	// CMD25 starting at LBA 1.
 	if r1 := sendCommand(c, 25, 1); r1 != 0x00 {

@@ -420,23 +420,18 @@ func (c *Card) dispatch() {
 		// until it issues CMD12 (or a CS deassert).
 		c.handleReadBlock(arg)
 		// Track where we are so ReadData can fetch the next block.
-		// arg is byte address (SDSC) or LBA (SDHC) — convert to LBA.
-		if c.advertiseSDHC {
-			c.multiReadLBA = arg + 1
-		} else {
-			c.multiReadLBA = (arg / 512) + 1
-		}
+		c.multiReadLBA = c.argToLBA(arg) + 1
 		c.multiReadActive = true
 	case 24: // WRITE_BLOCK
 		c.handleWriteBlockStart(arg)
 	case 25: // WRITE_MULTIPLE_BLOCK
 		c.handleWriteMultiBlockStart(arg)
 	case 32: // ERASE_WR_BLK_START
-		c.eraseStart = arg
+		c.eraseStart = c.argToLBA(arg)
 		c.eraseStartSet = true
 		c.respondR1(0x00)
 	case 33: // ERASE_WR_BLK_END
-		c.eraseEnd = arg
+		c.eraseEnd = c.argToLBA(arg)
 		c.respondR1(0x00)
 	case 38: // ERASE
 		c.handleErase()
@@ -596,20 +591,28 @@ func (c *Card) handleReadBlock(arg uint32) {
 	c.respondR1(0x00) // respondR1 supplies the Ncr pad
 	buf := make([]byte, 512)
 	if c.src != nil {
-		sector := arg
-		if !c.advertiseSDHC {
-			// SDSC: arg is byte address — divide back to LBA.
-			sector = arg / 512
-		}
-		// SDHC/SDXC: arg is already the LBA (block number).
-		_ = c.src.ReadBlock(sector, buf)
+		_ = c.src.ReadBlock(c.argToLBA(arg), buf)
 	}
 	c.queueRawDataBlock(buf)
 }
 
+// argToLBA maps a block-command argument to a 512-byte LBA. On an
+// SDHC/SDXC card the argument already is the LBA; on an SDSC card it
+// is a byte address, so it is divided by 512. Every block command
+// (read, write, erase) must funnel its argument through this — a
+// write path that skipped it treated the guest's SDSC byte address
+// as an LBA and *512'd it past EOC, silently dropping every save.
+func (c *Card) argToLBA(arg uint32) uint32 {
+	if c.advertiseSDHC {
+		return arg
+	}
+	return arg / 512
+}
+
 // handleWriteBlockStart begins a write transaction. The host
 // will send a 0xFE data token followed by 512 bytes + 2 CRC.
-func (c *Card) handleWriteBlockStart(lba uint32) {
+func (c *Card) handleWriteBlockStart(arg uint32) {
+	lba := c.argToLBA(arg)
 	c.respondR1(0x00)
 	c.writeMode = true
 	c.writeBuf = make([]byte, 0, 512+3)
@@ -657,7 +660,8 @@ func (c *Card) handleWriteByte(val byte) {
 // CRC; each accepted block writes to the next sequential LBA. A
 // 0xFD stop-tran token ends the transaction. Addressing matches the
 // CMD24 sibling: arg is the start LBA.
-func (c *Card) handleWriteMultiBlockStart(lba uint32) {
+func (c *Card) handleWriteMultiBlockStart(arg uint32) {
+	lba := c.argToLBA(arg)
 	c.respondR1(0x00)
 	c.writeMode = true
 	c.multiWriteMode = true

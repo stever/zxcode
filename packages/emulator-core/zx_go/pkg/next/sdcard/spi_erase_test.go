@@ -13,6 +13,7 @@ func TestCard_Erase_ZeroesRange(t *testing.T) {
 	}
 	src, _ := NewImageSource(img, false)
 	c := NewCard(src)
+	c.SetSDHC(true) // this test addresses by LBA (arg == block number)
 
 	// Erase blocks 1..3 inclusive.
 	if r := sendCommand(c, 32, 1); r != 0x00 {
@@ -66,6 +67,7 @@ func TestCard_Erase_SwappedBoundsStillErases(t *testing.T) {
 	}
 	src, _ := NewImageSource(img, false)
 	c := NewCard(src)
+	c.SetSDHC(true) // this test addresses by LBA (arg == block number)
 
 	sendCommand(c, 32, 5) // start > end
 	sendCommand(c, 33, 4)
