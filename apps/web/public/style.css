@@ -304,6 +304,27 @@ code {
     color: #ffffff !important;
 }
 
+.editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    column-gap: 16px;
+    row-gap: 8px;
+}
+
+.editor-toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Nudge the segmented Target machine buttons 1px apart. */
+.editor-toolbar .p-selectbutton .p-button + .p-button {
+    margin-left: 2px;
+}
+
 .project-divider {
     margin: 0 12px !important;
     height: 32px !important;

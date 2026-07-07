@@ -6,6 +6,7 @@ import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 import { Emulator } from "./Emulator";
 import { ProjectEditor } from "./ProjectEditor";
+import { ProjectToolbar } from "./ProjectToolbar";
 import StarButton from "./StarButton";
 import {
   loadProject,
@@ -71,7 +72,7 @@ export default function ProjectPage({ projectId }) {
       : 640;
   const zoom = emuW / 320;
   const editorTitle = getLanguageLabel(lang);
-  const className = mode === "tab" ? "" : "mx-2 my-1";
+  const className = mode === "tab" ? "" : "mx-2 mb-1";
 
   return (
     <Titled title={(s) => `${title} ${sep} ${t("nav.project")} ${sep} ${s}`}>
@@ -89,37 +90,42 @@ export default function ProjectPage({ projectId }) {
             </TabPanel>
             <TabPanel header={editorTitle}>
               <ProjectEditor id={effectiveId} />
+              <ProjectToolbar />
             </TabPanel>
           </TabView>
         )}
         {mode === "split" && (
-          <div className="grid full-width-grid">
-            <div
-              className="col p-0 mr-2"
-              style={{ maxWidth: `calc(100vw - ${emuW + 41}px` }}
-            >
-              <TabView
-                activeIndex={selectedTabIndex}
-                onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}
+          <>
+            <div className="grid full-width-grid">
+              <div
+                className="col p-0 mr-2"
+                style={{ maxWidth: `calc(100vw - ${emuW + 41}px` }}
               >
-                <TabPanel header={editorTitle}>
-                  <ProjectEditor id={effectiveId} />
-                </TabPanel>
-              </TabView>
-            </div>
-            <div
-              className="col-fixed p-0 pt-1"
-              style={{ width: `${emuW}px` }}
-            >
-              <div className="height-53 pt-3 pl-1 flex align-items-center justify-content-between">
-                <h3 className="m-0">
-                  {title ? t("home.projectLabel", { title }) : ""}
-                </h3>
-                {effectiveId && <StarButton projectId={effectiveId} />}
+                <TabView
+                  activeIndex={selectedTabIndex}
+                  onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}
+                >
+                  <TabPanel header={editorTitle}>
+                    <ProjectEditor id={effectiveId} />
+                  </TabPanel>
+                </TabView>
               </div>
-              <Emulator zoom={zoom} width={emuW} />
+              <div
+                className="col-fixed p-0 pt-1"
+                style={{ width: `${emuW}px` }}
+              >
+                <div className="height-53 pt-3 pl-1 flex align-items-center justify-content-between">
+                  <h3 className="m-0">
+                    {title ? t("home.projectLabel", { title }) : ""}
+                  </h3>
+                  {effectiveId && <StarButton projectId={effectiveId} />}
+                </div>
+                <Emulator zoom={zoom} width={emuW} />
+              </div>
             </div>
-          </div>
+            {/* Toolbar spans the full page width, beneath both columns. */}
+            <ProjectToolbar />
+          </>
         )}
       </div>
     </Titled>
