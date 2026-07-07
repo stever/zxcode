@@ -17,7 +17,8 @@ const initialState = {
     ownerSlug: undefined,
     ownerId: undefined,
     ownerName: undefined,
-    ownerProfileIsPublic: false
+    ownerProfileIsPublic: false,
+    machine: '48'
 };
 
 // -----------------------------------------------------------------------------
@@ -57,7 +58,8 @@ function receiveLoadedProject(state, action) {
         ownerSlug: action.ownerSlug,
         ownerId: action.ownerId,
         ownerName: action.ownerName,
-        ownerProfileIsPublic: action.ownerProfileIsPublic
+        ownerProfileIsPublic: action.ownerProfileIsPublic,
+        machine: action.machine
     };
 }
 

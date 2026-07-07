@@ -28,6 +28,7 @@ import { Dialog } from "primereact/dialog";
 import { InputText } from "primereact/inputtext";
 import { Divider } from "primereact/divider";
 import ProjectVisibilityToggle from "./ProjectVisibilityToggle";
+import ProjectMachineToggle from "./ProjectMachineToggle";
 import LineNumbersToggle from "./LineNumbersToggle";
 import { useTranslation } from "@zxplay/i18n";
 
@@ -52,6 +53,7 @@ export function ProjectEditor() {
   const projectName = useSelector((state) => state?.project.title);
   const projectId = useSelector((state) => state?.project.id);
   const isPublic = useSelector((state) => state?.project.isPublic);
+  const projectMachine = useSelector((state) => state?.project.machine);
   const projectSlug = useSelector((state) => state?.project.slug);
   const userId = useSelector((state) => state?.identity.userId);
   const ownerId = useSelector((state) => state?.project.ownerId);
@@ -247,6 +249,19 @@ export function ProjectEditor() {
                 project_id: projectId,
                 is_public: isPublic,
                 slug: projectSlug,
+              }}
+              userId={userId}
+            />
+          </div>
+          <Divider
+            layout="vertical"
+            className="hidden md:inline-flex project-divider"
+          />
+          <div className="mt-2 inline-flex project-divider-after">
+            <ProjectMachineToggle
+              project={{
+                project_id: projectId,
+                machine: projectMachine,
               }}
               userId={userId}
             />

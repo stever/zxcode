@@ -34,9 +34,9 @@ export const loadProject = (id, ownerSlug = null) => ({
     ownerSlug
 });
 
-export const receiveLoadedProject = (id, title, lang, code, isPublic = false, slug = null, ownerSlug = null, ownerId = null, ownerName = null, ownerProfileIsPublic = false) => ({
+export const receiveLoadedProject = (id, title, lang, code, isPublic = false, slug = null, ownerSlug = null, ownerId = null, ownerName = null, ownerProfileIsPublic = false, machine = '48') => ({
     type: actionTypes.receiveLoadedProject,
-    id, title, lang, code, isPublic, slug, ownerSlug, ownerId, ownerName, ownerProfileIsPublic
+    id, title, lang, code, isPublic, slug, ownerSlug, ownerId, ownerName, ownerProfileIsPublic, machine
 });
 
 export const setCode = (code) => ({

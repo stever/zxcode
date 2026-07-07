@@ -20,6 +20,10 @@
     "machine48": "Spectrum 48K",
     "machine128": "Spectrum 128K"
   },
+  "machine": {
+    "label": "Target machine",
+    "next": "ZX Spectrum Next"
+  },
   "errorPage": {
     "errorTitle": "Error",
     "notFoundTitle": "Not Found",
