@@ -44,7 +44,7 @@ async function handle(format: Format, req: Request, res: Response): Promise<void
         const machineType = req.query.machineType === 'next'
             ? ('next' as const)
             : parseInt(req.query.machineType as string) || 48;
-        const scale = parseInt(req.query.scale as string) || (format === 'mp4' ? 4 : 2);
+        const scale = parseInt(req.query.scale as string) || (format === 'mp4' ? 3 : 2);
 
         const { tap: compiledTap, detail } = await compile(code);
         if (!compiledTap) {

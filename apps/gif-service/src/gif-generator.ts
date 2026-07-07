@@ -44,6 +44,17 @@ export class GIFGenerator {
         // compatibility with the routes.
     }
 
+    // Hand control back to the event loop mid-render. The capture loops are
+    // synchronous (emu.runFrame() never awaits), so without this a render
+    // monopolises the single thread for tens of seconds and /health can't
+    // answer — a health-based restart (autoheal/Swarm) then SIGTERMs the
+    // container mid-render. Safe under MAX_CONCURRENT_RENDERS=1: the render
+    // slot is held, so no second render starts; only /health and queued
+    // waiters run during the yield.
+    private yieldToLoop(): Promise<void> {
+        return new Promise((resolve) => setImmediate(resolve));
+    }
+
     private areFramesIdentical(frame1: Uint8Array, frame2: Uint8Array): boolean {
         if (frame1.length !== frame2.length) {
             return false;
@@ -147,6 +158,7 @@ export class GIFGenerator {
         let prevBlock = emu.tapeBlock();
 
         for (let f = 0; f < maxFrames; f++) {
+            if ((f & 31) === 0) await this.yieldToLoop(); // keep /health responsive
             if (Date.now() > renderDeadline) {
                 console.warn(`Render wall-clock budget exceeded after ${f} frames; stopping`);
                 break;
@@ -209,6 +221,7 @@ export class GIFGenerator {
         const macroDeadline = Date.now() + 300_000;
         let skipped = 0;
         while (emu.macroActive()) {
+            if ((skipped & 31) === 0) await this.yieldToLoop(); // keep /health responsive
             emu.runFrame();
             skipped++;
             if (skipped > 15000 || Date.now() > macroDeadline) {
@@ -229,6 +242,7 @@ export class GIFGenerator {
         let lastChangeIndex = -1;
 
         for (let f = 0; f < maxFrames; f++) {
+            if ((f & 31) === 0) await this.yieldToLoop(); // keep /health responsive
             if (Date.now() > renderDeadline) {
                 console.warn(`Next render wall-clock budget exceeded after ${f} frames; stopping`);
                 break;
@@ -347,7 +361,7 @@ export class GIFGenerator {
     /** Render the program to an H.264 MP4 at the full 50fps, with AAC audio. */
     async generateMp4FromTAP(tapData: Buffer, machineType: MachineType = 48): Promise<Buffer> {
         const { frames, audio } = await this.captureFor(tapData, machineType, true);
-        return this.encodeMp4(frames, audio, 50, this.frameAdapter(machineType));
+        return this.encodeMp4(frames, audio, 50, this.options.scale);
     }
 
     // Concatenate per-frame stereo audio into one interleaved (L,R,L,R) f32 buffer.
@@ -364,15 +378,19 @@ export class GIFGenerator {
         return Buffer.from(interleaved.buffer, interleaved.byteOffset, interleaved.byteLength);
     }
 
-    /** Pipe decoded RGBA frames through ffmpeg to a temporary MP4 and return it. */
+    /** Pipe native RGBA frames through ffmpeg to a temporary MP4 and return it.
+     *  ffmpeg upscales (nearest-neighbour, so the pixels stay crisp) during
+     *  encode — far cheaper than a per-frame JS scale loop, and the pipe carries
+     *  scale^2 less data (native 320x256 instead of the upscaled frame). */
     private async encodeMp4(
         frames: Uint8Array[],
         audio: AudioFrame[],
         fps: number,
-        fit: { width: number; height: number; toRGBA: (frame: Uint8Array) => Uint8Array },
+        scale: number,
     ): Promise<Buffer> {
-        const width = fit.width;
-        const height = fit.height;
+        const w = ZxGoEmulator.BOX_W;
+        const h = ZxGoEmulator.BOX_H;
+        const s = Math.max(1, Math.floor(scale));
         const outPath = join(tmpdir(), `zxplay-${process.pid}-${Date.now()}.mp4`);
 
         // Only attach an audio track when the program actually made a sound;
@@ -386,11 +404,16 @@ export class GIFGenerator {
         }
 
         const args = [
-            '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${width}x${height}`, '-r', String(fps),
+            '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w}x${h}`, '-r', String(fps),
             '-i', 'pipe:0',
         ];
         if (hasAudio) {
             args.push('-f', 'f32le', '-ar', String(SAMPLE_RATE), '-ac', '2', '-i', audioPath);
+        }
+        // Upscale in ffmpeg (SIMD C) rather than a JS loop; nearest-neighbour
+        // preserves the crisp integer-pixel look the JS scaler produced.
+        if (s !== 1) {
+            args.push('-vf', `scale=${w * s}:${h * s}:flags=neighbor`);
         }
         args.push(
             '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '20',
@@ -414,8 +437,7 @@ export class GIFGenerator {
         });
 
         for (const raw of frames) {
-            const rgba = fit.toRGBA(raw);
-            if (!ff.stdin.write(rgba)) {
+            if (!ff.stdin.write(raw)) {
                 await new Promise<void>((resolve) => ff.stdin.once('drain', () => resolve()));
             }
         }
@@ -425,7 +447,7 @@ export class GIFGenerator {
         const buffer = await readFile(outPath);
         await unlink(outPath).catch(() => undefined);
         if (hasAudio) await unlink(audioPath).catch(() => undefined);
-        console.log(`Encoded MP4: ${frames.length} frames, ${buffer.length} bytes${hasAudio ? ' (with audio)' : ''}`);
+        console.log(`Encoded MP4: ${frames.length} frames @ ${w * s}x${h * s}, ${buffer.length} bytes${hasAudio ? ' (with audio)' : ''}`);
         return buffer;
     }
 
