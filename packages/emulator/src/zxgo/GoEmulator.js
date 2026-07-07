@@ -126,6 +126,11 @@ export class GoEmulator extends EventEmitter {
         // opening one while the Next is selected switches to the 128K.
         this.tapToNextEnabled = !!opts.tapToNext;
         this.machineType = null;
+        // Promise for an in-flight machine boot (currently only the Next, whose
+        // boot is async: it fetches the ~64MB SD image and constructs in a Go
+        // goroutine). run/tape/nex calls await this so they can't race the boot
+        // and hit "not booted", or branch on a machineType that hasn't settled.
+        this.pendingBoot = null;
         this.isReady = false;
         this.onReadyHandlers = [];
 
@@ -148,7 +153,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r10-highorg-stub';
+        const ENGINE_REV = 'r11-bootgate';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -356,7 +361,9 @@ export class GoEmulator extends EventEmitter {
 
     setMachine(type) {
         if (type === 'next') {
-            this.bootNext().catch(err => {
+            // Record the boot promise so run/tape/nex calls can await it.
+            this.pendingBoot = this.bootNext();
+            this.pendingBoot.catch(err => {
                 console.error('zxgo: Next boot failed:', err);
                 alert('Spectrum Next boot failed: ' + (err.message || err));
             });
@@ -370,7 +377,17 @@ export class GoEmulator extends EventEmitter {
             if (err) console.error('zxgo setMachine:', err);
         }
         this.machineType = type;
+        this.pendingBoot = null; // classic boot completes synchronously here
         this.emit('setMachine', type);
+    }
+
+    // Await any in-flight machine boot (see this.pendingBoot). No-op when the
+    // machine is already up. Boot errors are swallowed here — they are already
+    // surfaced by setMachine's own catch — so callers only wait, never rethrow.
+    async whenMachineReady() {
+        if (this.pendingBoot) {
+            try { await this.pendingBoot; } catch (e) { /* surfaced in setMachine */ }
+        }
     }
 
     // Machine construction runs in a Go goroutine; poll the core's reported
@@ -428,6 +445,9 @@ export class GoEmulator extends EventEmitter {
     // NextZXOS's own .nexload command to run it (expect a short reboot).
     async openNEXFile(arrayBuffer, name) {
         const data = new Uint8Array(arrayBuffer);
+        // Wait out a boot already started by setMachine('next') before deciding
+        // whether to boot — otherwise machineType lags and we double-boot.
+        await this.whenMachineReady();
         if (this.machineType !== 'next') await this.bootNext();
         const err = globalThis.zxRunNex(name || 'game.nex', data);
         if (err) throw new Error(err);
@@ -448,7 +468,13 @@ export class GoEmulator extends EventEmitter {
         return Promise.reject(res);
     }
 
-    openTapeBytes(arrayBuffer) {
+    async openTapeBytes(arrayBuffer) {
+        // A Next boot from setMachine('next') may still be in flight (its 64MB
+        // SD fetch takes seconds over the network). Wait for it so machineType
+        // has settled to 'next' and the core is constructed before we branch or
+        // call in — otherwise the Next path is missed and the classic branch
+        // loads a tape into a not-yet-booted core ("not booted").
+        await this.whenMachineReady();
         const data = new Uint8Array(arrayBuffer);
         if (this.machineType === 'next') {
             if (this.tapToNextEnabled) {
