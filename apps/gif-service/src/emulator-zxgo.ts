@@ -73,6 +73,9 @@ function loadRuntime(): Promise<void> {
         // wasm_exec.js is a classic script defining globalThis.Go.
         (0, eval)(readFileSync(join(dist, 'wasm_exec.js'), 'utf8'));
         const go = new (globalThis as any).Go();
+        // Surface ZX_GO_* diagnostics (NEXTREG_WATCH, FORCE_SPEED, ...) to
+        // the core; wasm_exec's default env is empty under Node.
+        go.env = process.env;
         const wasm = await WebAssembly.instantiate(readFileSync(join(dist, 'zx.wasm')), go.importObject);
         go.run(wasm.instance); // runs forever; exports appear asynchronously
         await new Promise<void>((resolve, reject) => {

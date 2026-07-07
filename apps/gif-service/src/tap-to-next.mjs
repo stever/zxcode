@@ -38,12 +38,14 @@ export function makeNEX(bin, org = 0x8000, entry = org) {
     staged[0] = 0xFD; staged[1] = 0x21; w(2, 0x5C3A); // LD IY,$5C3A (ERR-NR: ROM convention)
     staged[4] = 0x3E; staged[5] = 0x02;               // LD A,2 (upper screen stream)
     staged[6] = 0xCD; w(7, 0x1601);                   // CALL $1601 CHAN-OPEN (ROM3 is paged)
-    staged[9] = 0x21; w(10, 0x8020);                  // LD HL, staging area
-    staged[12] = 0x11; w(13, org);                    // LD DE, org
-    staged[15] = 0x01; w(16, bin.length);             // LD BC, length
-    staged[18] = 0xED; staged[19] = 0xB0;             // LDIR
-    staged[20] = 0xCD; w(21, entry);                  // CALL entry (RET-safe)
-    staged[23] = 0x18; staged[24] = 0xFE;             // JR $ — hold the final screen
+    staged[9] = 0xED; staged[10] = 0x56;              // IM 1 (BASIC's USR runs with
+    staged[11] = 0xFB;                                // EI — .nexload hands over DI'd)
+    staged[12] = 0x21; w(13, 0x8020);                 // LD HL, staging area
+    staged[15] = 0x11; w(16, org);                    // LD DE, org
+    staged[18] = 0x01; w(19, bin.length);             // LD BC, length
+    staged[21] = 0xED; staged[22] = 0xB0;             // LDIR
+    staged[23] = 0xCD; w(24, entry);                  // CALL entry (RET-safe)
+    staged[26] = 0x18; staged[27] = 0xFE;             // JR $ — hold the final screen
     staged.set(bin, 32);
     return makeNEX(staged, 0x8000, 0x8000);
   }
@@ -79,8 +81,10 @@ export function makeNEX(bin, org = 0x8000, entry = org) {
     bank0[0] = 0xFD; bank0[1] = 0x21; w(2, 0x5C3A);   // LD IY,$5C3A
     bank0[4] = 0x3E; bank0[5] = 0x02;                 // LD A,2
     bank0[6] = 0xCD; w(7, 0x1601);                    // CALL $1601 CHAN-OPEN
-    bank0[9] = 0xCD; w(10, entry);                    // CALL entry (RET-safe)
-    bank0[12] = 0x18; bank0[13] = 0xFE;               // JR $ — hold the screen
+    bank0[9] = 0xED; bank0[10] = 0x56;                // IM 1 (BASIC's USR runs with
+    bank0[11] = 0xFB;                                 // EI — .nexload hands over DI'd)
+    bank0[12] = 0xCD; w(13, entry);                   // CALL entry (RET-safe)
+    bank0[15] = 0x18; bank0[16] = 0xFE;               // JR $ — hold the screen
     banks.push([0, bank0]);
     pc = 0xC000;
   }

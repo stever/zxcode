@@ -2,6 +2,10 @@
 
 # ZX Play API for ZX Basic
 
+Programs target the classic 48K Spectrum by default. See [NEXT.md](NEXT.md)
+for writing ZX Spectrum Next programs (Z80N, Layer 2, hardware sprites) and
+how the service selects the zxnext architecture.
+
 ## Development start
 
 ### Initial project setup
