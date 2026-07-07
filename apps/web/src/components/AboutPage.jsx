@@ -60,10 +60,11 @@ export default function AboutPage() {
                         <a href="https://github.com/gasman/jsspeccy3/blob/main/COPYING" target="_blank">COPYING</a>.
                     </li>
                     <li>
-                        <a href="https://www.specnext.com/" target="_blank">NextZXOS</a> — the
+                        <a href="https://gitlab.com/thesmog358/tbblue" target="_blank">NextZXOS</a> — the
                         Spectrum Next machine boots the real NextZXOS system software,
                         copyright Garry Lancaster / SpecNext Ltd (Spectrum ROMs copyright
-                        Amstrad plc), distributed free of charge under The Next License.
+                        Amstrad plc), distributed free of charge under{' '}
+                        <a href="https://gitlab.com/thesmog358/tbblue/-/blob/master/LICENSE.md" target="_blank">The Next License</a>.
                     </li>
                     <li>
                         <a href="https://pasmo.speccy.org/" target="_blank">Pasmo</a> by Julián Albo García, alias "NotFound".
