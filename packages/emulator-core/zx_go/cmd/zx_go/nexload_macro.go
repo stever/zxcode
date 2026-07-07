@@ -201,16 +201,17 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "nextzxos", "autoexec.bas", neutralAutoexec()); err != nil {
 		slog.Warn("nex import: could not neutralise autoexec.bas", "err", err)
 	}
-	// Always import to one fixed, short 8.3 name and OVERWRITE it in place —
-	// never preserve the source name. AddFileToFAT32 would mint a unique alias
-	// when re-importing into an already-populated card (LONEWOLF.NEX ->
-	// LONEWO~1.NEX), and the typing macro cannot produce '~': it typed
-	// "lonewo1.nex" and NextZXOS answered "No such file or dir". A fixed name
-	// also keeps the typed `.nexload` command as short as possible, so the
-	// keystroke macro finishes far quicker. (The .nex's own filename is
-	// irrelevant to the game; saves are game-managed, e.g. lonewolf.sav.)
-	const importedNexName = "g.nex"
-	sdPath, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "imported", importedNexName, data)
+	// Always import to one fixed, short 8.3 name at the card ROOT and OVERWRITE
+	// it in place — never preserve the source name. AddFileToFAT32 would mint a
+	// unique alias when re-importing into an already-populated card
+	// (LONEWOLF.NEX -> LONEWO~1.NEX), and the typing macro cannot produce '~':
+	// it typed "lonewo1.nex" and NextZXOS answered "No such file or dir". A
+	// fixed root-level name makes the typed `.nexload /zx.nex` as short as
+	// possible, so the keystroke macro finishes far quicker. (The .nex's own
+	// filename is irrelevant to the game; saves are game-managed, e.g.
+	// lonewolf.sav.)
+	const importedNexName = "zx.nex"
+	sdPath, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "", importedNexName, data)
 	if err != nil {
 		e.paused.Store(false)
 		slog.Error("nex import: copy to SD card failed", "file", fileName, "err", err)
