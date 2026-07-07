@@ -3,6 +3,7 @@ const path = require("path");
 
 module.exports = (env, _) => {
     const isProduction = env && env.production ? env.production : false;
+    const buildVersion = Date.now();
 
     let hostname;
     let protocol;
@@ -28,6 +29,7 @@ module.exports = (env, _) => {
             AUTH_BASE: JSON.stringify(`${protocol}://${hostname}/auth`),
             HOSTNAME: JSON.stringify(hostname),
             HTTP_PROTO: JSON.stringify(protocol),
+            BUILD_VERSION: JSON.stringify(buildVersion),
         }),
     ];
 

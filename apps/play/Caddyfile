@@ -4,6 +4,19 @@
         # On-the-fly compression for text assets (bundle.js etc.); skips
         # responses that already carry a Content-Encoding.
         encode zstd gzip
+
+        # Versioned build assets carry a per-build ?ver query, so the URL
+        # changes whenever the file changes — cache them hard.
+        @immutable path /dist/* /next/* /assets/* /style.css
+        header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+        # Everything else (the SPA entry and its routes) must revalidate so
+        # clients always pick up the current ?ver references.
+        @revalidate {
+            not path /dist/* /next/* /assets/* /style.css
+        }
+        header @revalidate Cache-Control "no-cache"
+
         try_files {path} {path}/ /index.html
         # The Dockerfile builds .br/.gz sidecars for the ~30MB emulator
         # wasm; serve those instead of the raw binary when the client
