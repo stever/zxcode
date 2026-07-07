@@ -6,6 +6,9 @@ build/
 es5/
 node_modules/
 public/dist/
+# Build artifacts emitted by webpack/HtmlWebpackPlugin + the manifest step.
+public/index.html
+public/asset-manifest.json
 # Emulator runtime assets are copied in from @zxplay/emulator at build time.
 public/roms/
 public/tapeloaders/

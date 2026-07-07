@@ -5,3 +5,4 @@
 // package build and must be served from the consuming app's /dist, matching
 // the runtime URL resolution in src/zxgo/GoEmulator.js.
 export { JSSpeccy } from './src/JSSpeccy';
+export { assetUrl } from './src/zxgo/assetManifest';

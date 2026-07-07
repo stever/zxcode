@@ -22,8 +22,6 @@ RUN npm run build -w play
 
 FROM base AS final
 COPY --from=npmbuild /project/apps/play/public /srv
-# Cache-bust the static bundle reference per build.
-RUN sed -i "s|ver=0|ver=$(date +%s)|g" /srv/index.html
 # Precompressed sidecars for the ~30MB emulator wasm; the Caddyfile's
 # file_server `precompressed` serves them, cutting transfer ~5x.
 RUN apk add --no-cache brotli \

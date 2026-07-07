@@ -1,9 +1,9 @@
 const webpack = require("webpack");
 const path = require("path");
+const HtmlWebpackPlugin = require("html-webpack-plugin");
 
 module.exports = (env, _) => {
     const isProduction = env && env.production ? env.production : false;
-    const buildVersion = Date.now();
 
     let hostname;
     let protocol;
@@ -20,7 +20,6 @@ module.exports = (env, _) => {
 
     const srcFolder = path.join(isProduction ? "es5" : "src");
     const entryPath = path.join(__dirname, srcFolder);
-    const outputFile = "bundle.js";
     const mainScript = isProduction ? "index.js" : "index.jsx";
 
     const plugins = [
@@ -29,7 +28,13 @@ module.exports = (env, _) => {
             AUTH_BASE: JSON.stringify(`${protocol}://${hostname}/auth`),
             HOSTNAME: JSON.stringify(hostname),
             HTTP_PROTO: JSON.stringify(protocol),
-            BUILD_VERSION: JSON.stringify(buildVersion),
+        }),
+        // Emits public/index.html with the content-hashed bundle.js injected.
+        // The template lives outside public/ so it is never overwritten.
+        new HtmlWebpackPlugin({
+            template: path.join(__dirname, "index.html"),
+            filename: "index.html",
+            inject: "body",
         }),
     ];
 
@@ -80,14 +85,22 @@ module.exports = (env, _) => {
         {
             mode: isProduction ? "production" : "development",
             devtool: isProduction ? false : "source-map",
+            // Output root is public/ (so index.html lands there and is served
+            // at /); the bundle carries a dist/ prefix and content hash for
+            // immutable caching.
             output: {
-                path: path.join(__dirname, "public", "dist"),
-                filename: outputFile
+                path: path.join(__dirname, "public"),
+                filename: "dist/bundle.[contenthash].js",
+                assetModuleFilename: "dist/[hash][ext]",
+                publicPath: "/"
             },
             entry: path.join(entryPath, mainScript),
             devServer: {
                 port: 8001,
                 historyApiFallback: true,
+                static: {
+                    directory: path.join(__dirname, "public")
+                },
                 devMiddleware: {
                     writeToDisk: true
                 }

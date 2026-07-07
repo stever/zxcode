@@ -26,6 +26,7 @@ import JSZip from 'jszip';
 
 import { StandardKeyboardHandler, RecreatedZXSpectrumHandler } from '../KeyboardHandler.js';
 import { tapToNext } from './tapToNext.js';
+import { assetUrl } from './assetManifest.js';
 
 const scriptUrl = document.currentScript.src;
 
@@ -40,16 +41,17 @@ function loadGoRuntime() {
     if (goRuntimePromise) return goRuntimePromise;
     goRuntimePromise = (async () => {
         if (typeof globalThis.Go !== 'function') {
+            const execUrl = await assetUrl('/dist/wasm_exec.js', scriptUrl);
             await new Promise((resolve, reject) => {
                 const s = document.createElement('script');
-                s.src = new URL(`/dist/wasm_exec.js?ver=${BUILD_VERSION}`, scriptUrl);
+                s.src = execUrl;
                 s.onload = resolve;
                 s.onerror = () => reject(new Error('failed to load wasm_exec.js'));
                 document.head.appendChild(s);
             });
         }
         const go = new globalThis.Go();
-        const resp = await fetch(new URL(`/dist/zx.wasm?ver=${BUILD_VERSION}`, scriptUrl));
+        const resp = await fetch(await assetUrl('/dist/zx.wasm', scriptUrl));
         if (!resp.ok) throw new Error(`zx.wasm: HTTP ${resp.status}`);
         const result = await WebAssembly.instantiateStreaming
             ? await WebAssembly.instantiateStreaming(resp, go.importObject)
@@ -184,7 +186,7 @@ export class GoEmulator extends EventEmitter {
             // A real file served from /dist (CSP script-src 'self' compliant;
             // blob:/data: module URLs are blocked behind the Caddy proxy).
             await actx.audioWorklet.addModule(
-                new URL(`/dist/zx-feeder.worklet.js?ver=${BUILD_VERSION}`, scriptUrl));
+                await assetUrl('/dist/zx-feeder.worklet.js', scriptUrl));
             const node = new AudioWorkletNode(actx, 'zx-feeder',
                 { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
             node.connect(actx.destination);
@@ -416,7 +418,7 @@ export class GoEmulator extends EventEmitter {
     async bootNext() {
         if (!this.nextAssets) {
             const fetchBin = async (name) => {
-                const r = await fetch(new URL(`/next/${name}?ver=${BUILD_VERSION}`, scriptUrl));
+                const r = await fetch(await assetUrl(`/next/${name}`, scriptUrl));
                 // A SPA fallback answers missing files with the index page
                 // (HTTP 200, text/html) — treat that as absent too.
                 if (r.status === 404 || (r.headers.get('Content-Type') || '').includes('text/html')) return null;

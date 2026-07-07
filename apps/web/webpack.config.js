@@ -5,7 +5,6 @@ const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 
 module.exports = (env, _) => {
     const isProduction = env && env.production ? env.production : false;
-    const buildVersion = Date.now();
 
     let hostname;
     let protocol;
@@ -22,7 +21,6 @@ module.exports = (env, _) => {
 
     const srcFolder = path.join(isProduction ? "es5" : "src");
     const entryPath = path.join(__dirname, srcFolder);
-    const outputFile = "bundle.js";
     const mainScript = isProduction ? "index.js" : "index.jsx";
 
     const plugins = [
@@ -31,18 +29,17 @@ module.exports = (env, _) => {
             AUTH_BASE: JSON.stringify(`${protocol}://${hostname}/auth`),
             HOSTNAME: JSON.stringify(hostname),
             HTTP_PROTO: JSON.stringify(protocol),
-            BUILD_VERSION: JSON.stringify(buildVersion),
         }),
+        // Emits public/index.html with the content-hashed bundle.js/main.css
+        // injected. The template lives outside public/ so it is never
+        // overwritten by the emitted file.
         new HtmlWebpackPlugin({
-            template: path.join(__dirname, "public", "index.html"),
+            template: path.join(__dirname, "index.html"),
             filename: "index.html",
-            inject: false,
-            templateParameters: {
-                buildVersion: buildVersion
-            }
+            inject: "body",
         }),
         new MiniCssExtractPlugin({
-            filename: "[name].css"
+            filename: "dist/[name].[contenthash].css"
         }),
     ];
 
@@ -102,9 +99,14 @@ module.exports = (env, _) => {
         {
             mode: isProduction ? "production" : "development",
             devtool: isProduction ? false : "source-map",
+            // Output root is public/ (so index.html lands there and is served
+            // at /); JS/CSS carry a dist/ prefix and content hash for immutable
+            // caching.
             output: {
-                path: path.join(__dirname, "public", "dist"),
-                filename: outputFile
+                path: path.join(__dirname, "public"),
+                filename: "dist/bundle.[contenthash].js",
+                assetModuleFilename: "dist/[hash][ext]",
+                publicPath: "/"
             },
             entry: path.join(entryPath, mainScript),
             devServer: {

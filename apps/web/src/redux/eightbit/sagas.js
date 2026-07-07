@@ -4,6 +4,7 @@ import gql from "graphql-tag";
 import getZmakebasTap from "zmakebas";
 import getBas2Tap from "bas2tap";
 import getPasmoTap, {bin2tap} from "pasmo";
+import {assetUrl} from "@zxplay/emulator";
 import {gqlFetch} from "../../graphql_fetch";
 import {store} from "../store";
 import {
@@ -306,30 +307,40 @@ function* handleRunTapActions(action) {
 // Supporting code
 // -----------------------------------------------------------------------------
 
-// The 8bitworkshop worker compiles projects.
-const worker = new Worker(`/dist/8bitworker.js?ver=${BUILD_VERSION}`);
-
-// Preload tools.
-console.log('Preloading 8bitworker tools');
-worker.postMessage({preload: 'sdcc'});
-worker.postMessage({preload: 'sdasz80'});
-worker.postMessage({preload: 'zmac'});
+// The 8bitworkshop worker compiles projects. Its URL is content-versioned via
+// the asset manifest (resolved async), so the worker is created behind a
+// promise; consumers await workerReady before touching it. A module-level
+// message handler lets the event channel (below) subscribe before the worker
+// exists.
+let worker = null;
+let onWorkerMessage = null;
+const workerReady = assetUrl('/dist/8bitworker.js').then((url) => {
+    worker = new Worker(url);
+    worker.onmessage = (e) => { if (onWorkerMessage) onWorkerMessage(e); };
+    // Preload tools.
+    console.log('Preloading 8bitworker tools');
+    worker.postMessage({preload: 'sdcc'});
+    worker.postMessage({preload: 'sdasz80'});
+    worker.postMessage({preload: 'zmac'});
+    return worker;
+});
 
 function postMessage(msg) {
-    worker.postMessage(msg);
+    workerReady.then((w) => w.postMessage(msg));
 }
 
 function getWorkerMessagesEventChannel() {
     return eventChannel(emit => {
 
-        // Emits data from worker message events.
-        worker.onmessage = (e) => {
+        // Emits data from worker message events (routed through workerReady's
+        // handler so this works whether or not the worker exists yet).
+        onWorkerMessage = (e) => {
             emit({data: e.data});
         };
 
         // Must return an unsubscribe function.
         return () => {
-            worker.onmessage = undefined;
+            onWorkerMessage = null;
         };
     })
 }
