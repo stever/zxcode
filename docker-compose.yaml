@@ -127,7 +127,10 @@ services:
     # read-only with a writable tmpfs for the temp mp4/f32le files it creates.
     # NOTE: verify `user: node` + `read_only` on first deploy — the image must
     # let the node user read /app and tsx must cache under /tmp.
-    mem_limit: 1g
+    # A Next MP4 render peaks at ~1 GiB (64MB SD image + NextZXOS/Layer 2 wasm
+    # heap + ~1500 buffered frames for a 30s clip); 1g OOM-kills it mid-render.
+    # 2g gives headroom, and MAX_CONCURRENT_RENDERS=1 caps it to one at a time.
+    mem_limit: 2g
     cpus: 2.0
     pids_limit: 512
     user: node
