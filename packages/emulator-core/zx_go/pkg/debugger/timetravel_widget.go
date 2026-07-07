@@ -1,3 +1,5 @@
+//go:build !js
+
 package debugger
 
 import (
@@ -10,27 +12,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 )
-
-// TTRow is one time-travel snapshot, flattened for display.
-type TTRow struct {
-	Insn  uint64
-	PC    uint16
-	Label string
-}
-
-// TimeTravelController is the backend the TimeTravelWidget drives.
-// cmd/zx_go implements it over the emulator-owned snapshot ring, so
-// the GUI tab and the telnet `tt-*` commands operate on the SAME
-// buffer.
-type TimeTravelController interface {
-	Enabled() bool
-	Enable(everyInsns, keep int)
-	Disable()
-	Snap(label string)
-	Rewind(insn uint64) error
-	Clear()
-	Rows() []TTRow
-}
 
 // TimeTravelWidget renders the snapshot ring and offers enable/snap/
 // rewind/clear — parity with telnet tt-on / tt-snap / tt-rewind /

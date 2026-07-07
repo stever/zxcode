@@ -5,9 +5,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/dialog"
-
 	"github.com/conorarmstrong/zx_go/pkg/next/sdcard"
 )
 
@@ -112,7 +109,6 @@ func newNexloadMacro(sdPath string) *nexloadMacro {
 	return newCommandLineMacro(".nexload "+sdPath, 100)
 }
 
-
 // tick advances the macro by one frame. It must be called once per executed
 // frame, after the frame runs, so keys pressed here are seen by the next
 // frame's keyboard scan. Returns true when the macro is finished (the caller
@@ -147,27 +143,6 @@ func (m *nexloadMacro) tick(e *emulator) bool {
 		m.frame = 0
 	}
 	return false
-}
-
-// confirmImportNex asks the user to confirm copying a .nex onto the SD card
-// (required so NextZXOS's own loader can run it), then — on accept — imports
-// and launches it. fileName is the base name; data is the file's bytes.
-func (e *emulator) confirmImportNex(fileName string, data []byte) {
-	if e.window == nil {
-		// No window (headless): import directly.
-		go e.importAndRunNex(fileName, data)
-		return
-	}
-	msg := fmt.Sprintf(
-		"To load %q the way a real Spectrum Next does — through NextZXOS's own loader, so games that depend on the operating system work correctly — a copy must be written to your SD card (under /imported/).\n\n"+
-			"Your original file is left untouched. The machine will reset to load it.\n\n"+
-			"Copy to the SD card and load now?",
-		fileName)
-	dialog.NewConfirm("Load .nex via NextZXOS", msg, func(ok bool) {
-		if ok {
-			go e.importAndRunNex(fileName, data)
-		}
-	}, e.window).Show()
 }
 
 // neutralAutoexec is a PLUS3DOS-headered one-line program (9999 REM) with NO
@@ -220,9 +195,7 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 	if err != nil {
 		e.paused.Store(false)
 		slog.Error("nex import: copy to SD card failed", "file", fileName, "err", err)
-		if e.window != nil {
-			fyne.Do(func() { dialog.ShowError(fmt.Errorf("copy %q to SD card: %w", fileName, err), e.window) })
-		}
+		e.showGUIError(fmt.Errorf("copy %q to SD card: %w", fileName, err))
 		return
 	}
 	// Persist so the imported game survives restarts (race-free while paused).

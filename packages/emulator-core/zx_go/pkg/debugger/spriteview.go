@@ -1,3 +1,5 @@
+//go:build !js
+
 package debugger
 
 import (
@@ -10,20 +12,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 )
-
-// SpriteSnapshot is one visible sprite, pre-resolved to RGBA pixels by
-// the provider (so the widget needn't know 4bpp/palette internals).
-type SpriteSnapshot struct {
-	Index  int
-	Pixels [SpritePixels]color.RGBA // row-major 16×16
-}
-
-// SpriteVizProvider is the OPTIONAL companion interface that feeds the
-// graphical Sprite viewer. A NextProvider implementing it supplies the
-// currently-visible sprites' resolved pixels.
-type SpriteVizProvider interface {
-	VisibleSprites() []SpriteSnapshot
-}
 
 // SpriteView renders the visible sprites' 16×16 patterns as an actual
 // pixel sheet — the visual counterpart to the sprite-list text command.

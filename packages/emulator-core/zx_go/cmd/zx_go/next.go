@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,10 +12,6 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/storage"
-	"fyne.io/fyne/v2/widget"
 
 	"github.com/conorarmstrong/zx_go/pkg/ay"
 	"github.com/conorarmstrong/zx_go/pkg/keyboard"
@@ -62,135 +57,6 @@ func nextMenuItem(requestModelChange func(roms.SpectrumModel)) *fyne.MenuItem {
 	return fyne.NewMenuItem("ZX Spectrum Next", func() {
 		requestModelChange(roms.ModelNext)
 	})
-}
-
-// installNextROM is the File → "Install Next ROMs..." action. It
-// asks for a Next ROM file (one of the blobs from the official
-// NextZXOS distro plus optionally the FPGA bootrom), copies it
-// under the user's config directory, computes its SHA-256, and
-// reports back. The destination basename is preserved exactly,
-// because pkg/memory.setupNext looks up each ROM by a fixed
-// filename — installing the wrong-named file (e.g. someone
-// renames enNextZX.rom to next.rom) won't be picked up.
-func installNextROM(w fyne.Window) {
-	fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
-		if err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		if reader == nil {
-			return
-		}
-		path := reader.URI().Path()
-		_ = reader.Close()
-
-		result, err := install.InstallROM(path)
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("failed to install %s: %w", path, err), w)
-			return
-		}
-
-		// Recognise the well-known filenames so the user knows
-		// what role the file fills. The installer preserves the
-		// source basename, so picking enNextZX.rom installs as
-		// enNextZX.rom — the lookup happens against this fixed
-		// name in pkg/memory.setupNext.
-		base := filepath.Base(path)
-		var role string
-		switch base {
-		case install.DistroROM:
-			role = "✓ Recognised: NextZXOS firmware (REQUIRED for ModelNext)."
-		case install.DivMMCROM:
-			role = "✓ Recognised: divMMC / esxDOS overlay (enables SD-card and dot-commands)."
-		case install.FPGABootROM:
-			role = "✓ Recognised: FPGA boot loader (enables proper cold-boot path)."
-		default:
-			role = fmt.Sprintf(
-				"⚠️ Filename %q is not one the emulator looks up. Expected one of:\n • %s\n • %s\n • %s\nFile was installed anyway in case you know what you're doing.",
-				base, install.DistroROM, install.DivMMCROM, install.FPGABootROM)
-		}
-
-		msg := fmt.Sprintf(
-			"%s\n\nInstalled %d bytes to:\n%s\n\nSHA-256:\n%s\n\n"+
-				"Record this digest. A future release will gate "+
-				"ZX Spectrum Next boot on a pinned set of known-good "+
-				"hashes; until then this UI just copies and reports.",
-			role, result.Size, result.DestPath, result.SHA256)
-		if result.VersionWarning != "" {
-			msg += "\n\n⚠️ VERSION MISMATCH WARNING\n\n" + result.VersionWarning
-		}
-		dialog.ShowInformation("Next ROM Installed", msg, w)
-	}, w)
-	fd.SetFilter(storage.NewExtensionFileFilter([]string{".rom", ".ROM"}))
-	fd.Show()
-}
-
-// offerNextROMDownload asks the user whether to fetch the NextZXOS
-// ROMs from the official source. The ROMs are licensed and are NOT
-// bundled with the emulator. On confirmation it downloads the
-// official distro archive (install.DownloadNextROMs), shows live
-// progress, installs enNextZX.rom + enNxtmmc.rom and the SD-card
-// tree, and on success invokes onSuccess (which retries the model
-// switch). Errors are surfaced; the running emulator is untouched
-// until the switch is retried.
-func offerNextROMDownload(w fyne.Window, onSuccess func()) {
-	msg := "The Spectrum Next needs the NextZXOS ROMs, which are\n" +
-		"licensed and NOT bundled with this emulator.\n\n" +
-		"Download them now from the official Spectrum Next\n" +
-		"distribution?\n\n" +
-		install.DistroURL() + "\n\n" +
-		"This fetches the official archive and installs the ROMs\n" +
-		"plus the SD-card contents. (You can also install them\n" +
-		"manually via File → Install Next ROMs…)"
-	dialog.NewConfirm("Download Spectrum Next ROMs?", msg, func(ok bool) {
-		if !ok {
-			return
-		}
-		runNextROMDownload(w, onSuccess)
-	}, w).Show()
-}
-
-// runNextROMDownload performs the download on a background goroutine
-// with a cancellable progress dialog, then installs + reports.
-func runNextROMDownload(w fyne.Window, onSuccess func()) {
-	prog := widget.NewProgressBar()
-	status := widget.NewLabel("Connecting…")
-	content := container.NewVBox(status, prog)
-	ctx, cancel := context.WithCancel(context.Background())
-	dlg := dialog.NewCustom("Downloading Spectrum Next ROMs", "Cancel",
-		content, w)
-	dlg.SetOnClosed(cancel)
-	dlg.Show()
-
-	go func() {
-		res, err := install.DownloadNextROMs(ctx, nil, install.DistroURL(),
-			func(done, total int64) {
-				fyne.Do(func() {
-					if total > 0 {
-						prog.SetValue(float64(done) / float64(total))
-						status.SetText(fmt.Sprintf("Downloaded %.1f / %.1f MB",
-							float64(done)/1e6, float64(total)/1e6))
-					} else {
-						status.SetText(fmt.Sprintf("Downloaded %.1f MB…",
-							float64(done)/1e6))
-					}
-				})
-			})
-		fyne.Do(func() {
-			dlg.Hide()
-			cancel()
-			if err != nil {
-				dialog.ShowError(fmt.Errorf("download failed: %w", err), w)
-				return
-			}
-			dialog.ShowInformation("Spectrum Next ROMs installed",
-				fmt.Sprintf("Installed: %s\nSD-card files: %d\n\nStarting the Spectrum Next…",
-					strings.Join(res.InstalledROMs, ", "), res.SDFiles), w)
-			if onSuccess != nil {
-				onSuccess()
-			}
-		})
-	}()
 }
 
 // newNextEmulator constructs the production Spectrum Next emulator
