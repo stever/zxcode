@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 if command -v go >/dev/null 2>&1; then
   mkdir -p dist
-  (cd zx_go && GOOS=js GOARCH=wasm go build -o ../dist/zx.wasm ./cmd/zx_go)
+  (cd zx_go && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o ../dist/zx.wasm ./cmd/zx_go)
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" dist/wasm_exec.js
   echo "emulator-core: built dist/zx.wasm"
 elif [[ -f dist/zx.wasm && -f dist/wasm_exec.js ]]; then
