@@ -15,6 +15,7 @@ import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { tapToNext } from './tap-to-next.mjs';
+import { CompileError } from './errors.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -166,7 +167,15 @@ export class ZxGoEmulator {
      */
     runTAP(tapData: Buffer): void {
         const g = globalThis as any;
-        const next = tapToNext(new Uint8Array(tapData));
+        // A tape the translator can't express as a NextZXOS program is the
+        // project's shape, not a service fault: surface it as a CompileError
+        // so the routes answer 422 (web shows the cartridge fallback).
+        let next: ReturnType<typeof tapToNext>;
+        try {
+            next = tapToNext(new Uint8Array(tapData));
+        } catch (err) {
+            throw new CompileError(err instanceof Error ? err.message : String(err));
+        }
         const err = next.kind === 'bas'
             ? g.zxRunBas(next.name, next.data)
             : g.zxRunNex(next.name, next.data);

@@ -54,6 +54,7 @@ export interface ProjectRecord {
 export interface ProjectById {
     lang: string;
     code: string;
+    machine: string;
     updated_at: string;
 }
 
@@ -68,6 +69,7 @@ export async function fetchProjectById(projectId: string): Promise<ProjectById |
             project(where: { project_id: { _eq: $id } }, limit: 1) {
                 lang
                 code
+                machine
                 updated_at
             }
         }

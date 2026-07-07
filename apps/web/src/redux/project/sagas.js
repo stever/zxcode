@@ -91,9 +91,11 @@ function* handleCreateNewProjectActions(action) {
 
         slug = finalSlug;
 
+        const machine = yield select((state) => state.app.machine);
+
         const query = gql`
-            mutation ($title: String!, $lang: String!, $slug: String!) {
-                insert_project_one(object: {title: $title, lang: $lang, slug: $slug}) {
+            mutation ($title: String!, $lang: String!, $slug: String!, $machine: String!) {
+                insert_project_one(object: {title: $title, lang: $lang, slug: $slug, machine: $machine}) {
                     project_id
                     slug
                 }
@@ -103,7 +105,8 @@ function* handleCreateNewProjectActions(action) {
         const variables = {
             'title': action.title,
             'lang': action.lang,
-            'slug': slug
+            'slug': slug,
+            'machine': String(machine)
         };
 
         // noinspection JSCheckFunctionSignatures
@@ -202,10 +205,13 @@ function* handleSaveCodeChangesActions(_) {
         const userId = yield select((state) => state.identity.userId);
         const projectId = yield select((state) => state.project.id);
         const code = yield select((state) => state.project.code);
+        // Stamp the machine the project was saved under so screenshots render
+        // on the machine the program targets (gif-service reads this column).
+        const machine = yield select((state) => state.app.machine);
 
         const query = gql`
-            mutation ($project_id: uuid!, $code: String!) {
-                update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {code: $code}) {
+            mutation ($project_id: uuid!, $code: String!, $machine: String!) {
+                update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {code: $code, machine: $machine}) {
                     project_id
                 }
             }
@@ -213,7 +219,8 @@ function* handleSaveCodeChangesActions(_) {
 
         const variables = {
             'project_id': projectId,
-            'code': code
+            'code': code,
+            'machine': String(machine)
         };
 
         // noinspection JSCheckFunctionSignatures
@@ -444,9 +451,11 @@ function* handleCopyProjectActions(action) {
 
         slug = finalSlug;
 
+        const machine = yield select((state) => state.app.machine);
+
         const query = gql`
-            mutation ($title: String!, $lang: String!, $code: String!, $slug: String!) {
-                insert_project_one(object: {title: $title, lang: $lang, code: $code, slug: $slug}) {
+            mutation ($title: String!, $lang: String!, $code: String!, $slug: String!, $machine: String!) {
+                insert_project_one(object: {title: $title, lang: $lang, code: $code, slug: $slug, machine: $machine}) {
                     project_id
                     slug
                 }
@@ -457,7 +466,8 @@ function* handleCopyProjectActions(action) {
             'title': action.title,
             'lang': action.lang,
             'code': action.code,
-            'slug': slug
+            'slug': slug,
+            'machine': String(machine)
         };
 
         // noinspection JSCheckFunctionSignatures

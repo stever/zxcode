@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { mkdir, readFile, writeFile, access } from 'fs/promises';
 import { join } from 'path';
-import { GIFGenerator } from '../gif-generator.js';
+import { GIFGenerator, MachineType } from '../gif-generator.js';
 import { fetchProjectById } from '../hasura.js';
 import { compileProjectIsolated } from '../compile-isolated.js';
 import { withRenderSlot } from '../concurrency.js';
@@ -59,11 +59,16 @@ router.get('/:id', async (req: Request, res: Response) => {
         } else {
             let pending = inFlight.get(key);
             if (!pending) {
+                // Render on the machine the project was last saved under
+                // (stamped by the editor). A Next-only program on a 48K
+                // freezes on the tape loader screen, so the machine matters.
+                const machine: MachineType =
+                    project.machine === 'next' ? 'next' : project.machine === '128' ? 128 : 48;
                 pending = withRenderSlot(async () => {
                     const tap = await compileProjectIsolated(project.lang, project.code);
                     const generator = new GIFGenerator({ maxDurationMs: 2500, scale: 2 });
                     await generator.initialize();
-                    const out = await generator.generatePngFromTAP(tap, 48);
+                    const out = await generator.generatePngFromTAP(tap, machine);
                     await mkdir(CACHE_DIR, { recursive: true }).catch(() => undefined);
                     await writeFile(file, out).catch(() => undefined);
                     return out;

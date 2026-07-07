@@ -105,6 +105,12 @@ services:
       - "5001:5001"
     environment:
       HASURA_URL: http://hasura:8080/v1/graphql
+      # The zx_go core is ONE global machine per process: every render drives
+      # the same wasm emulator. Classic renders only serialize by accident
+      # (their frame loop never yields); the Next path awaits during its boot
+      # poll, so a concurrent render would reboot the machine under it and
+      # corrupt both captures. Keep renders strictly sequential.
+      MAX_CONCURRENT_RENDERS: "1"
     # Untrusted execution: cap CPU/mem/processes and drop privileges. Root FS is
     # read-only with a writable tmpfs for the temp mp4/f32le files it creates.
     # NOTE: verify `user: node` + `read_only` on first deploy — the image must
