@@ -4,10 +4,8 @@ import CodeMirror from "./CodeMirror";
 import "codemirror/mode/z80/z80";
 import { setCode } from "../redux/project/actions";
 import "../lib/syntax/pasmo";
-import "../lib/syntax/zmac";
 import "../lib/syntax/zmakebas";
 import "../lib/syntax/z88dk-c";
-import "../lib/syntax/sdcc";
 import "../lib/syntax/zxbasic";
 
 export function ProjectEditor() {
@@ -33,10 +31,10 @@ export function ProjectEditor() {
       mode = "text/x-z88dk-csrc";
       break;
     case "sdcc":
-      mode = "text/x-sdcc-csrc";
+      mode = "text/x-z88dk-csrc";
       break;
     case "zmac":
-      mode = "text/x-zmac";
+      mode = "text/x-pasmo";
       break;
     case "zxbasic":
       mode = "text/x-zxbasic";
