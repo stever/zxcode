@@ -1,0 +1,86 @@
+ZX Spectrum Next runtime assets — copyright notice and constituent licenses
+===========================================================================
+
+The files served alongside this notice are NextZXOS system content, distributed
+under The Next License (see THE-NEXT-LICENSE.txt). The Next License requires that
+its copyright notice and permission notice travel with every copy, together with
+the individual licenses of all constituent parts. This file records those parts,
+their copyright holders, the license in force for each, and — where a part is
+distributed without its source — a link to the corresponding source, as The Next
+License's source-code exception permits.
+
+Served assets
+-------------
+
+  enNextZX.rom   NextZXOS boot ROM        (64 KiB)
+  enNxtmmc.rom   divMMC / esxDOS ROM      (8 KiB)
+  tbblue.mmc     FAT32 SD image with the NextZXOS system (bootable system only)
+
+The SD image is served as the bare bootable NextZXOS system. Per-title games,
+demos, third-party tools and the Sinclair QL core — each licensed individually
+by its own author — are not included. Everything served here is either the
+NextZXOS system carried by The Next License's free-distribution grant, or a
+component covered by its own license as recorded below.
+
+Copyright
+---------
+
+  NextZXOS / NextBASIC system software   (c) Garry Lancaster / SpecNext Ltd
+  ZX Spectrum ROM images within the above (c) Amstrad plc / Sky plc
+  ZX Spectrum Next FPGA core & firmware   (c) Garry Lancaster, Fabio Belavenuto,
+                                              Victor Trucco and contributors
+
+Constituent parts and licenses in force
+---------------------------------------
+
+1. NextZXOS / NextBASIC system files (the OS on the SD image and in the ROMs)
+   License:   The Next License (this bundle). Closed source; the free, no-fee
+              distribution grant of The Next License applies.
+   Copyright: (c) Garry Lancaster / SpecNext Ltd.
+
+2. ZX Spectrum ROM images (the Sinclair 48K/128K ROM content embedded in
+   NextZXOS and present as ROM images on the SD image)
+   License:   Amstrad plc. Not SpecNext's to license. Redistributed under
+              Amstrad's standing permission to bundle the Spectrum ROMs with
+              emulators, which The Next License incorporates ("cases already
+              permitted by them (i.e. emulators)"). This application is an
+              emulator. See AMSTRAD-ROM-PERMISSION.txt.
+   Copyright: (c) Amstrad plc. Amstrad retains that copyright.
+
+3. ZX Spectrum Next FPGA core and firmware (TBBLUE.FW / TBBLUE.TBU and related
+   core files on the SD image)
+   License:   GNU General Public License v3.0 or later. See GPL-3.0.txt.
+   Copyright: (c) Garry Lancaster, Fabio Belavenuto, Victor Trucco and contributors.
+   Source:    Published in the official Spectrum Next distribution under
+              src/firmware and src/vhdl, and in the ZX Spectrum Next team's
+              firmware repositories. The binaries served here are unmodified
+              builds of that source.
+
+4. Dot commands (the /dot programs on the SD image, including .nexload)
+   License:   MIT, per The Next License's rule that software parts with source
+              under src/ are MIT unless they carry their own license. Any part
+              that does carry its own license (under docs/licenses) is governed
+              by that license instead — observe each.
+   Source:    Published in the official Spectrum Next distribution under src/asm.
+
+Corresponding source (Next License source-code exception)
+---------------------------------------------------------
+
+Where a part above is served as a binary without its source, the corresponding
+source is the official ZX Spectrum Next distribution, which contains src/firmware,
+src/vhdl, src/asm and the docs/licenses tree:
+
+  https://www.specnext.com/latestdistro/
+  https://gitlab.com/thesmog358/tbblue
+
+Conditions honoured by this deployment
+--------------------------------------
+
+  - Free to access. Not sold. No duplication fee.
+  - This notice, The Next License permission notice, and the constituent
+    licenses above are served with the assets.
+  - "ZX Spectrum Next" and the Sinclair/ZX Spectrum Next logo are trademarks of
+    their owners. This deployment is an emulator for the ZX Spectrum Next and is
+    not an official SpecNext product; it does not adopt the name or logo as its
+    own branding. The boot logo appears only because the genuine, unmodified
+    NextZXOS is run.

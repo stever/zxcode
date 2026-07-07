@@ -64,7 +64,9 @@ export default function AboutPage() {
                         Spectrum Next machine boots the real NextZXOS system software,
                         copyright Garry Lancaster / SpecNext Ltd (Spectrum ROMs copyright
                         Amstrad plc), distributed free of charge under{' '}
-                        <a href="https://gitlab.com/thesmog358/tbblue/-/blob/master/LICENSE.md" target="_blank">The Next License</a>.
+                        <a href="/next/licenses/THE-NEXT-LICENSE.txt" target="_blank">The Next License</a>
+                        {' '}(served with the assets, alongside the{' '}
+                        <a href="/next/licenses/NOTICES.txt" target="_blank">constituent-part notices</a>).
                     </li>
                     <li>
                         <a href="https://pasmo.speccy.org/" target="_blank">Pasmo</a> by Julián Albo García, alias "NotFound".
@@ -104,7 +106,7 @@ export default function AboutPage() {
                 <blockquote>
                     {t("about.sinclairRomText")}
                 </blockquote>
-                <a href="https://worldofspectrum.net/assets/amstrad-roms.txt" target="_blank">comp.sys.sinclair</a> 1999-08-31
+                <a href="https://worldofspectrum.net/app/themes/wosc-classic/static/legacy/amstrad-roms.txt" target="_blank">comp.sys.sinclair</a> 1999-08-31
             </Card>
         </Titled>
     )
