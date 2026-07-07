@@ -6,6 +6,14 @@ import sourceRoutes from './routes/source.js';
 import screenshotRoutes from './routes/screenshot.js';
 import ogRoutes from './routes/og.js';
 
+// Prefix every Node-side log line with a UTC timestamp. The Go core's slog
+// output is already timestamped; this brings the JS logs in line so render
+// timings (capture vs encode) are readable straight from `docker logs`.
+for (const level of ['log', 'warn', 'error'] as const) {
+    const orig = console[level].bind(console);
+    console[level] = (...args: unknown[]) => orig(new Date().toISOString(), ...args);
+}
+
 // Safety net: a single bad render must never take down the whole service. Log
 // and keep serving rather than letting an unhandled error exit the process
 // (each request is independent and stateless).

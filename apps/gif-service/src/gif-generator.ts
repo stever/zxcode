@@ -360,8 +360,16 @@ export class GIFGenerator {
 
     /** Render the program to an H.264 MP4 at the full 50fps, with AAC audio. */
     async generateMp4FromTAP(tapData: Buffer, machineType: MachineType = 48): Promise<Buffer> {
+        const tCap = Date.now();
         const { frames, audio } = await this.captureFor(tapData, machineType, true);
-        return this.encodeMp4(frames, audio, 50, this.options.scale);
+        const capMs = Date.now() - tCap;
+        const tEnc = Date.now();
+        const mp4 = await this.encodeMp4(frames, audio, 50, this.options.scale);
+        console.log(
+            `MP4 timing: capture ${(capMs / 1000).toFixed(1)}s, ` +
+            `encode ${((Date.now() - tEnc) / 1000).toFixed(1)}s (${frames.length} frames)`,
+        );
+        return mp4;
     }
 
     // Concatenate per-frame stereo audio into one interleaved (L,R,L,R) f32 buffer.
