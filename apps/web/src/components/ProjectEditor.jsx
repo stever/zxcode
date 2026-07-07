@@ -5,6 +5,7 @@ import "codemirror/mode/z80/z80";
 import { setCode } from "../redux/project/actions";
 import "../lib/syntax/pasmo";
 import "../lib/syntax/zmakebas";
+import "../lib/syntax/nextbas";
 import "../lib/syntax/z88dk-c";
 import "../lib/syntax/zxbasic";
 
@@ -26,6 +27,9 @@ export function ProjectEditor() {
       break;
     case "bas2tap":
       mode = "text/x-zmakebas";
+      break;
+    case "nextbas":
+      mode = "text/x-nextbas";
       break;
     case "c":
       mode = "text/x-z88dk-csrc";

@@ -3,6 +3,7 @@ export function getLanguageLabel(lang) {
     asm: "Pasmo",
     basic: "zmakebas",
     bas2tap: "bas2tap",
+    nextbas: "NextBASIC",
     c: "z88dk C",
     sdcc: "SDCC",
     zmac: "zmac",
