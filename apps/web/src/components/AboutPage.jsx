@@ -45,10 +45,25 @@ export default function AboutPage() {
                 </p>
                 <ul>
                     <li>
+                        <a href="https://github.com/conorarmstrong/zx_go" target="_blank">zx_go</a> by
+                        Conor Armstrong — the ZX Spectrum 48K/128K and Spectrum Next emulator core,
+                        compiled to WebAssembly. Licensed under terms of The MIT License - see{' '}
+                        <a href="https://github.com/conorarmstrong/zx_go/blob/main/LICENSE" target="_blank">LICENSE</a>.
+                        The built core embeds the Spectrum Next{"'"}s GPLv3 FPGA loader.
+                    </li>
+                    <li>
                         <a href="https://github.com/gasman/jsspeccy3" target="_blank">JSSpeccy3</a>{' '}
                         <a href="https://github.com/dcrespo3d/jsspeccy3-mobile" target="_blank">JSSpeccy3-mobile</a>.
-                        These are licensed under terms of The GPL version 3 - see{' '}
+                        The emulator UI and keyboard handling descend from these projects
+                        (the emulation core itself is now zx_go). Licensed under terms of
+                        The GPL version 3 - see{' '}
                         <a href="https://github.com/gasman/jsspeccy3/blob/main/COPYING" target="_blank">COPYING</a>.
+                    </li>
+                    <li>
+                        <a href="https://www.specnext.com/" target="_blank">NextZXOS</a> — the
+                        Spectrum Next machine boots the real NextZXOS system software,
+                        copyright Garry Lancaster / SpecNext Ltd (Spectrum ROMs copyright
+                        Amstrad plc), distributed free of charge under The Next License.
                     </li>
                     <li>
                         <a href="https://pasmo.speccy.org/" target="_blank">Pasmo</a> by Julián Albo García, alias "NotFound".

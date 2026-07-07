@@ -2,7 +2,7 @@ import React from "react";
 import {useDispatch, useSelector} from "react-redux";
 import {useNavigate} from "react-router-dom";
 import {Nav as Deck} from "@zxplay/ui";
-import {viewFullScreen} from "../redux/jsspeccy/actions";
+import {viewFullScreen, showOpenFileDialog} from "../redux/jsspeccy/actions";
 import {resetEmulator, setMachine, setKeyboardSide} from "../redux/app/actions";
 import {useTranslation} from "@zxplay/i18n";
 
@@ -109,6 +109,22 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
                 disabled: machineLocked,
                 command: () => {
                     dispatch(setMachine(128));
+                }
+            },
+            {
+                // zxgo engine only: the JSSpeccy3 engine has no Next.
+                label: 'ZX Spectrum Next',
+                icon: machine === 'next' ? 'pi pi-fw pi-check' : 'pi pi-fw',
+                disabled: machineLocked,
+                command: () => {
+                    dispatch(setMachine('next'));
+                }
+            },
+            {
+                label: t('nav.loadFile', 'Load file...'),
+                icon: 'pi pi-fw pi-folder-open',
+                command: () => {
+                    dispatch(showOpenFileDialog());
                 }
             },
         ]

@@ -25,6 +25,7 @@ insert_permissions:
       columns:
         - code
         - lang
+        - machine
         - title
         - slug
         - is_public
@@ -39,6 +40,7 @@ select_permissions:
         - updated_at
         - created_at
         - lang
+        - machine
         - is_public
         - slug
         - display_order
@@ -53,6 +55,7 @@ select_permissions:
         - created_at
         - display_order
         - lang
+        - machine
         - owner_user_id
         - project_id
         - title
@@ -72,6 +75,7 @@ update_permissions:
       columns:
         - code
         - display_order
+        - machine
         - title
         - is_public
         - slug

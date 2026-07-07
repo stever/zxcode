@@ -1,1 +1,3 @@
-dist/
+# Build-time / staged runtime assets (never committed)
+engine/zxgo/
+next-assets/

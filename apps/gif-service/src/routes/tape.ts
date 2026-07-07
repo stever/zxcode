@@ -14,7 +14,9 @@ router.post('/tape-to-gif', upload.single('tape'), async (req, res) => {
 
         const maxSeconds = parseInt(req.query.maxSeconds as string) || 30;
         const staleThreshold = parseInt(req.query.staleThreshold as string) || 150;
-        const machineType = parseInt(req.query.machineType as string) || 128;
+        const machineType = req.query.machineType === 'next'
+            ? ('next' as const)
+            : parseInt(req.query.machineType as string) || 128;
 
         const generator = new GIFGenerator({
             maxDurationMs: maxSeconds * 1000,

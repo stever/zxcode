@@ -1,5 +1,13 @@
-# Build context is the repo root, because the emulator loads the WASM core and
-# ROMs from apps/web/public (see emulator.ts paths relative to apps/gif-service).
+# Build context is the repo root (for the wasm CLI toolchains copied below);
+# the emulator core + ROMs are vendored in this service's engine/ directory.
+# zx_go core -> WebAssembly — the single emulation engine for all machines.
+FROM golang:1.25 AS wasmbuild
+WORKDIR /src
+COPY packages/emulator-core/zx_go ./zx_go
+RUN mkdir /out \
+ && cd zx_go && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o /out/zx.wasm ./cmd/zx_go \
+ && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" /out/wasm_exec.js
+
 FROM node:22-slim
 
 # ffmpeg is required for MP4 output.
@@ -16,11 +24,12 @@ RUN npm install --omit=dev --no-audit --no-fund && npm install tsx typescript
 # Service source.
 COPY apps/gif-service/ ./
 
-# Emulator assets, sourced from the shared @zxplay/emulator package (the single
-# source of truth) but placed at the relative location the code expects
-# (apps/gif-service/src -> ../../.. -> /app -> apps/web/public/...).
-COPY packages/emulator/dist/jsspeccy-core.wasm /app/apps/web/public/dist/jsspeccy-core.wasm
-COPY packages/emulator/roms/ /app/apps/web/public/roms/
+# Emulator core: zx_go (all machines), compiled by the golang stage into
+# engine/zxgo. The Next also needs the licensed NextZXOS assets staged into
+# next-assets/ in the build context (never committed — see
+# packages/emulator-core/LICENSES.md); they ride along with the COPY above
+# when present, or set NEXT_ASSETS_DIR at runtime.
+COPY --from=wasmbuild /out/ ./engine/zxgo/
 
 # Emscripten/asm.js CLI toolchains for rendering zmac and sdcc projects, plus
 # the sdcc bundled filesystem (fssdcc.data: crt0, z80 stdlib, headers) and the

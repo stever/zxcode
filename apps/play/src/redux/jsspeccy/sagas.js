@@ -10,8 +10,9 @@ import {
     reset,
     start
 } from "./actions";
-import {showActiveEmulator, actionTypes as appActionTypes} from "../app/actions";
+import {showActiveEmulator, machineChanged, actionTypes as appActionTypes} from "../app/actions";
 import {handleException} from "../../errors";
+import {store} from "../store";
 
 // -----------------------------------------------------------------------------
 // Action watchers
@@ -128,7 +129,7 @@ function* handleRenderEmulatorActions(action) {
 
         const emuParams = {
             zoom,
-            machine: machine || 48, // 48, 128 or 5 (Pentagon)
+            machine: machine || 48, // 48, 128 or 'next'
             autoLoadTapes: true
         };
 
@@ -151,6 +152,11 @@ function* handleRenderEmulatorActions(action) {
         console.assert(jsspeccy === undefined);
         jsspeccy = JSSpeccy(target, emuParams);
         jsspeccy.hideUI();
+        // Keep the menu checkmark honest: the engine switches machine on its
+        // own (a .tap on the Next moves to the 128K, a .nex moves to the
+        // Next), and this mirrors those switches into app state without
+        // re-triggering the boot saga.
+        jsspeccy.onMachineChange((m) => store.dispatch(machineChanged(m)));
 
         if (doFilter) {
             // TODO: Investigate this option, and narrow the element selector.
@@ -277,7 +283,11 @@ function* handleViewFullScreenActions(_) {
 
 function* handleOpenTAPFileActions(action) {
     try {
-        jsspeccy.openTAPFile(action.buffer);
+        jsspeccy.openTAPFile(action.buffer).catch((err) => {
+            // e.g. a program the Next translator cannot convert — surface it
+            // instead of silently doing nothing.
+            alert(err && err.message ? err.message : String(err));
+        });
     } catch (e) {
         handleException(e);
     }
@@ -295,6 +305,10 @@ function* handleOpenUrlActions(action) {
 
 function* handleSetMachineActions(action) {
     try {
+        // Bring the emulator into view like the navbar Reset does, so picking
+        // a machine from another page shows it booting rather than switching
+        // invisibly in the background.
+        yield put(showActiveEmulator());
         // jsspeccy may not be rendered yet; the redux state still records the
         // choice so the menu reflects it and the emulator boots with it later.
         if (!jsspeccy) return;

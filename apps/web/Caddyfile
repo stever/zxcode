@@ -1,7 +1,15 @@
 :8080 {
     route {
         root * /srv
+        # On-the-fly compression for text assets (bundle.js etc.); skips
+        # responses that already carry a Content-Encoding.
+        encode zstd gzip
         try_files {path} {path}/ /index.html
-        file_server
+        # The Dockerfile builds .br/.gz sidecars for the ~30MB emulator
+        # wasm; serve those instead of the raw binary when the client
+        # accepts them.
+        file_server {
+            precompressed br gzip
+        }
     }
 }

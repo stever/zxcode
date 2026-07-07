@@ -41,7 +41,10 @@ const loadKeyboardSide = () => {
 
 const parseMachine = (value) => {
     if (value === '128' || value === 128) return 128;
-    if (value === '5' || value === 5) return 5;
+    if (value === 'next') return 'next';
+    // Pentagon (5) support was dropped with the JSSpeccy3 engine; treat old
+    // saved/linked values as the closest supported machine.
+    if (value === '5' || value === 5) return 128;
     if (value === '48' || value === 48) return 48;
     return undefined;
 };
@@ -131,6 +134,7 @@ const actionsMap = {
     [actionTypes.receivePrivacyPolicy]: receivePrivacyPolicy,
     [actionTypes.receiveTermsOfUse]: receiveTermsOfUse,
     [actionTypes.setMachine]: setMachine,
+    [actionTypes.machineChanged]: setMachine,
     [actionTypes.setKeyboardSide]: setKeyboardSide,
 };
 

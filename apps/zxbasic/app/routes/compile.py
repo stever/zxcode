@@ -1,6 +1,7 @@
 import tempfile
 import base64
 import os
+import re
 import sys
 import signal
 import threading
@@ -147,7 +148,24 @@ class RateLimiter:
 # Global rate limiter instance
 rate_limiter = RateLimiter()
 
-def compile_with_subprocess(bas_filename):
+# Sources targeting the ZX Spectrum Next must be compiled with zxbc's zxnext
+# architecture: it enables the Z80N opcodes and the zxnext stdlib (which is
+# where NextLibLite.bas lives). It cannot be the default — zxnext codegen is
+# not valid on classic machines. Two signals opt a program in: an explicit
+# NextBuild-style directive comment, or including the Next-only stdlib file.
+ZXNEXT_DIRECTIVE_RE = re.compile(r"(?im)^\s*'!\s*arch\s*=\s*zxnext\s*$")
+ZXNEXT_INCLUDE_RE = re.compile(r"(?i)#include\s*<NextLibLite\.bas>")
+
+
+def zxbc_args(source: str) -> list[str]:
+    """Build the zxbc argument list for a program source."""
+    args = ['-f', 'tap', '-a', '-B']
+    if ZXNEXT_DIRECTIVE_RE.search(source) or ZXNEXT_INCLUDE_RE.search(source):
+        args += ['--arch', 'zxnext']
+    return args
+
+
+def compile_with_subprocess(bas_filename, args):
     """
     Compile using subprocess that can actually be killed.
     Falls back to threading approach if subprocess fails.
@@ -158,7 +176,7 @@ def compile_with_subprocess(bas_filename):
     try:
         # Try to run as subprocess
         proc = subprocess.Popen(
-            [ZXBC_EXECUTABLE, '-f', 'tap', '-a', '-B', bas_filename],
+            [ZXBC_EXECUTABLE, *args, bas_filename],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -190,7 +208,7 @@ def compile_with_subprocess(bas_filename):
         if zxbc_main:
             # Use threading approach as fallback
             try:
-                run_with_threading(zxbc_main, ['-f', 'tap', '-a', '-B', bas_filename], COMPILATION_TIMEOUT)
+                run_with_threading(zxbc_main, [*args, bas_filename], COMPILATION_TIMEOUT)
                 return os.path.exists(tap_filename)
             except TimeoutException:
                 raise
@@ -260,7 +278,7 @@ def handle_compile_request(
 
         # Compile the tape file from basic source with timeout
         try:
-            success = compile_with_subprocess(bas_filename)
+            success = compile_with_subprocess(bas_filename, zxbc_args(args.input.basic))
             if not success:
                 raise Exception("Compilation failed")
         except TimeoutException:

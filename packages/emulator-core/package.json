@@ -1,0 +1,11 @@
+{
+  "name": "@zxplay/emulator-core",
+  "version": "1.0.0",
+  "private": true,
+  "description": "zx_go ZX Spectrum 48K/128K/Next emulator core (Go) compiled to WebAssembly",
+  "scripts": {
+    "build": "bash scripts/build-wasm.sh",
+    "test": "cd zx_go && go test ./cmd/zx_go/... ./pkg/...",
+    "clean": "del-cli dist"
+  }
+}

@@ -36,7 +36,9 @@ async function handle(format: Format, req: Request, res: Response): Promise<void
 
         const maxSeconds = parseInt(req.query.maxSeconds as string) || 30;
         const staleThreshold = parseInt(req.query.staleThreshold as string) || 150;
-        const machineType = parseInt(req.query.machineType as string) || 48;
+        const machineType = req.query.machineType === 'next'
+            ? ('next' as const)
+            : parseInt(req.query.machineType as string) || 48;
         const scale = parseInt(req.query.scale as string) || (format === 'mp4' ? 4 : 2);
 
         let tap: Buffer;

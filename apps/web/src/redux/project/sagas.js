@@ -4,6 +4,7 @@ import {history} from "../store";
 import {gqlFetch} from "../../graphql_fetch";
 import {actionTypes, reset, receiveLoadedProject, setSavedCode, setSelectedTabIndex, setProjectTitle} from "./actions";
 import {pause, reset as resetMachine} from "../jsspeccy/actions";
+import {setMachine} from "../app/actions";
 import {handleException} from "../../errors";
 import {generateSlug} from "../../utils/slug";
 
@@ -91,9 +92,11 @@ function* handleCreateNewProjectActions(action) {
 
         slug = finalSlug;
 
+        const machine = yield select((state) => state.app.machine);
+
         const query = gql`
-            mutation ($title: String!, $lang: String!, $slug: String!) {
-                insert_project_one(object: {title: $title, lang: $lang, slug: $slug}) {
+            mutation ($title: String!, $lang: String!, $slug: String!, $machine: String!) {
+                insert_project_one(object: {title: $title, lang: $lang, slug: $slug, machine: $machine}) {
                     project_id
                     slug
                 }
@@ -103,7 +106,8 @@ function* handleCreateNewProjectActions(action) {
         const variables = {
             'title': action.title,
             'lang': action.lang,
-            'slug': slug
+            'slug': slug,
+            'machine': String(machine)
         };
 
         // noinspection JSCheckFunctionSignatures
@@ -140,6 +144,7 @@ function* handleLoadProjectActions(action) {
                     title
                     lang
                     code
+                    machine
                     is_public
                     slug
                     owner_user_id
@@ -176,6 +181,8 @@ function* handleLoadProjectActions(action) {
         const ownerName = proj.user?.greeting_name;
         const ownerProfileIsPublic = proj.user?.profile_is_public || false;
 
+        const machine = proj.machine || '48';
+
         yield put(receiveLoadedProject(
             action.id,
             proj.title,
@@ -186,8 +193,20 @@ function* handleLoadProjectActions(action) {
             finalOwnerSlug,
             ownerId,
             ownerName,
-            ownerProfileIsPublic
+            ownerProfileIsPublic,
+            machine
         ));
+
+        // Boot the emulator to the machine the project targets, so a Next
+        // program actually runs (and its screenshot matches the editor). The
+        // "m" query param locks the machine; respect that. Skip when already
+        // correct to avoid a needless cold-boot on the common 48K case.
+        const machineLocked = yield select((state) => state.app.machineLocked);
+        const currentMachine = yield select((state) => state.app.machine);
+        const target = machine === 'next' ? 'next' : machine === '128' ? 128 : 48;
+        if (!machineLocked && target !== currentMachine) {
+            yield put(setMachine(target));
+        }
 
         // Mobile view has emulator on a tab. Switch to the emulator tab when running code.
         const isMobile = yield select((state) => state.window.isMobile);
@@ -444,9 +463,11 @@ function* handleCopyProjectActions(action) {
 
         slug = finalSlug;
 
+        const machine = yield select((state) => state.app.machine);
+
         const query = gql`
-            mutation ($title: String!, $lang: String!, $code: String!, $slug: String!) {
-                insert_project_one(object: {title: $title, lang: $lang, code: $code, slug: $slug}) {
+            mutation ($title: String!, $lang: String!, $code: String!, $slug: String!, $machine: String!) {
+                insert_project_one(object: {title: $title, lang: $lang, code: $code, slug: $slug, machine: $machine}) {
                     project_id
                     slug
                 }
@@ -457,7 +478,8 @@ function* handleCopyProjectActions(action) {
             'title': action.title,
             'lang': action.lang,
             'code': action.code,
-            'slug': slug
+            'slug': slug,
+            'machine': String(machine)
         };
 
         // noinspection JSCheckFunctionSignatures

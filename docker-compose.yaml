@@ -48,23 +48,23 @@ services:
   # the non-root uvicorn can bind port 80.
   # NOTE: the healthchecks need the hardened images (which add /health to z88dk)
   # rebuilt and pushed — see zxcode-api-z88dk / zxcode-api-zxbasic.
-  z88dk:
-    image: ghcr.io/stever/zxcode-api-z88dk
-    restart: always
-    mem_limit: 512m
-    cpus: 1.0
-    pids_limit: 256
-    cap_drop: [ALL]
-    cap_add:
-      - NET_BIND_SERVICE
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:80/health',timeout=3).status==200 else 1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+  # z88dk:
+  #   image: ghcr.io/stever/zxcode-api-z88dk
+  #   restart: always
+  #   mem_limit: 512m
+  #   cpus: 1.0
+  #   pids_limit: 256
+  #   cap_drop: [ALL]
+  #   cap_add:
+  #     - NET_BIND_SERVICE
+  #   security_opt:
+  #     - no-new-privileges:true
+  #   healthcheck:
+  #     test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:80/health',timeout=3).status==200 else 1)"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #     start_period: 20s
 
   zxbasic:
     build:
@@ -80,7 +80,13 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:80/health',timeout=3).status==200 else 1)"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:80/health',timeout=3).status==200 else 1)",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -105,6 +111,18 @@ services:
       - "5001:5001"
     environment:
       HASURA_URL: http://hasura:8080/v1/graphql
+      # The zx_go core is ONE global machine per process: every render drives
+      # the same wasm emulator. Classic renders only serialize by accident
+      # (their frame loop never yields); the Next path awaits during its boot
+      # poll, so a concurrent render would reboot the machine under it and
+      # corrupt both captures. Keep renders strictly sequential.
+      MAX_CONCURRENT_RENDERS: "1"
+      # Licensed NextZXOS assets (ROMs + SD image) for the Next render path;
+      # never committed, so bind-mounted from the repo below rather than baked
+      # into the image. Without them a Next-machine screenshot 500s at boot and
+      # the card falls back to the cartridge. Prod bakes next-assets/ into the
+      # image at build instead.
+      NEXT_ASSETS_DIR: /next-assets
     # Untrusted execution: cap CPU/mem/processes and drop privileges. Root FS is
     # read-only with a writable tmpfs for the temp mp4/f32le files it creates.
     # NOTE: verify `user: node` + `read_only` on first deploy — the image must
@@ -118,11 +136,19 @@ services:
       - /tmp
     volumes:
       - screenshot_cache:/cache
+      # Read-only: the SD image is read into memory at boot, never written back.
+      - ./apps/play/public/next:/next-assets:ro
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:5001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:5001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
