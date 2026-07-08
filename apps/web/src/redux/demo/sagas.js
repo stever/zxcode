@@ -55,6 +55,7 @@ function* handleRunSinclairBasicActions(_) {
     try {
         const code = yield select((state) => state.demo.sinclairBasicCode);
         const machine = yield select((state) => state.app.machine);
+        console.log(`[demo-basic] run requested machine=${machine} codeLength=${code?.length}`);
         // On the Next, tokenise the source straight to a PLUS3DOS program via
         // txt2bas and hand it to the Next delivery — no .tap detour. The
         // GoEmulator delivery detects the PLUS3DOS magic and runs it directly.
@@ -68,6 +69,7 @@ function* handleRunSinclairBasicActions(_) {
         const isMobile = yield select((state) => state.window.isMobile);
         if (isMobile) yield put(setSelectedTabIndex(0));
     } catch (e) {
+        console.error('[demo-basic] dispatching setErrorItems', e);
         yield put(setErrorItems(e));
     } finally {
         dashboardUnlock();
