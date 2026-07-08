@@ -41,6 +41,7 @@
   "home": {
     "tabEmulator": "Emulator",
     "tabSinclairBasic": "Sinclair BASIC",
+    "tabNextBasic": "Next BASIC",
     "tabZ80Assembly": "Z80 Assembly",
     "projectLabel": "Project: {{title}}"
   },
