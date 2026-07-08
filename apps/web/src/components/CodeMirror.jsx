@@ -40,6 +40,8 @@ export default class CodeMirror extends React.Component {
 
         const value = this.props.value || '';
         this.codeMirror.setValue(value);
+        // Undo must stop at the initial content, not the empty pre-load document.
+        this.codeMirror.clearHistory();
 
         let char = 0;
         if (this.props.cursorPosition) {

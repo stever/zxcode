@@ -35,6 +35,8 @@ export function DemoSinclairBasicEditor() {
     useEffect(() => {
         const cm = cmRef.current.getCodeMirror();
         cm.setValue(code || '');
+        // Undo must stop at the loaded content, not the empty pre-load document.
+        cm.clearHistory();
         dispatch(setSinclairBasicCode(cm.getValue()))
     }, []);
 

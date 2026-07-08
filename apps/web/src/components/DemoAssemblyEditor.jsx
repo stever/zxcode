@@ -31,6 +31,8 @@ export function DemoAssemblyEditor() {
   useEffect(() => {
     const cm = cmRef.current.getCodeMirror();
     cm.setValue(asmCode || "");
+    // Undo must stop at the loaded content, not the empty pre-load document.
+    cm.clearHistory();
     dispatch(setAssemblyCode(cm.getValue()));
   }, []);
 
