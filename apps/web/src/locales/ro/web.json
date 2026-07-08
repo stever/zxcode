@@ -3,7 +3,7 @@
     "project": "Proiect",
     "newProject": "Proiect nou",
     "openProject": "Deschide proiect",
-    "downloadTap": "Descarcă TAP",
+    "download": "Descarcă {{ext}}",
     "fullScreen": "Ecran complet",
     "yourProfile": "Profilul tău",
     "profileSettings": "Setări profil",

@@ -3,7 +3,7 @@
     "project": "Projekt",
     "newProject": "Nowy projekt",
     "openProject": "Otwórz projekt",
-    "downloadTap": "Pobierz TAP",
+    "download": "Pobierz {{ext}}",
     "fullScreen": "Pełny ekran",
     "yourProfile": "Twój profil",
     "profileSettings": "Ustawienia profilu",

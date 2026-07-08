@@ -5,6 +5,7 @@ import getBas2Tap from "bas2tap";
 import getPasmoTap, {bin2tap} from "pasmo";
 import getNextBasicProgram from "../../lib/nextbas";
 import {assetUrl} from "@zxplay/emulator";
+import {tapDownloadFile} from "./tapDownload";
 import {getZXBasicTap} from "./zxbasicCompile";
 import {getZ88dkTap} from "./z88dkCompile";
 import {getSjasmplusTap} from "./sjasmplusCompile";
@@ -338,16 +339,26 @@ function* handleGetZmacTapActions(_) {
 
 function* handleBrowserTapDownloadActions(action) {
     const title = yield select((state) => state.project.title);
+    const machine = yield select((state) => state.app.machine);
     try {
-        // Cause the download of the tap file using browser download.
-        const blob = new Blob([action.tap], {type: 'application/octet-stream'});
+        const data = action.tap instanceof Uint8Array
+            ? action.tap
+            : new Uint8Array(action.tap);
+
+        // Name the file for what the payload actually is; on the Next the
+        // TAP is translated to the artifact the emulator runs (tapDownload.js).
+        const {bytes, ext} = tapDownloadFile(data, machine);
+
+        const blob = new Blob([bytes], {type: 'application/octet-stream'});
         const objURL = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.download = `${title}.tap`;
+        link.download = `${title}.${ext}`;
         link.href = objURL;
         link.click();
     } catch (e) {
-        handleException(e);
+        // e.g. a program the Next translator cannot convert — same surfacing
+        // as the run path (jsspeccy handleOpenTAPFileActions).
+        alert(e && e.message ? e.message : String(e));
     }
 }
 

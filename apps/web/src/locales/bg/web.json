@@ -3,7 +3,7 @@
     "project": "Проект",
     "newProject": "Нов проект",
     "openProject": "Отвори проект",
-    "downloadTap": "Изтегли TAP",
+    "download": "Изтегли {{ext}}",
     "fullScreen": "Цял екран",
     "yourProfile": "Вашият профил",
     "profileSettings": "Настройки на профила",

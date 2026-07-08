@@ -187,7 +187,11 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
         separator: true,
       },
       {
-        label: t("nav.downloadTap"),
+        // On the Next the download is the translated artifact, not a tape:
+        // a .nex (or a PLUS3DOS .bas for NextBASIC) — see the download saga.
+        label: t("nav.download", {
+          ext: machine === "next" ? (lang === "nextbas" ? "BAS" : "NEX") : "TAP",
+        }),
         icon: "pi pi-fw pi-download",
         disabled: typeof lang === "undefined",
         command: () => {

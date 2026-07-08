@@ -5,7 +5,8 @@
   "description": "Shared ZX Spectrum emulator engine (zx_go wasm core) for ZX Play apps",
   "main": "index.js",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./tapToNext": "./src/zxgo/tapToNext.js"
   },
   "scripts": {
     "build": "npm --prefix ../emulator-core run build && mkdir -p dist && cp ../emulator-core/dist/zx.wasm ../emulator-core/dist/wasm_exec.js dist/ && cp src/zxgo/zx-feeder.worklet.js dist/",

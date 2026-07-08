@@ -3,7 +3,7 @@
     "project": "Projekt",
     "newProject": "Nový projekt",
     "openProject": "Otvoriť projekt",
-    "downloadTap": "Stiahnuť TAP",
+    "download": "Stiahnuť {{ext}}",
     "fullScreen": "Celá obrazovka",
     "yourProfile": "Váš profil",
     "profileSettings": "Nastavenia profilu",

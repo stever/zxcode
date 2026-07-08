@@ -3,7 +3,7 @@
     "project": "Έργο",
     "newProject": "Νέο έργο",
     "openProject": "Άνοιγμα έργου",
-    "downloadTap": "Λήψη TAP",
+    "download": "Λήψη {{ext}}",
     "fullScreen": "Πλήρης οθόνη",
     "yourProfile": "Το προφίλ σου",
     "profileSettings": "Ρυθμίσεις προφίλ",
