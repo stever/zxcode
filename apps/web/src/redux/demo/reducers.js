@@ -9,79 +9,87 @@ const initialState = {
     asmCode: `; zxplay.org demo - colour bars and coloured text
 ; the assembly counterpart of the BASIC demo
 
-org 32768
+        org 32768
 
 CHAN_OPEN equ 5633              ; ROM 0x1601: open channel (A = channel)
-CLS       equ 3503              ; ROM 0x0DAF: clear screen
+ROM_CLS   equ 3503              ; ROM 0x0DAF: clear screen (uses ATTR-P)
+ATTR_P    equ 23693             ; permanent colours - used by CLS and scrolling
+BORDCR    equ 23624             ; border / lower-screen attribute
 
 start:
-    ld a,2
-    call CHAN_OPEN             ; channel 2 (main screen)
-    call CLS
-    ld a,2
-    out (254),a               ; red border
+        ld a,2
+        call CHAN_OPEN          ; channel 2 (main screen)
+
+        ld a,2                  ; BORDER 2
+        out (254),a
+        ld a,2*8+7              ; paper 2, ink 7 - what BORDER 2 stores
+        ld (BORDCR),a           ; so the lower screen (scroll?) is red too
+
+        ld a,7                  ; PAPER 0 : INK 7 (permanent)
+        ld (ATTR_P),a
+        call ROM_CLS            ; CLS clears with ATTR-P and copies it to ATTR-T
 
 loop:
-    ld c,0                    ; eight PAPER colour bars
+        ld c,0                  ; eight PAPER colour bars
 bars:
-    ld a,17                   ; PAPER control
-    rst 16
-    ld a,c
-    rst 16
-    ld b,4
+        ld a,17                 ; PAPER control
+        rst 16
+        ld a,c
+        rst 16
+        ld b,4
 space:
-    ld a,32
-    rst 16
-    djnz space
-    inc c
-    ld a,c
-    cp 8
-    jr nz,bars
+        ld a,32
+        rst 16
+        djnz space
+        inc c
+        ld a,c
+        cp 8
+        jr nz,bars
 
-    ld a,17                   ; back to PAPER 0, new line
-    rst 16
-    xor a
-    rst 16
-    ld a,13
-    rst 16
+        ld a,17                 ; back to PAPER 0, new line
+        rst 16
+        xor a
+        rst 16
+        ld a,13
+        rst 16
 
-    ld hl,msg                 ; message
-    call print
+        ld hl,msg               ; message
+        call print
 
-    ld c,1                    ; six rows of asterisks, INK 1..6
+        ld c,1                  ; six rows of asterisks, INK 1..6
 rows:
-    ld a,16                   ; INK control
-    rst 16
-    ld a,c
-    rst 16
-    ld hl,stars
-    call print
-    inc c
-    ld a,c
-    cp 7
-    jr nz,rows
+        ld a,16                 ; INK control
+        rst 16
+        ld a,c
+        rst 16
+        ld hl,stars
+        call print
+        inc c
+        ld a,c
+        cp 7
+        jr nz,rows
 
-    ld a,16                   ; back to INK 7
-    rst 16
-    ld a,7
-    rst 16
+        ld a,16                 ; back to INK 7
+        rst 16
+        ld a,7
+        rst 16
 
-    jr loop
+        jr loop
 
-print:                        ; print null-terminated string at HL
-    ld a,(hl)
-    or a
-    ret z
-    rst 16
-    inc hl
-    jr print
+print:                          ; print null-terminated string at HL
+        ld a,(hl)
+        or a
+        ret z
+        rst 16
+        inc hl
+        jr print
 
 msg:
-    db "Hello from zxplay.org",13,0
+        db "Hello from zxplay.org",13,0
 stars:
-    db "**********",13,0
+        db "**********",13,0
 
-    end start`,
+        end start`,
     sinclairBasicCode: `10 REM zxplay.org demo
 20 BORDER 2: PAPER 0: INK 7: CLS
 30 FOR n=0 TO 7
