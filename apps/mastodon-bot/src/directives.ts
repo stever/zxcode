@@ -14,6 +14,7 @@ const LANG_TAGS: Record<string, string> = {
     zxbasic: 'zxbasic',
     c: 'c',
     sdcc: 'sdcc',
+    sjasmplus: 'sjasmplus',
     zmac: 'zmac',
     bas2tap: 'bas2tap',
 };

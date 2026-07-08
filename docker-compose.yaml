@@ -126,7 +126,7 @@ services:
 
   # Headless emulator: compiles a program to .tap and renders it running to
   # GIF/MP4. Renders inline BASIC, or a public project looked up from Hasura
-  # (compiling asm/bas2tap in-process and zxbasic/c via the Hasura actions).
+  # (compiling asm/bas2tap in-process; zxbasic/c/sjasmplus via Hasura actions).
   # Talks to Hasura as the unauthenticated `public` role, so it holds no
   # secrets. Does untrusted execution; not exposed publicly.
   gif-service:
@@ -188,9 +188,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
-    # NETWORK ISOLATION (prod): gif-service + zxbasic + z88dk need no inbound
+    # NETWORK ISOLATION (prod): gif-service + zxbasic + z88dk + sjasmplus need no inbound
     # internet, only intra-stack traffic (gif-service -> hasura; hasura ->
-    # zxbasic/z88dk). In the prod compose put them on an `internal: true`
+    # zxbasic/z88dk/sjasmplus). In the prod compose put them on an `internal: true`
     # network that also carries hasura. Not wired here to avoid breaking dev
     # connectivity that can't be validated in this repo.
     #
