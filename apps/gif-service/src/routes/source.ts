@@ -44,7 +44,7 @@ async function handle(format: Format, req: Request, res: Response): Promise<void
 
         let tap: Buffer;
         try {
-            tap = await compileProjectIsolated(source.lang, source.code);
+            tap = await compileProjectIsolated(source.lang, source.code, String(machineType));
         } catch (err) {
             if (err instanceof CompileError) {
                 res.status(400).json({ error: 'Compilation failed', detail: err.message });

@@ -13,7 +13,7 @@ const COMPILE_TIMEOUT_MS = parseInt(process.env.COMPILE_TIMEOUT_MS ?? '20000', 1
  * process always works. The service is single-client and sequential, so one
  * child per request is fine.
  */
-export function compileProjectIsolated(lang: string, code: string): Promise<Buffer> {
+export function compileProjectIsolated(lang: string, code: string, machine?: string): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const child = fork(WORKER_PATH, { execArgv: ['--import', 'tsx'] });
         let settled = false;
@@ -45,6 +45,6 @@ export function compileProjectIsolated(lang: string, code: string): Promise<Buff
             finish(() => reject(new Error(`compile worker exited unexpectedly (code ${codeNum})`))),
         );
 
-        child.send({ lang, code });
+        child.send({ lang, code, machine });
     });
 }

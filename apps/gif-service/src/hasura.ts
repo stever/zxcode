@@ -155,11 +155,14 @@ export async function fetchProjectMetaById(id: string): Promise<ProjectMeta | nu
 }
 
 // One mutation per compile action; the Boriel action's input field is named
-// differently (basic vs code) for historical reasons.
+// differently (basic vs code) for historical reasons. compilePascal also
+// takes the machine target, since Pasta80 links a different runtime per
+// machine.
 const ACTION_MUTATIONS = {
     compile: `mutation ($src: String!) { compile(basic: $src) { base64_encoded } }`,
     compileC: `mutation ($src: String!) { compileC(code: $src) { base64_encoded } }`,
     compileSjasmplus: `mutation ($src: String!) { compileSjasmplus(code: $src) { base64_encoded } }`,
+    compilePascal: `mutation ($src: String!, $machine: String) { compilePascal(code: $src, machine: $machine) { base64_encoded } }`,
 } as const;
 
 /**
@@ -173,12 +176,16 @@ const ACTION_MUTATIONS = {
 export async function compileViaAction(
     action: keyof typeof ACTION_MUTATIONS,
     code: string,
+    machine?: string,
 ): Promise<Uint8Array> {
     const query = ACTION_MUTATIONS[action];
     try {
-        const data = await gql<Record<string, { base64_encoded: string } | null>>(query, {
-            src: code,
-        });
+        // Only pass $machine when given — the other mutations don't declare
+        // it, and an undeclared variable is a GraphQL error.
+        const data = await gql<Record<string, { base64_encoded: string } | null>>(
+            query,
+            machine === undefined ? { src: code } : { src: code, machine },
+        );
         const result = data[action];
         if (!result?.base64_encoded) {
             throw new CompileError(`${action} returned no output`);

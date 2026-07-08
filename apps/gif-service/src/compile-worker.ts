@@ -7,11 +7,12 @@ import { CompileError } from './errors.js';
 interface CompileRequest {
     lang: string;
     code: string;
+    machine?: string;
 }
 
 process.on('message', async (msg: CompileRequest) => {
     try {
-        const tap = await compileProject(msg.lang, msg.code);
+        const tap = await compileProject(msg.lang, msg.code, msg.machine);
         // Small payloads; base64 over IPC avoids Buffer-serialisation quirks.
         process.send!({ ok: true, tapB64: tap.toString('base64') }, () => process.exit(0));
     } catch (err) {

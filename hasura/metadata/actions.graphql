@@ -16,6 +16,13 @@ type Mutation {
   ): CompileResult
 }
 
+type Mutation {
+  compilePascal(
+    code: String!
+    machine: String
+  ): CompileResult
+}
+
 type CompileResult {
   base64_encoded: String!
 }

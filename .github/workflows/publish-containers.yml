@@ -46,6 +46,11 @@ jobs:
           - context: ./apps/sjasmplus/
             dockerfile: ./apps/sjasmplus/Dockerfile
             image: ghcr.io/stever/zxcode-api-sjasmplus
+          # Pasta80 Turbo Pascal compile API. New package; GHCR links it to
+          # this repo automatically on first push.
+          - context: ./apps/pasta80/
+            dockerfile: ./apps/pasta80/Dockerfile
+            image: ghcr.io/stever/zxcode-api-pasta80
           - context: ./
             dockerfile: ./apps/gif-service/Dockerfile
             image: ghcr.io/stever/zxcode-gif-service

@@ -65,7 +65,7 @@ router.get('/:id', async (req: Request, res: Response) => {
                 const machine: MachineType =
                     project.machine === 'next' ? 'next' : project.machine === '128' ? 128 : 48;
                 pending = withRenderSlot(async () => {
-                    const tap = await compileProjectIsolated(project.lang, project.code);
+                    const tap = await compileProjectIsolated(project.lang, project.code, String(machine));
                     const generator = new GIFGenerator({ maxDurationMs: 2500, scale: 2 });
                     await generator.initialize();
                     const out = await generator.generatePngFromTAP(tap, machine);

@@ -34,11 +34,14 @@ async function inProcess(run: () => Promise<Uint8Array>): Promise<Buffer> {
  * Compile a project's source to a self-loading TAP, dispatching on language.
  *
  * In-process WASM: basic (zmakebas), bas2tap, asm (pasmo --tapbas loader).
- * Via Hasura actions: zxbasic (Boriel), c (z88dk).
+ * Via Hasura actions: zxbasic (Boriel), c (z88dk), sjasmplus, pascal.
  * Not yet supported: zmac / sdcc (multi-step WASM toolchains that today live
  * only in the web worker — see work item #44).
+ *
+ * `machine` ('48' | '128' | 'next') is only consulted by languages whose
+ * codegen depends on the target — currently pascal (Pasta80).
  */
-export async function compileProject(lang: string, code: string): Promise<Buffer> {
+export async function compileProject(lang: string, code: string, machine?: string): Promise<Buffer> {
     switch (lang) {
         case 'basic':
             return inProcess(async () => {
@@ -63,6 +66,10 @@ export async function compileProject(lang: string, code: string): Promise<Buffer
             // May return a TAP or (SAVENEX source) a NEX image; the emulator
             // sniffs the 'Next' signature at load and routes accordingly.
             return Buffer.from(await compileViaAction('compileSjasmplus', code));
+        case 'pascal':
+            // Pasta80 Turbo Pascal; compiled for the machine the render will
+            // boot so the linked runtime matches.
+            return Buffer.from(await compileViaAction('compilePascal', code, machine ?? '48'));
         case 'zmac':
             return inProcess(async () => {
                 const { runTool } = await import('./wasm-tools.js');

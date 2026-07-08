@@ -5,6 +5,7 @@ export function getLanguageLabel(lang) {
     bas2tap: "bas2tap",
     nextbas: "Next BASIC",
     c: "z88dk C",
+    pascal: "Pasta80 Pascal",
     sdcc: "SDCC",
     sjasmplus: "sjasmplus",
     zmac: "zmac",

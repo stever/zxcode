@@ -157,6 +157,15 @@ export default function App() {
               />
               <Route
                 exact
+                path="/new/pascal"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="pascal" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
                 path="/new/sjasmplus"
                 element={
                   <MaxWidth>

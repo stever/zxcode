@@ -129,6 +129,14 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
+  const newPascal = {
+    label: getLanguageLabel("pascal"),
+    command: () => {
+      dispatch(pause());
+      navigate("/new/pascal");
+    },
+  };
+
   const newSdcc = {
     label: getLanguageLabel("sdcc"),
     command: () => {
@@ -153,6 +161,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   newProjectItems.push(newPasmo);
   newProjectItems.push(newSjasmplus);
   if (Constants.enableZ88dk) newProjectItems.push(newZ88dk);
+  newProjectItems.push(newPascal);
   newProjectItems.push(otherMenu);
 
   const projectMenu = {

@@ -8,6 +8,7 @@ import {assetUrl} from "@zxplay/emulator";
 import {getZXBasicTap} from "./zxbasicCompile";
 import {getZ88dkTap} from "./z88dkCompile";
 import {getSjasmplusTap} from "./sjasmplusCompile";
+import {getPascalTap} from "./pascalCompile";
 import {store} from "../store";
 import {
     actionTypes,
@@ -156,6 +157,7 @@ function* handleGetProjectTapActions(_) {
     const userId = yield select((state) => state.identity.userId);
     const lang = yield select((state) => state.project.lang);
     const code = yield select((state) => state.project.code);
+    const machine = yield select((state) => state.app.machine);
     const followTapAction = yield select((state) => state.eightbit.followTapAction);
     try {
         let tap;
@@ -233,6 +235,21 @@ function* handleGetProjectTapActions(_) {
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
                     console.error('[z88dk] dispatching setErrorItems', errorItems);
+                    yield put(setErrorItems(errorItems));
+                } finally {
+                    dashboardUnlock();
+                }
+                break;
+            case 'pascal':
+                // Pasta80 Turbo Pascal — the codegen target follows the
+                // emulator machine (48/128/next link different runtimes), so
+                // the program is compiled for what it is about to run on.
+                try {
+                    tap = yield call(getPascalTap, code, String(machine), userId);
+                    yield put(followTapAction(tap));
+                    yield put(setFollowTapAction(undefined));
+                } catch (errorItems) {
+                    console.error('[pasta80] dispatching setErrorItems', errorItems);
                     yield put(setErrorItems(errorItems));
                 } finally {
                     dashboardUnlock();

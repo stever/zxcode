@@ -21,6 +21,13 @@ actions:
     permissions:
       - role: public
       - role: zxplay-user
+  - name: compilePascal
+    definition:
+      kind: synchronous
+      handler: http://pasta80/compile/
+    permissions:
+      - role: public
+      - role: zxplay-user
 custom_types:
   enums: []
   input_objects: []

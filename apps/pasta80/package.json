@@ -1,0 +1,9 @@
+{
+  "name": "pasta80",
+  "private": true,
+  "description": "ZX Play compile API for Pasta80 Turbo Pascal (Python/FastAPI). Built and run via Docker; this manifest just registers it as a workspace and wraps the dev/test commands.",
+  "scripts": {
+    "dev": "uvicorn app.main:app --reload",
+    "test": "pytest"
+  }
+}
