@@ -235,8 +235,11 @@ services:
     # NETWORK ISOLATION (prod): gif-service + zxbasic + z88dk + sjasmplus need no inbound
     # internet, only intra-stack traffic (gif-service -> hasura; hasura ->
     # zxbasic/z88dk/sjasmplus). In the prod compose put them on an `internal: true`
-    # network that also carries hasura. Not wired here to avoid breaking dev
-    # connectivity that can't be validated in this repo.
+    # network that also carries hasura. The gif-service network must ALSO carry
+    # the proxy (prod.Caddyfile serves /screenshots/* and the OG-crawler routes
+    # from gif-service:5001) and mastodon-bot — omitting the proxy leg 502s
+    # every screenshot. Not wired here to avoid breaking dev connectivity that
+    # can't be validated in this repo.
     #
     # AUTO-RESTART ON HANG: plain `restart: always` restarts on exit, NOT on an
     # unhealthy healthcheck. To recover a wedged event loop automatically, run
