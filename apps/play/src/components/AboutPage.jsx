@@ -52,6 +52,12 @@ export default function AboutPage() {
                         <a href="/next/licenses/NOTICES.txt" target="_blank">constituent-part notices</a>).
                     </li>
                     <li>
+                        <a href="https://github.com/Stuk/jszip" target="_blank">JSZip</a> by
+                        Stuart Knightley — used to open zipped tape and snapshot archives.
+                        Dual-licensed under The MIT License or the GPL version 3 - see{' '}
+                        <a href="https://github.com/Stuk/jszip/blob/main/LICENSE.markdown" target="_blank">LICENSE</a>.
+                    </li>
+                    <li>
                         <a href="https://github.com/primefaces/primereact" target="_blank">PrimeReact</a> by
                         PrimeTek. Licensed under terms of The MIT License - see{' '}
                         <a href="https://github.com/primefaces/primereact/blob/master/LICENSE.md" target="_blank">LICENSE</a>.

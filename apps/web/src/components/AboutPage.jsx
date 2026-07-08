@@ -78,6 +78,26 @@ export default function AboutPage() {
                         This tool is public domain.
                     </li>
                     <li>
+                        <a href="https://github.com/stever/emscripten-bas2tap" target="_blank">bas2tap</a> by
+                        Martijn van der Heide (ThunderWare Research Center).
+                        Licensed under terms of The GPL version 2 - see{' '}
+                        <a href="https://github.com/stever/emscripten-bas2tap/blob/main/LICENSE" target="_blank">LICENSE</a>.
+                    </li>
+                    <li>
+                        <a href="https://github.com/z00m128/sjasmplus" target="_blank">sjasmplus</a> by
+                        Aprisobal and contributors — used both as a project language and as the
+                        assembler backend for Pasta80. Licensed under terms of The BSD 3-Clause
+                        License - see{' '}
+                        <a href="https://github.com/z00m128/sjasmplus/blob/master/LICENSE.md" target="_blank">LICENSE.md</a>.
+                    </li>
+                    <li>
+                        <a href="https://github.com/pleumann/pasta80" target="_blank">PASTA/80</a> by
+                        Jörg Pleumann — the Turbo Pascal 3.0-compatible Pascal compiler.
+                        Licensed under terms of The GPL version 3, with a linking exception for
+                        its run-time library - see{' '}
+                        <a href="https://github.com/pleumann/pasta80/blob/master/LICENSE.txt" target="_blank">LICENSE.txt</a>.
+                    </li>
+                    <li>
                         <a href="https://github.com/remy/txt2bas" target="_blank">txt2bas</a> by Remy Sharp,
                         the in-browser NextBASIC tokeniser. Licensed under terms of{' '}
                         <a href="https://github.com/remy/txt2bas/blob/main/package.json" target="_blank">The MIT License</a>.
@@ -86,6 +106,16 @@ export default function AboutPage() {
                         <a href="https://github.com/sehugg/8bitworkshop" target="_blank">8bitworkshop</a> by
                         Steven Hugg. Licensed under terms of The GPL version 3 - see{' '}
                         <a href="https://github.com/sehugg/8bitworkshop/blob/master/LICENSE" target="_blank">LICENSE</a>.
+                    </li>
+                    <li>
+                        <a href="http://48k.ca/zmac.html" target="_blank">zmac</a> by Bruce Norskog
+                        and many others, maintained by George Phillips (bundled via the
+                        8bitworkshop worker). Released under the CC0 Public Domain Dedication.
+                    </li>
+                    <li>
+                        <a href="https://sdcc.sourceforge.net/" target="_blank">SDCC</a> — the Small
+                        Device C Compiler, by Sandeep Dutta and contributors (bundled via the
+                        8bitworkshop worker). Licensed under terms of The GPL version 2.
                     </li>
                     <li>
                         <a href="https://github.com/boriel/zxbasic" target="_blank">Boriel ZX BASIC</a> by Jose Rodriguez.
@@ -99,6 +129,18 @@ export default function AboutPage() {
                             <a href="https://github.com/z88dk/z88dk/wiki/license" target="_blank">LICENSE</a>.
                         </li>
                     }
+                    <li>
+                        <a href="https://github.com/Stuk/jszip" target="_blank">JSZip</a> by
+                        Stuart Knightley — used to open zipped tape and snapshot archives.
+                        Dual-licensed under The MIT License or the GPL version 3 - see{' '}
+                        <a href="https://github.com/Stuk/jszip/blob/main/LICENSE.markdown" target="_blank">LICENSE</a>.
+                    </li>
+                    <li>
+                        <a href="https://codemirror.net/5/" target="_blank">CodeMirror</a> by
+                        Marijn Haverbeke — the code editor component. Licensed under terms of
+                        The MIT License - see{' '}
+                        <a href="https://github.com/codemirror/codemirror5/blob/master/LICENSE" target="_blank">LICENSE</a>.
+                    </li>
                     <li>
                         <a href="https://github.com/primefaces/primereact" target="_blank">PrimeReact</a> by
                         PrimeTek. Licensed under terms of The MIT License - see{' '}
