@@ -38,3 +38,30 @@ the wasm port is gated behind `//go:build js` / `!js` tags.
 real NextZXOS from ROMs + an SD image staged by `scripts/` — licensed content
 served under The Next License; see `LICENSES.md` for the distribution basis
 and its conditions (free access, bare bootable system, attribution).
+
+## Next boot modes — MAINTENANCE GOTCHA
+
+The core's default Next boot is the hardware-faithful path: FPGA bootrom →
+TBBLUE.FW → NextZXOS. The BROWSER opts out of it for speed:
+`@zxplay/emulator` sets `ZX_GO_NO_FPGA_BOOTROM=1` +
+`ZX_GO_NEXT_DIRECT_BOOT=1` via `go.env` in `GoEmulator.js` (loadGoRuntime),
+which resets the CPU straight into the NextZXOS ROM with the post-firmware
+NextReg personality seeded from `cmd/zx_go/next_directboot.go`. On top of
+that, the page fast-forwards emulation until the NextZXOS menu wait loop
+(`cmd/zx_go/fastboot.go`, polled through the `zxFastBoot()` export). Boot
+drops from ~384 to ~80 frames, all of it time-compressed.
+
+The gotcha: **the `next_directboot.go` seed table was captured from a live
+NextZXOS boot on the current SD distro.** A future `tbblue.mmc` / NextZXOS
+update can invalidate it — the failure mode is a boot hang, not an error.
+After restaging Next assets, re-run:
+
+    ZX_GO_NEXT_SD_IMG=<staged tbblue.mmc> ZX_GO_NO_FPGA_BOOTROM=1 \
+      ZX_GO_NEXT_DIRECT_BOOT=1 go test ./cmd/zx_go/ \
+      -run 'TestDirectBootSurvivesReboot|TestImportAndRun'
+
+If that fails, either recapture the seeds (see the comments in
+`next_directboot.go`) or delete the two `go.env` lines in `GoEmulator.js` —
+the browser then falls back to the faithful bootrom path, still
+fast-forwarded, just ~300 frames slower. The desktop build always uses the
+faithful path and is unaffected.

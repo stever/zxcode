@@ -51,6 +51,16 @@ function loadGoRuntime() {
             });
         }
         const go = new globalThis.Go();
+        // Direct-core Next boot: skip the FPGA bootrom splash + TBBLUE.FW
+        // stage and reset straight into NextZXOS with the post-firmware
+        // NextReg personality seeded (zx_go next_directboot.go). NextZXOS
+        // still performs its entire init from the unmodified staged assets;
+        // combined with the boot fast-forward this takes boot-to-welcome
+        // from ~384 to ~80 emulated frames. The hardware-faithful bootrom
+        // path stays the core default — delete these two entries to get it
+        // back. Env is snapshotted at go.run(), so it must be set here.
+        go.env.ZX_GO_NO_FPGA_BOOTROM = '1';
+        go.env.ZX_GO_NEXT_DIRECT_BOOT = '1';
         const resp = await fetch(await assetUrl('/dist/zx.wasm', scriptUrl));
         if (!resp.ok) throw new Error(`zx.wasm: HTTP ${resp.status}`);
         const result = await WebAssembly.instantiateStreaming
