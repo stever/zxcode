@@ -173,7 +173,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r18-nex-sniff';
+        const ENGINE_REV = 'r19-fast-boot';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -285,6 +285,52 @@ export class GoEmulator extends EventEmitter {
         }
     }
 
+    // Emulated-frames-per-second, published once a second for the page's
+    // discreet FPS readout (50 = full speed; counts frames EXECUTED, so a
+    // late rAF that catches up with 2 frames isn't a spurious dip — and the
+    // boot fast-forward shows up as the multi-hundred rate it really runs at).
+    tallyFps(t, frames) {
+        this.fpsCount = (this.fpsCount || 0) + frames;
+        if (!this.fpsT) this.fpsT = t;
+        if (t - this.fpsT >= 1000) {
+            window.__zxgoFps = Math.round(this.fpsCount * 1000 / (t - this.fpsT));
+            this.fpsCount = 0;
+            this.fpsT = t;
+        }
+    }
+
+    // Composite one core frame ({w,h} as returned by zxFrame) into the fixed
+    // display box. Shared by the normal and fast-boot paths.
+    presentFrame(d) {
+        if (!d.w) return;
+        if (d.w !== this.frameW || d.h !== this.frameH) {
+            this.frameW = d.w; this.frameH = d.h;
+            this.frameBuf = new Uint8Array(d.w * d.h * 4);
+            this.imageData = new ImageData(new Uint8ClampedArray(this.frameBuf.buffer), d.w, d.h);
+            // Raw frame goes to an offscreen canvas, composited into
+            // the fixed display box each tick.
+            this.off = document.createElement('canvas');
+            this.off.width = d.w; this.off.height = d.h;
+            this.offCtx = this.off.getContext('2d');
+        } else if (this.frameBuf) {
+            this.imageData.data.set(this.frameBuf);
+            this.offCtx.putImageData(this.imageData, 0, 0);
+            const g = this.ctx;
+            // Filler in the frame's own border colour (corner
+            // pixel), so it reads as border, not letterboxing.
+            g.fillStyle = 'rgb(' + this.frameBuf[0] + ',' + this.frameBuf[1] + ',' + this.frameBuf[2] + ')';
+            g.fillRect(0, 0, DISPLAY_W, DISPLAY_H);
+            g.imageSmoothingEnabled = false;
+            // Frames >=600px wide are half-width-pixel modes spanning
+            // the same visible raster as the 320-wide ones, so every
+            // mode maps to 640 wide x 2-per-line tall.
+            const visW = this.frameW >= 600 ? this.frameW / 2 : this.frameW;
+            let dw = DISPLAY_W, dh = Math.round(this.frameH * (DISPLAY_W / visW));
+            if (dh > DISPLAY_H) { dw = Math.round(dw * DISPLAY_H / dh); dh = DISPLAY_H; }
+            g.drawImage(this.off, (DISPLAY_W - dw) >> 1, (DISPLAY_H - dh) >> 1, dw, dh);
+        }
+    }
+
     // One rAF tick. Pacing (ported from the PoC): clock the 50Hz machine off
     // the audio clock when it runs — produce whatever keeps audioCushion
     // samples in flight ahead of playback — else bank wall-clock time at 20ms
@@ -292,6 +338,35 @@ export class GoEmulator extends EventEmitter {
     // briefly instead of bursting.
     loop(t) {
         if (!this.isRunning) return;
+        // Boot fast-forward: while the core reports the Next still booting
+        // (or its load macro still typing keystrokes — zx_go fastboot.go),
+        // run as many frames as fit a ~10ms budget per displayed frame
+        // instead of the audio-paced 1x cadence. Nothing is skipped: the
+        // FPGA bootrom, TBBLUE.FW and NextZXOS all execute unmodified —
+        // pure time compression, so the ~20s boot-and-type sequence passes
+        // in a second or two of wall clock.
+        if (globalThis.zxFastBoot && globalThis.zxFrame && globalThis.zxFastBoot()) {
+            const t0 = performance.now();
+            let ran = 0;
+            while (globalThis.zxFastBoot() && performance.now() - t0 < 10) {
+                globalThis.zxFrame();
+                ran++;
+            }
+            const d = this.frameBuf ? globalThis.zxFrame(this.frameBuf) : globalThis.zxFrame();
+            ran++;
+            // Time-compressed audio is garbled noise — drain the core's ring
+            // and drop it, then re-anchor the audio clock so normal pacing
+            // resumes cleanly at the boundary (as after a pause).
+            if (globalThis.zxPullAudio) {
+                while (globalThis.zxPullAudio(this.audioPullU8) > 0) { /* discard */ }
+            }
+            this.audioBase = null;
+            this.acc = 0; this.lastTick = t;
+            this.tallyFps(t, ran);
+            this.presentFrame(d);
+            this.rafId = window.requestAnimationFrame((tt) => this.loop(tt));
+            return;
+        }
         let owed;
         const actx = this.audioNode && this.audioNode.context;
         if (actx && actx.state === 'running') {
@@ -307,16 +382,7 @@ export class GoEmulator extends EventEmitter {
             owed = Math.floor(this.acc / 20);
             this.acc -= owed * 20;
         }
-        // Emulated-frames-per-second, published once a second for the page's
-        // discreet FPS readout (50 = full speed; counts frames EXECUTED, so a
-        // late rAF that catches up with 2 frames isn't a spurious dip).
-        this.fpsCount = (this.fpsCount || 0) + (owed || 0);
-        if (!this.fpsT) this.fpsT = t;
-        if (t - this.fpsT >= 1000) {
-            window.__zxgoFps = Math.round(this.fpsCount * 1000 / (t - this.fpsT));
-            this.fpsCount = 0;
-            this.fpsT = t;
-        }
+        this.tallyFps(t, owed || 0);
         if (owed && globalThis.zxFrame) {
             for (let i = 1; i < owed; i++) globalThis.zxFrame();
             // No destination buffer until the core has reported its frame
@@ -325,34 +391,7 @@ export class GoEmulator extends EventEmitter {
             const d = this.frameBuf ? globalThis.zxFrame(this.frameBuf) : globalThis.zxFrame();
             this.pumpAudio();
             this.pollTape();
-            if (d.w) {
-                if (d.w !== this.frameW || d.h !== this.frameH) {
-                    this.frameW = d.w; this.frameH = d.h;
-                    this.frameBuf = new Uint8Array(d.w * d.h * 4);
-                    this.imageData = new ImageData(new Uint8ClampedArray(this.frameBuf.buffer), d.w, d.h);
-                    // Raw frame goes to an offscreen canvas, composited into
-                    // the fixed display box each tick.
-                    this.off = document.createElement('canvas');
-                    this.off.width = d.w; this.off.height = d.h;
-                    this.offCtx = this.off.getContext('2d');
-                } else if (this.frameBuf) {
-                    this.imageData.data.set(this.frameBuf);
-                    this.offCtx.putImageData(this.imageData, 0, 0);
-                    const g = this.ctx;
-                    // Filler in the frame's own border colour (corner
-                    // pixel), so it reads as border, not letterboxing.
-                    g.fillStyle = 'rgb(' + this.frameBuf[0] + ',' + this.frameBuf[1] + ',' + this.frameBuf[2] + ')';
-                    g.fillRect(0, 0, DISPLAY_W, DISPLAY_H);
-                    g.imageSmoothingEnabled = false;
-                    // Frames >=600px wide are half-width-pixel modes spanning
-                    // the same visible raster as the 320-wide ones, so every
-                    // mode maps to 640 wide x 2-per-line tall.
-                    const visW = this.frameW >= 600 ? this.frameW / 2 : this.frameW;
-                    let dw = DISPLAY_W, dh = Math.round(this.frameH * (DISPLAY_W / visW));
-                    if (dh > DISPLAY_H) { dw = Math.round(dw * DISPLAY_H / dh); dh = DISPLAY_H; }
-                    g.drawImage(this.off, (DISPLAY_W - dw) >> 1, (DISPLAY_H - dh) >> 1, dw, dh);
-                }
-            }
+            this.presentFrame(d);
         }
         this.rafId = window.requestAnimationFrame((tt) => this.loop(tt));
     }

@@ -354,6 +354,7 @@ func setupWasmExports() {
 		if e.nexloadMacro != nil && e.nexloadMacro.tick(e) {
 			e.nexloadMacro = nil
 		}
+		e.noteBootFrame()
 		img := e.renderFrame() // *image.RGBA
 		// Guard null as well as undefined: CopyBytesToJS panics on a null
 		// destination, and a panic in a js.FuncOf callback kills the whole
@@ -443,6 +444,15 @@ func setupWasmExports() {
 	g.Set("zxMacroActive", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		e := wasmEmu
 		return e != nil && e.nexloadMacro != nil
+	}))
+
+	// zxFastBoot() -> bool. True while the Spectrum Next is still booting
+	// (or a load macro is still typing) and the page should fast-forward:
+	// run extra zxFrame calls per displayed frame and discard the audio.
+	// See fastboot.go for the exact conditions and rationale.
+	g.Set("zxFastBoot", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		e := wasmEmu
+		return e != nil && e.bootFastForwardActive()
 	}))
 
 	// zxAudioDebug() -> {events, mult, speaker} (diagnostic).

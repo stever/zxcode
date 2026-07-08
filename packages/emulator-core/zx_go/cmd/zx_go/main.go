@@ -224,6 +224,14 @@ type emulator struct {
 	// cleared when finished.
 	nexloadMacro *nexloadMacro
 
+	// Boot fast-forward tracking (ModelNext; see fastboot.go). bootFrames
+	// counts frames since power-on/reset (saturating at the cap) and
+	// bootMenuSeen latches once the CPU reaches the NextZXOS welcome/menu
+	// key-wait loop — the "boot finished" signal. Updated by noteBootFrame,
+	// reset by reboot().
+	bootFrames   int
+	bootMenuSeen bool
+
 	// cpuSpeedForce is the user-facing "CPU Speed" override (ModelNext):
 	// 0 = Auto (follow the guest's NextReg $07), 1..4 = force 3.5/7/14/28 MHz.
 	// The zero value is Auto so no constructor init is needed. NextZXOS runs
@@ -807,6 +815,7 @@ func (e *emulator) reboot() {
 		e.sam.Reset()
 		return
 	}
+	e.resetBootProgress()
 	e.cpu.Reset()
 	e.ula.Reset()
 

@@ -119,6 +119,15 @@ func newNexloadMacro(sdPath string) *nexloadMacro {
 	return newCommandLineMacro(".nexload "+sdPath, 100)
 }
 
+// inTail reports whether the macro has reached its final step — the tail
+// wait after the run/load ENTER, i.e. the loaded program is now running.
+// Boot fast-forward (fastboot.go) covers the boot and typing steps but must
+// end here so the program itself runs at normal speed. Both constructors end
+// their step list with the tail wait, so "last step" identifies it.
+func (m *nexloadMacro) inTail() bool {
+	return m.idx >= len(m.steps)-1
+}
+
 // tick advances the macro by one frame. It must be called once per executed
 // frame, after the frame runs, so keys pressed here are seen by the next
 // frame's keyboard scan. Returns true when the macro is finished (the caller
