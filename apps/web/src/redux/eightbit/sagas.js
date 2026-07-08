@@ -1,13 +1,12 @@
 import {takeLatest, select, call, put, take} from "redux-saga/effects";
 import {eventChannel} from "redux-saga";
-import gql from "graphql-tag";
 import getZmakebasTap from "zmakebas";
 import getBas2Tap from "bas2tap";
 import getPasmoTap, {bin2tap} from "pasmo";
 import getNextBasicProgram from "../../lib/nextbas";
 import {assetUrl} from "@zxplay/emulator";
-import {gqlFetch} from "../../graphql_fetch";
 import {getZXBasicTap} from "./zxbasicCompile";
+import {getZ88dkTap} from "./z88dkCompile";
 import {store} from "../store";
 import {
     actionTypes,
@@ -232,6 +231,7 @@ function* handleGetProjectTapActions(_) {
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
+                    console.error('[z88dk] dispatching setErrorItems', errorItems);
                     yield put(setErrorItems(errorItems));
                 } finally {
                     dashboardUnlock();
@@ -363,30 +363,4 @@ function getWorkerMessagesEventChannel() {
             onWorkerMessage = null;
         };
     })
-}
-
-
-async function getZ88dkTap(code, userId) {
-    const query = gql`
-        mutation ($code: String!) {
-            compileC(code: $code) {
-                base64_encoded
-            }
-        }
-    `;
-
-    const variables = {
-        'code': code
-    };
-
-    const response = await gqlFetch(userId, query, variables);
-
-    // noinspection JSUnresolvedVariable
-    console.assert(response?.data?.compileC, response);
-
-    // noinspection JSUnresolvedVariable
-    const base64 = response.data.compileC.base64_encoded;
-
-    // noinspection JSDeprecatedSymbols
-    return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 }
