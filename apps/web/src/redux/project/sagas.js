@@ -136,6 +136,16 @@ function* handleCreateNewProjectActions(action) {
 
 function* handleLoadProjectActions(action) {
     try {
+        // The reducer keeps the state (instead of resetting) when this project
+        // is already loaded with unsaved changes. Skip the refetch too, so the
+        // draft isn't overwritten with the server copy.
+        const currentId = yield select((state) => state.project.id);
+        const code = yield select((state) => state.project.code);
+        const savedCode = yield select((state) => state.project.savedCode);
+        if (currentId === action.id && code !== savedCode) {
+            return;
+        }
+
         const userId = yield select((state) => state.identity.userId);
 
         const query = gql`

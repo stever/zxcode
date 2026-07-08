@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useSelector } from "react-redux";
 import { Route, Routes } from "react-router-dom";
 import { Titled } from "react-titled";
@@ -36,6 +36,25 @@ export default function App() {
   const err = useSelector((state) => state?.error.msg);
   const width = useSelector((state) => state?.window.width);
   const height = useSelector((state) => state?.window.height);
+  const hasUnsavedCode = useSelector(
+    (state) => state?.project.code !== state?.project.savedCode
+  );
+
+  // The unsaved draft only lives in the store, so leaving the page (refresh,
+  // close, log-out redirect) would lose it silently. In-app navigation is
+  // safe: the draft survives in the store and reloading the same project
+  // keeps it (see redux/project reducer + saga).
+  useEffect(() => {
+    if (!hasUnsavedCode) {
+      return undefined;
+    }
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedCode]);
   // The body class drives the editor height and emulator-frame CSS, so it must
   // follow the layout mode (height-aware), not raw width.
   const mode = computeMode(width, height);

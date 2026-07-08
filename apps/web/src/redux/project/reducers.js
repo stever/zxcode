@@ -29,6 +29,17 @@ function reset() {
     return {...initialState};
 }
 
+function loadProject(state, action) {
+    // Returning to the already-loaded project with unsaved changes (e.g. after
+    // visiting About or profile settings) must keep the in-memory draft; the
+    // matching saga skips the server refetch in this case. Everything else
+    // starts from a clean slate as before.
+    if (action.id && action.id === state.id && state.code !== state.savedCode) {
+        return state;
+    }
+    return {...initialState};
+}
+
 function setSelectedTabIndex(state, action) {
     return {
         ...state,
@@ -97,7 +108,7 @@ function setProjectTitle(state, action) {
 
 const actionsMap = {
     [actionTypes.reset]: reset,
-    [actionTypes.loadProject]: reset,
+    [actionTypes.loadProject]: loadProject,
     [actionTypes.setSelectedTabIndex]: setSelectedTabIndex,
     [actionTypes.createNewProject]: createNewProject,
     [actionTypes.receiveLoadedProject]: receiveLoadedProject,
