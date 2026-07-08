@@ -1,5 +1,7 @@
 import tempfile
 import base64
+import contextlib
+import io
 import os
 import re
 import sys
@@ -83,6 +85,36 @@ MAX_REQUESTS_PER_HOUR = 100
 
 class TimeoutException(Exception):
     pass
+
+
+class CompilationError(Exception):
+    """Raised when the compiler rejects the source. Carries the compiler's own
+    diagnostics (line numbers + messages) so they can be surfaced to the user."""
+
+    def __init__(self, output: str = ""):
+        super().__init__(output)
+        self.output = output or ""
+
+
+def sanitize_compiler_output(output: str, bas_filename: str) -> str:
+    """Strip server-side paths from the compiler output before returning it to
+    the client. zxbc prefixes each diagnostic with the source path we passed it
+    (a temp file), so replace that with a neutral name and defensively scrub any
+    other temp-file reference."""
+    if not output:
+        return ""
+
+    cleaned = output.replace(bas_filename, "program.bas")
+    # Defensive: catch any leftover /path/to/tmpXXXX.bas that slipped through.
+    cleaned = re.sub(r"\S*/tmp\w+\.bas", "program.bas", cleaned)
+    cleaned = cleaned.strip()
+
+    # Keep the error payload bounded.
+    MAX_OUTPUT = 4000
+    if len(cleaned) > MAX_OUTPUT:
+        cleaned = cleaned[:MAX_OUTPUT] + "\n... (truncated)"
+
+    return cleaned
 
 
 class RateLimiter:
@@ -190,8 +222,10 @@ def compile_with_subprocess(bas_filename, args):
             stdout, stderr = proc.communicate(timeout=COMPILATION_TIMEOUT)
 
             if proc.returncode != 0:
+                # zxbc writes its diagnostics (line numbers + messages) to
+                # stderr. Carry them up so the user sees the actual error.
                 print(f"Compilation failed: {stderr}")
-                return False
+                raise CompilationError(stderr or stdout)
 
             return os.path.exists(tap_filename)
 
@@ -206,12 +240,19 @@ def compile_with_subprocess(bas_filename, args):
         print(f"Subprocess failed ({e}), falling back to threading approach")
 
         if zxbc_main:
-            # Use threading approach as fallback
+            # Use threading approach as fallback, capturing the compiler's stderr
+            # so the same diagnostics are available on this path too.
+            stderr_buffer = io.StringIO()
             try:
-                run_with_threading(zxbc_main, [*args, bas_filename], COMPILATION_TIMEOUT)
-                return os.path.exists(tap_filename)
+                with contextlib.redirect_stderr(stderr_buffer):
+                    run_with_threading(zxbc_main, [*args, bas_filename], COMPILATION_TIMEOUT)
             except TimeoutException:
                 raise
+
+            if not os.path.exists(tap_filename):
+                raise CompilationError(stderr_buffer.getvalue())
+
+            return True
         else:
             raise Exception("Cannot compile: zxbc not available")
 
@@ -280,15 +321,28 @@ def handle_compile_request(
         try:
             success = compile_with_subprocess(bas_filename, zxbc_args(args.input.basic))
             if not success:
-                raise Exception("Compilation failed")
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Compilation produced no output."
+                )
         except TimeoutException:
             # Compilation took too long - likely an infinite loop or complex computation
             raise HTTPException(
                 status_code=status.HTTP_408_REQUEST_TIMEOUT,
                 detail=f"Compilation timeout exceeded ({COMPILATION_TIMEOUT} seconds). Code may contain infinite loops or be too complex."
             )
+        except CompilationError as e:
+            # The compiler rejected the source. Surface its own diagnostics
+            # (line numbers + messages) instead of a generic message.
+            detail = sanitize_compiler_output(e.output, bas_filename)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=detail or "Compilation failed. Please check your BASIC code."
+            )
+        except HTTPException:
+            raise
         except Exception as e:
-            # Compilation failed
+            # Unexpected failure - keep the message generic.
             print(f"Compilation error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -68,9 +68,21 @@ export const setProjectTitle = (title) => ({
     title
 });
 
+// The saga catches pass through whatever the compiler threw: the in-browser
+// compilers (pasmo, zmakebas, bas2tap) reject with arrays of build-error
+// items, but others (txt2bas) throw raw Errors. Normalise here so
+// state.project.errorItems is always either undefined or an array of items -
+// the shape the toast renderer needs - and a compile failure can never be
+// silently dropped.
+function toErrorItems(value) {
+    if (value === undefined || value === null) return undefined;
+    if (Array.isArray(value)) return value;
+    return [{type: 'err', text: value?.message || String(value)}];
+}
+
 export const setErrorItems = (errorItems) => ({
     type: actionTypes.setErrorItems,
-    errorItems
+    errorItems: toErrorItems(errorItems)
 });
 
 export const copyProject = (title, lang, code) => ({

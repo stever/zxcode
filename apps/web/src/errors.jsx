@@ -59,6 +59,11 @@ function getRequestError(e) {
 }
 
 export function showToastsForErrorItems(errorItems, toast) {
+    console.log('[build-errors] showToastsForErrorItems', {
+        count: errorItems?.length,
+        hasToast: Boolean(toast?.current),
+        items: errorItems
+    });
     if (errorItems && errorItems.length > 0 && toast.current) {
         const toasts = [];
 
@@ -127,7 +132,7 @@ function getBuildErrorToastContent(msg, isError) {
             <span className="p-toast-summary">
                 {isError ? i18n.t('errors.projectRunError') : i18n.t('errors.projectRunMessage')}
             </span>
-            <div className="p-toast-detail">
+            <div className="p-toast-detail" style={{whiteSpace: 'pre-wrap'}}>
                 {msg}
             </div>
         </div>

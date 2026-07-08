@@ -7,6 +7,7 @@ import getPasmoTap, {bin2tap} from "pasmo";
 import getNextBasicProgram from "../../lib/nextbas";
 import {assetUrl} from "@zxplay/emulator";
 import {gqlFetch} from "../../graphql_fetch";
+import {getZXBasicTap} from "./zxbasicCompile";
 import {store} from "../store";
 import {
     actionTypes,
@@ -204,6 +205,7 @@ function* handleGetProjectTapActions(_) {
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
+                    console.error('[nextbas] dispatching setErrorItems', errorItems);
                     yield put(setErrorItems(errorItems));
                 } finally {
                     dashboardUnlock();
@@ -216,6 +218,7 @@ function* handleGetProjectTapActions(_) {
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
+                    console.error('[zxbasic] dispatching setErrorItems', errorItems);
                     yield put(setErrorItems(errorItems));
                 } finally {
                     dashboardUnlock();
@@ -361,28 +364,6 @@ function getWorkerMessagesEventChannel() {
     })
 }
 
-async function getZXBasicTap(code, userId) {
-    const query = gql`
-        mutation ($basic: String!) {
-            compile(basic: $basic) {
-                base64_encoded
-            }
-        }
-    `;
-
-    const variables = {
-        'basic': code
-    };
-
-    const response = await gqlFetch(userId, query, variables);
-    console.assert(response?.data?.compile, response);
-
-    // noinspection JSUnresolvedVariable
-    const base64 = response.data.compile.base64_encoded;
-
-    // noinspection JSDeprecatedSymbols
-    return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-}
 
 async function getZ88dkTap(code, userId) {
     const query = gql`

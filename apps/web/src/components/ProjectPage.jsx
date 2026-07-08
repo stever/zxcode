@@ -50,6 +50,14 @@ export default function ProjectPage({ projectId }) {
   }, [effectiveId, userId]);
 
   useEffect(() => {
+    if (errorItems !== undefined) {
+      console.log("[build-errors] ProjectPage errorItems changed", {
+        isArray: Array.isArray(errorItems),
+        count: errorItems?.length,
+        hasToast: Boolean(toast.current),
+        items: errorItems,
+      });
+    }
     if (errorItems && errorItems.length > 0 && toast.current) {
       showToastsForErrorItems(errorItems, toast);
       dispatch(setErrorItems(undefined));
