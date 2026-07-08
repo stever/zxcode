@@ -3,7 +3,7 @@ import {Link} from "react-router-dom";
 import {Titled} from "react-titled";
 import {Card} from "primereact/card";
 import {useTranslation, Trans} from "@zxplay/i18n";
-import Constants, {sep} from "../constants";
+import {sep} from "../constants";
 
 export default function AboutPage() {
     const {t} = useTranslation();
@@ -122,13 +122,11 @@ export default function AboutPage() {
                         Licensed under terms of The GPL version 3 - see{' '}
                         <a href="https://github.com/boriel/zxbasic/blob/master/LICENSE.txt" target="_blank">LICENSE</a>.
                     </li>
-                    {Constants.isDev &&
-                        <li>
-                            <a href="https://z88dk.org/" target="_blank">Z88DK</a> by various.
-                            Licensed under terms of The Clarified Artistic License - see{' '}
-                            <a href="https://github.com/z88dk/z88dk/wiki/license" target="_blank">LICENSE</a>.
-                        </li>
-                    }
+                    <li>
+                        <a href="https://z88dk.org/" target="_blank">Z88DK</a> by various.
+                        Licensed under terms of The Clarified Artistic License - see{' '}
+                        <a href="https://github.com/z88dk/z88dk/wiki/license" target="_blank">LICENSE</a>.
+                    </li>
                     <li>
                         <a href="https://github.com/Stuk/jszip" target="_blank">JSZip</a> by
                         Stuart Knightley — used to open zipped tape and snapshot archives.
