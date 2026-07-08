@@ -5,6 +5,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from fastapi import APIRouter, Header, HTTPException, status
 from typing import Optional
@@ -27,6 +28,19 @@ MAX_INPUT_SIZE = 64 * 1024  # 64KB of assembly source is ample for this use
 RLIMIT_CPU_SECONDS = COMPILE_TIMEOUT + 10
 RLIMIT_FSIZE_BYTES = 32 * 1024 * 1024
 RLIMIT_AS_BYTES = 1024 * 1024 * 1024
+
+# Compiles are strictly serialized. With Lua enabled in the assembler
+# (USE_LUA in the Dockerfile) a source can run arbitrary code, and all
+# compiles share one uid and one tmpfs, so an overlapping compile could read
+# another request's in-flight source — which may be a logged-in user's
+# private project. Unlinking the source after spawn is no substitute:
+# sjasmplus is multi-pass and reopens program.asm, and the unlink would race
+# the child's first open anyway. Serializing here (not via uvicorn
+# --limit-concurrency 1) keeps /health answering during a compile. The wait
+# is bounded so a queue sheds as 503 instead of stacking threads; typical
+# assemblies finish well under a second, so contention is rare.
+COMPILE_QUEUE_TIMEOUT = 10
+_compile_lock = threading.Lock()
 
 
 def _apply_rlimits():
@@ -87,11 +101,17 @@ def handle_compile_request(
         args: RequestArgs,
         authorization: Optional[str] = Header(None)) -> Optional[CompileResult]:
 
+    if not _compile_lock.acquire(timeout=COMPILE_QUEUE_TIMEOUT):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='The assembler is busy. Try again shortly.')
+
     # A fresh directory per request: the source is always program.asm and the
     # assembler runs with cwd here, so diagnostics say program.asm(N) with no
     # server paths to scrub, and SAVETAP/SAVENEX outputs land alongside it.
-    workdir = tempfile.mkdtemp(prefix='sjasmplus-')
+    workdir = None
     try:
+        workdir = tempfile.mkdtemp(prefix='sjasmplus-')
         with open(os.path.join(workdir, 'program.asm'), 'w') as f:
             f.write(args.input.code)
 
@@ -144,4 +164,6 @@ def handle_compile_request(
             return CompileResult(base64_encoded=base64.b64encode(f.read()).decode())
 
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        if workdir:
+            shutil.rmtree(workdir, ignore_errors=True)
+        _compile_lock.release()

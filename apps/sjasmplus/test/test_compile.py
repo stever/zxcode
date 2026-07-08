@@ -50,6 +50,21 @@ msg:
 """
 
 
+# Proves the assembler was built with USE_LUA=1: with Lua compiled out the
+# LUA directive itself is an assembly error, and the stdlib call inside the
+# block exercises the interpreter.
+LUA_TAP_SOURCE = """    DEVICE ZXSPECTRUM48
+    ORG $8000
+start:
+    ret
+    LUA
+local greeting = string.format("lua %d", 1 + 1)
+if greeting ~= "lua 2" then sj.error("lua stdlib broken") end
+    ENDLUA
+    SAVETAP "out.tap",start
+"""
+
+
 def compile_request(code):
     return client.post('/compile/', json={
         'session_variables': {'x-hasura-role': 'public'},
@@ -70,6 +85,13 @@ def test_savenex():
     assert response.status_code == 200
     nex = base64.b64decode(response.json()['base64_encoded'])
     assert nex[:4] == b'Next'
+
+
+def test_lua_scripting_enabled():
+    response = compile_request(LUA_TAP_SOURCE)
+    assert response.status_code == 200
+    tap = base64.b64decode(response.json()['base64_encoded'])
+    assert len(tap) > 0
 
 
 def test_syntax_error_surfaces_diagnostics():
