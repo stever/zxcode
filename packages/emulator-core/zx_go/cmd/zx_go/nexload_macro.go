@@ -30,11 +30,11 @@ var nexKeyMatrix = func() map[rune][][2]int {
 		'5': {3, 0x10}, '6': {4, 0x10}, '7': {4, 0x08}, '8': {4, 0x04}, '9': {4, 0x02},
 	}
 	m := map[rune][][2]int{
-		' ':  {{7, 0x01}},      // SPACE
-		'.':  {sym, {7, 0x04}}, // SYMBOL SHIFT + M
-		'/':  {sym, {0, 0x10}}, // SYMBOL SHIFT + V
-		'-':  {sym, {6, 0x08}}, // SYMBOL SHIFT + J
-		'_':  {sym, {4, 0x01}}, // SYMBOL SHIFT + 0 — appears in compiler temp
+		' ': {{7, 0x01}},      // SPACE
+		'.': {sym, {7, 0x04}}, // SYMBOL SHIFT + M
+		'/': {sym, {0, 0x10}}, // SYMBOL SHIFT + V
+		'-': {sym, {6, 0x08}}, // SYMBOL SHIFT + J
+		'_': {sym, {4, 0x01}}, // SYMBOL SHIFT + 0 — appears in compiler temp
 		//                         names (tmp…); untypeable here meant the macro
 		//                         silently dropped it and NextZXOS then couldn't
 		//                         find the file ("No such file or dir").
@@ -50,14 +50,40 @@ var nexKeyMatrix = func() map[rune][][2]int {
 
 // macroStep is one stage of the NEXLOAD macro. Keys are held for the whole
 // step (released and re-pressed on entry to each step); frames is how many
-// emulated frames the step lasts. A step with waitMenu set instead runs until
-// the CPU reaches the NextZXOS menu wait loop (or a safety timeout), which is
-// how the boot phase waits for an interactive prompt.
+// emulated frames the step lasts.
+//
+// Two step kinds run until a condition instead of a frame count:
+//   - waitMenu: run until the CPU reaches the NextZXOS menu wait loop (or a
+//     safety timeout) — how the boot phase waits for the interactive prompt.
+//   - waitCursor: hold this step's keys until the live menu cursor index at
+//     $F700 reads cursorTarget (or a safety cap). Cursor-feedback navigation:
+//     it self-times through the menu appearing (cursor keys are ignored at
+//     the welcome, where $F700 stays 0) and lands exactly on the target item
+//     regardless of how long the menu took or auto-repeat timing — the same
+//     signal the headless ZX_GO_NAV_128K path uses.
 type macroStep struct {
-	keys     [][2]int
-	frames   int
-	waitMenu bool
+	keys         [][2]int
+	frames       int
+	waitMenu     bool
+	waitCursor   bool
+	cursorTarget byte
 }
+
+// nextMenuCursorAddr is the logical address NextZXOS keeps the main-menu
+// cursor index at (0 = the top item). Read to drive cursor-feedback menu
+// navigation; also surfaced in the headless FD state dump.
+const nextMenuCursorAddr = 0xF700
+
+// menuItemCommandLine is the cursor index of "Command Line" in the NextZXOS
+// main menu (Browser = 0, Command Line = 1; verified on the current distro in
+// both boot modes). If a NextZXOS update reorders the menu this must change —
+// the cycle tests (bas_run_cycle_test.go) fail loudly if it drifts.
+const menuItemCommandLine = 1
+
+// waitCursorCap bounds a waitCursor step so a menu that never presents (bad
+// SD/boot) can't wedge the macro; on the cap it advances anyway (degraded,
+// caught by the cycle tests) rather than hanging.
+const waitCursorCap = 600
 
 // nexloadMacro drives the genuine NextZXOS `.nexload` dot command from the GUI
 // run loop, one step per frame: it reaches the menu, opens the Command Line,
@@ -72,22 +98,18 @@ type nexloadMacro struct {
 	keyOn bool
 }
 
-// Settle pads for the menu navigation, in emulated frames. The welcome, the
-// main menu and the command prompt all idle at the same $0C90 loop, so PC
-// can't signal readiness — these are timed pads. They were originally 140/92,
-// a large over-caution: a sweep showed the cycle completes even at 0 in both
-// boot modes (the preceding key-holds already give the menu time to redraw).
-// Kept at a modest value so the pause is short but a comfortable margin
-// remains for timing drift when the SD distro is updated. The end-to-end
-// cycle tests (bas_run_cycle_test.go) run at these shipped values and are the
-// regression guard.
-const (
-	// macroMenuSettleFrames: after SPACE ("Start NextZXOS"), before cursor
-	// DOWN to "Command Line".
-	macroMenuSettleFrames = 30
-	// macroPromptSettleFrames: after ENTER on "Command Line", before typing.
-	macroPromptSettleFrames = 20
-)
+// macroPromptSettleFrames is the settle pad after ENTER on "Command Line",
+// before typing. The command prompt is a separate environment (no $F700
+// cursor to poll and it idles at the same $0C90 loop as the menu, so PC gives
+// no signal either), so this stays a timed pad. A sweep showed the cycle
+// completes even at 0; kept modest so the pause is short but a margin remains
+// for timing drift on an SD distro update. The end-to-end cycle tests
+// (bas_run_cycle_test.go) run at this shipped value and are the guard.
+//
+// The menu-settle wait that used to sit before the cursor-down step is gone:
+// the waitCursor step (hold DOWN until $F700 == Command Line) self-times
+// through the menu appearing, so no separate pad is needed there.
+const macroPromptSettleFrames = 20
 
 // newCommandLineMacro builds a macro that boots to the NextZXOS menu, opens
 // the Command Line, types cmd (lowercase — the SD card is FAT and NextZXOS
@@ -100,9 +122,15 @@ func newCommandLineMacro(cmd string, tailFrames int) *nexloadMacro {
 
 	steps = append(steps, macroStep{waitMenu: true}) // boot to the welcome screen
 	hold([][2]int{{7, 0x01}}, 40)                    // SPACE -> "Start NextZXOS"
-	wait(macroMenuSettleFrames)                      // settle on the main menu
-	hold([][2]int{{0, 0x01}, {4, 0x10}}, 6)          // cursor DOWN -> Command Line
-	wait(10)
+	// Cursor-feedback: hold DOWN until the menu cursor ($F700) lands on
+	// Command Line. Self-times through the menu appearing and can't overshoot
+	// the target — no fixed menu-settle pad needed.
+	steps = append(steps, macroStep{
+		keys:         [][2]int{{0, 0x01}, {4, 0x10}}, // CAPS SHIFT + 6 = cursor DOWN
+		waitCursor:   true,
+		cursorTarget: menuItemCommandLine,
+	})
+	wait(8)                      // let the cursor-down key-state clear before ENTER
 	hold([][2]int{{6, 0x01}}, 6) // ENTER -> command prompt
 	wait(macroPromptSettleFrames)
 	for _, c := range strings.ToLower(cmd) {
@@ -169,6 +197,16 @@ func (m *nexloadMacro) tick(e *emulator) bool {
 		// Safety timeout so a failed/absent boot can't wedge the macro. A
 		// cold NextZXOS boot can take ~2500 frames; allow ample margin.
 		if e.cpu.PC == nextMenuLoopPC || m.frame > 4000 {
+			m.idx++
+			m.frame = 0
+		}
+		return false
+	}
+	if s.waitCursor {
+		// Hold this step's keys (cursor DOWN) until the menu cursor reaches
+		// the target item, or the safety cap fires. The keys stay held from
+		// the frame==0 press above; releaseAll on the next step drops them.
+		if e.mem.Read(nextMenuCursorAddr) == s.cursorTarget || m.frame > waitCursorCap {
 			m.idx++
 			m.frame = 0
 		}

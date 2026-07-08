@@ -51,17 +51,28 @@ that, the page fast-forwards emulation until the NextZXOS menu wait loop
 (`cmd/zx_go/fastboot.go`, polled through the `zxFastBoot()` export). Boot
 drops from ~384 to ~80 frames, all of it time-compressed.
 
-The gotcha: **the `next_directboot.go` seed table was captured from a live
-NextZXOS boot on the current SD distro.** A future `tbblue.mmc` / NextZXOS
-update can invalidate it — the failure mode is a boot hang, not an error.
-After restaging Next assets, re-run:
+Two things are coupled to the exact SD distro version and both fail on a
+future `tbblue.mmc` / NextZXOS update:
 
+1. **The `next_directboot.go` NextReg seed table** — captured from a live
+   NextZXOS boot. If it drifts the failure mode is a boot hang, not an error.
+2. **The compile-run menu navigation** (`nexload_macro.go`) — it drives the
+   NextZXOS main menu to "Command Line" by holding cursor-down until the live
+   cursor index at `$F700` reaches `menuItemCommandLine` (= 1 on this distro).
+   A menu reorder makes it select the wrong item.
+
+After restaging Next assets, re-run (covers both, in both boot modes):
+
+    ZX_GO_NEXT_SD_IMG=<staged tbblue.mmc> \
+      go test ./cmd/zx_go/ -run 'TestDirectBootSurvivesReboot|TestImportAndRun|TestMenuCursorNavigation'
     ZX_GO_NEXT_SD_IMG=<staged tbblue.mmc> ZX_GO_NO_FPGA_BOOTROM=1 \
       ZX_GO_NEXT_DIRECT_BOOT=1 go test ./cmd/zx_go/ \
-      -run 'TestDirectBootSurvivesReboot|TestImportAndRun'
+      -run 'TestDirectBootSurvivesReboot|TestImportAndRun|TestMenuCursorNavigation'
 
-If that fails, either recapture the seeds (see the comments in
+If the boot tests fail, either recapture the seeds (see the comments in
 `next_directboot.go`) or delete the two `go.env` lines in `GoEmulator.js` —
 the browser then falls back to the faithful bootrom path, still
-fast-forwarded, just ~300 frames slower. The desktop build always uses the
-faithful path and is unaffected.
+fast-forwarded, just ~300 frames slower. If `TestMenuCursorNavigation` fails,
+update `menuItemCommandLine` to the new index (the test message reports where
+the cursor actually landed). The desktop build always uses the faithful path
+and is unaffected.
