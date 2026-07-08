@@ -20,6 +20,14 @@ export default function HomePage() {
     const errorItems = useSelector(state => state?.project.errorItems);
     const windowWidth = useSelector(state => state?.window.width);
     const windowHeight = useSelector(state => state?.window.height);
+    const machine = useSelector(state => state?.app.machine);
+
+    // The BASIC demo tab targets whichever machine is selected: NextBASIC on the
+    // Next, Sinclair BASIC on the 48K/128K. The label (and the editor's dialect)
+    // follow the machine.
+    const basicTabHeader = machine === 'next'
+        ? t("home.tabNextBasic")
+        : t("home.tabSinclairBasic");
 
     const toast = useRef(null);
 
@@ -48,7 +56,7 @@ export default function HomePage() {
         return () => {};
     }, [errorItems, toast.current]);
 
-    const className = mode === 'tab' ? '' : 'mx-2 my-1';
+    const className = mode === 'tab' ? '' : 'mx-2 mb-1';
 
     return (
         <>
@@ -63,7 +71,7 @@ export default function HomePage() {
                                 <Emulator zoom={zoom} width={emuW}/>
                             </div>
                         </TabPanel>
-                        <TabPanel header={t("home.tabSinclairBasic")}>
+                        <TabPanel header={basicTabHeader}>
                             <DemoSinclairBasicEditor/>
                         </TabPanel>
                         <TabPanel header={t("home.tabZ80Assembly")}>
@@ -77,7 +85,7 @@ export default function HomePage() {
                             <TabView
                                 activeIndex={selectedTabIndex}
                                 onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
-                                <TabPanel header={t("home.tabSinclairBasic")}>
+                                <TabPanel header={basicTabHeader}>
                                     <DemoSinclairBasicEditor/>
                                 </TabPanel>
                                 <TabPanel header={t("home.tabZ80Assembly")}>
