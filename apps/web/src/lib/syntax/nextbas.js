@@ -4,4 +4,4 @@ import { defineBasicMode, NEXT_KEYWORDS } from "./basic-common"
 // additions. The shared Sinclair keyword set and tokeniser live in
 // basic-common.js; NEXT_KEYWORDS is the delta documented in the "NextBASIC New
 // Commands and Features" (NextZXOS v2.09) new-keyword-token table.
-defineBasicMode("nextbas", "text/x-nextbas", NEXT_KEYWORDS)
+defineBasicMode("nextbas", "text/x-nextbas", {extraKeywords: NEXT_KEYWORDS})
