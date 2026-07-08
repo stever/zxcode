@@ -69,7 +69,8 @@ export function showToastsForErrorItems(errorItems, toast) {
 
         for (let i = 0; i < errorItems.length; i++) {
             const item = errorItems[i];
-            toasts.push(getBuildErrorToast(item));
+            const t = getBuildErrorToast(item);
+            if (t) toasts.push(t);
         }
 
         toast.current.show(toasts);
@@ -77,11 +78,12 @@ export function showToastsForErrorItems(errorItems, toast) {
 }
 
 function getBuildErrorToast(item) {
-    if (item.type) {
+    if (item?.type) {
         return getBuildErrorWasmCommandToast(item);
-    } else if (item.line) {
-        return getBuildErrorWorkerToast(item);
     }
+    // Everything else is a worker-style item ({line, msg}). line 0 marks a
+    // whole-program failure (e.g. a linker error) and must still surface.
+    return getBuildErrorWorkerToast(item);
 }
 
 function getBuildErrorWasmCommandToast(item) {
@@ -107,17 +109,21 @@ function getBuildErrorWasmCommandToast(item) {
 }
 
 function getBuildErrorWorkerToast(item) {
-    let isError = false;
-    let msg = item.msg;
+    let msg = item?.msg ?? String(item);
 
     const errorPrefix = 'error: ';
-
     if (msg.startsWith(errorPrefix)) {
-        isError = true;
         msg = msg.substr(errorPrefix.length);
     }
 
-    msg = i18n.t('errors.lineMsg', {line: item.line, msg});
+    // These items come from the build's errors[] (zmac/sdcc diagnostics don't
+    // carry an 'error: ' prefix), so default to error severity; only items
+    // announcing themselves as warnings get the softer treatment.
+    const isError = !/^warning\b/i.test(msg);
+
+    if (item?.line) {
+        msg = i18n.t('errors.lineMsg', {line: item.line, msg});
+    }
 
     return {
         severity: isError ? 'error' : 'info',

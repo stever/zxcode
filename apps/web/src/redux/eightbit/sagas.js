@@ -94,6 +94,7 @@ function* handleWorkerMessageActions(action) {
         const data = action.msg.data;
 
         if (data.errors && data.errors.length > 0) {
+            console.error('[worker] dispatching setErrorItems', data.errors);
             yield put(setErrorItems(data.errors));
             return; // Don't continue on errors.
         }
