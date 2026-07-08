@@ -14,6 +14,13 @@ actions:
     permissions:
       - role: public
       - role: zxplay-user
+  - name: compileSjasmplus
+    definition:
+      kind: synchronous
+      handler: http://sjasmplus/compile/
+    permissions:
+      - role: public
+      - role: zxplay-user
 custom_types:
   enums: []
   input_objects: []

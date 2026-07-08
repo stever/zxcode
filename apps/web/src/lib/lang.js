@@ -6,6 +6,7 @@ export function getLanguageLabel(lang) {
     nextbas: "Next BASIC",
     c: "z88dk C",
     sdcc: "SDCC",
+    sjasmplus: "sjasmplus",
     zmac: "zmac",
     zxbasic: "Boriel BASIC",
   };

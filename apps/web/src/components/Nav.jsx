@@ -81,6 +81,14 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
+  const newSjasmplus = {
+    label: getLanguageLabel("sjasmplus"),
+    command: () => {
+      dispatch(pause());
+      navigate("/new/sjasmplus");
+    },
+  };
+
   const newBoriel = {
     label: getLanguageLabel("zxbasic"),
     command: () => {
@@ -136,6 +144,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   const otherMenu = { label: t("nav.other"), items: [] };
   if (languageAllowedOnMachine("bas2tap", machine)) otherMenu.items.push(newBas2Tap);
   otherMenu.items.push(newZmac);
+  otherMenu.items.push(newSjasmplus);
   if (Constants.enableZ88dk) otherMenu.items.push(newZ88dk);
   otherMenu.items.push(newSdcc);
 

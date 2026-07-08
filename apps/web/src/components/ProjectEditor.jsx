@@ -37,6 +37,9 @@ export function ProjectEditor() {
     case "sdcc":
       mode = "text/x-z88dk-csrc";
       break;
+    case "sjasmplus":
+      mode = "text/x-pasmo";
+      break;
     case "zmac":
       mode = "text/x-pasmo";
       break;

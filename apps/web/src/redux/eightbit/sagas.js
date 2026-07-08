@@ -7,6 +7,7 @@ import getNextBasicProgram from "../../lib/nextbas";
 import {assetUrl} from "@zxplay/emulator";
 import {getZXBasicTap} from "./zxbasicCompile";
 import {getZ88dkTap} from "./z88dkCompile";
+import {getSjasmplusTap} from "./sjasmplusCompile";
 import {store} from "../store";
 import {
     actionTypes,
@@ -232,6 +233,20 @@ function* handleGetProjectTapActions(_) {
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
                     console.error('[z88dk] dispatching setErrorItems', errorItems);
+                    yield put(setErrorItems(errorItems));
+                } finally {
+                    dashboardUnlock();
+                }
+                break;
+            case 'sjasmplus':
+                // sjasmplus — returns a TAP, or a NEX image when the source
+                // uses SAVENEX (the emulator sniffs the signature at load).
+                try {
+                    tap = yield call(getSjasmplusTap, code, userId);
+                    yield put(followTapAction(tap));
+                    yield put(setFollowTapAction(undefined));
+                } catch (errorItems) {
+                    console.error('[sjasmplus] dispatching setErrorItems', errorItems);
                     yield put(setErrorItems(errorItems));
                 } finally {
                     dashboardUnlock();

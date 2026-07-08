@@ -1,0 +1,7 @@
+.idea/
+.pytest_cache/
+__pycache__/
+venv/
+CLAUDE.md
+plan_*
+

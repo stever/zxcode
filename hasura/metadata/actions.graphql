@@ -10,6 +10,12 @@ type Mutation {
   ): CompileResult
 }
 
+type Mutation {
+  compileSjasmplus(
+    code: String!
+  ): CompileResult
+}
+
 type CompileResult {
   base64_encoded: String!
 }

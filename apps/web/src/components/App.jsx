@@ -136,6 +136,15 @@ export default function App() {
               />
               <Route
                 exact
+                path="/new/sjasmplus"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="sjasmplus" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
                 path="/new/zmac"
                 element={
                   <MaxWidth>

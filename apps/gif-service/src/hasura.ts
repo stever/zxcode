@@ -154,20 +154,27 @@ export async function fetchProjectMetaById(id: string): Promise<ProjectMeta | nu
     return p ? { projectId: p.project_id, title: p.title, updatedAt: p.updated_at } : null;
 }
 
+// One mutation per compile action; the Boriel action's input field is named
+// differently (basic vs code) for historical reasons.
+const ACTION_MUTATIONS = {
+    compile: `mutation ($src: String!) { compile(basic: $src) { base64_encoded } }`,
+    compileC: `mutation ($src: String!) { compileC(code: $src) { base64_encoded } }`,
+    compileSjasmplus: `mutation ($src: String!) { compileSjasmplus(code: $src) { base64_encoded } }`,
+} as const;
+
 /**
- * Compile ZX BASIC (Boriel) or C (z88dk) through the Hasura actions, returning
- * the TAP bytes. A rejection here usually means the source did not compile, so
- * it surfaces as a CompileError (400) rather than a service fault. A genuine
- * outage of the upstream compiler also lands here; it is logged either way.
+ * Compile through one of the Hasura compile actions (Boriel ZX BASIC, z88dk
+ * C, sjasmplus), returning the output bytes (a TAP, or a NEX for sjasmplus
+ * SAVENEX sources). A rejection here usually means the source did not
+ * compile, so it surfaces as a CompileError (400) rather than a service
+ * fault. A genuine outage of the upstream compiler also lands here; it is
+ * logged either way.
  */
 export async function compileViaAction(
-    action: 'compile' | 'compileC',
+    action: keyof typeof ACTION_MUTATIONS,
     code: string,
 ): Promise<Uint8Array> {
-    const query =
-        action === 'compile'
-            ? `mutation ($src: String!) { compile(basic: $src) { base64_encoded } }`
-            : `mutation ($src: String!) { compileC(code: $src) { base64_encoded } }`;
+    const query = ACTION_MUTATIONS[action];
     try {
         const data = await gql<Record<string, { base64_encoded: string } | null>>(query, {
             src: code,

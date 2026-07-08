@@ -59,6 +59,10 @@ export async function compileProject(lang: string, code: string): Promise<Buffer
             return Buffer.from(await compileViaAction('compile', code));
         case 'c':
             return Buffer.from(await compileViaAction('compileC', code));
+        case 'sjasmplus':
+            // May return a TAP or (SAVENEX source) a NEX image; the emulator
+            // sniffs the 'Next' signature at load and routes accordingly.
+            return Buffer.from(await compileViaAction('compileSjasmplus', code));
         case 'zmac':
             return inProcess(async () => {
                 const { runTool } = await import('./wasm-tools.js');

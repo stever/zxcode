@@ -1,0 +1,9 @@
+{
+  "name": "sjasmplus",
+  "private": true,
+  "description": "ZX Play compile API for sjasmplus Z80 assembly (Python/FastAPI). Built and run via Docker; this manifest just registers it as a workspace and wraps the dev/test commands.",
+  "scripts": {
+    "dev": "uvicorn app.main:app --reload",
+    "test": "pytest"
+  }
+}

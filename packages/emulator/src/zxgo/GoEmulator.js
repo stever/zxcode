@@ -88,6 +88,15 @@ function isPlus3Dos(data) {
     return PLUS3DOS_SIG.every((b, i) => data[i] === b);
 }
 
+// A NEX file (the Next's native program format, e.g. sjasmplus SAVENEX
+// output) begins with the 4-byte "Next" signature. Compiled programs arrive
+// through the same byte pipeline as TAPs, so sniff and route accordingly.
+const NEX_SIG = [0x4E, 0x65, 0x78, 0x74];
+function isNexImage(data) {
+    if (data.length < NEX_SIG.length) return false;
+    return NEX_SIG.every((b, i) => data[i] === b);
+}
+
 export class GoEmulator extends EventEmitter {
     constructor(canvas, opts) {
         super();
@@ -164,7 +173,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r17-nextbas';
+        const ENGINE_REV = 'r18-nex-sniff';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -498,6 +507,16 @@ export class GoEmulator extends EventEmitter {
             if (err) return Promise.reject('Next: ' + err);
             this.emit('openedTapeFile');
             return Promise.resolve({ mediaType: 'bas' });
+        }
+
+        // A NEX image (e.g. sjasmplus SAVENEX output) is Next-native: like the
+        // PLUS3DOS path, boot the Next if needed and run it via .nexload.
+        if (isNexImage(data)) {
+            if (this.machineType !== 'next') await this.bootNext();
+            const err = globalThis.zxRunNex('program.nex', data);
+            if (err) return Promise.reject('Next: ' + err);
+            this.emit('openedTapeFile');
+            return Promise.resolve({ mediaType: 'nex' });
         }
 
         if (this.machineType === 'next') {

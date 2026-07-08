@@ -41,6 +41,11 @@ jobs:
           - context: ./apps/z88dk/
             dockerfile: ./apps/z88dk/Dockerfile
             image: ghcr.io/stever/zxcode-api-z88dk
+          # sjasmplus Z80 assembler compile API. New package; GHCR links it to
+          # this repo automatically on first push.
+          - context: ./apps/sjasmplus/
+            dockerfile: ./apps/sjasmplus/Dockerfile
+            image: ghcr.io/stever/zxcode-api-sjasmplus
           - context: ./
             dockerfile: ./apps/gif-service/Dockerfile
             image: ghcr.io/stever/zxcode-gif-service

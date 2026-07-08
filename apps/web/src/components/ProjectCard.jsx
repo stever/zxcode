@@ -15,6 +15,7 @@ function getLanguageColor(lang) {
     bas2tap: "blue",
     c: "orange",
     sdcc: "orange",
+    sjasmplus: "purple",
     zmac: "purple",
     zxbasic: "green",
   };
