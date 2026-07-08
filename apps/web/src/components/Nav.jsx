@@ -144,8 +144,6 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   const otherMenu = { label: t("nav.other"), items: [] };
   if (languageAllowedOnMachine("bas2tap", machine)) otherMenu.items.push(newBas2Tap);
   otherMenu.items.push(newZmac);
-  otherMenu.items.push(newSjasmplus);
-  if (Constants.enableZ88dk) otherMenu.items.push(newZ88dk);
   otherMenu.items.push(newSdcc);
 
   const newProjectItems = [];
@@ -153,6 +151,8 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   if (languageAllowedOnMachine("nextbas", machine)) newProjectItems.push(newNextBasic);
   if (Constants.enableBoriel) newProjectItems.push(newBoriel);
   newProjectItems.push(newPasmo);
+  newProjectItems.push(newSjasmplus);
+  if (Constants.enableZ88dk) newProjectItems.push(newZ88dk);
   newProjectItems.push(otherMenu);
 
   const projectMenu = {

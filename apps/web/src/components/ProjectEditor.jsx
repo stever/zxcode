@@ -4,6 +4,7 @@ import CodeMirror from "./CodeMirror";
 import "codemirror/mode/z80/z80";
 import { setCode } from "../redux/project/actions";
 import "../lib/syntax/pasmo";
+import "../lib/syntax/sjasmplus";
 import "../lib/syntax/zmakebas";
 import "../lib/syntax/nextbas";
 import "../lib/syntax/z88dk-c";
@@ -38,7 +39,7 @@ export function ProjectEditor() {
       mode = "text/x-z88dk-csrc";
       break;
     case "sjasmplus":
-      mode = "text/x-pasmo";
+      mode = "text/x-sjasmplus";
       break;
     case "zmac":
       mode = "text/x-pasmo";
