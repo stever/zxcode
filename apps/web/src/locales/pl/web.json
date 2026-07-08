@@ -12,6 +12,7 @@
     "view": "Widok",
     "info": "Informacje",
     "aboutThisSite": "O tej stronie",
+    "mastodonBot": "Bot Mastodona",
     "privacyPolicy": "Polityka prywatności",
     "termsOfUse": "Warunki użytkowania",
     "reset": "Resetuj",
@@ -91,6 +92,24 @@
     "intro1": "Emulator ZX Spectrum i środowisko programistyczne dla przeglądarki. Kod źródłowy dostępny <srcLink>tutaj</srcLink>.",
     "intro2": "Powiązana strona jest dostępna pod adresem <zxplayLink>zxplay.org</zxplayLink>. ZX Play to przyjazny dla urządzeń mobilnych emulator ZX Spectrum, przeznaczony do gier.",
     "legal": "Zapoznaj się z <privacyLink>polityką prywatności</privacyLink> oraz <termsLink>warunkami użytkowania</termsLink> tej strony."
+  },
+  "bot": {
+    "intro": "Wspomnij <botLink>@bot@zxplay.org</botLink> z Mastodona lub dowolnego miejsca w Fediwersum z programem na ZX Spectrum, a bot odpowie filmem z działającym programem.",
+    "howToHeading": "Jak używać",
+    "howToAddress": "Rozpocznij wpis od adresu bota, a po nim napisz program. Wzmianka musi być pierwszą rzeczą we wpisie.",
+    "howToReply": "Bot odpowiada nagraniem wideo działającego programu.",
+    "machinesHeading": "Wybór maszyny",
+    "machinesText": "Dodaj jeden z tych hashtagów, aby wybrać maszynę. Bez niego programy działają na 48K:",
+    "languagesHeading": "Wybór języka",
+    "languagesText": "Bez tagu języka program jest traktowany jako Sinclair BASIC (zmakebas). Dodaj jeden z tych hashtagów, aby użyć innego języka:",
+    "hashtagNote": "Odczytywane są tylko dokładnie te tagi. Każdy inny # pozostaje częścią programu, więc PRINT #2 i #include działają normalnie.",
+    "projectsHeading": "Renderowanie projektu",
+    "projectsText": "Zamiast pisać kod we wpisie, wklej link do publicznego projektu, a bot wyrenderuje go bezpośrednio. Link ma pierwszeństwo przed kodem we wpisie, a wskazanie maszyny w adresie URL (?m=48 lub ?m=128) wygrywa z hashtagami.",
+    "limitsHeading": "Ograniczenia",
+    "limitVisibility": "Odpowiedź ma taką samą widoczność jak twój wpis.",
+    "limitRate": "Każde konto może wysłać do 10 żądań na godzinę.",
+    "limitCapture": "Wideo rejestruje do 15 sekund działania programu.",
+    "limitErrors": "Jeśli program się nie kompiluje, bot odpowiada komunikatem błędu kompilatora."
   },
   "settings": {
     "displayName": "Nazwa wyświetlana",

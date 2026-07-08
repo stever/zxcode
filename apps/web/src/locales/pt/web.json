@@ -12,6 +12,7 @@
     "view": "Ver",
     "info": "Informação",
     "aboutThisSite": "Sobre este site",
+    "mastodonBot": "Bot do Mastodon",
     "privacyPolicy": "Política de privacidade",
     "termsOfUse": "Termos de utilização",
     "reset": "Repor",
@@ -91,6 +92,24 @@
     "intro1": "Um emulador de ZX Spectrum e ambiente de programação para o navegador. Código disponível <srcLink>aqui</srcLink>.",
     "intro2": "Um website relacionado está disponível em <zxplayLink>zxplay.org</zxplayLink>. O ZX Play é um emulador de ZX Spectrum compatível com dispositivos móveis, para jogos.",
     "legal": "Por favor, leia a <privacyLink>política de privacidade</privacyLink> e os <termsLink>termos de utilização</termsLink> deste website."
+  },
+  "bot": {
+    "intro": "Mencione <botLink>@bot@zxplay.org</botLink> no Mastodon, ou em qualquer parte do Fediverso, com um programa de ZX Spectrum e o bot responde com um vídeo do programa em execução.",
+    "howToHeading": "Como usar",
+    "howToAddress": "Comece a sua publicação com o endereço do bot e escreva o programa a seguir. A menção tem de ser a primeira coisa na publicação.",
+    "howToReply": "O bot responde com uma gravação em vídeo do programa em execução.",
+    "machinesHeading": "Escolher a máquina",
+    "machinesText": "Adicione uma destas hashtags para escolher a máquina. Sem nenhuma, os programas correm no 48K:",
+    "languagesHeading": "Escolher a linguagem",
+    "languagesText": "Sem uma tag de linguagem, o programa é tratado como Sinclair BASIC (zmakebas). Adicione uma destas hashtags para usar outra linguagem:",
+    "hashtagNote": "Apenas estas tags exatas são lidas. Qualquer outro # continua a fazer parte do programa, pelo que PRINT #2 e #include funcionam normalmente.",
+    "projectsHeading": "Renderizar um projeto",
+    "projectsText": "Em vez de escrever código na publicação, cole a ligação para um projeto público e o bot renderiza-o diretamente. A ligação tem prioridade sobre o código na publicação, e uma indicação de máquina no URL (?m=48 ou ?m=128) prevalece sobre as hashtags.",
+    "limitsHeading": "Limites",
+    "limitVisibility": "A resposta usa a mesma visibilidade da sua publicação.",
+    "limitRate": "Cada conta pode fazer até 10 pedidos por hora.",
+    "limitCapture": "O vídeo capta até 15 segundos do programa em execução.",
+    "limitErrors": "Se o programa não compilar, o bot responde com a mensagem de erro do compilador."
   },
   "settings": {
     "displayName": "Nome a apresentar",

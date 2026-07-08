@@ -12,6 +12,7 @@
     "view": "View",
     "info": "Info",
     "aboutThisSite": "About This Site",
+    "mastodonBot": "Mastodon Bot",
     "privacyPolicy": "Privacy Policy",
     "termsOfUse": "Terms of Use",
     "reset": "Reset",
@@ -95,6 +96,24 @@
     "intro1": "A ZX Spectrum emulator & programming environment for the browser. Source available <srcLink>here</srcLink>.",
     "intro2": "A related website is available at <zxplayLink>zxplay.org</zxplayLink>. ZX Play is a mobile-friendly ZX Spectrum emulator, for games.",
     "legal": "Please read <privacyLink>privacy policy</privacyLink> and <termsLink>terms of use</termsLink>, for this website."
+  },
+  "bot": {
+    "intro": "Mention <botLink>@bot@zxplay.org</botLink> from Mastodon, or anywhere on the Fediverse, with a ZX Spectrum program and the bot replies with a video of the program running.",
+    "howToHeading": "How to Use It",
+    "howToAddress": "Start your post with the bot's handle, then write the program after it. The mention must be the first thing in the post.",
+    "howToReply": "The bot replies with a video capture of the program running.",
+    "machinesHeading": "Choosing a Machine",
+    "machinesText": "Add one of these hashtags to pick the machine. Without one, programs run on the 48K:",
+    "languagesHeading": "Choosing a Language",
+    "languagesText": "Without a language tag the program is treated as Sinclair BASIC (zmakebas). Add one of these hashtags to use another language:",
+    "hashtagNote": "Only these exact tags are read. Any other # stays part of the program, so PRINT #2 and #include work as normal.",
+    "projectsHeading": "Rendering a Project",
+    "projectsText": "Instead of writing code in the post, paste a link to a public project and the bot renders it directly. The link takes precedence over any code in the post, and a machine hint on the URL (?m=48 or ?m=128) wins over hashtags.",
+    "limitsHeading": "Limits",
+    "limitVisibility": "The reply uses the same visibility as your post.",
+    "limitRate": "Each account can make up to 10 requests per hour.",
+    "limitCapture": "The video captures up to 15 seconds of the program running.",
+    "limitErrors": "If the program does not compile, the bot replies with the compiler's error message."
   },
   "settings": {
     "displayName": "Display Name",

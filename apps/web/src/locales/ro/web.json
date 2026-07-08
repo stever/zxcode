@@ -12,6 +12,7 @@
     "view": "Vizualizare",
     "info": "Informații",
     "aboutThisSite": "Despre acest site",
+    "mastodonBot": "Bot Mastodon",
     "privacyPolicy": "Politica de confidențialitate",
     "termsOfUse": "Termeni de utilizare",
     "reset": "Resetează",
@@ -91,6 +92,24 @@
     "intro1": "Un emulator ZX Spectrum și mediu de programare pentru browser. Codul sursă este disponibil <srcLink>aici</srcLink>.",
     "intro2": "Un site înrudit este disponibil la <zxplayLink>zxplay.org</zxplayLink>. ZX Play este un emulator ZX Spectrum optimizat pentru mobil, pentru jocuri.",
     "legal": "Te rugăm să citești <privacyLink>politica de confidențialitate</privacyLink> și <termsLink>termenii de utilizare</termsLink> pentru acest site."
+  },
+  "bot": {
+    "intro": "Menționați <botLink>@bot@zxplay.org</botLink> de pe Mastodon sau de oriunde din Fedivers cu un program ZX Spectrum, iar botul răspunde cu un videoclip al programului în execuție.",
+    "howToHeading": "Cum se folosește",
+    "howToAddress": "Începeți postarea cu adresa botului, apoi scrieți programul după ea. Mențiunea trebuie să fie primul lucru din postare.",
+    "howToReply": "Botul răspunde cu o înregistrare video a programului în execuție.",
+    "machinesHeading": "Alegerea mașinii",
+    "machinesText": "Adăugați unul dintre aceste hashtaguri pentru a alege mașina. Fără unul, programele rulează pe 48K:",
+    "languagesHeading": "Alegerea limbajului",
+    "languagesText": "Fără un tag de limbaj, programul este tratat ca Sinclair BASIC (zmakebas). Adăugați unul dintre aceste hashtaguri pentru alt limbaj:",
+    "hashtagNote": "Sunt citite doar aceste taguri exacte. Orice alt # rămâne parte din program, deci PRINT #2 și #include funcționează normal.",
+    "projectsHeading": "Redarea unui proiect",
+    "projectsText": "În loc să scrieți cod în postare, lipiți linkul către un proiect public și botul îl redă direct. Linkul are prioritate față de codul din postare, iar o indicație de mașină în URL (?m=48 sau ?m=128) are prioritate față de hashtaguri.",
+    "limitsHeading": "Limite",
+    "limitVisibility": "Răspunsul folosește aceeași vizibilitate ca postarea dvs.",
+    "limitRate": "Fiecare cont poate face până la 10 cereri pe oră.",
+    "limitCapture": "Videoclipul surprinde până la 15 secunde din rularea programului.",
+    "limitErrors": "Dacă programul nu se compilează, botul răspunde cu mesajul de eroare al compilatorului."
   },
   "settings": {
     "displayName": "Nume afișat",

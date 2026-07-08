@@ -15,6 +15,7 @@ import Nav from "./Nav";
 import HomePage from "./HomePage";
 import MaxWidth from "./MaxWidth";
 import AboutPage from "./AboutPage";
+import BotPage from "./BotPage";
 import PrivacyPolicyPage from "./PrivacyPolicyPage";
 import TermsOfUsePage from "./TermsOfUsePage";
 import NewProjectPage from "./NewProjectPage";
@@ -80,6 +81,15 @@ export default function App() {
                 element={
                   <MaxWidth>
                     <AboutPage />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
+                path="/bot"
+                element={
+                  <MaxWidth>
+                    <BotPage />
                   </MaxWidth>
                 }
               />

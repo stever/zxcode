@@ -12,6 +12,7 @@
     "view": "Zobrazenie",
     "info": "Informácie",
     "aboutThisSite": "O tejto stránke",
+    "mastodonBot": "Mastodon bot",
     "privacyPolicy": "Zásady ochrany súkromia",
     "termsOfUse": "Podmienky používania",
     "reset": "Resetovať",
@@ -91,6 +92,24 @@
     "intro1": "Emulátor ZX Spectrum a programovacie prostredie pre prehliadač. Zdrojový kód je dostupný <srcLink>tu</srcLink>.",
     "intro2": "Súvisiaca webová stránka je dostupná na <zxplayLink>zxplay.org</zxplayLink>. ZX Play je emulátor ZX Spectrum vhodný pre mobilné zariadenia, určený na hry.",
     "legal": "Prečítajte si <privacyLink>zásady ochrany súkromia</privacyLink> a <termsLink>podmienky používania</termsLink> tejto webovej stránky."
+  },
+  "bot": {
+    "intro": "Spomeňte <botLink>@bot@zxplay.org</botLink> z Mastodonu alebo odkiaľkoľvek z Fediversu s programom pre ZX Spectrum a bot odpovie videom bežiaceho programu.",
+    "howToHeading": "Ako ho použiť",
+    "howToAddress": "Začnite príspevok adresou bota a za ňu napíšte program. Zmienka musí byť prvou vecou v príspevku.",
+    "howToReply": "Bot odpovie videozáznamom bežiaceho programu.",
+    "machinesHeading": "Voľba počítača",
+    "machinesText": "Pridajte jeden z týchto hashtagov na voľbu počítača. Bez neho programy bežia na 48K:",
+    "languagesHeading": "Voľba jazyka",
+    "languagesText": "Bez jazykového tagu sa program považuje za Sinclair BASIC (zmakebas). Pridajte jeden z týchto hashtagov pre iný jazyk:",
+    "hashtagNote": "Čítajú sa iba presne tieto tagy. Akýkoľvek iný # zostáva súčasťou programu, takže PRINT #2 a #include fungujú normálne.",
+    "projectsHeading": "Vykreslenie projektu",
+    "projectsText": "Namiesto písania kódu do príspevku vložte odkaz na verejný projekt a bot ho vykreslí priamo. Odkaz má prednosť pred kódom v príspevku a údaj o počítači v URL (?m=48 alebo ?m=128) má prednosť pred hashtagmi.",
+    "limitsHeading": "Obmedzenia",
+    "limitVisibility": "Odpoveď má rovnakú viditeľnosť ako váš príspevok.",
+    "limitRate": "Každý účet môže poslať až 10 požiadaviek za hodinu.",
+    "limitCapture": "Video zachytáva až 15 sekúnd behu programu.",
+    "limitErrors": "Ak sa program neskompiluje, bot odpovie chybovou správou prekladača."
   },
   "settings": {
     "displayName": "Zobrazované meno",

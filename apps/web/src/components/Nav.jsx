@@ -267,6 +267,13 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
         },
       },
       {
+        label: t("nav.mastodonBot"),
+        icon: "pi pi-fw pi-send",
+        command: () => {
+          navigate("/bot");
+        },
+      },
+      {
         label: t("nav.privacyPolicy"),
         icon: "pi pi-fw pi-eye",
         command: () => {

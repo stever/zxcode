@@ -12,6 +12,7 @@
     "view": "Visualizza",
     "info": "Info",
     "aboutThisSite": "Informazioni su questo sito",
+    "mastodonBot": "Bot Mastodon",
     "privacyPolicy": "Informativa sulla privacy",
     "termsOfUse": "Condizioni d'uso",
     "reset": "Reimposta",
@@ -91,6 +92,24 @@
     "intro1": "Un emulatore ZX Spectrum e ambiente di programmazione per il browser. Sorgente disponibile <srcLink>qui</srcLink>.",
     "intro2": "Un sito web collegato è disponibile su <zxplayLink>zxplay.org</zxplayLink>. ZX Play è un emulatore ZX Spectrum ottimizzato per dispositivi mobili, per i giochi.",
     "legal": "Leggi l'<privacyLink>informativa sulla privacy</privacyLink> e le <termsLink>condizioni d'uso</termsLink> di questo sito web."
+  },
+  "bot": {
+    "intro": "Menziona <botLink>@bot@zxplay.org</botLink> da Mastodon o da qualsiasi punto del Fediverso con un programma per ZX Spectrum e il bot risponderà con un video del programma in esecuzione.",
+    "howToHeading": "Come si usa",
+    "howToAddress": "Inizia il tuo post con l'indirizzo del bot e scrivi il programma subito dopo. La menzione deve essere la prima cosa nel post.",
+    "howToReply": "Il bot risponde con una registrazione video del programma in esecuzione.",
+    "machinesHeading": "Scegliere la macchina",
+    "machinesText": "Aggiungi uno di questi hashtag per scegliere la macchina. Senza, i programmi girano sul 48K:",
+    "languagesHeading": "Scegliere il linguaggio",
+    "languagesText": "Senza un tag di linguaggio il programma viene trattato come Sinclair BASIC (zmakebas). Aggiungi uno di questi hashtag per usare un altro linguaggio:",
+    "hashtagNote": "Vengono letti solo esattamente questi tag. Qualsiasi altro # resta parte del programma, quindi PRINT #2 e #include funzionano normalmente.",
+    "projectsHeading": "Renderizzare un progetto",
+    "projectsText": "Invece di scrivere codice nel post, incolla il link a un progetto pubblico e il bot lo renderizza direttamente. Il link ha la precedenza sul codice nel post, e un'indicazione di macchina nell'URL (?m=48 o ?m=128) prevale sugli hashtag.",
+    "limitsHeading": "Limiti",
+    "limitVisibility": "La risposta usa la stessa visibilità del tuo post.",
+    "limitRate": "Ogni account può fare fino a 10 richieste all'ora.",
+    "limitCapture": "Il video cattura fino a 15 secondi del programma in esecuzione.",
+    "limitErrors": "Se il programma non compila, il bot risponde con il messaggio di errore del compilatore."
   },
   "settings": {
     "displayName": "Nome visualizzato",
