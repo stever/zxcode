@@ -29,6 +29,7 @@ import Stargazers from "./Stargazers";
 import PublicProfiles from "./PublicProfiles";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
+import UnsavedChangesGuard from "./UnsavedChangesGuard";
 import clsx from "clsx";
 import { computeMode } from "../lib/layout";
 
@@ -65,6 +66,7 @@ export default function App() {
       <RenderEmulator />
       <LoadingScreen />
       <LockScreen />
+      <UnsavedChangesGuard />
       <div className={className}>
         <Nav />
         {err && <ErrorPage msg={err} />}

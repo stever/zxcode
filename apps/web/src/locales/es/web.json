@@ -150,7 +150,11 @@
     "projectBy": "Proyecto de:",
     "renameNameHelp": "Actualiza o introduce texto para renombrar el proyecto.",
     "renameSlugHelp": "Opcional: slug de URL personalizado para el proyecto. Déjalo vacío para generarlo automáticamente a partir del título.",
-    "copyNameHelp": "Introduce un nombre para tu copia de este proyecto."
+    "copyNameHelp": "Introduce un nombre para tu copia de este proyecto.",
+    "unsavedTitle": "Cambios sin guardar",
+    "unsavedMessage": "Este proyecto tiene cambios sin guardar. Si continúas, se descartarán.",
+    "unsavedMessageNoSave": "Este proyecto tiene cambios sin guardar que no se pueden guardar aquí. Si continúas, se descartarán.",
+    "discard": "Descartar"
   },
   "projectList": {
     "title": "Título del proyecto",

@@ -18,6 +18,9 @@ export default function HomePage() {
 
     const selectedTabIndex = useSelector(state => state?.demo.selectedTabIndex);
     const errorItems = useSelector(state => state?.project.errorItems);
+    const hasUnsavedCode = useSelector(
+        state => state?.project.code !== state?.project.savedCode
+    );
     const windowWidth = useSelector(state => state?.window.width);
     const windowHeight = useSelector(state => state?.window.height);
 
@@ -38,7 +41,12 @@ export default function HomePage() {
     const zoom = emuW / 320;
 
     useEffect(() => {
-        dispatch(resetProject());
+        // Keep the project's unsaved draft so navigating home and back doesn't
+        // lose it (matches the About/settings pages, which never reset). The
+        // reducer/saga restore the draft when the project is reloaded.
+        if (!hasUnsavedCode) {
+            dispatch(resetProject());
+        }
         return () => {
             dispatch(reset());
         }

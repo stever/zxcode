@@ -150,7 +150,11 @@
     "projectBy": "Proiect de:",
     "renameNameHelp": "Actualizează sau introdu text pentru a redenumi proiectul.",
     "renameSlugHelp": "Opțional: slug URL personalizat pentru proiect. Lasă gol pentru a genera automat din titlu.",
-    "copyNameHelp": "Introdu un nume pentru copia ta a acestui proiect."
+    "copyNameHelp": "Introdu un nume pentru copia ta a acestui proiect.",
+    "unsavedTitle": "Modificări nesalvate",
+    "unsavedMessage": "Acest proiect are modificări nesalvate. Dacă continui, acestea vor fi anulate.",
+    "unsavedMessageNoSave": "Acest proiect are modificări nesalvate care nu pot fi salvate aici. Dacă continui, acestea vor fi anulate.",
+    "discard": "Renunță"
   },
   "projectList": {
     "title": "Titlul proiectului",

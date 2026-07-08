@@ -150,7 +150,11 @@
     "projectBy": "Autor projektu:",
     "renameNameHelp": "Aktualizujte nebo zadejte text pro přejmenování projektu.",
     "renameSlugHelp": "Nepovinné: vlastní URL slug projektu. Ponechte prázdné pro automatické vygenerování z názvu.",
-    "copyNameHelp": "Zadejte název pro svou kopii tohoto projektu."
+    "copyNameHelp": "Zadejte název pro svou kopii tohoto projektu.",
+    "unsavedTitle": "Neuložené změny",
+    "unsavedMessage": "Tento projekt má neuložené změny. Pokud budete pokračovat, budou zahozeny.",
+    "unsavedMessageNoSave": "Tento projekt má neuložené změny, které zde nelze uložit. Pokud budete pokračovat, budou zahozeny.",
+    "discard": "Zahodit"
   },
   "projectList": {
     "title": "Název projektu",

@@ -154,7 +154,11 @@
     "projectBy": "Project by:",
     "renameNameHelp": "Update or enter text to rename the project.",
     "renameSlugHelp": "Optional: Custom URL slug for the project. Leave empty to auto-generate from title.",
-    "copyNameHelp": "Enter a name for your copy of this project."
+    "copyNameHelp": "Enter a name for your copy of this project.",
+    "unsavedTitle": "Unsaved Changes",
+    "unsavedMessage": "This project has unsaved changes. Continuing will discard them.",
+    "unsavedMessageNoSave": "This project has unsaved changes that cannot be saved here. Continuing will discard them.",
+    "discard": "Discard"
   },
   "projectList": {
     "title": "Project Title",

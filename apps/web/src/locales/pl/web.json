@@ -150,7 +150,11 @@
     "projectBy": "Autor projektu:",
     "renameNameHelp": "Zaktualizuj lub wpisz tekst, aby zmienić nazwę projektu.",
     "renameSlugHelp": "Opcjonalnie: własny identyfikator URL projektu. Pozostaw puste, aby wygenerować automatycznie z tytułu.",
-    "copyNameHelp": "Wpisz nazwę dla swojej kopii tego projektu."
+    "copyNameHelp": "Wpisz nazwę dla swojej kopii tego projektu.",
+    "unsavedTitle": "Niezapisane zmiany",
+    "unsavedMessage": "Ten projekt ma niezapisane zmiany. Kontynuacja spowoduje ich odrzucenie.",
+    "unsavedMessageNoSave": "Ten projekt ma niezapisane zmiany, których nie można tutaj zapisać. Kontynuacja spowoduje ich odrzucenie.",
+    "discard": "Odrzuć"
   },
   "projectList": {
     "title": "Tytuł projektu",
