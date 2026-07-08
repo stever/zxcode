@@ -229,7 +229,8 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 }
 
 // importAndRunBas writes data — a PLUS3DOS-headered, autostart-lined NextBASIC
-// program — to c:/imported/program.bas and drives the NextZXOS Command Line
+// program — to a fixed short 8.3 name at the card ROOT (/zx.bas) and drives the
+// NextZXOS Command Line
 // to LOAD it. The autostart line runs it on load, and when it ends (STOP, END
 // or falling off) the machine is left at the NextBASIC editor report WITH THE
 // PROGRAM OUTPUT STILL ON SCREEN — the 48K-like experience. (The previous
@@ -246,9 +247,12 @@ func (e *emulator) importAndRunBas(data []byte) error {
 	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "nextzxos", "autoexec.bas", neutralAutoexec()); err != nil {
 		slog.Warn("bas import: could not neutralise autoexec.bas", "err", err)
 	}
-	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "imported", "program.bas", data); err != nil {
+	// Root-level, fixed short name (mirrors the .nex import): keeps the typed
+	// `load "/zx.bas"` as short as possible so the keystroke macro finishes
+	// quicker than the old `/imported/program.bas`.
+	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "", "zx.bas", data); err != nil {
 		e.paused.Store(false)
-		return fmt.Errorf("write program.bas: %w", err)
+		return fmt.Errorf("write zx.bas: %w", err)
 	}
 	// Persist so the program survives restarts (no-op on wasm: sdImagePath == "").
 	if e.sdImagePath != "" {
@@ -259,7 +263,7 @@ func (e *emulator) importAndRunBas(data []byte) error {
 	slog.Info("bas import: LOADing via the NextZXOS command line", "bytes", len(data))
 	// Arm the macro before releasing pause (see startNexloadMacro).
 	e.reboot()
-	e.nexloadMacro = newCommandLineMacro(`load "/imported/program.bas"`, 100)
+	e.nexloadMacro = newCommandLineMacro(`load "/zx.bas"`, 100)
 	e.paused.Store(false)
 	return nil
 }
