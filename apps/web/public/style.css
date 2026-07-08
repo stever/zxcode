@@ -311,6 +311,10 @@ code {
     justify-content: flex-start;
     column-gap: 16px;
     row-gap: 8px;
+    /* Bare labels (Private / Target machine / Line Numbers) must share the
+       PrimeReact theme font: the body font has different vertical metrics,
+       which floats their glyphs ~2px above the flex-centred controls. */
+    font-family: var(--font-family);
 }
 
 .editor-toolbar-group {
