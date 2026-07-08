@@ -17,7 +17,8 @@ FROM python:3.12-slim-bookworm
 
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}" \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 # Non-root, no login shell.
 RUN groupadd -g 1000 zxbasic \
@@ -25,13 +26,14 @@ RUN groupadd -g 1000 zxbasic \
 
 WORKDIR /app
 COPY --chown=zxbasic:zxbasic . /app/
-# zxbc writes the compiled .tap into the working dir, so /app itself must be
-# writable by the non-root user (WORKDIR creates the dir owned by root).
-RUN chown zxbasic:zxbasic /app
 USER zxbasic
 
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:80/health', timeout=3).status==200 else 1)"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
+# zxbc writes the .tap into a temp dir under /tmp (a writable tmpfs), so /app
+# stays read-only. --limit-concurrency sheds a request flood as 503 rather
+# than exhausting threads/memory (the compile endpoint is sync, so each
+# in-flight request holds a threadpool slot and may spawn the compiler).
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--limit-concurrency", "12"]

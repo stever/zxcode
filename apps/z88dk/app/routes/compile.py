@@ -2,6 +2,7 @@ import tempfile
 import base64
 import os
 import re
+import resource
 import signal
 import subprocess
 from pathlib import Path
@@ -14,6 +15,24 @@ from uuid import UUID
 # Kept under gif-service's 20s upstream timeout so the caller gets a clean error.
 COMPILE_TIMEOUT = int(os.environ.get("COMPILE_TIMEOUT", "15"))
 MAX_INPUT_SIZE = 64 * 1024  # 64KB of C source is ample for this use
+
+# Per-compile resource ceilings applied to the compiler subprocess (inherited
+# by the sccz80/zsdcc/appmake children zcc spawns), so a single hostile source
+# can't exhaust the container regardless of the cgroup caps: CPU seconds (a
+# backstop to the wall-clock timeout), max size of any single output/
+# intermediate file (defends against disk fill), and total address space per
+# process. Kept under the container mem_limit so a greedy process fails on its
+# own RLIMIT rather than tripping a cgroup OOM that could catch a concurrent
+# compile.
+RLIMIT_CPU_SECONDS = COMPILE_TIMEOUT + 10
+RLIMIT_FSIZE_BYTES = 32 * 1024 * 1024
+RLIMIT_AS_BYTES = 1024 * 1024 * 1024
+
+
+def _apply_rlimits():
+    resource.setrlimit(resource.RLIMIT_CPU, (RLIMIT_CPU_SECONDS, RLIMIT_CPU_SECONDS))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (RLIMIT_FSIZE_BYTES, RLIMIT_FSIZE_BYTES))
+    resource.setrlimit(resource.RLIMIT_AS, (RLIMIT_AS_BYTES, RLIMIT_AS_BYTES))
 
 
 class SessionVars(BaseModel):
@@ -105,9 +124,13 @@ def handle_compile_request(
         # child it spawned (sdcc etc.), not just the parent.
         proc = subprocess.Popen(
             [*zcc_args(args.input.code), c_filename, '-o', out_filename],
+            cwd=path,  # the temp dir (/tmp tmpfs), so any CWD-relative
+                       # intermediate zcc drops lands there, not the read-only
+                       # image layer
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,
+            preexec_fn=_apply_rlimits,
         )
         try:
             _, stderr = proc.communicate(timeout=COMPILE_TIMEOUT)

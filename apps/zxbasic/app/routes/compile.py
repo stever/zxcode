@@ -4,6 +4,7 @@ import contextlib
 import io
 import os
 import re
+import resource
 import sys
 import signal
 import threading
@@ -81,6 +82,23 @@ compile_endpoint = APIRouter()
 COMPILATION_TIMEOUT = 5  # seconds
 MAX_REQUESTS_PER_MINUTE = 10
 MAX_REQUESTS_PER_HOUR = 100
+
+# Per-compile resource ceilings applied to the zxbc subprocess, so a single
+# hostile source can't exhaust the container regardless of the cgroup caps:
+# CPU seconds (a backstop to the wall-clock timeout), max size of any single
+# output/intermediate file (defends against disk fill), and total address
+# space. Kept under the container mem_limit so a greedy compile fails on its
+# own RLIMIT rather than tripping a cgroup OOM that could catch a concurrent
+# one.
+RLIMIT_CPU_SECONDS = COMPILATION_TIMEOUT + 10
+RLIMIT_FSIZE_BYTES = 32 * 1024 * 1024
+RLIMIT_AS_BYTES = 1024 * 1024 * 1024
+
+
+def _apply_rlimits():
+    resource.setrlimit(resource.RLIMIT_CPU, (RLIMIT_CPU_SECONDS, RLIMIT_CPU_SECONDS))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (RLIMIT_FSIZE_BYTES, RLIMIT_FSIZE_BYTES))
+    resource.setrlimit(resource.RLIMIT_AS, (RLIMIT_AS_BYTES, RLIMIT_AS_BYTES))
 
 
 class TimeoutException(Exception):
@@ -197,21 +215,30 @@ def zxbc_args(source: str) -> list[str]:
     return args
 
 
-def compile_with_subprocess(bas_filename, args):
+def compile_with_subprocess(bas_filename, tap_filename, args):
     """
     Compile using subprocess that can actually be killed.
     Falls back to threading approach if subprocess fails.
+
+    The output path (tap_filename) is passed explicitly with -o so the .tap
+    lands in the caller's temp dir (a writable tmpfs) rather than the process
+    CWD — the container runs read-only, and this keeps compiler output off the
+    image layer on both the subprocess and the in-process fallback path.
     """
-    tap_filename = f'{Path(bas_filename).stem}.tap'
+    workdir = os.path.dirname(bas_filename)
 
     # First try subprocess approach (can be killed)
     try:
-        # Try to run as subprocess
+        # Try to run as subprocess, in its own process group (so a timeout can
+        # kill it) with per-compile resource ceilings applied in the child.
         proc = subprocess.Popen(
-            [ZXBC_EXECUTABLE, *args, bas_filename],
+            [ZXBC_EXECUTABLE, *args, '-o', tap_filename, bas_filename],
+            cwd=workdir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            start_new_session=True,
+            preexec_fn=_apply_rlimits,
         )
 
         # Register with monitor so it will be killed if it runs too long
@@ -245,7 +272,10 @@ def compile_with_subprocess(bas_filename, args):
             stderr_buffer = io.StringIO()
             try:
                 with contextlib.redirect_stderr(stderr_buffer):
-                    run_with_threading(zxbc_main, [*args, bas_filename], COMPILATION_TIMEOUT)
+                    # Pass -o too so this in-process path also writes the .tap
+                    # to the writable temp dir rather than the (read-only) CWD.
+                    run_with_threading(
+                        zxbc_main, [*args, '-o', tap_filename, bas_filename], COMPILATION_TIMEOUT)
             except TimeoutException:
                 raise
 
@@ -308,10 +338,13 @@ def handle_compile_request(
             detail=reason
         )
 
-    # Write ZX Basic to file.
+    # Write ZX Basic to file. Both the source and the .tap live in the temp
+    # dir (a writable tmpfs under read-only root), addressed absolutely so the
+    # compiler never writes into the process CWD / image layer.
     tmp = tempfile.NamedTemporaryFile(delete=False)
     bas_filename = f'{tmp.name}.bas'
-    tap_filename = f'{Path(bas_filename).stem}.tap'
+    tap_filename = os.path.join(
+        os.path.dirname(bas_filename), f'{Path(bas_filename).stem}.tap')
 
     try:
         with open(bas_filename, 'w') as f:
@@ -319,7 +352,7 @@ def handle_compile_request(
 
         # Compile the tape file from basic source with timeout
         try:
-            success = compile_with_subprocess(bas_filename, zxbc_args(args.input.basic))
+            success = compile_with_subprocess(bas_filename, tap_filename, zxbc_args(args.input.basic))
             if not success:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

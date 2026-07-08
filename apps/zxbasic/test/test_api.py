@@ -180,4 +180,8 @@ def test_compile_endpoint_rejects_empty_input(monkeypatch):
     with TestClient(app) as client:
         response = client.post("/compile/", json=request_body)
 
-    assert response.status_code == 422, response.text
+    # 400 with a Hasura-shaped {"message": ...} body: the action webhook
+    # reshapes validation errors so Hasura surfaces them (FastAPI's default
+    # 422 {"detail": ...} would make Hasura fail to parse the response).
+    assert response.status_code == 400, response.text
+    assert "message" in response.json(), response.text
