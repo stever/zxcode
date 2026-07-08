@@ -4,6 +4,7 @@ import gql from "graphql-tag";
 import getZmakebasTap from "zmakebas";
 import getBas2Tap from "bas2tap";
 import getPasmoTap, {bin2tap} from "pasmo";
+import getNextBasicProgram from "../../lib/nextbas";
 import {assetUrl} from "@zxplay/emulator";
 import {gqlFetch} from "../../graphql_fetch";
 import {store} from "../store";
@@ -185,6 +186,21 @@ function* handleGetProjectTapActions(_) {
                 // Sinclair BASIC (bas2tap)
                 try {
                     tap = yield call(getBas2Tap, code);
+                    yield put(followTapAction(tap));
+                    yield put(setFollowTapAction(undefined));
+                } catch (errorItems) {
+                    yield put(setErrorItems(errorItems));
+                } finally {
+                    dashboardUnlock();
+                }
+                break;
+            case 'nextbas':
+                // NextBASIC (txt2bas) — tokenised to a PLUS3DOS program rather
+                // than a TAP. The Next delivery (GoEmulator.openTapeBytes)
+                // detects the PLUS3DOS magic and runs it via zxRunBas, so it
+                // rides the same followTapAction path as the TAP compilers.
+                try {
+                    tap = yield call(getNextBasicProgram, code);
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {

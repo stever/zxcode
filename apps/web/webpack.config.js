@@ -29,6 +29,10 @@ module.exports = (env, _) => {
             AUTH_BASE: JSON.stringify(`${protocol}://${hostname}/auth`),
             HOSTNAME: JSON.stringify(hostname),
             HTTP_PROTO: JSON.stringify(protocol),
+            // txt2bas stores its parser singleton on `global` (global.parser);
+            // that bare identifier doesn't exist in the browser, so map it to
+            // globalThis (as the PoC's esbuild --define:global=globalThis did).
+            global: "globalThis",
         }),
         // Emits public/index.html with the content-hashed bundle.js/main.css
         // injected. The template lives outside public/ so it is never
@@ -127,7 +131,11 @@ module.exports = (env, _) => {
             resolve: {
                 extensions: ['.js', '.jsx'],
                 alias: {
-                    fs: false
+                    // txt2bas (NextBASIC tokeniser) reaches for fs/path only in
+                    // its file-loading and CLI code paths, which the in-browser
+                    // file2bas(source, name, '3dos') call never hits. Stub them.
+                    fs: false,
+                    path: false
                 }
             }
         }

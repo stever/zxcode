@@ -109,6 +109,15 @@ export default function App() {
               />
               <Route
                 exact
+                path="/new/nextbas"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="nextbas" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
                 path="/new/c"
                 element={
                   <MaxWidth>

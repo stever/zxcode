@@ -79,6 +79,15 @@ const SAMPLES_PER_FRAME = 882; // 44100 / 50: one emulated frame of mono audio
 const DISPLAY_W = 640;
 const DISPLAY_H = 512;
 
+// A PLUS3DOS file (the on-disk +3/NextZXOS program format) begins with the
+// 8-byte "PLUS3DOS" signature. NextBASIC compiled by txt2bas arrives in this
+// form rather than as a TAP.
+const PLUS3DOS_SIG = [0x50, 0x4C, 0x55, 0x53, 0x33, 0x44, 0x4F, 0x53];
+function isPlus3Dos(data) {
+    if (data.length < PLUS3DOS_SIG.length) return false;
+    return PLUS3DOS_SIG.every((b, i) => data[i] === b);
+}
+
 export class GoEmulator extends EventEmitter {
     constructor(canvas, opts) {
         super();
@@ -155,7 +164,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r16-basname';
+        const ENGINE_REV = 'r17-nextbas';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -478,6 +487,19 @@ export class GoEmulator extends EventEmitter {
         // loads a tape into a not-yet-booted core ("not booted").
         await this.whenMachineReady();
         const data = new Uint8Array(arrayBuffer);
+
+        // NextBASIC (txt2bas) is delivered as a tokenised PLUS3DOS program, not
+        // a tape. It only runs on the Next: boot it if needed, then hand the
+        // bytes straight to NextZXOS's LOAD delivery (zxRunBas), bypassing the
+        // TAP translation. The autostart line baked into the header runs it.
+        if (isPlus3Dos(data)) {
+            if (this.machineType !== 'next') await this.bootNext();
+            const err = globalThis.zxRunBas('program.bas', data);
+            if (err) return Promise.reject('Next: ' + err);
+            this.emit('openedTapeFile');
+            return Promise.resolve({ mediaType: 'bas' });
+        }
+
         if (this.machineType === 'next') {
             if (this.tapToNextEnabled) {
                 // IDE mode: the TAP is a compiler artifact — translate it

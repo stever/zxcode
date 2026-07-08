@@ -89,4 +89,5 @@ This software uses code from the following open source projects:
 - Pasmo by Julián Albo García, alias "NotFound". Licensed under terms of the GPL version 3.
 - Boriel ZX BASIC by Jose Rodriguez. Licensed under terms of the GPL version 3.
 - zmakebas by Russell Marks. This tool is public domain.
+- txt2bas by Remy Sharp, the in-browser NextBASIC tokeniser. Licensed under terms of the MIT License.
 - 8bitworkshop by Steven Hugg. Licensed under terms of the GPL version 3.

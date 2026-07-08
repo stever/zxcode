@@ -11,7 +11,7 @@ import { downloadProjectTap } from "../redux/eightbit/actions";
 import { getUserInfo } from "../redux/identity/actions";
 import { login, logout } from "../auth";
 import { resetEmulator, setMachine } from "../redux/app/actions";
-import { getLanguageLabel } from "../lib/lang";
+import { getLanguageLabel, languageAllowedOnMachine } from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
 import Constants from "../constants";
 
@@ -97,6 +97,14 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
+  const newNextBasic = {
+    label: getLanguageLabel("nextbas"),
+    command: () => {
+      dispatch(pause());
+      navigate("/new/nextbas");
+    },
+  };
+
   const newBas2Tap = {
     label: getLanguageLabel("bas2tap"),
     command: () => {
@@ -121,14 +129,19 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
+  // BASIC options depend on the selected machine (#68/#69): Sinclair BASIC
+  // (zmakebas/bas2tap) targets 48/128; NextBASIC targets the Next. Only offer
+  // the flavour that matches, so a project can't be created for a machine its
+  // language can't run on. Assembly/C/Boriel are machine-agnostic — always on.
   const otherMenu = { label: t("nav.other"), items: [] };
-  otherMenu.items.push(newBas2Tap);
+  if (languageAllowedOnMachine("bas2tap", machine)) otherMenu.items.push(newBas2Tap);
   otherMenu.items.push(newZmac);
   if (Constants.enableZ88dk) otherMenu.items.push(newZ88dk);
   otherMenu.items.push(newSdcc);
 
   const newProjectItems = [];
-  newProjectItems.push(newBasic);
+  if (languageAllowedOnMachine("basic", machine)) newProjectItems.push(newBasic);
+  if (languageAllowedOnMachine("nextbas", machine)) newProjectItems.push(newNextBasic);
   if (Constants.enableBoriel) newProjectItems.push(newBoriel);
   newProjectItems.push(newPasmo);
   newProjectItems.push(otherMenu);
@@ -252,6 +265,9 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     ],
   };
 
+  // A project's language pins the machines it can run on (#68): NextBASIC is
+  // Next-only, Sinclair BASIC is 48/128-only, everything else is free. Disable
+  // machines the current language can't target (in addition to machineLocked).
   const machineMenu = {
     label: t("nav.machine"),
     icon: "pi pi-fw pi-desktop",
@@ -259,7 +275,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
       {
         label: t("nav.machine48"),
         icon: machine === 48 ? "pi pi-fw pi-check" : "pi pi-fw",
-        disabled: machineLocked,
+        disabled: machineLocked || !languageAllowedOnMachine(lang, 48),
         command: () => {
           dispatch(setMachine(48));
         },
@@ -267,7 +283,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
       {
         label: t("nav.machine128"),
         icon: machine === 128 ? "pi pi-fw pi-check" : "pi pi-fw",
-        disabled: machineLocked,
+        disabled: machineLocked || !languageAllowedOnMachine(lang, 128),
         command: () => {
           dispatch(setMachine(128));
         },
@@ -276,7 +292,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
         // zxgo engine only: the JSSpeccy3 engine has no Next.
         label: "ZX Spectrum Next",
         icon: machine === "next" ? "pi pi-fw pi-check" : "pi pi-fw",
-        disabled: machineLocked,
+        disabled: machineLocked || !languageAllowedOnMachine(lang, "next"),
         command: () => {
           dispatch(setMachine("next"));
         },

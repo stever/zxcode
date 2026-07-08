@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { SelectButton } from "primereact/selectbutton";
 import gql from "graphql-tag";
 import { gqlFetch } from "../graphql_fetch";
 import { setMachine } from "../redux/app/actions";
+import { languageAllowedOnMachine } from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
 
 const UPDATE_PROJECT_MACHINE = gql`
@@ -30,14 +31,19 @@ const toApp = (m) => (m === "next" ? "next" : m === "128" ? 128 : 48);
 export default function ProjectMachineToggle({ project, userId }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
+  const lang = useSelector((state) => state?.project.lang);
   const [machine, setMachineValue] = useState(project?.machine || "48");
   const [updating, setUpdating] = useState(false);
 
+  // A project's language pins its machines (#68): NextBASIC is Next-only,
+  // Sinclair BASIC is 48/128-only, everything else is free. Only offer machines
+  // the language can target (the current value always qualifies for a valid
+  // project, so it stays selectable).
   const options = [
     { label: t("nav.machine48"), value: "48" },
     { label: t("nav.machine128"), value: "128" },
     { label: t("machine.next"), value: "next" },
-  ];
+  ].filter((o) => languageAllowedOnMachine(lang, o.value));
 
   const handleChange = async (value) => {
     // SelectButton fires null when the active button is re-clicked; ignore it

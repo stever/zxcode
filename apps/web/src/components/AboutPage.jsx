@@ -78,6 +78,11 @@ export default function AboutPage() {
                         This tool is public domain.
                     </li>
                     <li>
+                        <a href="https://github.com/remy/txt2bas" target="_blank">txt2bas</a> by Remy Sharp,
+                        the in-browser NextBASIC tokeniser. Licensed under terms of{' '}
+                        <a href="https://github.com/remy/txt2bas/blob/main/package.json" target="_blank">The MIT License</a>.
+                    </li>
+                    <li>
                         <a href="https://github.com/sehugg/8bitworkshop" target="_blank">8bitworkshop</a> by
                         Steven Hugg. Licensed under terms of The GPL version 3 - see{' '}
                         <a href="https://github.com/sehugg/8bitworkshop/blob/master/LICENSE" target="_blank">LICENSE</a>.
