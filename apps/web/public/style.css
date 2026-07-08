@@ -157,6 +157,19 @@ code {
     overflow: hidden;
 }
 
+/* Cyan ring = the emulator owns the keyboard. Capture is focus-scoped:
+   click the screen to type into the machine, click anywhere else to give
+   the keyboard back to the page (the emulator keeps running either way). */
+.emulator-frame:focus-within {
+    box-shadow: 0 0 0 2px #00d8d8, 0 0 18px rgba(0, 216, 216, 0.35);
+}
+
+/* The debugger's amber paused-ring (debugger.css) outranks the focus ring:
+   higher specificity here so stylesheet load order can't flip the result. */
+.debug-paused-ring .emulator-frame:focus-within {
+    box-shadow: 0 0 0 2px #ffb928, 0 0 18px rgba(255, 185, 40, 0.35);
+}
+
 .mobile .CodeMirror {
     height: calc(100vh - 152px) !important;
     border: 0 !important;

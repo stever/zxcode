@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -14,6 +14,7 @@ import {
   copyProject,
 } from "../redux/project/actions";
 import { runProjectCode } from "../redux/eightbit/actions";
+import { openDebugger, closeDebugger } from "../redux/debugger/actions";
 import { dashboardLock } from "../dashboard_lock";
 import { showLoading } from "../dashboard_loading";
 import clsx from "clsx";
@@ -29,6 +30,7 @@ export function ProjectToolbar() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const renameInputReference = useRef(null);
+  const toolbarReference = useRef(null);
   const toast = useRef(null);
 
   const [renameDialogVisible, setRenameDialogVisible] = useState(false);
@@ -39,6 +41,7 @@ export function ProjectToolbar() {
 
   const lang = useSelector((state) => state?.project.lang);
   const code = useSelector((state) => state?.project.code);
+  const debugActive = useSelector((state) => state?.debugger.active);
   const savedCode = useSelector((state) => state?.project.savedCode);
   const isMobile = useSelector((state) => state?.window.isMobile);
   const projectName = useSelector((state) => state?.project.title);
@@ -56,6 +59,15 @@ export function ProjectToolbar() {
 
   // Check if current user owns this project
   const isOwner = userId && ownerId && userId === ownerId;
+
+  // Keep the DOM class in step with the store for every path that doesn't go
+  // through the Debug button (session invalidation, attach failure). The
+  // button's own handler sets the class directly, ahead of React, so the
+  // controls disappear on the first paint after the click no matter how the
+  // debug-open render is scheduled.
+  useLayoutEffect(() => {
+    toolbarReference.current?.classList.toggle("debug-mode", Boolean(debugActive));
+  }, [debugActive]);
 
   const deleteConfirm = (event) => {
     confirmPopup({
@@ -86,10 +98,18 @@ export function ProjectToolbar() {
     setCopyProjectName("");
   };
 
+  // A debug session slims the toolbar down to Play (rerun the program; this
+  // closes the session, since the machine reloads under it) and the Debug
+  // toggle itself. The other controls are hidden with visibility (see
+  // debugger.css), NOT unmounted — removing them changes the row's height
+  // by a pixel and nudges Play when the tallest control leaves.
   return (
     <>
       <Toast ref={toast} />
-      <div className="editor-toolbar mt-2">
+      <div
+        ref={toolbarReference}
+        className={clsx("editor-toolbar mt-2", debugActive && "debug-mode")}
+      >
         <div className="editor-toolbar-group">
           <Button
             label={t("actions.play")}
@@ -99,6 +119,28 @@ export function ProjectToolbar() {
               dashboardLock();
               showLoading();
               dispatch(runProjectCode());
+            }}
+          />
+
+          <Button
+            label={t("debug.debug")}
+            icon="pi pi-wrench"
+            className={clsx(
+              "p-button-warning zx-debug-button",
+              debugActive ? "active" : "p-button-outlined"
+            )}
+            aria-pressed={debugActive ? "true" : "false"}
+            onClick={() => {
+              // Flip the class on the DOM node directly, in the click's own
+              // task: the store dispatch and React's render both run at the
+              // scheduler's discretion, and with the emulator loop on the
+              // main thread that can be several frames away. This way the
+              // controls are gone at the very next paint.
+              toolbarReference.current?.classList.toggle(
+                "debug-mode",
+                !debugActive
+              );
+              dispatch(debugActive ? closeDebugger() : openDebugger());
             }}
           />
 

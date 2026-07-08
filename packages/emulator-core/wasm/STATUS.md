@@ -59,6 +59,25 @@ In-place edits:
 - `pkg/audio/audio.go` — `<-ready` → `waitAudioReady(ready)`; peak meter in
   PushBeeperSamples.
 
+## Debug bridge (port-owned surface)
+
+- `cmd/zx_go/wasm_debug_js.go` — browser debugger over the upstream command
+  layer: zxDebugAttach/Detach, zxDebugCmd (the full `handleCommand` dispatch,
+  so upstream command additions work unmodified), zxDebugState/Mem/Disasm
+  (structured reads for the UI panels), zxDebugStepFrame. A stand-in goroutine
+  parked in `WaitIfPaused` supplies the pause-ack/single-step cooperation the
+  desktop headless loop normally provides; `step-over` is rerouted to a
+  non-blocking variant because on wasm the CPU only advances when JS calls
+  zxFrame (see the file comment for the threading model).
+- `cmd/zx_go/debugger.go` — one in-place edit for the above: the constructor
+  is split into `newDebuggerCore` (hooks, no listener; used by the bridge) and
+  `newRemoteDebugger` (adds the TCP listener; desktop unchanged). Re-apply the
+  split if an upstream pull rewrites the constructor.
+- `cmd/zx_go/wasm_js.go` — `zxFrame` skips execution while the debugger holds
+  the machine paused (render-only, so the page can repaint after pokes) and
+  reports `{debug, paused, pc}` so the JS frame loop can observe breakpoint
+  hits. Adds ~0.9 MB to zx.wasm (the command layer stops being dead code).
+
 ## Notes
 
 - 31 MB because Fyne compiles in as dead code. To shrink, split the emulator core

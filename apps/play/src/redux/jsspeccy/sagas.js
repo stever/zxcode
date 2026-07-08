@@ -1,12 +1,9 @@
-import {take, takeLatest, put, call, select} from "redux-saga/effects";
-import {eventChannel} from "redux-saga";
+import {takeLatest, put, select} from "redux-saga/effects";
 import queryString from "query-string";
 import {JSSpeccy} from "@zxplay/emulator";
 import {
     actionTypes,
-    handleClick,
     openTAPFile,
-    pause,
     reset,
     start
 } from "./actions";
@@ -31,24 +28,6 @@ export function* watchForLoadEmulatorActions() {
 // noinspection JSUnusedGlobalSymbols
 export function* watchForLoadTapActions() {
     yield takeLatest(actionTypes.loadTap, handleLoadTapActions);
-}
-
-// noinspection JSUnusedGlobalSymbols
-export function* watchForClickEvents() {
-    const chan = yield call(getClickEventChannel);
-    try {
-        while (true) {
-            const e = yield take(chan);
-            yield put(handleClick(e));
-        }
-    } finally {
-        chan.close();
-    }
-}
-
-// noinspection JSUnusedGlobalSymbols
-export function* watchForHandleClickActions() {
-    yield takeLatest(actionTypes.handleClick, handleClickActions);
 }
 
 // noinspection JSUnusedGlobalSymbols
@@ -194,27 +173,6 @@ function* handleLoadTapActions(action) {
     }
 }
 
-function* handleClickActions(action) {
-    try {
-        const target = action.e.target;
-
-        const screenElem = document.getElementById('jsspeccy-screen');
-        if (screenElem?.contains(target)) {
-            return;
-        }
-
-        const keysElem = document.getElementById('virtkeys');
-        if (keysElem?.contains(target)) {
-            return;
-        }
-
-        // Clicks anywhere except screen or keys to pause emulator.
-        yield put(pause());
-    } catch (e) {
-        handleException(e);
-    }
-}
-
 function* handleResetActions(_) {
     try {
         jsspeccy.reset();
@@ -348,14 +306,3 @@ let target = undefined;
 let jsspeccy = undefined;
 let previousPath = undefined;
 let currentZoom = undefined;
-
-function getClickEventChannel() {
-    return eventChannel(emit => {
-        const emitter = (e) => emit(e);
-        window.addEventListener('click', emitter);
-        return () => {
-            // Must return an unsubscribe function.
-            window.removeEventListener('click', emitter);
-        }
-    })
-}

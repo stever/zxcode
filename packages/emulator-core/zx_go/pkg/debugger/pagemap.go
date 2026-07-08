@@ -85,11 +85,12 @@ func (c *pagemapCell) set(rangeStr, bankStr string, bg color.Color) {
 // debugger a container.Object plus a Refresh method that pulls
 // fresh state from the wired providers.
 type PageMapWidget struct {
-	classic    []*pagemapCell // 4 cells for classic models
-	next       []*pagemapCell // 8 cells for Next mode (replaces classic)
-	classicBox *fyne.Container
-	nextBox    *fyne.Container
-	root       *fyne.Container
+	classic     []*pagemapCell // 4 cells for classic models
+	next        []*pagemapCell // 8 cells for Next mode (replaces classic)
+	classicFoot *canvas.Text   // raw 7FFD/1FFD readout; empty on 48K
+	classicBox  *fyne.Container
+	nextBox     *fyne.Container
+	root        *fyne.Container
 
 	mem          *memory.Memory
 	nextProvider NextProvider // optional; nil for non-Next emulators
@@ -107,7 +108,16 @@ func NewPageMapWidget(mem *memory.Memory) *PageMapWidget {
 		w.classic[i] = newPagemapCell()
 		classicRows[i] = w.classic[i].root
 	}
-	w.classicBox = container.NewGridWithRows(4, classicRows...)
+	// Footer under the four cells: the raw paging-port state the
+	// cells can't express (7FFD value, shadow display, lock bit).
+	// Stays empty on 48K, where there is no paging port.
+	w.classicFoot = canvas.NewText("", color.NRGBA{R: 200, G: 200, B: 205, A: 255})
+	w.classicFoot.TextStyle = fyne.TextStyle{Monospace: true}
+	w.classicFoot.TextSize = 11
+	w.classicBox = container.NewBorder(
+		nil, w.classicFoot, nil, nil,
+		container.NewGridWithRows(4, classicRows...),
+	)
 
 	w.next = make([]*pagemapCell, 8)
 	nextRows := make([]fyne.CanvasObject, 8)
@@ -169,9 +179,29 @@ func (w *PageMapWidget) refreshClassic() {
 		var bankStr string
 		var bg color.Color
 		switch {
+		case model == roms.Model48K && bankIdx >= 16:
+			// 48K: a single ROM, so no number.
+			bankStr = "ROM"
+			bg = pagemapColors.rom
+		case model == roms.Model48K && bankIdx == w.mem.ScreenPage:
+			// 48K has no paging hardware — the core models it with
+			// 128K-style bank numbers internally; don't surface them.
+			// $4000-$7FFF is both the screen and the ULA-contended
+			// region.
+			bankStr = "RAM (screen, contended)"
+			bg = pagemapColors.screen
+		case model == roms.Model48K:
+			bankStr = "RAM"
+			bg = pagemapColors.normal
 		case bankIdx >= 16:
-			// ROM. 16=ROM0, 17=ROM1, 18=ROM2, 19=ROM3.
-			bankStr = fmt.Sprintf("ROM %d", bankIdx-16)
+			// ROM. 16=ROM0, 17=ROM1, 18=ROM2, 19=ROM3. Annotated
+			// with what lives there when the model is known.
+			n := bankIdx - 16
+			if name := classicROMName(model, n); name != "" {
+				bankStr = fmt.Sprintf("ROM %d (%s)", n, name)
+			} else {
+				bankStr = fmt.Sprintf("ROM %d", n)
+			}
 			bg = pagemapColors.rom
 		case bankIdx == w.mem.ScreenPage:
 			// The bank holding the visible screen.
@@ -193,6 +223,55 @@ func (w *PageMapWidget) refreshClassic() {
 		}
 		w.classic[i].set(rangeStr, bankStr, bg)
 	}
+
+	// Footer: the raw port state the cells can't express. The lock
+	// bit matters most — once 7FFD bit 5 is set the map is frozen
+	// until reset.
+	if model == roms.Model48K {
+		w.classicFoot.Text = ""
+	} else {
+		port7FFD, port1FFD, special := w.mem.GetPortState()
+		parts := []string{fmt.Sprintf("7FFD=$%02X", port7FFD)}
+		if model == roms.ModelPlus2A || model == roms.ModelPlus3 {
+			parts = append(parts, fmt.Sprintf("1FFD=$%02X", port1FFD))
+		}
+		if special {
+			parts = append(parts, "special")
+		}
+		// Bit 3 picks which screen bank the ULA displays: bank 5
+		// (normal) or bank 7 (shadow). Named by bank so it reads
+		// against the cell labels.
+		if port7FFD&0x08 != 0 {
+			parts = append(parts, "showing 7")
+		} else {
+			parts = append(parts, "showing 5")
+		}
+		if port7FFD&0x20 != 0 {
+			parts = append(parts, "LOCKED")
+		} else {
+			parts = append(parts, "unlocked")
+		}
+		w.classicFoot.Text = strings.Join(parts, " · ")
+	}
+	w.classicFoot.Refresh()
+}
+
+// classicROMName says what a classic model keeps in ROM slot n:
+// the 2-ROM machines carry the 128 editor and 48 BASIC; the 4-ROM
+// +2A/+3 add the syntax checker and +3DOS. Empty when unknown
+// (48K, or an out-of-range slot).
+func classicROMName(model roms.SpectrumModel, n int) string {
+	var names []string
+	switch model {
+	case roms.ModelPlus2A, roms.ModelPlus3:
+		names = []string{"editor", "syntax", "+3DOS", "48"}
+	case roms.Model128K, roms.ModelPlus2, roms.ModelPentagon:
+		names = []string{"128", "48"}
+	}
+	if n >= 0 && n < len(names) {
+		return names[n]
+	}
+	return ""
 }
 
 // refreshNext populates the 8-cell view for Next mode. Reads the

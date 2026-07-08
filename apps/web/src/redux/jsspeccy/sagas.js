@@ -1,17 +1,15 @@
-import {take, takeLatest, put, call, select} from "redux-saga/effects";
-import {eventChannel} from "redux-saga";
+import {takeLatest, put, select} from "redux-saga/effects";
 import queryString from "query-string";
 import {JSSpeccy} from "@zxplay/emulator";
 import {
     actionTypes,
-    handleClick,
     openTAPFile,
     openUrl,
-    pause,
     reset,
     start
 } from "./actions";
 import {reset as resetProject} from "../project/actions";
+import {setJsspeccy} from "./handle";
 import {showActiveEmulator, machineChanged, actionTypes as appActionTypes} from "../app/actions";
 import {handleException} from "../../errors";
 import {store} from "../store";
@@ -38,24 +36,6 @@ export function* watchForLoadTapActions() {
 // noinspection JSUnusedGlobalSymbols
 export function* watchForLoadUrlActions() {
     yield takeLatest(actionTypes.loadUrl, handleLoadUrlActions);
-}
-
-// noinspection JSUnusedGlobalSymbols
-export function* watchForClickEvents() {
-    const chan = yield call(getClickEventChannel);
-    try {
-        while (true) {
-            const e = yield take(chan);
-            yield put(handleClick(e));
-        }
-    } finally {
-        chan.close();
-    }
-}
-
-// noinspection JSUnusedGlobalSymbols
-export function* watchForHandleClickActions() {
-    yield takeLatest(actionTypes.handleClick, handleClickActions);
 }
 
 // noinspection JSUnusedGlobalSymbols
@@ -162,6 +142,7 @@ function* handleRenderEmulatorActions(action) {
 
         console.assert(jsspeccy === undefined);
         jsspeccy = JSSpeccy(target, emuParams);
+        setJsspeccy(jsspeccy);
         jsspeccy.hideUI();
         // Keep the menu checkmark honest: the engine switches machine on its
         // own (a .tap on the Next moves to the 128K, a .nex moves to the
@@ -228,27 +209,6 @@ function* handleLoadUrlActions(action) {
         yield put(start());
         yield put(openUrl(action.url));
         yield put(start()); // NOTE: Extra call to start was required here.
-    } catch (e) {
-        handleException(e);
-    }
-}
-
-function* handleClickActions(action) {
-    try {
-        const target = action.e.target;
-
-        const screenElem = document.getElementById('jsspeccy-screen');
-        if (screenElem?.contains(target)) {
-            return;
-        }
-
-        const keysElem = document.getElementById('virtkeys');
-        if (keysElem?.contains(target)) {
-            return;
-        }
-
-        // Clicks anywhere except screen or keys to pause emulator.
-        yield put(pause());
     } catch (e) {
         handleException(e);
     }
@@ -373,14 +333,3 @@ let target = undefined;
 let jsspeccy = undefined;
 let previousPath = undefined;
 let currentZoom = undefined;
-
-function getClickEventChannel() {
-    return eventChannel(emit => {
-        const emitter = (e) => emit(e);
-        window.addEventListener('click', emitter);
-        return () => {
-            // Must return an unsubscribe function.
-            window.removeEventListener('click', emitter);
-        }
-    })
-}

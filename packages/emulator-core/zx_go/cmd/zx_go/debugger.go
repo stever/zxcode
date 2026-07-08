@@ -357,12 +357,30 @@ func newRemoteDebugger(emu *emulator, port int, pauseAtStart bool, historySize i
 	if port <= 0 {
 		return nil
 	}
+	d := newDebuggerCore(emu, pauseAtStart, historySize, historyWide)
+	d.port = port
+	addr := fmt.Sprintf(":%d", port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		slog.Error("debugger: listen failed", "addr", addr, "err", err)
+		return nil
+	}
+	d.listener = ln
+	slog.Info("debugger listening", "port", port, "pauseAtStart", pauseAtStart)
+	go d.acceptLoop()
+	return d
+}
+
+// newDebuggerCore builds the debugger and wires the CPU hooks without any
+// network listener. Shared by the telnet server above and the wasm bridge
+// (wasm_debug_js.go), which dispatches handleCommand directly and stands in
+// for the headless loop with its own WaitIfPaused goroutine.
+func newDebuggerCore(emu *emulator, pauseAtStart bool, historySize int, historyWide bool) *remoteDebugger {
 	d := &remoteDebugger{
 		emu:          emu,
 		resumeCh:     make(chan struct{}, 1),
 		stepDoneCh:   make(chan struct{}, 1),
 		pauseAckCh:   make(chan struct{}),
-		port:         port,
 		pauseAtStart: pauseAtStart,
 		regWatches:   emu.sharedRegWatches(),
 		bps:          emu.sharedBreakpoints(),
@@ -550,15 +568,6 @@ func newRemoteDebugger(emu *emulator, port int, pauseAtStart bool, historySize i
 		}
 		return true
 	}
-	addr := fmt.Sprintf(":%d", port)
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		slog.Error("debugger: listen failed", "addr", addr, "err", err)
-		return nil
-	}
-	d.listener = ln
-	slog.Info("debugger listening", "port", port, "pauseAtStart", pauseAtStart)
-	go d.acceptLoop()
 	return d
 }
 

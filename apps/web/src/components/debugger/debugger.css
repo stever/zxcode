@@ -1,0 +1,641 @@
+/* Debugger dock. Scoped under .debug-dock so nothing leaks into the rest of
+   the app. The palette is drawn from what is already on the page: PrimeReact
+   theme surfaces for the chrome, and the mbo CodeMirror theme for the code
+   panes, so the dock reads as part of the editor. Amber = paused/PC (mbo's
+   keyword colour), red = breakpoint. */
+
+.debug-dock {
+    --dbg-chrome: var(--surface-a, #1e1e1e);
+    --dbg-strip: var(--surface-f, #262626);
+    --dbg-body: #2c2c2c;   /* mbo editor background */
+    --dbg-edge: #424242;   /* editor scrollbar filler grey */
+    --dbg-text: #ffffec;   /* mbo foreground */
+    --dbg-dim: #95958a;    /* mbo comment */
+    --dbg-amber: #ffb928;  /* mbo keyword — paused / PC */
+    --dbg-red: #ff6161;
+    --dbg-addr: #00a8c6;   /* mbo number */
+    --dbg-label: #9ddfe9;  /* mbo tag — symbols / labels */
+    --dbg-accent: var(--primary-color, #2BD4D4);
+    background: var(--dbg-body);
+    color: var(--dbg-text);
+    border: 1px solid #5B5B5B;
+    border-radius: 5px;
+    margin-top: 8px;
+    overflow: hidden;
+    font-family: monospace;
+    font-size: 13px;
+}
+
+/* --- transport bar --- */
+
+.debug-transport {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--dbg-chrome);
+    border-bottom: 1px solid var(--dbg-edge);
+}
+
+.debug-transport .p-button.p-button-sm {
+    padding: 3px 10px;
+    font-size: 13px;
+}
+
+.debug-transport-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.debug-status-chip {
+    color: var(--dbg-amber);
+    border: 1px solid rgba(255, 185, 40, 0.4);
+    border-radius: 4px;
+    padding: 3px 10px;
+    background: rgba(255, 185, 40, 0.06);
+    white-space: nowrap;
+}
+
+.debug-status-chip.running {
+    color: var(--dbg-accent);
+    border-color: rgba(43, 212, 212, 0.4);
+    background: rgba(43, 212, 212, 0.06);
+}
+
+.debug-mock-chip {
+    color: var(--dbg-dim);
+    border: 1px dashed var(--dbg-edge);
+    border-radius: 4px;
+    padding: 3px 9px;
+    white-space: nowrap;
+}
+
+/* --- registers strip --- */
+
+.debug-registers {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--dbg-edge);
+    background: var(--dbg-strip);
+}
+
+.debug-reg b {
+    color: var(--dbg-addr);
+    font-weight: 600;
+    margin-right: 5px;
+}
+
+.debug-reg.changed {
+    background: rgba(255, 185, 40, 0.18);
+    border-radius: 3px;
+    padding: 0 5px;
+    margin: 0 -5px;
+    color: var(--dbg-amber);
+}
+
+.debug-reg.changed b {
+    color: var(--dbg-amber);
+}
+
+.debug-reg-alt,
+.debug-reg-alt b {
+    color: var(--dbg-dim);
+}
+
+.debug-flags {
+    color: var(--dbg-dim);
+}
+
+.debug-flags .on {
+    color: var(--dbg-label);
+}
+
+/* --- panes --- */
+
+/* Flex rather than a grid so the paging pane can size to its content while
+   the others share the rest; wrapping still handles narrow viewports. */
+.debug-panes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+    background: var(--dbg-edge);
+}
+
+.debug-pane {
+    flex: 1 1 300px;
+    background: var(--dbg-body);
+    min-width: 0;
+}
+
+/* The paging pane only needs its widest cell text ("$0000-$1FFF divMMC
+   overlay" in Next mode); the width it gives up flows mostly to the tab
+   panel, which has the densest content. */
+.debug-pane-paging {
+    flex: 0 0 auto;
+    min-width: 160px;
+}
+
+.debug-pane-panels {
+    flex-grow: 2;
+}
+
+/* Every pane header — including the tab bar that heads the panel group —
+   shares this height so the tops of the four panes line up. */
+.debug-pane-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    background: var(--dbg-chrome);
+    border-bottom: 1px solid var(--dbg-edge);
+    color: var(--dbg-dim);
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.debug-pane-head .hint {
+    letter-spacing: 0;
+    text-transform: none;
+    margin-left: auto;
+    color: #6b6b60;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.debug-pane-body {
+    height: 252px;
+    overflow: auto;
+    padding: 2px 0;
+}
+
+/* --- disassembly --- */
+
+/* Like the memory pane, this one hugs its content: marker + 4ch address +
+   11ch byte dump (the longest Z80 encoding) + 15ch reserved for the widest
+   mnemonic text ("LD (IX+$7F),$FF"), joined by the same 12px gaps the
+   memory rows use. The basis is fixed rather than max-content so the pane
+   doesn't resize as the window disassembles different code. */
+.debug-pane-disasm {
+    flex: 0 0 calc(30ch + 50px);
+    font-size: 12px;
+}
+
+/* The marker sits absolutely in the row's left padding rather than in a
+   grid column of its own, so the address needs only a sliver of gutter
+   instead of a full column gap. */
+.debug-disasm-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: 4ch 11ch 1fr;
+    column-gap: 12px;
+    align-items: center;
+    height: 19px;
+    line-height: 19px;
+    padding-left: 16px;
+    padding-right: 10px;
+    white-space: nowrap;
+}
+
+.debug-disasm-row .addr {
+    color: var(--dbg-addr);
+    cursor: pointer;
+}
+
+.debug-disasm-row .addr:hover {
+    text-decoration: underline;
+}
+
+.debug-disasm-row .bytes {
+    color: var(--dbg-dim);
+}
+
+.debug-disasm-row .mnem {
+    color: var(--dbg-amber);
+}
+
+.debug-disasm-row.pc {
+    background: rgba(255, 185, 40, 0.12);
+    box-shadow: inset 2px 0 0 var(--dbg-amber);
+}
+
+.debug-disasm-row .marker {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 14px;
+    text-align: center;
+    color: var(--dbg-amber);
+    cursor: pointer;
+}
+
+.debug-disasm-row .marker.bp {
+    color: var(--dbg-red);
+}
+
+.debug-disasm-symbol {
+    color: var(--dbg-label);
+    /* Indent to the address column (the rows' left padding). */
+    padding-left: 16px;
+    height: 19px;
+    line-height: 19px;
+}
+
+/* --- memory --- */
+
+.debug-mem-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.debug-mem-controls .p-inputtext {
+    width: 72px;
+    padding: 1px 6px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+/* The memory pane virtualises the full 64K space: scroll offsets map onto
+   addresses through the pinned row height (DebugMemory's ROW_HEIGHT must
+   match). The body keeps the shared 2px vertical padding — it offsets every
+   row uniformly and the render overscan absorbs it, so the first line sits
+   level with the disassembly pane's. */
+
+/* The pane hugs its rows: 4ch address + 23ch hex + 8ch ascii + the two
+   column gaps and edge padding below. ch resolves against the font-size set
+   here (which the rows inherit), so the width tracks whatever monospace
+   font the platform renders. The virtualised rows are absolutely
+   positioned and cannot size the pane themselves, hence the explicit
+   basis. flex-grow stays 0 so spare dock width goes to the growing panes
+   instead of into gaps. */
+.debug-pane-memory {
+    flex: 0 0 calc(35ch + 48px);
+    font-size: 12px;
+}
+
+/* Columns size to their content with fixed gaps; the wider right padding
+   keeps the ascii clear of overlay scrollbars. */
+.debug-mem-row {
+    display: grid;
+    grid-template-columns: auto auto auto;
+    justify-content: flex-start;
+    column-gap: 12px;
+    align-items: center;
+    height: 19px;
+    line-height: 19px;
+    padding: 0 16px 0 8px;
+    white-space: pre;
+}
+
+.debug-mem-row .addr {
+    color: var(--dbg-addr);
+}
+
+.debug-mem-row .ascii {
+    color: var(--dbg-dim);
+}
+
+/* --- paging map --- */
+
+/* Cell colours track the desktop debugger's PageMapWidget palette
+   (zx_go pkg/debugger/pagemap.go) so both debuggers read the same:
+   ROM blue, screen green, shadow pale green, contended red, Next high
+   banks purple, divMMC overlay amber, plain RAM grey. */
+.debug-pagemap {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px;
+}
+
+.debug-pagemap-cell {
+    flex: 1;
+    min-height: 26px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 2px 8px;
+    border: 1px solid rgba(30, 30, 40, 0.9);
+    border-radius: 3px;
+    background: rgb(50, 50, 55);
+    color: #ffffff;
+    font-size: 12px;
+    line-height: 1.25;
+}
+
+.debug-pagemap-cell .range {
+    opacity: 0.85;
+}
+
+/* Next mode shows eight slots in the same height, so each cell goes
+   single-line: range first, then the bank description. */
+.debug-pagemap.compact .debug-pagemap-cell {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+}
+
+/* One-line raw port readout under the cells: 7FFD (plus 1FFD on the
+   +2A/+3) with the shadow-screen and lock bits decoded. */
+.debug-pagemap-foot {
+    padding: 1px 2px 0;
+    font-size: 11px;
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.debug-pagemap-cell.rom     { background: rgb(60, 90, 150); }
+.debug-pagemap-cell.screen  { background: rgb(50, 130, 60); }
+.debug-pagemap-cell.shadow  { background: rgb(80, 140, 80); }
+.debug-pagemap-cell.contend { background: rgb(150, 60, 60); }
+.debug-pagemap-cell.normal  { background: rgb(80, 80, 90); }
+.debug-pagemap-cell.high    { background: rgb(120, 70, 150); }
+.debug-pagemap-cell.divmmc  { background: rgb(200, 140, 50); }
+
+/* --- tabbed panel --- */
+
+/* The tab bar doubles as the panel group's header; it matches
+   .debug-pane-head's height so all four pane headers align. The strip
+   itself scrolls with a hidden scrollbar (it would sit over the labels);
+   edge buttons appear on overflow to scroll it instead. */
+.debug-tabbar {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    height: 30px;
+    box-sizing: border-box;
+    background: var(--dbg-chrome);
+    border-bottom: 1px solid var(--dbg-edge);
+}
+
+.debug-tabs {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.debug-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+/* The buttons float over the strip's edges rather than taking layout
+   space, so their appearance never shifts the tabs underneath. */
+.debug-tab-scroll {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    padding: 0;
+    background: var(--dbg-chrome);
+    color: var(--dbg-dim);
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    z-index: 1;
+}
+
+.debug-tab-scroll.left {
+    left: 0;
+    border-right: 1px solid var(--dbg-edge);
+}
+
+.debug-tab-scroll.right {
+    right: 0;
+    border-left: 1px solid var(--dbg-edge);
+}
+
+.debug-tab-scroll:hover {
+    color: var(--dbg-text);
+}
+
+.debug-tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 11px;
+    color: var(--dbg-dim);
+    white-space: nowrap;
+    border-right: 1px solid var(--dbg-edge);
+    /* The transparent bottom border balances the accent-bearing top one so
+       the label stays vertically centered on both states. */
+    border-top: 2px solid transparent;
+    border-bottom: 2px solid transparent;
+    border-left: 0;
+    font-size: 12px;
+    cursor: pointer;
+    background: transparent;
+    font-family: inherit;
+}
+
+.debug-tab.on {
+    color: var(--dbg-text);
+    background: var(--dbg-body);
+    border-top-color: var(--dbg-accent);
+}
+
+.debug-tab .count {
+    color: var(--dbg-red);
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+.debug-tab-body {
+    height: 224px;
+    overflow: auto;
+    padding: 8px 12px;
+}
+
+/* --- console --- */
+
+.debug-console {
+    display: flex;
+    flex-direction: column;
+    height: 224px;
+}
+
+.debug-console-scroll {
+    flex: 1;
+    overflow: auto;
+    padding: 8px 12px;
+}
+
+.debug-console-line {
+    min-height: 19px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.debug-console-line .prompt {
+    color: var(--dbg-accent);
+    margin-right: 6px;
+}
+
+.debug-console-line.ok {
+    color: #d0d0d0;
+}
+
+.debug-console-line.err {
+    color: var(--dbg-red);
+}
+
+.debug-console-input {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--dbg-edge);
+}
+
+.debug-console-input .prompt {
+    color: var(--dbg-accent);
+}
+
+.debug-console-input input {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    outline: none;
+    color: var(--dbg-text);
+    font-family: monospace;
+    font-size: 13px;
+}
+
+/* --- breakpoints tab --- */
+
+.debug-bp-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 26px;
+}
+
+.debug-bp-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--dbg-red);
+    flex: none;
+}
+
+/* Source-line breakpoints are stored but not armed on the real backend
+   until symbol maps land. */
+.debug-bp-dot.inert {
+    background: transparent;
+    border: 1px solid var(--dbg-red);
+}
+
+.debug-bp-row .p-button.p-button-sm {
+    padding: 1px 6px;
+    font-size: 11px;
+}
+
+.debug-placeholder {
+    color: var(--dbg-dim);
+    padding: 4px 0;
+}
+
+/* --- editor integration (outside .debug-dock) --- */
+
+/* Breakpoint gutter: always present so breakpoints can be set ahead of a
+   session, like any IDE. */
+.zx-bp-gutter {
+    width: 16px;
+}
+
+.zx-bp-marker {
+    color: #ff6161;
+    font-size: 13px;
+    line-height: 1;
+    padding-left: 3px;
+    cursor: pointer;
+}
+
+.CodeMirror .debug-paused-line {
+    background: rgba(255, 185, 40, 0.15) !important;
+}
+
+/* The Debug button wears the debugger's own amber (#ffb928 — the paused
+   ring, dock accents, and the editor's mbo keyword colour), not the theme's
+   highlighter warning yellow. The theme draws outlined buttons as
+   border: 0 none plus a 1px inset box-shadow that follows `color`, so
+   recolouring is enough — an explicit border would double the ring. Hover
+   and active keep the hue with the theme's 4% / 16% background tint. */
+.p-button.p-button-outlined.p-button-warning.zx-debug-button {
+    color: #ffb928;
+    border: 0 none;
+}
+
+.p-button.p-button-outlined.p-button-warning.zx-debug-button:enabled:hover {
+    background: rgba(255, 185, 40, 0.04);
+    color: #ffb928;
+    border: 0 none;
+}
+
+.p-button.p-button-outlined.p-button-warning.zx-debug-button:enabled:active {
+    background: rgba(255, 185, 40, 0.16);
+    color: #ffb928;
+    border: 0 none;
+}
+
+/* While a debug session is active the toolbar shows only Play and the Debug
+   toggle. The rest stay mounted but invisible: visibility preserves the
+   row's height (unmounting shifted Play by a pixel when the tallest control
+   left) and disables their pointer events.
+
+   The rule reaches every descendant AND their ::before/::after, with
+   transitions killed: the PrimeReact theme puts `transition-duration` on
+   button labels and switch knobs without a transition-property, which
+   defaults to `all` — and a transitioned `visibility` holds 'visible' until
+   the transition ENDS, so labels and toggle circles lingered ~200ms after
+   the outlines vanished, hiding the controls in ragged stages. */
+.editor-toolbar.debug-mode .editor-toolbar-group > :not(.zx-run):not(.zx-debug-button),
+.editor-toolbar.debug-mode .editor-toolbar-group > :not(.zx-run):not(.zx-debug-button) *,
+.editor-toolbar.debug-mode .editor-toolbar-group > :not(.zx-run):not(.zx-debug-button) *::before,
+.editor-toolbar.debug-mode .editor-toolbar-group > :not(.zx-run):not(.zx-debug-button) *::after {
+    visibility: hidden;
+    transition: none;
+}
+
+/* Pressed state: while the panel is open the same button shows filled and
+   closes the session on the next press. */
+.p-button.p-button-warning.zx-debug-button.active {
+    background: #ffb928;
+    color: #121212;
+    border: 0 none;
+}
+
+.p-button.p-button-warning.zx-debug-button.active:enabled:hover {
+    background: #f0a916;
+    color: #121212;
+    border: 0 none;
+}
+
+/* A frozen screen looks like a crash; the amber ring says "paused by the
+   debugger" from across the room. Cleared the moment execution resumes. */
+.debug-paused-ring .emulator-frame {
+    box-shadow: 0 0 0 2px #ffb928, 0 0 18px rgba(255, 185, 40, 0.35);
+}
+
+/* While a session is active the editor gives up height to the dock so the
+   editor column stays level with the (untouched) emulator column:
+   406 (editor) + 8 (dock margin) + 356 (dock) = 770 = the emulator frame. */
+.desktop .debug-session .CodeMirror {
+    height: 406px !important;
+    max-height: 406px !important;
+}

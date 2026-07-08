@@ -80,6 +80,10 @@ export class UIController extends EventEmitter {
         });
 
         emulator.on('pause', () => {
+            // While a debug session is attached, pauses belong to the
+            // debugger (breakpoints, stepping) — the resume control is the
+            // debugger's transport bar, not the overlay play button.
+            if (emulator.debugActive) return;
             this.startButton.style.display = 'block';
         });
 
@@ -200,6 +204,9 @@ export class UIController extends EventEmitter {
 
     enterFullscreen() {
         this.appContainer.requestFullscreen();
+        // Focus-scoped keyboard capture: in fullscreen the display is the
+        // only thing on screen, so it should own the keyboard immediately.
+        this.canvas.focus({preventScroll: true});
     }
 
     exitFullscreen() {

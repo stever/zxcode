@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import CodeMirror from "./CodeMirror";
 import "codemirror/mode/z80/z80";
 import { setCode } from "../redux/project/actions";
+import { toggleBreakpoint } from "../redux/debugger/actions";
 import "../lib/syntax/pasmo";
 import "../lib/syntax/pasta80";
 import "../lib/syntax/sjasmplus";
@@ -18,6 +19,10 @@ export function ProjectEditor() {
   const lang = useSelector((state) => state?.project.lang);
   const code = useSelector((state) => state?.project.code);
   const lineNumbers = useSelector((state) => state?.app?.lineNumbers || false);
+  const breakpoints = useSelector((state) => state?.debugger.breakpoints);
+  const debugActive = useSelector((state) => state?.debugger.active);
+  const pausedLine = useSelector((state) => state?.debugger.pausedLine);
+  const pausedLineRef = useRef(null);
 
   let mode;
   switch (lang) {
@@ -61,6 +66,10 @@ export function ProjectEditor() {
     readOnly: false,
     lineWrapping: false,
     lineNumbers: lineNumbers,
+    // The breakpoint gutter is always present, so breakpoints can be set
+    // before a debug session starts. The line-numbers gutter is appended
+    // implicitly when enabled.
+    gutters: ["zx-bp-gutter"],
     matchBrackets: true,
     tabSize: 4,
     indentAuto: true,
@@ -72,6 +81,11 @@ export function ProjectEditor() {
     // Undo must stop at the loaded content, not the empty pre-load document.
     cm.clearHistory();
     dispatch(setCode(cm.getValue()));
+    cm.on("gutterClick", (instance, line, gutter) => {
+      if (gutter === "zx-bp-gutter") {
+        dispatch(toggleBreakpoint(line + 1));
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -80,6 +94,36 @@ export function ProjectEditor() {
       cm.setOption("lineNumbers", lineNumbers);
     }
   }, [lineNumbers]);
+
+  // Render breakpoint dots into the gutter (breakpoint lines are 1-based).
+  useEffect(() => {
+    if (!cmRef.current) return;
+    const cm = cmRef.current.getCodeMirror();
+    cm.clearGutter("zx-bp-gutter");
+    for (const bp of breakpoints) {
+      if (bp.line <= cm.lineCount()) {
+        const marker = document.createElement("div");
+        marker.className = "zx-bp-marker";
+        marker.textContent = "●";
+        cm.setGutterMarker(bp.line - 1, "zx-bp-gutter", marker);
+      }
+    }
+  }, [breakpoints]);
+
+  // Highlight the source line the debugger is paused on and keep it in view.
+  useEffect(() => {
+    if (!cmRef.current) return;
+    const cm = cmRef.current.getCodeMirror();
+    if (pausedLineRef.current !== null) {
+      cm.removeLineClass(pausedLineRef.current, "background", "debug-paused-line");
+      pausedLineRef.current = null;
+    }
+    if (debugActive && pausedLine && pausedLine <= cm.lineCount()) {
+      cm.addLineClass(pausedLine - 1, "background", "debug-paused-line");
+      cm.scrollIntoView({ line: pausedLine - 1, ch: 0 }, 40);
+      pausedLineRef.current = pausedLine - 1;
+    }
+  }, [debugActive, pausedLine]);
 
   return (
     <CodeMirror

@@ -126,14 +126,13 @@ export class GoEmulator extends EventEmitter {
         // posts {message:'keyDown'|'keyUp', row, mask}; route it straight to
         // the core's matrix. Everything else it might post is meaningless
         // here and ignored.
+        this.heldMatrixKeys = new Map();
         this.worker = {
             postMessage: (msg) => {
                 if (!msg) return;
                 if (msg.message === 'keyDown' || msg.message === 'keyUp') {
                     this.resumeAudio(); // key gestures unlock the AudioContext
-                    if (globalThis.zxMatrixKey) {
-                        globalThis.zxMatrixKey(msg.row, msg.mask, msg.message === 'keyDown');
-                    }
+                    this.setMatrixKey(msg.row, msg.mask, msg.message === 'keyDown');
                 }
             },
             terminate: () => {},
@@ -141,9 +140,23 @@ export class GoEmulator extends EventEmitter {
 
         this.keyboardEnabled = ('keyboardEnabled' in opts) ? opts.keyboardEnabled : true;
         if (this.keyboardEnabled) {
+            // Keyboard capture is scoped by focus: the canvas is focusable
+            // and is the default event root, so keys are swallowed only
+            // while the display has focus (the apps mark that state with a
+            // cyan ring via :focus-within). Clicking anywhere else hands the
+            // keyboard back to the page while the emulator keeps running.
+            // Virtual keyboards dispatch synthetic key events directly at
+            // the canvas, which needs no focus.
+            this.canvas.tabIndex = 0;
+            this.canvas.style.outline = 'none';
             this.keyboardHandler = (opts.keyboardMap == 'recreated')
-                ? new RecreatedZXSpectrumHandler(this.worker, opts.keyboardEventRoot || document)
-                : new StandardKeyboardHandler(this.worker, opts.keyboardEventRoot || document);
+                ? new RecreatedZXSpectrumHandler(this.worker, opts.keyboardEventRoot || this.canvas)
+                : new StandardKeyboardHandler(this.worker, opts.keyboardEventRoot || this.canvas);
+            // Focus loss mid-keypress means the matching keyup will never
+            // reach the canvas listener; release everything so keys can't
+            // stay held down in the machine (or on the mirrored on-screen
+            // keyboard).
+            this.canvas.addEventListener('blur', () => this.releaseAllMatrixKeys());
         }
 
         this.isRunning = false;
@@ -183,7 +196,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r19-fast-boot';
+        const ENGINE_REV = 'r25-memory-map-ports';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -402,11 +415,58 @@ export class GoEmulator extends EventEmitter {
             this.pumpAudio();
             this.pollTape();
             this.presentFrame(d);
+            this.noteDebugFrame(d);
         }
         this.rafId = window.requestAnimationFrame((tt) => this.loop(tt));
     }
 
+    // Watch zxFrame's debug fields for a transition into paused — a
+    // breakpoint / watchpoint hit or a step-over landing. Stops the frame
+    // loop (audio re-anchors on the next start, as after a manual pause)
+    // and tells the page why the screen froze.
+    noteDebugFrame(d) {
+        if (!d || !d.debug) {
+            this.debugWasPaused = false;
+            return;
+        }
+        if (d.paused && !this.debugWasPaused) {
+            this.debugWasPaused = true;
+            this.pause();
+            this.emit('debugpause', {pc: d.pc});
+        } else if (!d.paused) {
+            this.debugWasPaused = false;
+        }
+    }
+
+    // Route one keyboard-matrix transition to the core, remember held keys
+    // so blur can release them, and broadcast the transition as a DOM event
+    // for UI mirrors: the apps' on-screen keyboards light the matching keys.
+    // Because the KeyboardHandler has already translated the PC key, mirrors
+    // see the real Spectrum combo (Backspace = CAPS SHIFT + 0, '.' =
+    // SYMBOL SHIFT + M), and only while the emulator is trapping keys.
+    setMatrixKey(row, mask, down) {
+        const key = row * 256 + mask;
+        if (down) this.heldMatrixKeys.set(key, {row, mask});
+        else this.heldMatrixKeys.delete(key);
+        if (globalThis.zxMatrixKey) globalThis.zxMatrixKey(row, mask, down);
+        document.dispatchEvent(new CustomEvent('zx-matrix-key', {detail: {row, mask, down}}));
+    }
+
+    releaseAllMatrixKeys() {
+        for (const {row, mask} of Array.from(this.heldMatrixKeys.values())) {
+            this.setMatrixKey(row, mask, false);
+        }
+    }
+
     start() {
+        // Every start request is user-initiated (Play/Run, Reset, the
+        // overlay button) — hand the keyboard straight to the program
+        // without demanding an extra click on the screen. Deliberately
+        // outside the isRunning guard: pressing Play while the machine is
+        // already running must still move focus to the emulator.
+        if (this.keyboardEnabled) {
+            this.canvas.focus({preventScroll: true});
+        }
         if (!this.isRunning) {
             this.isRunning = true;
             this.isInitiallyPaused = false;
@@ -428,7 +488,72 @@ export class GoEmulator extends EventEmitter {
         }
     }
 
+    // --- Debugger bridge (zxDebug* exports from wasm_debug_js.go) ---
+    // Thin primitives; session policy (when to pause the loop, what to
+    // refresh) lives with the caller. 'debugpause' fires from the frame
+    // loop when a breakpoint or step-over lands (see noteDebugFrame).
+
+    debugAvailable() {
+        return !!globalThis.zxDebugAttach;
+    }
+
+    debugAttach() {
+        this.debugWasPaused = false;
+        this.debugActive = !!(globalThis.zxDebugAttach && globalThis.zxDebugAttach());
+        return this.debugActive;
+    }
+
+    debugDetach() {
+        if (globalThis.zxDebugDetach) globalThis.zxDebugDetach();
+        this.debugWasPaused = false;
+        this.debugActive = false;
+    }
+
+    debugCmd(line) {
+        return globalThis.zxDebugCmd ? globalThis.zxDebugCmd(line) : 'ERR debugger unavailable';
+    }
+
+    debugState() {
+        return globalThis.zxDebugState ? globalThis.zxDebugState() : null;
+    }
+
+    debugMem(addr, len) {
+        const dst = new Uint8Array(len);
+        if (globalThis.zxDebugMem) globalThis.zxDebugMem(addr, dst);
+        return dst;
+    }
+
+    debugDisasm(addr, count) {
+        return globalThis.zxDebugDisasm ? globalThis.zxDebugDisasm(addr, count) : [];
+    }
+
+    debugPaging() {
+        return globalThis.zxDebugPaging ? globalThis.zxDebugPaging() : null;
+    }
+
+    debugStepFrame() {
+        return globalThis.zxDebugStepFrame ? globalThis.zxDebugStepFrame() : 'ERR debugger unavailable';
+    }
+
+    // Repaint while the debugger holds the machine paused: zxFrame skips
+    // execution in that state, so this is render-only.
+    debugRender() {
+        if (globalThis.zxFrame && this.frameBuf) {
+            this.presentFrame(globalThis.zxFrame(this.frameBuf));
+        }
+    }
+
+    // Resume the frame loop after a debugger continue/step-over.
+    debugResume() {
+        console.debug('[zxdbg] debugResume()');
+        this.debugWasPaused = false;
+        this.start();
+    }
+
     setMachine(type) {
+        // A machine switch replaces the core emulator instance; any debug
+        // session would be left bound to the dead one.
+        this.debugDetach();
         if (type === 'next') {
             // Record the boot promise so run/tape/nex calls can await it.
             this.pendingBoot = this.bootNext();
@@ -524,6 +649,7 @@ export class GoEmulator extends EventEmitter {
     }
 
     reset() {
+        this.debugDetach();
         if (globalThis.zxReset) globalThis.zxReset();
     }
 

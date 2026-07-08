@@ -100,6 +100,13 @@ code {
     background-color: transparent !important;
 }
 
+/* Cyan ring = the emulator owns the keyboard. Capture is focus-scoped:
+   click the screen to type into the machine, click anywhere else to give
+   the keyboard back to the page (the emulator keeps running either way). */
+#jsspeccy-screen:focus-within {
+    box-shadow: 0 0 0 2px #00d8d8, 0 0 18px rgba(0, 216, 216, 0.35);
+}
+
 #jsspeccy-screen > div > div > canvas
 {
     background-color: #4E4E4E;

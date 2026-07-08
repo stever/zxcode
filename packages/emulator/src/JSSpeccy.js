@@ -257,6 +257,23 @@ export const JSSpeccy = (container, opts) => {
         showUI: () => ui.showUI(),
         pause: () => emu.pause(),
         start: () => emu.start(),
-        reset: () => emu.reset()
+        reset: () => emu.reset(),
+        // Debugger bridge — see GoEmulator's debug* methods. available()
+        // is false until the wasm core (with zxDebug* exports) has loaded.
+        debug: {
+            available: () => emu.debugAvailable(),
+            attach: () => emu.debugAttach(),
+            detach: () => emu.debugDetach(),
+            cmd: (line) => emu.debugCmd(line),
+            state: () => emu.debugState(),
+            mem: (addr, len) => emu.debugMem(addr, len),
+            disasm: (addr, count) => emu.debugDisasm(addr, count),
+            paging: () => emu.debugPaging(),
+            stepFrame: () => emu.debugStepFrame(),
+            render: () => emu.debugRender(),
+            resume: () => emu.debugResume(),
+            onPause: (callback) => emu.on('debugpause', callback),
+            offPause: (callback) => emu.removeListener('debugpause', callback)
+        }
     };
 };

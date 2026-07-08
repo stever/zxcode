@@ -7,6 +7,7 @@ import Constants from "../constants";
 
 // Reducers
 import appReducer from "./app/reducers";
+import debuggerReducer from "./debugger/reducers";
 import demoReducer from "./demo/reducers";
 import eightbitReducer from "./eightbit/reducers";
 import errorReducer from "./error/reducers";
@@ -20,6 +21,7 @@ import windowReducer from "./window/reducers";
 
 // Sagas
 import * as appSagas from "./app/sagas";
+import * as debuggerSagas from "./debugger/sagas";
 import * as demoSagas from "./demo/sagas";
 import * as eightbitSagas from "./eightbit/sagas";
 import * as identitySagas from "./identity/sagas";
@@ -63,6 +65,7 @@ const sagaMiddleware = createSagaMiddleware();
 const rootReducer = combineReducers({
     router: createRouterReducer(history),
     app: appReducer,
+    debugger: debuggerReducer,
     demo: demoReducer,
     eightbit: eightbitReducer,
     error: errorReducer,
@@ -93,6 +96,7 @@ function collectSagas(file) {
 }
 
 collectSagas(appSagas);
+collectSagas(debuggerSagas);
 collectSagas(demoSagas);
 collectSagas(eightbitSagas);
 collectSagas(identitySagas);

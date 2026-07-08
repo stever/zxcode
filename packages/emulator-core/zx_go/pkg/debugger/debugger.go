@@ -727,7 +727,7 @@ func (d *Debugger) buildUI() fyne.CanvasObject {
 	// SetNextProvider is called.
 	d.pageMap = NewPageMapWidget(d.mem)
 	pageMapPanel := container.NewBorder(
-		container.NewVBox(headerText("  PAGING", colRegName), widget.NewSeparator()),
+		container.NewVBox(headerText("  MEMORY MAP", colRegName), widget.NewSeparator()),
 		nil, nil, nil, d.pageMap.Root(),
 	)
 

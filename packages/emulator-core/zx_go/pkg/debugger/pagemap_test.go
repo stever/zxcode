@@ -44,16 +44,16 @@ func TestPageMapWidget_Classic48K(t *testing.T) {
 	w := NewPageMapWidget(mem)
 	w.Refresh()
 
-	// 48K layout: ROM 0 / RAM 5 / RAM 2 / RAM 0.
+	// 48K has no paging hardware, so no bank numbers.
 	expect := []struct {
 		idx      int
 		rangeStr string
 		bankStr  string
 	}{
-		{0, "$0000-$3FFF", "ROM 0"},
-		{1, "$4000-$7FFF", "RAM 5 (screen)"},
-		{2, "$8000-$BFFF", "RAM 2"},
-		{3, "$C000-$FFFF", "RAM 0"},
+		{0, "$0000-$3FFF", "ROM"},
+		{1, "$4000-$7FFF", "RAM (screen, contended)"},
+		{2, "$8000-$BFFF", "RAM"},
+		{3, "$C000-$FFFF", "RAM"},
 	}
 	for _, e := range expect {
 		got := w.classic[e.idx]
@@ -63,6 +63,44 @@ func TestPageMapWidget_Classic48K(t *testing.T) {
 		if got.bankT.Text != e.bankStr {
 			t.Errorf("cell %d bank = %q, want %q", e.idx, got.bankT.Text, e.bankStr)
 		}
+	}
+}
+
+func TestPageMapWidget_Classic128K(t *testing.T) {
+	mem := makeTestMemory(t, roms.Model128K)
+	w := NewPageMapWidget(mem)
+	w.Refresh()
+
+	// 128K reset layout: ROM 0 / RAM 5 / RAM 2 / RAM 0, with bank
+	// numbers shown because paging is real hardware here.
+	expect := []struct {
+		idx     int
+		bankStr string
+	}{
+		{0, "ROM 0 (128)"},
+		{1, "RAM 5 (screen)"},
+		{2, "RAM 2"},
+		{3, "RAM 0"},
+	}
+	for _, e := range expect {
+		if got := w.classic[e.idx].bankT.Text; got != e.bankStr {
+			t.Errorf("cell %d bank = %q, want %q", e.idx, got, e.bankStr)
+		}
+	}
+
+	// Reset state: 7FFD is zero, so displaying bank 5 and unlocked.
+	wantFoot := "7FFD=$00 · showing 5 · unlocked"
+	if got := w.classicFoot.Text; got != wantFoot {
+		t.Errorf("footer = %q, want %q", got, wantFoot)
+	}
+}
+
+func TestPageMapWidget_Classic48KHasNoFooter(t *testing.T) {
+	mem := makeTestMemory(t, roms.Model48K)
+	w := NewPageMapWidget(mem)
+	w.Refresh()
+	if got := w.classicFoot.Text; got != "" {
+		t.Errorf("48K footer = %q, want empty", got)
 	}
 }
 

@@ -4,9 +4,11 @@ import { useDispatch, useSelector } from "react-redux";
 import { Titled } from "react-titled";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
+import clsx from "clsx";
 import { Emulator } from "./Emulator";
 import { ProjectEditor } from "./ProjectEditor";
 import { ProjectToolbar } from "./ProjectToolbar";
+import { DebuggerDock } from "./debugger/DebuggerDock";
 import StarButton from "./StarButton";
 import {
   loadProject,
@@ -41,6 +43,16 @@ export default function ProjectPage({ projectId }) {
   const errorItems = useSelector((state) => state?.project.errorItems);
   const windowWidth = useSelector((state) => state?.window.width);
   const windowHeight = useSelector((state) => state?.window.height);
+  const debugActive = useSelector((state) => state?.debugger.active);
+  // The dock (and the editor-column resize it forces) waits for the session
+  // attach: `active` flips in the click's task so the toolbar can slim on
+  // the very next paint, and that paint must stay cheap. `backend` is set a
+  // beat later, once the machine is paused and the first snapshot is in.
+  const debugAttached = useSelector(
+    (state) => state?.debugger.backend !== null
+  );
+  const debugStatus = useSelector((state) => state?.debugger.status);
+  const debugPausedRing = debugActive && debugStatus === "paused";
 
   const toast = useRef(null);
 
@@ -65,6 +77,14 @@ export default function ProjectPage({ projectId }) {
 
     return () => {};
   }, [errorItems, toast.current]);
+
+  // The Debug tab disappears with the session; step the selection back to
+  // the editor if it was showing.
+  useEffect(() => {
+    if (!debugActive && selectedTabIndex > 1) {
+      dispatch(setSelectedTabIndex(1));
+    }
+  }, [debugActive]);
 
   if (!effectiveId || !lang) {
     return <></>;
@@ -91,35 +111,48 @@ export default function ProjectPage({ projectId }) {
             activeIndex={selectedTabIndex}
             onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}
           >
-            <TabPanel header={t("home.tabEmulator")}>
-              <div className="flex justify-content-center">
-                <Emulator zoom={zoom} width={emuW} />
-              </div>
-            </TabPanel>
-            <TabPanel header={editorTitle}>
-              <ProjectEditor id={effectiveId} />
-              <ProjectToolbar />
-            </TabPanel>
+            {[
+              <TabPanel key="emulator" header={t("home.tabEmulator")}>
+                <div className="flex justify-content-center">
+                  <Emulator zoom={zoom} width={emuW} />
+                </div>
+              </TabPanel>,
+              <TabPanel key="editor" header={editorTitle}>
+                <ProjectEditor id={effectiveId} />
+                <ProjectToolbar />
+              </TabPanel>,
+              ...(debugAttached
+                ? [
+                    <TabPanel key="debug" header={t("debug.tab")}>
+                      <DebuggerDock />
+                    </TabPanel>,
+                  ]
+                : []),
+            ]}
           </TabView>
         )}
         {mode === "split" && (
           <>
             <div className="grid full-width-grid">
               <div
-                className="col p-0 mr-2"
+                className={clsx("col p-0 mr-2", debugAttached && "debug-session")}
                 style={{ maxWidth: `calc(100vw - ${emuW + 41}px` }}
               >
-                <TabView
-                  activeIndex={selectedTabIndex}
-                  onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}
-                >
+                {/* Single tab, pinned: the shared selectedTabIndex belongs to
+                    tab mode (0 emulator / 1 editor / 2 debug) and would blank
+                    this panel after a narrow-mode debug session. */}
+                <TabView activeIndex={0}>
                   <TabPanel header={editorTitle}>
                     <ProjectEditor id={effectiveId} />
                   </TabPanel>
                 </TabView>
+                {debugAttached && <DebuggerDock />}
               </div>
               <div
-                className="col-fixed p-0 pt-1"
+                className={clsx(
+                  "col-fixed p-0 pt-1",
+                  debugPausedRing && "debug-paused-ring"
+                )}
                 style={{ width: `${emuW}px` }}
               >
                 <div className="height-53 pt-3 pl-1 flex align-items-center justify-content-between">

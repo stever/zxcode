@@ -337,24 +337,33 @@ func setupWasmExports() {
 		return ""
 	}))
 
-	// zxFrame(optional Uint8Array dst) -> {w,h}. Advances one frame and, if dst
-	// is given, copies the RGBA framebuffer into it.
+	// zxFrame(optional Uint8Array dst) -> {w,h[,debug,paused,pc]}. Advances one
+	// frame and, if dst is given, copies the RGBA framebuffer into it. While a
+	// debug session (wasm_debug_js.go) holds the machine paused, execution is
+	// skipped and only the framebuffer is (re)rendered, so the page can keep
+	// repainting after register/memory pokes; the debug fields let the frame
+	// loop observe pause transitions (breakpoint hits, step-over landings).
 	g.Set("zxFrame", js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if wasmEmu == nil {
 			return js.ValueOf(map[string]any{"w": 0, "h": 0})
 		}
 		e := wasmEmu
-		e.cpu.ExecuteFrame(frameTStatesForModel(e.model))
-		if e.peripherals != nil {
-			e.peripherals.Frame()
+		dbgPaused := wasmDebugPaused(e)
+		if !dbgPaused {
+			e.cpu.ExecuteFrame(frameTStatesForModel(e.model))
+			if e.peripherals != nil {
+				e.peripherals.Frame()
+			}
+			if e.kbd != nil {
+				e.kbd.Tick()
+			}
+			if e.nexloadMacro != nil && e.nexloadMacro.tick(e) {
+				e.nexloadMacro = nil
+			}
+			e.noteBootFrame()
+			// A breakpoint / watchpoint / one-shot may have fired mid-frame.
+			dbgPaused = wasmDebugPaused(e)
 		}
-		if e.kbd != nil {
-			e.kbd.Tick()
-		}
-		if e.nexloadMacro != nil && e.nexloadMacro.tick(e) {
-			e.nexloadMacro = nil
-		}
-		e.noteBootFrame()
 		img := e.renderFrame() // *image.RGBA
 		// Guard null as well as undefined: CopyBytesToJS panics on a null
 		// destination, and a panic in a js.FuncOf callback kills the whole
@@ -363,7 +372,13 @@ func setupWasmExports() {
 			js.CopyBytesToJS(a[0], img.Pix)
 		}
 		b := img.Bounds()
-		return js.ValueOf(map[string]any{"w": b.Dx(), "h": b.Dy()})
+		ret := map[string]any{"w": b.Dx(), "h": b.Dy()}
+		if wasmDebugAttached(e) {
+			ret["debug"] = true
+			ret["paused"] = dbgPaused
+			ret["pc"] = int(e.cpu.PC)
+		}
+		return js.ValueOf(ret)
 	}))
 
 	// zxType — printable runes via TypeRune. Named keys deferred (boot and .nex
@@ -476,6 +491,8 @@ func setupWasmExports() {
 	g.Set("zxAudioLevel", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		return int(audio.LastPeak())
 	}))
+
+	setupWasmDebugExports(g)
 
 	g.Set("zxReady", js.ValueOf(true))
 }

@@ -3,7 +3,6 @@ export const actionTypes = {
     loadEmulator: 'jsspeccy/loadEmulator',
     loadTap: 'jsspeccy/loadTap',
     loadUrl: 'jsspeccy/loadUrl',
-    handleClick: 'jsspeccy/handleClick',
     reset: 'jsspeccy/reset',
     pause: 'jsspeccy/pause',
     start: 'jsspeccy/start',
@@ -33,11 +32,6 @@ export const loadTap = (tap) => ({
 export const loadUrl = (url) => ({
     type: actionTypes.loadUrl,
     url
-});
-
-export const handleClick = (e) => ({
-    type: actionTypes.handleClick,
-    e
 });
 
 export const reset = () => ({
