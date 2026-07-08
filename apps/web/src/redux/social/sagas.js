@@ -201,6 +201,7 @@ function* handleFetchActivityFeedActions(action) {
                     title
                     slug
                     lang
+                    machine
                     is_public
                     created_at
                     updated_at

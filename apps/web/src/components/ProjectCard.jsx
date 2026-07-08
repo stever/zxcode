@@ -23,6 +23,19 @@ function getLanguageColor(lang) {
   return colors[lang] || "gray";
 }
 
+// Badge text for the project's target machine. Only the non-default machines
+// get a badge — a plain 48K card stays as it was — so the label is a short
+// model name rather than the full selector labels ("Spectrum 128K"), which
+// would crowd the tag row. Machine names are proper nouns; like the language
+// labels above they aren't translated.
+function getMachineBadge(machine) {
+  const badges = {
+    128: "128K",
+    next: "Next",
+  };
+  return badges[machine] || null;
+}
+
 // The inner card content (thumbnail, language tag + star, title, metadata).
 // Shared by every project card so the structure stays identical regardless of
 // how the surrounding wrapper navigates: ProjectCard wraps it in a Link, while
@@ -33,6 +46,7 @@ function getLanguageColor(lang) {
 export function ProjectCardBody({ project, author, onStarToggle }) {
   const { t } = useTranslation();
   const locale = useDateFnsLocale();
+  const machineBadge = getMachineBadge(project.machine);
 
   return (
     <div className="flex flex-column h-full relative" style={{ minHeight: "160px" }}>
@@ -50,6 +64,7 @@ export function ProjectCardBody({ project, author, onStarToggle }) {
           severity={getLanguageColor(project.lang)}
           className="lang-tag"
         />
+        {machineBadge && <Tag value={machineBadge} className="machine-tag" />}
         <StarButton projectId={project.project_id} onToggle={onStarToggle} />
       </div>
 

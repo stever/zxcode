@@ -122,6 +122,16 @@
     font-weight: 600;
 }
 
+// Machine badges mark a project card as targeting a non-default machine
+// (128K / Next). Same outlined-chip shape as the language tag, but in the
+// muted neutral so the cyan language tag stays the row's accent.
+.p-tag.machine-tag {
+    background: transparent;
+    border: 1px solid var(--zx-muted);
+    color: var(--zx-text);
+    font-weight: 600;
+}
+
 // Dropdown panels: match the header tone (the base theme uses a cooler grey)
 // and round the corners to fit the rest of the UI. Items shrink slightly to
 // relate to the menu bar.

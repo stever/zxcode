@@ -160,6 +160,7 @@ const GET_PUBLIC_PROJECTS = gql`
       title
       slug
       lang
+      machine
       updated_at
       created_at
       display_order
@@ -188,6 +189,7 @@ const GET_STARRED_PROJECTS = gql`
         title
         slug
         lang
+        machine
         updated_at
         is_public
         user {
