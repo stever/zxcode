@@ -15,6 +15,11 @@
     "packages/*",
     "apps/*"
   ],
+  "overrides": {
+    "sockjs": {
+      "uuid": "^11.1.1"
+    }
+  },
   "devDependencies": {
     "nodemon": "^3.1.10",
     "turbo": "^2.5.4"
