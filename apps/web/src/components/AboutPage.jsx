@@ -87,19 +87,17 @@ export default function AboutPage() {
                         Steven Hugg. Licensed under terms of The GPL version 3 - see{' '}
                         <a href="https://github.com/sehugg/8bitworkshop/blob/master/LICENSE" target="_blank">LICENSE</a>.
                     </li>
+                    <li>
+                        <a href="https://github.com/boriel/zxbasic" target="_blank">Boriel ZX BASIC</a> by Jose Rodriguez.
+                        Licensed under terms of The GPL version 3 - see{' '}
+                        <a href="https://github.com/boriel/zxbasic/blob/master/LICENSE.txt" target="_blank">LICENSE</a>.
+                    </li>
                     {Constants.isDev &&
-                        <>
-                            <li>
-                                <a href="https://github.com/boriel/zxbasic" target="_blank">Boriel ZX BASIC</a> by Jose Rodriguez.
-                                Licensed under terms of The GPL version 3 - see{' '}
-                                <a href="https://github.com/boriel/zxbasic/blob/master/LICENSE.txt" target="_blank">LICENSE</a>.
-                            </li>
-                            <li>
-                                <a href="https://z88dk.org/" target="_blank">Z88DK</a> by various.
-                                Licensed under terms of The Clarified Artistic License - see{' '}
-                                <a href="https://github.com/z88dk/z88dk/wiki/license" target="_blank">LICENSE</a>.
-                            </li>
-                        </>
+                        <li>
+                            <a href="https://z88dk.org/" target="_blank">Z88DK</a> by various.
+                            Licensed under terms of The Clarified Artistic License - see{' '}
+                            <a href="https://github.com/z88dk/z88dk/wiki/license" target="_blank">LICENSE</a>.
+                        </li>
                     }
                     <li>
                         <a href="https://github.com/primefaces/primereact" target="_blank">PrimeReact</a> by
