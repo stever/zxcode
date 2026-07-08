@@ -34,6 +34,13 @@ jobs:
           - context: ./apps/zxbasic/
             dockerfile: ./apps/zxbasic/Dockerfile
             image: ghcr.io/stever/zxcode-api-zxbasic
+          # z88dk C compile API (migrated from the standalone zxcode-api-z88dk
+          # repo). Keeps the original image name so the deploy is unchanged;
+          # needs this repo's Actions write access to the
+          # stever/zxcode-api-z88dk GHCR package.
+          - context: ./apps/z88dk/
+            dockerfile: ./apps/z88dk/Dockerfile
+            image: ghcr.io/stever/zxcode-api-z88dk
           - context: ./
             dockerfile: ./apps/gif-service/Dockerfile
             image: ghcr.io/stever/zxcode-gif-service
