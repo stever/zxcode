@@ -72,6 +72,23 @@ type nexloadMacro struct {
 	keyOn bool
 }
 
+// Settle pads for the menu navigation, in emulated frames. The welcome, the
+// main menu and the command prompt all idle at the same $0C90 loop, so PC
+// can't signal readiness — these are timed pads. They were originally 140/92,
+// a large over-caution: a sweep showed the cycle completes even at 0 in both
+// boot modes (the preceding key-holds already give the menu time to redraw).
+// Kept at a modest value so the pause is short but a comfortable margin
+// remains for timing drift when the SD distro is updated. The end-to-end
+// cycle tests (bas_run_cycle_test.go) run at these shipped values and are the
+// regression guard.
+const (
+	// macroMenuSettleFrames: after SPACE ("Start NextZXOS"), before cursor
+	// DOWN to "Command Line".
+	macroMenuSettleFrames = 30
+	// macroPromptSettleFrames: after ENTER on "Command Line", before typing.
+	macroPromptSettleFrames = 20
+)
+
 // newCommandLineMacro builds a macro that boots to the NextZXOS menu, opens
 // the Command Line, types cmd (lowercase — the SD card is FAT and NextZXOS
 // keywords are case-insensitive) and presses ENTER, then waits tailFrames for
@@ -83,11 +100,11 @@ func newCommandLineMacro(cmd string, tailFrames int) *nexloadMacro {
 
 	steps = append(steps, macroStep{waitMenu: true}) // boot to the welcome screen
 	hold([][2]int{{7, 0x01}}, 40)                    // SPACE -> "Start NextZXOS"
-	wait(140)                                        // settle on the main menu
+	wait(macroMenuSettleFrames)                      // settle on the main menu
 	hold([][2]int{{0, 0x01}, {4, 0x10}}, 6)          // cursor DOWN -> Command Line
 	wait(10)
 	hold([][2]int{{6, 0x01}}, 6) // ENTER -> command prompt
-	wait(92)
+	wait(macroPromptSettleFrames)
 	for _, c := range strings.ToLower(cmd) {
 		if keys, ok := nexKeyMatrix[c]; ok {
 			hold(keys, 4)
