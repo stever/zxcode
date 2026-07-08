@@ -9,6 +9,8 @@ public/dist/
 # Build artifacts emitted by webpack/HtmlWebpackPlugin + the manifest step.
 public/index.html
 public/asset-manifest.json
+# webpack-dev-server HMR chunks flushed to disk during `npm run dev`.
+public/*.hot-update.*
 # Emulator runtime assets are copied in from @zxplay/emulator at build time.
 public/roms/
 public/tapeloaders/
