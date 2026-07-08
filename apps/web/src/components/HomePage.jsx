@@ -20,14 +20,11 @@ export default function HomePage() {
     const errorItems = useSelector(state => state?.project.errorItems);
     const windowWidth = useSelector(state => state?.window.width);
     const windowHeight = useSelector(state => state?.window.height);
-    const machine = useSelector(state => state?.app.machine);
 
-    // The BASIC demo tab targets whichever machine is selected: NextBASIC on the
-    // Next, Sinclair BASIC on the 48K/128K. The label (and the editor's dialect)
-    // follow the machine.
-    const basicTabHeader = machine === 'next'
-        ? t("home.tabNextBasic")
-        : t("home.tabSinclairBasic");
+    // Both machines share one neutral BASIC sample, so the tab is just "BASIC".
+    // The editor still highlights the machine's dialect and the run saga routes
+    // delivery (zmakebas tap vs txt2bas) by machine underneath.
+    const basicTabHeader = t("home.tabBasic");
 
     const toast = useRef(null);
 

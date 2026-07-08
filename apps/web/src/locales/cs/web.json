@@ -36,7 +36,7 @@
   },
   "home": {
     "tabEmulator": "Emulátor",
-    "tabSinclairBasic": "Sinclair BASIC",
+    "tabBasic": "BASIC",
     "tabZ80Assembly": "Assembler Z80",
     "projectLabel": "Projekt: {{title}}"
   },

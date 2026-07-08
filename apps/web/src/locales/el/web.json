@@ -36,7 +36,7 @@
   },
   "home": {
     "tabEmulator": "Εξομοιωτής",
-    "tabSinclairBasic": "Sinclair BASIC",
+    "tabBasic": "BASIC",
     "tabZ80Assembly": "Assembly Z80",
     "projectLabel": "Έργο: {{title}}"
   },
