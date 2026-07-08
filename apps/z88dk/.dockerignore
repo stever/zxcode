@@ -1,0 +1,12 @@
+/**/.idea/
+/**/.pytest_cache/
+/**/__pycache__/
+/**/venv/
+.git/
+.gitignore
+test/
+*.md
+CLAUDE.md
+LICENSE.txt
+Dockerfile
+.dockerignore
