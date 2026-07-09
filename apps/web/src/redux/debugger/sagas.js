@@ -11,7 +11,6 @@ import {
 } from "./actions";
 import {actionTypes as jsspeccyActionTypes} from "../jsspeccy/actions";
 import {actionTypes as appActionTypes} from "../app/actions";
-import {actionTypes as eightbitActionTypes} from "../eightbit/actions";
 import {getJsspeccy} from "../jsspeccy/handle";
 import {createDebugSession} from "../../lib/debugger/mockSession";
 import {createRealSession} from "../../lib/debugger/realSession";
@@ -79,17 +78,19 @@ export function* watchForBreakpointChanges() {
 
 // The debug session binds to the machine instance that was live when it
 // opened; anything that replaces or restarts the machine invalidates it.
-// Running project code closes the panel (the program under debug is gone);
-// a machine change or reset keeps it open and reattaches to the new machine.
-// takeLatest so the machineChanged+reset burst a machine pick dispatches
-// coalesces into one reattach (see handleSessionInvalidation).
+// The panel stays open throughout: machine change and reset reattach to the
+// new machine, and Play (runProjectCode → compile → loadTap → reset) also
+// reattaches, resumed, so the freshly loaded program runs under the
+// debugger. loadTap is watched only to mark that intent for the reset that
+// follows it. takeLatest so the machineChanged+reset burst a machine pick
+// dispatches coalesces into one reattach (see handleSessionInvalidation).
 // noinspection JSUnusedGlobalSymbols
 export function* watchForSessionInvalidation() {
     yield takeLatest(
         [
             jsspeccyActionTypes.reset,
             appActionTypes.machineChanged,
-            eightbitActionTypes.runProjectCode,
+            jsspeccyActionTypes.loadTap,
         ],
         handleSessionInvalidation);
 }
@@ -238,13 +239,22 @@ function* handleCloseDebuggerActions() {
     }
 }
 
+// Set by loadTap (a compiled program is about to be loaded) and consumed by
+// the reset that follows: the tape only loads on a running machine, so that
+// reattach must resume regardless of the debugger's previous run state. The
+// set and the read-and-clear are both synchronous at handler start (before
+// any yield), so takeLatest cancellation cannot lose or double-apply it.
+let resumeOnReattach = false;
+
 function* handleSessionInvalidation(action) {
-    const active = yield select((state) => state?.debugger.active);
-    if (!active) return;
-    if (action.type === eightbitActionTypes.runProjectCode) {
-        yield put(closeDebugger());
+    if (action.type === jsspeccyActionTypes.loadTap) {
+        resumeOnReattach = true;
         return;
     }
+    const loadingProgram = resumeOnReattach;
+    resumeOnReattach = false;
+    const active = yield select((state) => state?.debugger.active);
+    if (!active) return;
     // Machine change or reset: the machine under the session is being
     // replaced, but the panel stays open — reattach in place, without
     // re-dispatching openDebugger (its reducer resets the slice, which
@@ -257,9 +267,10 @@ function* handleSessionInvalidation(action) {
     const stillActive = yield select((state) => state?.debugger.active);
     if (!stillActive) return;
     // Carry the run state across: a debugger left running (Continue) stays
-    // running on the new machine; a paused one lands paused at entry.
-    const wasRunning = yield select(
-        (state) => state?.debugger.status === 'running');
+    // running on the new machine; a paused one lands paused at entry —
+    // except when a program is loading, which always needs a running machine.
+    const wasRunning = loadingProgram || (yield select(
+        (state) => state?.debugger.status === 'running'));
     if (session) {
         // The engine already detached from the dying machine (setMachine and
         // reset both do); resuming here would poke the new machine the

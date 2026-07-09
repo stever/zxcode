@@ -61,7 +61,7 @@ export function ProjectToolbar() {
   const isOwner = userId && ownerId && userId === ownerId;
 
   // Keep the DOM class in step with the store for every path that doesn't go
-  // through the Debug button (session invalidation, attach failure). The
+  // through the Debug button (attach failure closing the panel). The
   // button's own handler sets the class directly, ahead of React, so the
   // controls disappear on the first paint after the click no matter how the
   // debug-open render is scheduled.
@@ -98,11 +98,12 @@ export function ProjectToolbar() {
     setCopyProjectName("");
   };
 
-  // A debug session slims the toolbar down to Play (rerun the program; this
-  // closes the session, since the machine reloads under it) and the Debug
-  // toggle itself. The other controls are hidden with visibility (see
-  // debugger.css), NOT unmounted — removing them changes the row's height
-  // by a pixel and nudges Play when the tallest control leaves.
+  // A debug session slims the toolbar down to Play (rerun the program; the
+  // session follows, reattaching to the reloaded machine and resuming so
+  // the program runs under the debugger) and the Debug toggle itself. The
+  // other controls are hidden with visibility (see debugger.css), NOT
+  // unmounted — removing them changes the row's height by a pixel and
+  // nudges Play when the tallest control leaves.
   return (
     <>
       <Toast ref={toast} />
