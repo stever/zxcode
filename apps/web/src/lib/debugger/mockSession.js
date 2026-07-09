@@ -194,7 +194,12 @@ export function createDebugSession() {
         },
 
         setBreakpoints({lines, addrs}) {
-            breakpointLines = [...lines].sort((a, b) => a - b);
+            // Locations are {file, line}; the canned program is single-file,
+            // so only main-source (file: null) lines take part in the mock.
+            breakpointLines = lines
+                .filter((loc) => (loc.file ?? null) === null)
+                .map((loc) => loc.line)
+                .sort((a, b) => a - b);
             breakpointAddrs = [...addrs].sort((a, b) => a - b);
         },
 

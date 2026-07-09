@@ -85,11 +85,12 @@ export const consoleOutput = (entries) => ({
     entries
 });
 
-// Breakpoints are source-line based. `file` is null until projects grow
-// multiple files (#79); keeping it in the shape now avoids a migration.
-export const toggleBreakpoint = (line) => ({
+// Breakpoints are source-line based. `file` is null for the main source, or
+// an additional project file's name (#79) — the same keying the SLD map uses.
+export const toggleBreakpoint = (line, file = null) => ({
     type: actionTypes.toggleBreakpoint,
-    line
+    line,
+    file
 });
 
 // Address breakpoints, toggled from the disassembly pane. These arm on the

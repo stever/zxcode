@@ -12,6 +12,7 @@ import {
 import { DebugConsole } from "./DebugConsole";
 import { DebugHelp } from "./DebugHelp";
 import { hex16 } from "./format";
+import { locToAddr } from "../../lib/debugger/sld";
 import { useTranslation } from "@zxplay/i18n";
 
 // The secondary panel group. Console and Breakpoints are structured; the
@@ -135,20 +136,22 @@ export function DebugPanels() {
             </div>
           ))}
           {breakpoints.map((bp) => {
-            const addr = mapLive ? sourceMap.lineToAddr.get(bp.line) : undefined;
+            const addr = mapLive ? locToAddr(sourceMap, bp.file, bp.line) : undefined;
             return (
               <div className="debug-bp-row" key={`${bp.file}:${bp.line}`}>
                 <span
                   className={clsx("debug-bp-dot", !lineBpsLive && "inert")}
                 />
-                <span>{t("debug.line", { line: bp.line })}</span>
+                <span>
+                  {bp.file ? `${bp.file}:${bp.line}` : t("debug.line", { line: bp.line })}
+                </span>
                 {addr !== undefined && (
                   <span className="debug-bp-addr">${hex16(addr)}</span>
                 )}
                 <Button
                   icon="pi pi-times"
                   className="p-button-sm p-button-text p-button-danger"
-                  onClick={() => dispatch(toggleBreakpoint(bp.line))}
+                  onClick={() => dispatch(toggleBreakpoint(bp.line, bp.file))}
                 />
               </div>
             );

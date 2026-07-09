@@ -26,16 +26,21 @@ export function ProjectEditor() {
   // source (project.code). Binary assets swap the editor for an info panel.
   const activeFile = useSelector(selectActiveFile);
   const activeFileId = activeFile?.id ?? null;
+  // Breakpoints and the source map key files by NAME (matching the SLD
+  // records); null means the main source.
+  const activeFileName = activeFile?.name ?? null;
   const activeIsBinary = Boolean(activeFile?.isBinary);
-  const onMainFile = activeFileId === null;
   // The change handler and the mount-time gutter handler need the current
   // active file without re-binding CodeMirror events.
   const activeFileIdRef = useRef(null);
   activeFileIdRef.current = activeFileId;
+  const activeFileNameRef = useRef(null);
+  activeFileNameRef.current = activeFileName;
   const lineNumbers = useSelector((state) => state?.app?.lineNumbers || false);
   const breakpoints = useSelector((state) => state?.debugger.breakpoints);
   const debugActive = useSelector((state) => state?.debugger.active);
   const pausedLine = useSelector((state) => state?.debugger.pausedLine);
+  const pausedFile = useSelector((state) => state?.debugger.pausedFile);
   const backend = useSelector((state) => state?.debugger.backend);
   const sourceMapLive = useSelector(
     (state) => Boolean(state?.debugger.sourceMap && !state.debugger.sourceMap.stale)
@@ -103,12 +108,19 @@ export function ProjectEditor() {
     cm.setValue(code || "");
     // Undo must stop at the loaded content, not the empty pre-load document.
     cm.clearHistory();
-    dispatch(setCode(cm.getValue()));
+    // Sync CodeMirror's line-ending normalisation back to the store — but
+    // only when it changed something. The editor remounts on every file-tab
+    // switch, and an unconditional setCode here would stale the debugger's
+    // source map (any setCode marks it stale) and disarm line breakpoints.
+    if (cm.getValue() !== (code || "")) {
+      dispatch(setCode(cm.getValue()));
+    }
     if (sourceDebug) {
       cm.on("gutterClick", (instance, line, gutter) => {
-        // Source-line breakpoints only map to the main source file.
-        if (gutter === "zx-bp-gutter" && activeFileIdRef.current === null) {
-          dispatch(toggleBreakpoint(line + 1));
+        // Breakpoints carry the file they belong to (null = main source);
+        // the SLD map places included files' lines too.
+        if (gutter === "zx-bp-gutter") {
+          dispatch(toggleBreakpoint(line + 1, activeFileNameRef.current));
         }
       });
     }
@@ -143,17 +155,16 @@ export function ProjectEditor() {
     if (!cmRef.current || !sourceDebug) return;
     const cm = cmRef.current.getCodeMirror();
     cm.clearGutter("zx-bp-gutter");
-    // Breakpoints belong to the main source file; other buffers show none.
-    if (!onMainFile) return;
+    // Each buffer shows only its own file's dots.
     for (const bp of breakpoints) {
-      if (bp.line <= cm.lineCount()) {
+      if (bp.file === activeFileName && bp.line <= cm.lineCount()) {
         const marker = document.createElement("div");
         marker.className = bpsInert ? "zx-bp-marker inert" : "zx-bp-marker";
         marker.textContent = "●";
         cm.setGutterMarker(bp.line - 1, "zx-bp-gutter", marker);
       }
     }
-  }, [breakpoints, bpsInert, activeFileId]);
+  }, [breakpoints, bpsInert, activeFileName]);
 
   // Highlight the source line the debugger is paused on and keep it in view.
   useEffect(() => {
@@ -163,13 +174,18 @@ export function ProjectEditor() {
       cm.removeLineClass(pausedLineRef.current, "background", "debug-paused-line");
       pausedLineRef.current = null;
     }
-    // The paused-line highlight maps to the main source file only.
-    if (onMainFile && debugActive && pausedLine && pausedLine <= cm.lineCount()) {
+    // Highlight only when the paused location's file is the one on screen.
+    if (
+      pausedFile === activeFileName &&
+      debugActive &&
+      pausedLine &&
+      pausedLine <= cm.lineCount()
+    ) {
       cm.addLineClass(pausedLine - 1, "background", "debug-paused-line");
       cm.scrollIntoView({ line: pausedLine - 1, ch: 0 }, 40);
       pausedLineRef.current = pausedLine - 1;
     }
-  }, [debugActive, pausedLine, activeFileId]);
+  }, [debugActive, pausedLine, pausedFile, activeFileName]);
 
   // Binary asset size in raw bytes (content is base64).
   const assetSize = activeIsBinary

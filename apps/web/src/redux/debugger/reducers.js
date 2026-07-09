@@ -29,11 +29,15 @@ const initialState = {
     paging: null,
     // The editor line to highlight while paused (1-based), when the pc maps
     // to source. Null when the pc is outside the project code (or, for now,
-    // when the mock session has nothing better to offer).
+    // when the mock session has nothing better to offer). pausedFile is the
+    // project file that line lives in (null = the main source), so the
+    // highlight follows the right editor tab in multi-file projects.
     pausedLine: null,
-    // Source-line breakpoints; `file` stays null until multi-file projects
-    // (#79) give it a value. On the real backend they arm through sourceMap;
-    // without one (or with a stale one) they are stored but inert.
+    pausedFile: null,
+    // Source-line breakpoints ({file, line}); `file` is null for the main
+    // source or an additional project file's name (#79). On the real backend
+    // they arm through sourceMap; without one (or with a stale one) they are
+    // stored but inert.
     breakpoints: [],
     // Parsed SLD map from the last successful sjasmplus compile
     // (lib/debugger/sld.js shape plus `stale`). Belongs to the loaded
@@ -100,6 +104,7 @@ export default function debuggerReducer(state = initialState, action) {
                 memory: s.memory || state.memory,
                 paging: s.paging || state.paging,
                 pausedLine: s.pausedLine !== undefined ? s.pausedLine : null,
+                pausedFile: s.pausedFile !== undefined ? s.pausedFile : null,
             };
         }
         case actionTypes.debugLiveUpdate: {
@@ -123,6 +128,7 @@ export default function debuggerReducer(state = initialState, action) {
                 status: 'running',
                 reason: null,
                 pausedLine: null,
+                pausedFile: null,
             };
         case actionTypes.consoleOutput:
             return {
@@ -131,23 +137,25 @@ export default function debuggerReducer(state = initialState, action) {
             };
         case actionTypes.toggleBreakpoint: {
             // With a live map, snap the click to the next line that has code
-            // (so the dot sits on a real instruction) and refuse lines with
-            // nothing below — data and directives cannot break. Toggling an
-            // existing dot from the panel resolves to itself: stored lines
-            // are always mapped lines.
+            // in that file (so the dot sits on a real instruction) and
+            // refuse lines with nothing below — data and directives cannot
+            // break, and neither can a file the assembly never included.
+            // Toggling an existing dot from the panel resolves to itself:
+            // stored lines are always mapped lines.
             const map = state.sourceMap;
+            const file = action.file ?? null;
             let line = action.line;
             if (map && !map.stale) {
-                line = snapLine(map, line);
+                line = snapLine(map, line, file);
                 if (line === null) return state;
             }
             const exists = state.breakpoints.some(
-                (bp) => bp.line === line && bp.file === null);
+                (bp) => bp.line === line && bp.file === file);
             const breakpoints = exists
                 ? state.breakpoints.filter(
-                    (bp) => !(bp.line === line && bp.file === null))
-                : [...state.breakpoints, {file: null, line}].sort(
-                    (a, b) => a.line - b.line);
+                    (bp) => !(bp.line === line && bp.file === file))
+                : [...state.breakpoints, {file, line}].sort(
+                    (a, b) => (a.file ?? '').localeCompare(b.file ?? '') || a.line - b.line);
             return {...state, breakpoints};
         }
         case actionTypes.toggleAddrBreakpoint: {
@@ -182,27 +190,31 @@ export default function debuggerReducer(state = initialState, action) {
             // before any compile (no map to snap against at click time) or
             // whose lines moved with an edit land on label/blank/data
             // lines, where they would silently arm nothing. Snap each to
-            // the next line with code, merge collisions, and drop dots
-            // with no code below them.
+            // the next line with code in its own file, merge collisions,
+            // and drop dots with no code below them — which also cleans up
+            // dots in files that were renamed or deleted since the compile.
             let breakpoints = state.breakpoints;
             if (sourceMap && !sourceMap.stale && breakpoints.length > 0) {
-                const lines = new Set();
+                const locs = new Map();
                 for (const bp of breakpoints) {
-                    const snapped = snapLine(sourceMap, bp.line);
-                    if (snapped !== null) lines.add(snapped);
+                    const snapped = snapLine(sourceMap, bp.line, bp.file);
+                    if (snapped !== null) {
+                        locs.set(`${bp.file ?? ''}\n${snapped}`, {file: bp.file, line: snapped});
+                    }
                 }
-                breakpoints = [...lines]
-                    .sort((a, b) => a - b)
-                    .map((line) => ({file: null, line}));
+                breakpoints = [...locs.values()].sort(
+                    (a, b) => (a.file ?? '').localeCompare(b.file ?? '') || a.line - b.line);
             }
             return {...state, sourceMap, breakpoints};
         }
         case actionTypes.sourceMapCleared:
             return state.sourceMap ? {...state, sourceMap: null} : state;
         case projectActionTypes.setCode:
-            // Any edit after the compile means the map's line numbers no
-            // longer describe the buffer. One-way until the next compile;
-            // no-op (same state object) on the keystrokes that follow.
+        case projectActionTypes.setFileContent:
+            // Any edit after the compile — main source or an additional
+            // file — means the map's line numbers no longer describe the
+            // buffers. One-way until the next compile; no-op (same state
+            // object) on the keystrokes that follow.
             if (state.sourceMap && !state.sourceMap.stale) {
                 return {...state, sourceMap: {...state.sourceMap, stale: true}};
             }

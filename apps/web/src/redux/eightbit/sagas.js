@@ -278,9 +278,15 @@ function* handleGetProjectTapActions(_) {
                     const map = parseSld(result.sld);
                     if (map) {
                         // Stale on arrival when the editor moved on while
-                        // the compile was in flight.
+                        // the compile was in flight — in the main source or
+                        // in any additional file the assembly consumed.
                         const codeNow = yield select((state) => state.project.code);
-                        yield put(sourceMapLoaded(map, codeNow !== code));
+                        const filesNow = toActionFiles(
+                            yield select((state) => state.project.files));
+                        const filesMoved = filesNow.length !== files.length
+                            || filesNow.some((f, i) =>
+                                f.name !== files[i].name || f.content !== files[i].content);
+                        yield put(sourceMapLoaded(map, codeNow !== code || filesMoved));
                     } else {
                         yield put(sourceMapCleared());
                     }

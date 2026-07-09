@@ -7,6 +7,8 @@
 // step-over landings arrive via the engine's 'debugpause' event (the frame
 // loop sees zxFrame report paused and stops itself).
 
+import {locToAddr} from "./sld";
+
 const DISASM_ROWS = 32;
 const MEM_BYTES = 0x10000;
 
@@ -65,6 +67,11 @@ export function createRealSession(handle) {
     const snapshot = (reason) => {
         const s = dbg.state();
         if (!s) return null;
+        // Null when the pc is outside the compiled program (ROM, the
+        // loader) — the editor then shows no paused line and the
+        // disassembly pane carries the position. pausedFile names the
+        // project file the line lives in (null = the main source).
+        const loc = sourceMap ? (sourceMap.addrToLoc.get(s.pc) ?? null) : null;
         return {
             reason,
             pc: s.pc,
@@ -72,10 +79,8 @@ export function createRealSession(handle) {
             disasm: disasmWindow(s.pc),
             memory: readMemory(),
             paging: dbg.paging ? dbg.paging() : null,
-            // Null when the pc is outside the compiled program (ROM, the
-            // loader) — the editor then shows no paused line and the
-            // disassembly pane carries the position.
-            pausedLine: sourceMap ? (sourceMap.addrToLine.get(s.pc) ?? null) : null,
+            pausedLine: loc ? loc.line : null,
+            pausedFile: loc ? loc.file : null,
         };
     };
 
@@ -133,16 +138,17 @@ export function createRealSession(handle) {
             return snapshot("pause");
         },
 
-        // Address breakpoints arm directly; source lines arm through the
-        // source map (lines the map cannot place — or all of them, without a
-        // map — stay stored in the store but set nothing here). The two can
-        // resolve to the same address; the Set collapses that to one arm and
-        // it survives until both are gone.
+        // Address breakpoints arm directly; source locations ({file, line},
+        // file null = main source) arm through the source map (locations
+        // the map cannot place — or all of them, without a map — stay
+        // stored in the store but set nothing here). The two can resolve to
+        // the same address; the Set collapses that to one arm and it
+        // survives until both are gone.
         setBreakpoints({ lines = [], addrs = [] }) {
             const wanted = new Set(addrs);
             if (sourceMap) {
-                for (const line of lines) {
-                    const addr = sourceMap.lineToAddr.get(line);
+                for (const loc of lines) {
+                    const addr = locToAddr(sourceMap, loc.file, loc.line);
                     if (addr !== undefined) wanted.add(addr);
                 }
             }

@@ -58,10 +58,16 @@ describe("parseSld", () => {
         expect(map.lineToAddr.get(4)).toBe(0x8000);
     });
 
-    test("records from other files are ignored", () => {
+    test("records from other files map under their own file key", () => {
         const foreign = SLD + "include.asm|1||0|2|50000|T|\n";
         const map = parseSld(foreign);
+        // Not part of the main file's line space...
         expect(map.addrToLine.has(50000)).toBe(false);
+        expect(map.lineToAddr.get(1)).toBeUndefined();
+        // ...but addressable through the per-file maps.
+        expect(map.byFile.get("include.asm").lineToAddr.get(1)).toBe(50000);
+        expect(map.addrToLoc.get(50000)).toEqual({file: "include.asm", line: 1});
+        expect(map.addrToLoc.get(0x8000)).toEqual({file: null, line: 4});
     });
 
     test("returns null for empty or code-free input", () => {
@@ -84,5 +90,13 @@ describe("snapLine", () => {
 
     test("returns null past the last instruction", () => {
         expect(snapLine(parseSld(SLD), 16)).toBeNull();
+    });
+
+    test("snaps within the named file only", () => {
+        const map = parseSld(SLD + "include.asm|5||0|2|50000|T|\n");
+        expect(snapLine(map, 1, "include.asm")).toBe(5);
+        expect(snapLine(map, 6, "include.asm")).toBeNull();
+        // A file the assembly never touched has nothing to snap to.
+        expect(snapLine(map, 1, "missing.asm")).toBeNull();
     });
 });

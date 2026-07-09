@@ -103,3 +103,49 @@ describe("toggleBreakpoint snapping", () => {
         expect(staleMap.breakpoints).toEqual([{file: null, line: 7}]);
     });
 });
+
+// Main-source code on lines 4/15, included-file code on lines 2/5.
+const MULTI_SLD = `|SLD.data.version|1
+program.asm|4||0|2|32768|T|
+part.asm|2||0|2|32770|T|
+part.asm|5||0|2|32773|T|
+program.asm|15||0|2|32784|T|
+`;
+
+const withMultiMap = (stale = false) =>
+    reducer(undefined, sourceMapLoaded(parseSld(MULTI_SLD), stale));
+
+describe("multi-file breakpoints", () => {
+    test("dots in different files with the same line coexist", () => {
+        let state = reducer(undefined, toggleBreakpoint(4));
+        state = reducer(state, toggleBreakpoint(4, "part.asm"));
+        expect(state.breakpoints).toEqual([
+            {file: null, line: 4},
+            {file: "part.asm", line: 4},
+        ]);
+        // Toggling one off leaves the other.
+        state = reducer(state, toggleBreakpoint(4));
+        expect(state.breakpoints).toEqual([{file: "part.asm", line: 4}]);
+    });
+
+    test("snapping uses the file's own line space", () => {
+        const state = reducer(withMultiMap(), toggleBreakpoint(3, "part.asm"));
+        expect(state.breakpoints).toEqual([{file: "part.asm", line: 5}]);
+    });
+
+    test("refuses lines in files the assembly never included", () => {
+        const state = withMultiMap();
+        expect(reducer(state, toggleBreakpoint(1, "missing.asm"))).toBe(state);
+    });
+
+    test("re-anchoring keeps per-file dots and drops orphaned files", () => {
+        let state = reducer(undefined, toggleBreakpoint(1, "part.asm"));  // -> 2
+        state = reducer(state, toggleBreakpoint(4));
+        state = reducer(state, toggleBreakpoint(3, "deleted.asm"));
+        state = reducer(state, sourceMapLoaded(parseSld(MULTI_SLD)));
+        expect(state.breakpoints).toEqual([
+            {file: null, line: 4},
+            {file: "part.asm", line: 2},
+        ]);
+    });
+});

@@ -12,7 +12,7 @@ import {
 } from "./actions";
 import {actionTypes as jsspeccyActionTypes} from "../jsspeccy/actions";
 import {actionTypes as appActionTypes} from "../app/actions";
-import {actionTypes as projectActionTypes} from "../project/actions";
+import {actionTypes as projectActionTypes, setActiveFile} from "../project/actions";
 import {getJsspeccy} from "../jsspeccy/handle";
 import {createDebugSession} from "../../lib/debugger/mockSession";
 import {createRealSession} from "../../lib/debugger/realSession";
@@ -67,6 +67,33 @@ export function* watchForSendConsoleCommandActions() {
     yield takeEvery(actionTypes.sendConsoleCommand, handleSendConsoleCommandActions);
 }
 
+// Follow a pause into the file it landed in: when the pc maps to an
+// included file's line, switch the editor to that file's tab so the
+// paused-line highlight is actually visible (and back to the main source
+// when it maps there). Pauses outside the source map leave the tabs alone.
+// noinspection JSUnusedGlobalSymbols
+export function* watchForPausedFileFollow() {
+    yield takeEvery(actionTypes.debugSnapshot, handlePausedFileFollow);
+}
+
+function* handlePausedFileFollow(action) {
+    const s = action.snapshot;
+    if (!s || s.pausedLine === null || s.pausedLine === undefined) return;
+    const pausedFile = s.pausedFile ?? null;
+    const files = yield select((state) => state?.project.files ?? []);
+    const activeFileId = yield select((state) => state?.project.activeFileId ?? null);
+    const activeName = files.find((f) => f.id === activeFileId)?.name ?? null;
+    if (activeName === pausedFile) return;
+    if (pausedFile === null) {
+        yield put(setActiveFile(null));
+        return;
+    }
+    const target = files.find((f) => f.name === pausedFile && !f.isBinary);
+    if (target) {
+        yield put(setActiveFile(target.id));
+    }
+}
+
 // noinspection JSUnusedGlobalSymbols
 export function* watchForBreakpointChanges() {
     yield takeEvery(
@@ -93,9 +120,10 @@ export function* watchForPanelRefresh() {
 }
 
 // The session's view of the source map follows the store: a compile loads
-// or clears it, and the first edit after a compile stales it (the reducer's
-// setCode case), which reaches the session as null so its line breakpoints
-// disarm. setCode fires per keystroke but only the first one changes
+// or clears it, and the first edit after a compile — in the main source or
+// an additional file — stales it (the reducer's setCode/setFileContent
+// case), which reaches the session as null so its line breakpoints disarm.
+// The edit actions fire per keystroke but only the first one changes
 // anything; the rest fall through the no-change guard in the handler.
 // noinspection JSUnusedGlobalSymbols
 export function* watchForSourceMapChanges() {
@@ -104,6 +132,7 @@ export function* watchForSourceMapChanges() {
             actionTypes.sourceMapLoaded,
             actionTypes.sourceMapCleared,
             projectActionTypes.setCode,
+            projectActionTypes.setFileContent,
         ],
         handleSourceMapChanges);
 }
@@ -174,7 +203,7 @@ function* syncBreakpointsToSession() {
     const breakpoints = yield select((state) => state?.debugger.breakpoints);
     const addrBreakpoints = yield select((state) => state?.debugger.addrBreakpoints);
     session.setBreakpoints({
-        lines: breakpoints.map((bp) => bp.line),
+        lines: breakpoints.map((bp) => ({file: bp.file, line: bp.line})),
         addrs: addrBreakpoints,
     });
 }
