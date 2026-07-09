@@ -35,7 +35,7 @@ describe("realSession source-line breakpoints", () => {
         session.setSourceMap(parseSld(SLD));
         cmds.length = 0;
         session.setBreakpoints({lines: [4, 15], addrs: []});
-        expect(cmds).toEqual(["set-breakpoint $8000", "set-breakpoint $8010"]);
+        expect(cmds).toEqual(["set-breakpoint $8000 any-bank", "set-breakpoint $8010 any-bank"]);
     });
 
     test("without a map, lines set nothing and addrs still arm", () => {
@@ -43,7 +43,7 @@ describe("realSession source-line breakpoints", () => {
         const session = createRealSession(handle);
         cmds.length = 0;
         session.setBreakpoints({lines: [4], addrs: [0x9000]});
-        expect(cmds).toEqual(["set-breakpoint $9000"]);
+        expect(cmds).toEqual(["set-breakpoint $9000 any-bank"]);
     });
 
     test("a line and an addr on the same address arm once, clear once", () => {
@@ -52,7 +52,7 @@ describe("realSession source-line breakpoints", () => {
         session.setSourceMap(parseSld(SLD));
         cmds.length = 0;
         session.setBreakpoints({lines: [4], addrs: [0x8000]});
-        expect(cmds).toEqual(["set-breakpoint $8000"]);
+        expect(cmds).toEqual(["set-breakpoint $8000 any-bank"]);
         cmds.length = 0;
         session.setBreakpoints({lines: [], addrs: [0x8000]});
         expect(cmds).toEqual([]);

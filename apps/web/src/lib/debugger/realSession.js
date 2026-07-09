@@ -150,7 +150,14 @@ export function createRealSession(handle) {
                 if (!wanted.has(a)) dbg.cmd(`clear-breakpoint ${hex(a)}`);
             }
             for (const a of wanted) {
-                if (!armedAddrs.includes(a)) dbg.cmd(`set-breakpoint ${hex(a)}`);
+                // any-bank: the engine otherwise defaults the bank filter
+                // to the ROM bank paged when the command runs — the OS
+                // menu's bank, not the one the program executes under, so
+                // on the 128K/Next the breakpoint would silently never
+                // match (48K worked only because both are bank 0). IDE
+                // breakpoints target the user's RAM program; bank-filtered
+                // ones remain available from the console.
+                if (!armedAddrs.includes(a)) dbg.cmd(`set-breakpoint ${hex(a)} any-bank`);
             }
             armedAddrs = [...wanted];
         },

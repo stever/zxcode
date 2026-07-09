@@ -44,6 +44,36 @@ describe("debugger reducer source map", () => {
     });
 });
 
+describe("sourceMapLoaded breakpoint normalization", () => {
+    test("re-anchors pre-compile breakpoints to instruction lines", () => {
+        // Dots set with no map: a label line (3), an instruction line (4),
+        // and a line past all code (16).
+        let state = reducer(undefined, toggleBreakpoint(3));
+        state = reducer(state, toggleBreakpoint(4));
+        state = reducer(state, toggleBreakpoint(16));
+        state = reducer(state, sourceMapLoaded(parseSld(SLD)));
+        // 3 snaps to 4 and merges with the existing 4; 16 has no code
+        // below and drops.
+        expect(state.breakpoints).toEqual([{file: null, line: 4}]);
+    });
+
+    test("a stale-on-arrival map leaves breakpoints untouched", () => {
+        let state = reducer(undefined, toggleBreakpoint(3));
+        state = reducer(state, sourceMapLoaded(parseSld(SLD), true));
+        expect(state.breakpoints).toEqual([{file: null, line: 3}]);
+    });
+
+    test("distinct dots stay distinct when they map to different lines", () => {
+        let state = reducer(undefined, toggleBreakpoint(3));   // -> 4
+        state = reducer(state, toggleBreakpoint(14));          // -> 15
+        state = reducer(state, sourceMapLoaded(parseSld(SLD)));
+        expect(state.breakpoints).toEqual([
+            {file: null, line: 4},
+            {file: null, line: 15},
+        ]);
+    });
+});
+
 describe("toggleBreakpoint snapping", () => {
     test("keeps a mapped line as-is", () => {
         const state = reducer(withMap(), toggleBreakpoint(4));

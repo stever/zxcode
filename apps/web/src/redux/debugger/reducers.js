@@ -174,11 +174,29 @@ export default function debuggerReducer(state = initialState, action) {
                 ...state,
                 panels: {...state.panels, [action.panel]: action.text},
             };
-        case actionTypes.sourceMapLoaded:
-            return {
-                ...state,
-                sourceMap: action.map ? {...action.map, stale: action.stale} : null,
-            };
+        case actionTypes.sourceMapLoaded: {
+            const sourceMap = action.map
+                ? {...action.map, stale: action.stale}
+                : null;
+            // Re-anchor existing breakpoints to the fresh map: dots set
+            // before any compile (no map to snap against at click time) or
+            // whose lines moved with an edit land on label/blank/data
+            // lines, where they would silently arm nothing. Snap each to
+            // the next line with code, merge collisions, and drop dots
+            // with no code below them.
+            let breakpoints = state.breakpoints;
+            if (sourceMap && !sourceMap.stale && breakpoints.length > 0) {
+                const lines = new Set();
+                for (const bp of breakpoints) {
+                    const snapped = snapLine(sourceMap, bp.line);
+                    if (snapped !== null) lines.add(snapped);
+                }
+                breakpoints = [...lines]
+                    .sort((a, b) => a - b)
+                    .map((line) => ({file: null, line}));
+            }
+            return {...state, sourceMap, breakpoints};
+        }
         case actionTypes.sourceMapCleared:
             return state.sourceMap ? {...state, sourceMap: null} : state;
         case projectActionTypes.setCode:

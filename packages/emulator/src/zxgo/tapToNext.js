@@ -113,8 +113,9 @@ export function makeNEX(bin, org = 0x8000, entry = org) {
 }
 
 // Parse a TAP into [{type, name, param1, param2, data}] entries by pairing
-// each 19-byte header block with its following data block. Headerless/turbo
-// blocks are skipped (they cannot be translated anyway).
+// each 19-byte header block with its following data block. Headerless data
+// blocks come through as type -1 (sjasmplus SAVETAP delivers the actual
+// program that way); turbo/custom blocks are skipped.
 export function parseTAP(bytes) {
   const entries = [];
   let i = 0, pendingHeader = null;
@@ -140,9 +141,40 @@ export function parseTAP(bytes) {
         data: block.subarray(1, block.length - 1), // strip flag + checksum
       });
       pendingHeader = null;
+    } else if (flag === 0xFF) {
+      entries.push({
+        type: -1, name: '', dataLen: block.length - 2, param1: 0, param2: 0,
+        data: block.subarray(1, block.length - 1),
+      });
     }
   }
   return entries;
+}
+
+// sjasmplus SAVETAP does not write a plain headered CODE block at the org.
+// Its tape is: BASIC bootstrap -> a small type-3 second-stage loader at
+// $5Exx -> the program as a HEADERLESS memory dump. The loader ends with a
+// parameter table the second stage reads for its own LD-BYTES call — three
+// little-endian words: entry, load address, length. Length matching a
+// headerless block is the fingerprint (a generic $5Exx code block would
+// have no reason to end with a following block's exact byte count).
+// Returns {data, org, entry} for makeNEX, or null when the tape is not
+// this shape.
+function findSjasmplusPayload(entries) {
+  for (const e of entries) {
+    if (e.type !== 3 || e.data.length < 8 || e.data.length > 128) continue;
+    if (e.param1 < 0x5B00 || e.param1 >= 0x6000) continue;
+    const t = e.data, n = t.length;
+    const w = (off) => t[off] | (t[off + 1] << 8);
+    const entry = w(n - 6), org = w(n - 4), length = w(n - 2);
+    if (org < 0x4000 || org + length > 0x10000 || length === 0) continue;
+    if (entry < org || entry >= org + length) continue;
+    const payload = entries.find(
+      (h) => h.type === -1 && h.data.length === length);
+    if (!payload) continue;
+    return {data: payload.data, org, entry};
+  }
+  return null;
 }
 
 // Wrap a tokenised BASIC program as a PLUS3DOS file (the on-disk format
@@ -197,6 +229,23 @@ export function tapToNext(bytes) {
   }
   const codeBlocks = entries.filter(e => e.type === 3);
   const basBlocks = entries.filter(e => e.type === 0);
+  // sjasmplus SAVETAP: the only headered code block is its second-stage
+  // TAPE loader — shipping that would leave the Next polling a tape that
+  // does not exist (the Next never tape-loads; that is the whole reason
+  // this translation exists). The program itself is the headerless dump;
+  // org and entry come from the loader's parameter table.
+  const sjasm = findSjasmplusPayload(entries);
+  if (sjasm) {
+    const basName = basBlocks.length ? basBlocks[0].name : '';
+    let base = (basName || '').toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '').slice(0, 8);
+    if (!base) base = 'program';
+    return {
+      kind: 'nex',
+      name: base + '.nex',
+      data: makeNEX(sjasm.data, sjasm.org, sjasm.entry),
+    };
+  }
   // Any code block makes this a loader-style tape: the machine code is the
   // program and the BASIC block (if any) is tape-loading scaffolding that
   // must NOT be run on the Next. Entry point comes from the loader's
