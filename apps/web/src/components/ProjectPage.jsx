@@ -45,9 +45,9 @@ export default function ProjectPage({ projectId }) {
   const windowHeight = useSelector((state) => state?.window.height);
   const debugActive = useSelector((state) => state?.debugger.active);
   // The dock (and the editor-column resize it forces) waits for the session
-  // attach: `active` flips in the click's task so the toolbar can slim on
-  // the very next paint, and that paint must stay cheap. `backend` is set a
-  // beat later, once the machine is paused and the first snapshot is in.
+  // attach: `active` flips in the click's task and that paint must stay
+  // cheap. `backend` is set a beat later, once the machine is paused and
+  // the first snapshot is in.
   const debugAttached = useSelector(
     (state) => state?.debugger.backend !== null
   );

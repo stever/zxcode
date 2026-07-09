@@ -168,7 +168,7 @@ function* handleOpenDebuggerActions() {
     try {
         // Stop the frame loop first, inside the click's task: the wasm core
         // runs on the main thread, and while the machine is running its
-        // frame work owns it — the toolbar's debug-mode render would queue
+        // frame work owns it — the debugger panel's render would queue
         // behind emulator frames for as long as they keep coming. The
         // session opens paused anyway; this just moves the pause ahead of
         // the rendering. Only when the debug bridge is live: that is the
@@ -184,9 +184,9 @@ function* handleOpenDebuggerActions() {
             handle.debug.attach();
             handle.pause();
         }
-        // The reducer already flipped `active` on openDebugger, slimming the
-        // toolbar. Let that frame paint before the attach below blocks the
-        // main thread, or the controls linger until the session is up.
+        // The reducer already flipped `active` on openDebugger. Let that
+        // frame paint before the attach below blocks the main thread, so
+        // the panel appears without waiting for the session to come up.
         yield call(afterNextPaint);
         const active = yield select((state) => state?.debugger.active);
         if (!active) {

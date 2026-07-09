@@ -48,9 +48,10 @@ export default function debuggerReducer(state = initialState, action) {
     switch (action.type) {
         case actionTypes.openDebugger:
             // active flips here, synchronously with the click, so the
-            // toolbar slims in the same frame. The saga attaches the session
-            // (heavy: pauses the machine and snapshots the address space)
-            // afterwards and reports the backend via debuggerOpened.
+            // Debug button shows pressed in the same frame. The saga
+            // attaches the session (heavy: pauses the machine and snapshots
+            // the address space) afterwards and reports the backend via
+            // debuggerOpened.
             return {
                 ...state,
                 active: true,

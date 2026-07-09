@@ -609,25 +609,6 @@
     border: 0 none;
 }
 
-/* While a debug session is active the toolbar shows only Play and the Debug
-   toggle. The rest stay mounted but invisible: visibility preserves the
-   row's height (unmounting shifted Play by a pixel when the tallest control
-   left) and disables their pointer events.
-
-   The rule reaches every descendant AND their ::before/::after, with
-   transitions killed: the PrimeReact theme puts `transition-duration` on
-   button labels and switch knobs without a transition-property, which
-   defaults to `all` — and a transitioned `visibility` holds 'visible' until
-   the transition ENDS, so labels and toggle circles lingered ~200ms after
-   the outlines vanished, hiding the controls in ragged stages. */
-.editor-toolbar.debug-mode .editor-toolbar-group > :not(.zx-run):not(.zx-debug-button),
-.editor-toolbar.debug-mode .editor-toolbar-group > :not(.zx-run):not(.zx-debug-button) *,
-.editor-toolbar.debug-mode .editor-toolbar-group > :not(.zx-run):not(.zx-debug-button) *::before,
-.editor-toolbar.debug-mode .editor-toolbar-group > :not(.zx-run):not(.zx-debug-button) *::after {
-    visibility: hidden;
-    transition: none;
-}
-
 /* Pressed state: while the panel is open the same button shows filled and
    closes the session on the next press. */
 .p-button.p-button-warning.zx-debug-button.active {

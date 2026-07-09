@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -30,7 +30,6 @@ export function ProjectToolbar() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const renameInputReference = useRef(null);
-  const toolbarReference = useRef(null);
   const toast = useRef(null);
 
   const [renameDialogVisible, setRenameDialogVisible] = useState(false);
@@ -59,15 +58,6 @@ export function ProjectToolbar() {
 
   // Check if current user owns this project
   const isOwner = userId && ownerId && userId === ownerId;
-
-  // Keep the DOM class in step with the store for every path that doesn't go
-  // through the Debug button (attach failure closing the panel). The
-  // button's own handler sets the class directly, ahead of React, so the
-  // controls disappear on the first paint after the click no matter how the
-  // debug-open render is scheduled.
-  useLayoutEffect(() => {
-    toolbarReference.current?.classList.toggle("debug-mode", Boolean(debugActive));
-  }, [debugActive]);
 
   const deleteConfirm = (event) => {
     confirmPopup({
@@ -98,19 +88,10 @@ export function ProjectToolbar() {
     setCopyProjectName("");
   };
 
-  // A debug session slims the toolbar down to Play (rerun the program; the
-  // session follows, reattaching to the reloaded machine and resuming so
-  // the program runs under the debugger) and the Debug toggle itself. The
-  // other controls are hidden with visibility (see debugger.css), NOT
-  // unmounted — removing them changes the row's height by a pixel and
-  // nudges Play when the tallest control leaves.
   return (
     <>
       <Toast ref={toast} />
-      <div
-        ref={toolbarReference}
-        className={clsx("editor-toolbar mt-2", debugActive && "debug-mode")}
-      >
+      <div className="editor-toolbar mt-2">
         <div className="editor-toolbar-group">
           <Button
             label={t("actions.play")}
@@ -132,15 +113,6 @@ export function ProjectToolbar() {
             )}
             aria-pressed={debugActive ? "true" : "false"}
             onClick={() => {
-              // Flip the class on the DOM node directly, in the click's own
-              // task: the store dispatch and React's render both run at the
-              // scheduler's discretion, and with the emulator loop on the
-              // main thread that can be several frames away. This way the
-              // controls are gone at the very next paint.
-              toolbarReference.current?.classList.toggle(
-                "debug-mode",
-                !debugActive
-              );
               dispatch(debugActive ? closeDebugger() : openDebugger());
             }}
           />
