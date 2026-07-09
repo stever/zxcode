@@ -43,6 +43,22 @@
     font-size: 13px;
 }
 
+/* The theme tints outlined buttons on :focus, and a clicked button keeps
+   focus — so Step/Step Over/Step Frame (which stay enabled after acting,
+   unlike Pause, which disables itself and drops focus) looked stuck "on"
+   after every click. Clear the tint for pointer focus only; keyboard focus
+   (:focus-visible) keeps it so tab-and-Enter stepping shows its position.
+   :not(:active) keeps the theme's press flash, and the :hover rule
+   restores its hover tint — both lower-specificity rules the override
+   would otherwise beat while the pointer still rests on the button. */
+.debug-transport .p-button.p-button-outlined:enabled:focus:not(:focus-visible):not(:active) {
+    background: transparent;
+}
+
+.debug-transport .p-button.p-button-outlined:enabled:focus:not(:focus-visible):not(:active):hover {
+    background: rgba(43, 212, 212, 0.04);
+}
+
 .debug-transport-status {
     margin-left: auto;
     display: flex;
