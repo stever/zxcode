@@ -206,7 +206,10 @@ function* handleSourceMapChanges() {
 // commands concatenate, blank-line separated.
 const PANEL_COMMANDS = {
     backtrace: ["backtrace 16"],
-    watches: ["list-watches", "list-tp"],
+    // Register watches, tracepoints, and port watches (bare `watch-port`
+    // is its list form). The mem/read watches are single-slot with no
+    // list command — console-only.
+    watches: ["list-watches", "list-tp", "watch-port"],
     nextState: ["nr-panel"],
     history: ["history", "prev 24"],
 };

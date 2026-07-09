@@ -157,8 +157,18 @@
     min-width: 160px;
 }
 
+/* A column: the tab bar keeps its height and the selected tab's body fills
+   whatever height the dock row stretches the pane to (the row's tallest
+   sibling decides it — without this the fixed-height bodies left a dead gap
+   under themselves). */
 .debug-pane-panels {
     flex-grow: 2;
+    display: flex;
+    flex-direction: column;
+}
+
+.debug-pane-panels .debug-tabbar {
+    flex: none;
 }
 
 /* Every pane header — including the tab bar that heads the panel group —
@@ -471,8 +481,13 @@
     margin-left: 4px;
 }
 
+/* 224px is the flex BASIS, not a cap: the body grows into whatever height
+   the dock row already has (set by its tallest sibling pane), while
+   min-height 0 stops tall tab content (Help) from inflating the pane — and
+   with it the whole row — beyond that. */
 .debug-tab-body {
-    height: 224px;
+    flex: 1 1 224px;
+    min-height: 0;
     overflow: auto;
     padding: 8px 12px;
 }
@@ -482,7 +497,8 @@
 .debug-console {
     display: flex;
     flex-direction: column;
-    height: 224px;
+    flex: 1 1 224px;
+    min-height: 0;
 }
 
 .debug-console-scroll {
@@ -573,6 +589,41 @@
 .debug-placeholder {
     color: var(--dbg-dim);
     padding: 4px 0;
+}
+
+/* Console command reference (Help tab). */
+.debug-help section {
+    margin-top: 8px;
+}
+
+.debug-help h4 {
+    margin: 0 0 2px;
+    color: #ffb928;
+    font-size: inherit;
+}
+
+.debug-help-note {
+    color: var(--dbg-dim);
+    margin: 2px 0 4px;
+}
+
+.debug-help-row {
+    display: flex;
+    gap: 10px;
+    padding: 1px 0;
+}
+
+.debug-help-row code {
+    flex: none;
+    width: 240px;
+    font-family: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.debug-help-row span {
+    color: var(--dbg-dim);
 }
 
 /* Command-backed panels show the engine's console text verbatim. */

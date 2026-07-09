@@ -10,6 +10,7 @@ import {
   sendConsoleCommand,
 } from "../../redux/debugger/actions";
 import { DebugConsole } from "./DebugConsole";
+import { DebugHelp } from "./DebugHelp";
 import { hex16 } from "./format";
 import { useTranslation } from "@zxplay/i18n";
 
@@ -76,6 +77,7 @@ export function DebugPanels() {
     { key: "nextState", label: t("debug.nextState") },
     { key: "backtrace", label: t("debug.backtrace") },
     { key: "history", label: t("debug.history") },
+    { key: "help", label: t("debug.help") },
   ];
 
   return (
@@ -167,6 +169,7 @@ export function DebugPanels() {
           )}
         </div>
       )}
+      {selectedTab === "help" && <DebugHelp />}
       {["watches", "nextState", "backtrace", "history"].includes(selectedTab) && (
         <div className="debug-tab-body">
           {selectedTab === "history" &&
