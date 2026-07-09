@@ -29,6 +29,12 @@
 
 	redir /api /api/
 	handle /api/* {
+		# Bound GraphQL payloads: the largest legitimate request is a project
+		# copy carrying all 32 files at 256KB each (~8MB of JSON). Scoped to
+		# /api so it never constrains other routes.
+		request_body {
+			max_size 16MB
+		}
 		uri strip_prefix /api
 		reverse_proxy localhost:4000
 	}

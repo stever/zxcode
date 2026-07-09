@@ -219,3 +219,14 @@ def test_invalid_base64_rejected():
     ])
     assert response.status_code == 400
     assert 'base64' in response.json()['message']
+
+
+def test_total_files_size_capped():
+    # Each file is under the per-file cap, but together they exceed the
+    # per-request total (2MB).
+    big = 'x' * (250 * 1024)
+    response = compile_request(TAP_SOURCE, files=[
+        {'name': f'data{i}.txt', 'content': big} for i in range(9)
+    ])
+    assert response.status_code == 400
+    assert response.json()['message'] == 'Invalid compile request.'

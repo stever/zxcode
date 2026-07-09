@@ -28,6 +28,28 @@ CREATE TRIGGER set_public_project_file_updated_at BEFORE UPDATE ON public.projec
 COMMENT ON TRIGGER set_public_project_file_updated_at ON public.project_file
     IS 'trigger to set value of column "updated_at" to current timestamp on row update';
 
+-- Cap files per project at the database layer. The UI and the compile
+-- services enforce the same limit, but only this stops a client talking to
+-- GraphQL directly from bulk-inserting rows (storage abuse). The parent row
+-- is locked first so concurrent inserts serialise instead of racing past
+-- the count.
+CREATE FUNCTION public.enforce_project_file_limit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    PERFORM 1 FROM public.project WHERE project_id = NEW.project_id FOR UPDATE;
+    IF (SELECT COUNT(*) FROM public.project_file WHERE project_id = NEW.project_id) >= 32 THEN
+        RAISE EXCEPTION 'A project can hold at most 32 additional files';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER enforce_project_file_limit BEFORE INSERT ON public.project_file
+    FOR EACH ROW EXECUTE PROCEDURE public.enforce_project_file_limit();
+COMMENT ON TRIGGER enforce_project_file_limit ON public.project_file
+    IS 'trigger to cap additional files per project at 32';
+
 -- Screenshot/GIF cache keys derive from project.updated_at, so any file
 -- change must touch the parent project or previews would serve stale
 -- renders forever (the project row's own BEFORE UPDATE trigger stamps the

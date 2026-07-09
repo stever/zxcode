@@ -282,7 +282,7 @@
     "history": "History",
     "tabsScrollLeft": "Scroll tabs left",
     "tabsScrollRight": "Scroll tabs right",
-    "consolePlaceholder": "type a command (try 'help', or view the Help tab)",
+    "consolePlaceholder": "type a command (try 'help', or view Help tab)",
     "help": "Help",
     "helpIntro": "The console drives the engine's full debugger. Addresses and values take $ or 0x hex. The commands below are the ones that matter day to day; type help for the complete list.",
     "helpOutro": "State-reading commands pause a running machine and leave it paused. Tracepoint hits and log-only port watches print to the browser's DevTools console.",

@@ -46,6 +46,9 @@ class SessionVars(BaseModel):
 # the main source and its outputs so a staged file can't shadow them.
 MAX_PROJECT_FILES = 32
 MAX_FILE_CONTENT_SIZE = 256 * 1024  # matches the DB cap; base64 for binaries
+# Bound the whole request, not just each file: 32 x 256KB would otherwise
+# let one compile call carry ~8MB into the tmpfs.
+MAX_TOTAL_FILES_SIZE = 2 * 1024 * 1024
 PROJECT_FILE_NAME_RE = re.compile(r'[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}')
 
 
@@ -111,6 +114,9 @@ class Input(BaseModel):
     def validate_file_count(cls, v):
         if v and len(v) > MAX_PROJECT_FILES:
             raise ValueError(f'Too many files. Maximum is {MAX_PROJECT_FILES}')
+        if v and sum(len(f.content) for f in v) > MAX_TOTAL_FILES_SIZE:
+            raise ValueError(
+                f'Files too large. Maximum total is {MAX_TOTAL_FILES_SIZE} bytes')
         return v
 
     @field_validator('basic')

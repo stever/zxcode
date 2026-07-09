@@ -317,6 +317,15 @@ code {
     color: #ffffff !important;
 }
 
+/* The theme leaves the tab-strip scroll arrows transparent and they float
+   over the tab headers, so tab text showed through them. Paint them with
+   the page background so they occlude what they cover. */
+/* !important: the theme sets the same-specificity transparent rule and its
+   stylesheet (bundled) loads after this static one. */
+.p-tabview .p-tabview-nav-btn.p-link {
+    background: #444 !important;
+}
+
 /* Inline actions on the selected file tab header (rename/delete). */
 .file-tab-action {
     margin-left: 8px;

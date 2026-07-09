@@ -225,6 +225,9 @@ export function ProjectFileTabView() {
       <Toast ref={toast} />
       <ConfirmPopup />
       <TabView
+        // Arrow buttons appear at the strip's edges when the tabs overflow
+        // (matching the debugger panel's tab bar behaviour).
+        scrollable
         activeIndex={activeIndex}
         onTabChange={(e) => {
           // Ignore the "+" pseudo-tab (guards keyboard navigation).
