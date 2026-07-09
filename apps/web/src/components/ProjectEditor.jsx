@@ -22,6 +22,10 @@ export function ProjectEditor() {
   const breakpoints = useSelector((state) => state?.debugger.breakpoints);
   const debugActive = useSelector((state) => state?.debugger.active);
   const pausedLine = useSelector((state) => state?.debugger.pausedLine);
+  const backend = useSelector((state) => state?.debugger.backend);
+  const sourceMapLive = useSelector(
+    (state) => Boolean(state?.debugger.sourceMap && !state.debugger.sourceMap.stale)
+  );
   const pausedLineRef = useRef(null);
 
   let mode;
@@ -96,6 +100,9 @@ export function ProjectEditor() {
   }, [lineNumbers]);
 
   // Render breakpoint dots into the gutter (breakpoint lines are 1-based).
+  // During a real-backend session they dim to hollow when no live source map
+  // backs them (none compiled, or the source changed since the compile).
+  const bpsInert = debugActive && backend === "zxgo" && !sourceMapLive;
   useEffect(() => {
     if (!cmRef.current) return;
     const cm = cmRef.current.getCodeMirror();
@@ -103,12 +110,12 @@ export function ProjectEditor() {
     for (const bp of breakpoints) {
       if (bp.line <= cm.lineCount()) {
         const marker = document.createElement("div");
-        marker.className = "zx-bp-marker";
+        marker.className = bpsInert ? "zx-bp-marker inert" : "zx-bp-marker";
         marker.textContent = "●";
         cm.setGutterMarker(bp.line - 1, "zx-bp-gutter", marker);
       }
     }
-  }, [breakpoints]);
+  }, [breakpoints, bpsInert]);
 
   // Highlight the source line the debugger is paused on and keep it in view.
   useEffect(() => {

@@ -69,10 +69,15 @@ In-place edits:
   desktop headless loop normally provides; `step-over` is rerouted to a
   non-blocking variant because on wasm the CPU only advances when JS calls
   zxFrame (see the file comment for the threading model).
-- `cmd/zx_go/debugger.go` — one in-place edit for the above: the constructor
-  is split into `newDebuggerCore` (hooks, no listener; used by the bridge) and
-  `newRemoteDebugger` (adds the TCP listener; desktop unchanged). Re-apply the
-  split if an upstream pull rewrites the constructor.
+- `cmd/zx_go/debugger.go` — two in-place edits for the above: (1) the
+  constructor is split into `newDebuggerCore` (hooks, no listener; used by
+  the bridge) and `newRemoteDebugger` (adds the TCP listener; desktop
+  unchanged); (2) the instruction-history setup is extracted from the
+  constructor into `armHistory(size, wide)` and exposed as runtime commands
+  `history-on [SIZE] [wide]` / `history-off` (in `commandsNeedingPause`),
+  because the bridge constructs with history off — the browser UI arms the
+  ring on demand from its History panel. Re-apply both if an upstream pull
+  rewrites the constructor or the command dispatch.
 - `cmd/zx_go/wasm_js.go` — `zxFrame` skips execution while the debugger holds
   the machine paused (render-only, so the page can repaint after pokes) and
   reports `{debug, paused, pc}` so the JS frame loop can observe breakpoint

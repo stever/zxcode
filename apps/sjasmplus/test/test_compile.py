@@ -80,6 +80,18 @@ def test_savetap():
     assert len(tap) > 0
 
 
+def test_sld_returned_with_line_records():
+    response = compile_request(TAP_SOURCE)
+    assert response.status_code == 200
+    sld = response.json()['sld']
+    assert sld.startswith('|SLD.data.version|')
+    # The ld a,2 on source line 4 assembles at ORG $8000 = 32768.
+    assert 'program.asm|4||0|' in sld
+    assert '|32768|T|' in sld
+    # No server paths leak: every record names the fixed source file.
+    assert '/tmp' not in sld
+
+
 def test_savenex():
     response = compile_request(NEX_SOURCE)
     assert response.status_code == 200

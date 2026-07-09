@@ -265,7 +265,9 @@
     "clearAll": "Clear all",
     "line": "line {{line}}",
     "toggleAddrBp": "Toggle breakpoint at this address",
-    "lineBpsPending": "Source-line breakpoints arm when the compilers emit symbol maps; use address breakpoints from the disassembly pane meanwhile.",
-    "placeholderPanel": "This panel arrives in a later pass — the console on the left already covers it (try help)."
+    "lineBpsPending": "Source-line breakpoints need a source map — Play a sjasmplus project to arm them; address breakpoints from the disassembly pane always work.",
+    "lineBpsStale": "The source changed since the last compile, so line breakpoints are disarmed. Play to rebuild and re-arm them.",
+    "panelNoData": "No data yet — the panel refreshes when the machine pauses (breakpoint, step, or Pause).",
+    "enableHistory": "Enable instruction history"
   }
 }

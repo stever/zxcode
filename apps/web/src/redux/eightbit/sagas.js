@@ -23,6 +23,8 @@ import {
 } from "./actions";
 import {loadTap} from "../jsspeccy/actions";
 import {setErrorItems, setSelectedTabIndex} from "../project/actions";
+import {sourceMapLoaded, sourceMapCleared} from "../debugger/actions";
+import {parseSld} from "../../lib/debugger/sld";
 import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
@@ -161,6 +163,11 @@ function* handleGetProjectTapActions(_) {
     const machine = yield select((state) => state.app.machine);
     const followTapAction = yield select((state) => state.eightbit.followTapAction);
     try {
+        // Any other toolchain replacing the program invalidates the
+        // sjasmplus source map; the sjasmplus branch reloads its own.
+        if (lang !== 'sjasmplus') {
+            yield put(sourceMapCleared());
+        }
         let tap;
         switch (lang) {
             case 'asm':
@@ -258,10 +265,22 @@ function* handleGetProjectTapActions(_) {
                 break;
             case 'sjasmplus':
                 // sjasmplus — returns a TAP, or a NEX image when the source
-                // uses SAVENEX (the emulator sniffs the signature at load).
+                // uses SAVENEX (the emulator sniffs the signature at load),
+                // plus the SLD source map the debugger arms line breakpoints
+                // with. A failed compile keeps the previous map: the machine
+                // still runs the previous build.
                 try {
-                    tap = yield call(getSjasmplusTap, code, userId);
-                    yield put(followTapAction(tap));
+                    const result = yield call(getSjasmplusTap, code, userId);
+                    const map = parseSld(result.sld);
+                    if (map) {
+                        // Stale on arrival when the editor moved on while
+                        // the compile was in flight.
+                        const codeNow = yield select((state) => state.project.code);
+                        yield put(sourceMapLoaded(map, codeNow !== code));
+                    } else {
+                        yield put(sourceMapCleared());
+                    }
+                    yield put(followTapAction(result.tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
                     console.error('[sjasmplus] dispatching setErrorItems', errorItems);

@@ -7,14 +7,16 @@ import {
   toggleBreakpoint,
   toggleAddrBreakpoint,
   clearBreakpoints,
+  sendConsoleCommand,
 } from "../../redux/debugger/actions";
 import { DebugConsole } from "./DebugConsole";
 import { hex16 } from "./format";
 import { useTranslation } from "@zxplay/i18n";
 
-// The secondary panel group. Console and Breakpoints are live; the rest are
-// stubs that fill in as the emulator bridge exposes their data (they map to
-// zx_go's Next State / Backtrace / History views).
+// The secondary panel group. Console and Breakpoints are structured; the
+// backtrace / watches / Next state / history tabs mirror the engine's own
+// console output for the matching commands, refreshed on every pause (see
+// PANEL_COMMANDS in redux/debugger/sagas.js).
 export function DebugPanels() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
@@ -25,6 +27,14 @@ export function DebugPanels() {
     (state) => state?.debugger.addrBreakpoints
   );
   const backend = useSelector((state) => state?.debugger.backend);
+  const sourceMap = useSelector((state) => state?.debugger.sourceMap);
+  const panels = useSelector((state) => state?.debugger.panels);
+
+  // Line breakpoints are live on the real backend only while a fresh source
+  // map describes the buffer; a stale one (edited since compile) disarms
+  // them until the next Play.
+  const mapLive = Boolean(sourceMap && !sourceMap.stale);
+  const lineBpsLive = backend !== "zxgo" || mapLive;
 
   const bpCount = breakpoints.length + addrBreakpoints.length;
 
@@ -122,25 +132,28 @@ export function DebugPanels() {
               />
             </div>
           ))}
-          {breakpoints.map((bp) => (
-            <div className="debug-bp-row" key={`${bp.file}:${bp.line}`}>
-              <span
-                className={clsx(
-                  "debug-bp-dot",
-                  backend === "zxgo" && "inert"
+          {breakpoints.map((bp) => {
+            const addr = mapLive ? sourceMap.lineToAddr.get(bp.line) : undefined;
+            return (
+              <div className="debug-bp-row" key={`${bp.file}:${bp.line}`}>
+                <span
+                  className={clsx("debug-bp-dot", !lineBpsLive && "inert")}
+                />
+                <span>{t("debug.line", { line: bp.line })}</span>
+                {addr !== undefined && (
+                  <span className="debug-bp-addr">${hex16(addr)}</span>
                 )}
-              />
-              <span>{t("debug.line", { line: bp.line })}</span>
-              <Button
-                icon="pi pi-times"
-                className="p-button-sm p-button-text p-button-danger"
-                onClick={() => dispatch(toggleBreakpoint(bp.line))}
-              />
-            </div>
-          ))}
-          {backend === "zxgo" && breakpoints.length > 0 && (
+                <Button
+                  icon="pi pi-times"
+                  className="p-button-sm p-button-text p-button-danger"
+                  onClick={() => dispatch(toggleBreakpoint(bp.line))}
+                />
+              </div>
+            );
+          })}
+          {!lineBpsLive && breakpoints.length > 0 && (
             <div className="debug-placeholder">
-              {t("debug.lineBpsPending")}
+              {t(sourceMap ? "debug.lineBpsStale" : "debug.lineBpsPending")}
             </div>
           )}
           {bpCount > 0 && (
@@ -156,7 +169,25 @@ export function DebugPanels() {
       )}
       {["watches", "nextState", "backtrace", "history"].includes(selectedTab) && (
         <div className="debug-tab-body">
-          <div className="debug-placeholder">{t("debug.placeholderPanel")}</div>
+          {selectedTab === "history" &&
+            panels[selectedTab]?.startsWith("ERR history disabled") && (
+              <div className="debug-bp-row">
+                <Button
+                  label={t("debug.enableHistory")}
+                  className="p-button-sm p-button-outlined"
+                  onClick={() =>
+                    dispatch(sendConsoleCommand("history-on 4096"))
+                  }
+                />
+              </div>
+            )}
+          {panels[selectedTab] ? (
+            <pre className="debug-panel-pre">
+              {panels[selectedTab].replace(/\r\n/g, "\n")}
+            </pre>
+          ) : (
+            <div className="debug-placeholder">{t("debug.panelNoData")}</div>
+          )}
         </div>
       )}
     </div>

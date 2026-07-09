@@ -371,6 +371,58 @@ func newRemoteDebugger(emu *emulator, port int, pauseAtStart bool, historySize i
 	return d
 }
 
+// armHistory attaches the instruction-history ring and its recording hook.
+// Called at construction when --debugger-history=N is set, and at runtime by
+// the `history-on` command (the browser bridge constructs with history off —
+// the per-M1 hook is not free — and arms it on demand). AddPreFetchHook
+// replaces by name, so re-arming swaps the recorder rather than stacking.
+func (d *remoteDebugger) armHistory(historySize int, historyWide bool) {
+	emu := d.emu
+	// Share the ring with the visual debugger by stashing it on
+	// the emulator. If one already exists (visual opened first),
+	// reuse it instead of allocating a parallel buffer.
+	if emu.debugHistory == nil {
+		if historyWide {
+			emu.debugHistory = debugger.NewHistoryWide(historySize)
+		} else {
+			emu.debugHistory = debugger.NewHistory(historySize)
+		}
+	}
+	d.history = emu.debugHistory
+	wide := d.history.Wide()
+	// Pre-fetch hook records every M1 fetch into the ring. Hot
+	// path: ~1M fetches/sec at 28 MHz Z80N, so the entry
+	// construction + ring write under a sync.Mutex is the budget
+	// we have to fit. The History impl was designed for this —
+	// no allocations per push, no map lookups, single mutex.
+	emu.cpu.AddPreFetchHook("debugger-history", func(pc uint16) {
+		c := emu.cpu
+		e := debugger.HistoryEntry{
+			PC:         pc,
+			SP:         c.SP,
+			A:          c.A,
+			F:          c.F,
+			IFFIM:      debugger.PackIFFIM(c.IFF1, c.IFF2, c.Halted, int(c.IM)),
+			Insns:      c.InstructionCount(),
+			ROMBnk:     byte(d.currentROMBank()),
+			Source:     debugger.PCSource(c.BranchSource),
+			SourceFrom: c.BranchFrom,
+		}
+		// Consume the branch latch so the NEXT M1 sees
+		// sequential if no branch fires.
+		c.BranchSource = 0
+		c.BranchFrom = 0
+		if wide {
+			e.BC = c.BC()
+			e.DE = c.DE()
+			e.HL = c.HL()
+			e.IX = c.IX
+			e.IY = c.IY
+		}
+		d.history.Push(e)
+	})
+}
+
 // newDebuggerCore builds the debugger and wires the CPU hooks without any
 // network listener. Shared by the telnet server above and the wasm bridge
 // (wasm_debug_js.go), which dispatches handleCommand directly and stands in
@@ -386,49 +438,7 @@ func newDebuggerCore(emu *emulator, pauseAtStart bool, historySize int, historyW
 		bps:          emu.sharedBreakpoints(),
 	}
 	if historySize > 0 {
-		// Share the ring with the visual debugger by stashing it on
-		// the emulator. If one already exists (visual opened first),
-		// reuse it instead of allocating a parallel buffer.
-		if emu.debugHistory == nil {
-			if historyWide {
-				emu.debugHistory = debugger.NewHistoryWide(historySize)
-			} else {
-				emu.debugHistory = debugger.NewHistory(historySize)
-			}
-		}
-		d.history = emu.debugHistory
-		wide := d.history.Wide()
-		// Pre-fetch hook records every M1 fetch into the ring. Hot
-		// path: ~1M fetches/sec at 28 MHz Z80N, so the entry
-		// construction + ring write under a sync.Mutex is the budget
-		// we have to fit. The History impl was designed for this —
-		// no allocations per push, no map lookups, single mutex.
-		emu.cpu.AddPreFetchHook("debugger-history", func(pc uint16) {
-			c := emu.cpu
-			e := debugger.HistoryEntry{
-				PC:         pc,
-				SP:         c.SP,
-				A:          c.A,
-				F:          c.F,
-				IFFIM:      debugger.PackIFFIM(c.IFF1, c.IFF2, c.Halted, int(c.IM)),
-				Insns:      c.InstructionCount(),
-				ROMBnk:     byte(d.currentROMBank()),
-				Source:     debugger.PCSource(c.BranchSource),
-				SourceFrom: c.BranchFrom,
-			}
-			// Consume the branch latch so the NEXT M1 sees
-			// sequential if no branch fires.
-			c.BranchSource = 0
-			c.BranchFrom = 0
-			if wide {
-				e.BC = c.BC()
-				e.DE = c.DE()
-				e.HL = c.HL()
-				e.IX = c.IX
-				e.IY = c.IY
-			}
-			d.history.Push(e)
-		})
+		d.armHistory(historySize, historyWide)
 	}
 	if pauseAtStart {
 		d.paused.Store(true)
@@ -837,6 +847,10 @@ var commandsNeedingPause = map[string]bool{
 	"bt":                   true,
 	"history":              true,
 	"hist":                 true,
+	// Arming/disarming mutates the CPU's pre-fetch hook list, which the
+	// running CPU iterates without a lock; the implicit pause serializes.
+	"history-on":           true,
+	"history-off":          true,
 	"prev":                 true,
 	"p":                    true,
 	"get-memory":           true,
@@ -934,7 +948,7 @@ func (d *remoteDebugger) handleCommand(line string) string {
 	}
 	switch cmd {
 	case "help", "?":
-		return "OK pause set-pause-timeout break-on-sd continue step step-over get-registers get-stack backtrace history prev hot callgraph retgraph rstgraph get-memory hexdump read-memory write-memory set-breakpoint clear-breakpoint list-breakpoints bp-first-entry disassemble disasm-bank get-mmu get-divmmc nr-panel copper-disasm layer-state sprite-list palette-dump nextreg-read nextreg-write nr-snap nr-diff bank-peek bank-poke pool-scan load-bin list-banks watch-reg list-watches clear-watch watch-mem clear-watch-mem watch-read clear-watch-read watch-zero watch-port tp list-tp clear-tp nr-trace trace-divmmc-ram trace-writes trace-nextreg-deltas irq-stats catch snapshot-on-bp compare-foreign crash-detect tt-on tt-off tt-status tt-snap tt-rewind tt-find-pc tt-clear quit"
+		return "OK pause set-pause-timeout break-on-sd continue step step-over get-registers get-stack backtrace history history-on history-off prev hot callgraph retgraph rstgraph get-memory hexdump read-memory write-memory set-breakpoint clear-breakpoint list-breakpoints bp-first-entry disassemble disasm-bank get-mmu get-divmmc nr-panel copper-disasm layer-state sprite-list palette-dump nextreg-read nextreg-write nr-snap nr-diff bank-peek bank-poke pool-scan load-bin list-banks watch-reg list-watches clear-watch watch-mem clear-watch-mem watch-read clear-watch-read watch-zero watch-port tp list-tp clear-tp nr-trace trace-divmmc-ram trace-writes trace-nextreg-deltas irq-stats catch snapshot-on-bp compare-foreign crash-detect tt-on tt-off tt-status tt-snap tt-rewind tt-find-pc tt-clear quit"
 	case "set-pause-timeout":
 		// Query form (no arg) reports the current value; otherwise set
 		// the pause-ack wait to N seconds. Used to await a `continue`
@@ -995,8 +1009,17 @@ func (d *remoteDebugger) handleCommand(line string) string {
 		// over the current instruction so the BP doesn't immediately
 		// re-fire on the same PC. This is the standard "skip the BP
 		// we just hit" pattern; without it `continue` is a no-op.
+		// The step must NOT accept a pending IRQ first (plain
+		// StepInstruction, not StepInstructionWithIRQ): IRQ delivery
+		// pushes the un-executed BP address as the return, so the
+		// handler RETs straight back onto the BP and continue
+		// bounces forever — with a 50 Hz INT there is nearly always
+		// one pending. The IRQ is accepted at the next M1 inside
+		// normal frame execution instead. (A BP on HALT still
+		// re-fires — the plain step cannot leave a HALT — but a BP
+		// on HALT is pathological; step past it manually.)
 		if _, ok := d.bpset().Lookup(d.emu.cpu.PC); ok {
-			d.emu.cpu.StepInstructionWithIRQ()
+			d.emu.cpu.StepInstruction()
 		}
 		d.paused.Store(false)
 		d.stepping.Store(false)
@@ -1047,6 +1070,10 @@ func (d *remoteDebugger) handleCommand(line string) string {
 		return d.cmdBacktrace(args)
 	case "history", "hist":
 		return d.cmdHistory(args)
+	case "history-on":
+		return d.cmdHistoryOn(args)
+	case "history-off":
+		return d.cmdHistoryOff()
 	case "prev", "p":
 		return d.cmdPrev(args)
 	case "get-memory", "mem":
@@ -1543,10 +1570,57 @@ func (d *remoteDebugger) cmdListBreakpoints() string {
 // the window the user wants to inspect.
 func (d *remoteDebugger) cmdHistory(_ []string) string {
 	if d.history == nil {
-		return "ERR history disabled (relaunch with --debugger-history=N)"
+		return "ERR history disabled (arm with `history-on [SIZE] [wide]`, or relaunch with --debugger-history=N)"
 	}
 	return fmt.Sprintf("OK entries=%d capacity=%d",
 		d.history.Len(), d.history.Capacity())
+}
+
+// cmdHistoryOn arms the instruction-history ring at runtime:
+//
+//	history-on [SIZE] [wide]
+//
+// SIZE defaults to 4096 entries; `wide` records BC/DE/HL/IX/IY per entry as
+// well. Re-arming with a different geometry replaces the ring (entries are
+// lost); with the same geometry it is a no-op that reports the ring state.
+func (d *remoteDebugger) cmdHistoryOn(args []string) string {
+	size := 4096
+	wide := false
+	for _, a := range args {
+		if strings.EqualFold(a, "wide") {
+			wide = true
+			continue
+		}
+		v, err := strconv.Atoi(a)
+		if err != nil || v <= 0 {
+			return "ERR usage: history-on [SIZE>0] [wide]"
+		}
+		size = v
+	}
+	const maxHistorySize = 1 << 20
+	if size > maxHistorySize {
+		return fmt.Sprintf("ERR history-on: SIZE too large (max %d)", maxHistorySize)
+	}
+	if d.history == nil || d.history.Capacity() != size || d.history.Wide() != wide {
+		// Geometry change: drop the shared ring so armHistory
+		// allocates a fresh one at the requested size/width.
+		d.emu.debugHistory = nil
+		d.history = nil
+		d.armHistory(size, wide)
+	}
+	return fmt.Sprintf("OK history armed entries=%d capacity=%d wide=%v",
+		d.history.Len(), d.history.Capacity(), d.history.Wide())
+}
+
+// cmdHistoryOff detaches the recording hook and releases the ring, dropping
+// the per-M1 recording cost back to zero.
+func (d *remoteDebugger) cmdHistoryOff() string {
+	if d.history != nil {
+		d.emu.cpu.RemovePreFetchHook("debugger-history")
+		d.history = nil
+		d.emu.debugHistory = nil
+	}
+	return "OK history off"
 }
 
 // cmdTp adds a tracepoint at PC. The CPU does NOT halt at PC;
@@ -1721,7 +1795,7 @@ func (d *remoteDebugger) cmdHot(args []string) string {
 // breakpoint to see what code preceded the hit.
 func (d *remoteDebugger) cmdPrev(args []string) string {
 	if d.history == nil {
-		return "ERR history disabled (relaunch with --debugger-history=N)"
+		return "ERR history disabled (arm with `history-on [SIZE] [wide]`, or relaunch with --debugger-history=N)"
 	}
 	n := 20
 	if len(args) >= 1 {

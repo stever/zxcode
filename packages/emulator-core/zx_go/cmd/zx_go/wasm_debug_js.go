@@ -112,6 +112,14 @@ func wasmStepOver(d *remoteDebugger) string {
 		return d.handleCommand("step")
 	}
 	target := c.PC + uint16(len(lines[0].Bytes))
+	// Execute the call itself with the plain step (no IRQ acceptance
+	// first). Resuming with it un-executed lets a pending IRQ's handler
+	// RET straight back onto this PC — and a breakpoint here (the common
+	// "stopped at a bp, step over the call" flow) re-fires instead of the
+	// one-shot. After the plain step the CPU is inside the callee and the
+	// pending IRQ is accepted at the next M1. Mirrors the continue
+	// command's step-off (see debugger.go).
+	c.StepInstruction()
 	d.stepOverPC.Store(&target)
 	d.paused.Store(false)
 	d.stepping.Store(false)
@@ -231,11 +239,18 @@ func setupWasmDebugExports(g js.Value) {
 			if l.Operand != "" {
 				text += " " + l.Operand
 			}
-			rows = append(rows, map[string]any{
+			row := map[string]any{
 				"addr":  int(l.Addr),
 				"bytes": bytes,
 				"text":  text,
-			})
+			}
+			// The symbol table is fed at runtime via `sym` (the IDE
+			// pushes compiler labels); the panel shows it as a label
+			// column like the desktop debugger.
+			if name, ok := lookupSymbol(l.Addr); ok {
+				row["symbol"] = name
+			}
+			rows = append(rows, row)
 		}
 		return js.ValueOf(rows)
 	}))

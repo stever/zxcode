@@ -25,5 +25,6 @@ type Mutation {
 
 type CompileResult {
   base64_encoded: String!
+  sld: String
 }
 

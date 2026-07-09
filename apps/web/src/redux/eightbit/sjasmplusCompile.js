@@ -9,16 +9,18 @@ const COMPILE_MUTATION = gql`
     mutation ($code: String!) {
         compileSjasmplus(code: $code) {
             base64_encoded
+            sld
         }
     }
 `;
 
-// Assemble via the sjasmplus service and return the output bytes — a TAP or,
-// when the source uses SAVENEX, a NEX image (the emulator sniffs the 'Next'
-// signature at load time). On failure it throws an array of build-error items
-// ({type: 'err', text}) - the same shape the other compilers reject with - so
-// the saga surfaces them as build-error toasts rather than the full-page
-// error banner.
+// Assemble via the sjasmplus service and return {tap, sld}: the output bytes
+// — a TAP or, when the source uses SAVENEX, a NEX image (the emulator sniffs
+// the 'Next' signature at load time) — plus the SLD source-map text for the
+// debugger (null when the service produced none). On failure it throws an
+// array of build-error items ({type: 'err', text}) - the same shape the
+// other compilers reject with - so the saga surfaces them as build-error
+// toasts rather than the full-page error banner.
 //
 // It is guaranteed to only ever throw an array of items: any unexpected error
 // (token refresh, malformed payload, ...) is normalised too, so a failure can
@@ -26,9 +28,10 @@ const COMPILE_MUTATION = gql`
 export async function getSjasmplusTap(code, userId) {
     console.log("[sjasmplus] compile requested", {codeLength: code?.length, userId});
     try {
-        const tap = await compile(code, userId);
-        console.log("[sjasmplus] compile succeeded", {bytes: tap.length});
-        return tap;
+        const result = await compile(code, userId);
+        console.log("[sjasmplus] compile succeeded",
+            {bytes: result.tap.length, sldBytes: result.sld?.length || 0});
+        return result;
     } catch (e) {
         // Re-throw our own build-error arrays unchanged; wrap anything else.
         if (Array.isArray(e)) {
@@ -75,6 +78,9 @@ async function compile(code, userId) {
         throw [{type: "err", text: "Compilation produced no output."}];
     }
 
-    // noinspection JSDeprecatedSymbols
-    return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    return {
+        // noinspection JSDeprecatedSymbols
+        tap: Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)),
+        sld: envelope?.data?.compileSjasmplus?.sld || null,
+    };
 }

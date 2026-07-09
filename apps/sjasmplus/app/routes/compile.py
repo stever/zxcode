@@ -89,8 +89,17 @@ class RequestArgs(BaseModel):
     action: Action
 
 
+# The SLD file scales with source size (a handful of lines per source line);
+# 64KB of source stays well under this. Oversized means something pathological
+# (Lua-generated code), so drop the map rather than the compile.
+MAX_SLD_SIZE = 1024 * 1024
+
+
 class CompileResult(BaseModel):
     base64_encoded: str
+    # sjasmplus source-level-debugging map (file:line <-> address records) for
+    # the IDE debugger. Absent when the assembly produced none.
+    sld: Optional[str] = None
 
 
 compile_endpoint = APIRouter()
@@ -117,8 +126,12 @@ def handle_compile_request(
 
         # Assemble in its own process group so a timeout can kill sjasmplus
         # and anything it spawned, not just the parent.
+        # --sld emits the source-level-debugging map the IDE debugger uses for
+        # source-line breakpoints. No --fullpath: with cwd here the records
+        # say program.asm with no server paths to scrub (sjasmplus warns about
+        # the omission; harmless for a single-file assembly).
         proc = subprocess.Popen(
-            ['sjasmplus', '--nologo', 'program.asm'],
+            ['sjasmplus', '--nologo', '--sld=program.sld', 'program.asm'],
             cwd=workdir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -160,8 +173,15 @@ def handle_compile_request(
                 detail=f'Produced more than one output ({names}). '
                        'Use exactly one SAVETAP or SAVENEX output.')
 
+        sld = None
+        sld_path = Path(workdir) / 'program.sld'
+        if sld_path.is_file() and sld_path.stat().st_size <= MAX_SLD_SIZE:
+            sld = sld_path.read_text(errors='replace')
+
         with open(outputs[0], 'rb') as f:
-            return CompileResult(base64_encoded=base64.b64encode(f.read()).decode())
+            return CompileResult(
+                base64_encoded=base64.b64encode(f.read()).decode(),
+                sld=sld)
 
     finally:
         if workdir:

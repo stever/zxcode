@@ -79,6 +79,16 @@ func annotateAddr(addr uint16) string {
 	return fmt.Sprintf("$%04X", addr)
 }
 
+// lookupSymbol returns the bare name for an address, for callers
+// that build structured output rather than annotated text (the
+// wasm bridge's disassembly rows).
+func lookupSymbol(addr uint16) (string, bool) {
+	symbolMu.RLock()
+	defer symbolMu.RUnlock()
+	name, ok := symbolTable[addr]
+	return name, ok
+}
+
 // addSymbol adds or updates a single symbol-table entry. Used by
 // the runtime `sym $ADDR NAME` debugger command so users can name
 // addresses they've identified mid-session without rebuilding the

@@ -549,11 +549,20 @@
     flex: none;
 }
 
-/* Source-line breakpoints are stored but not armed on the real backend
-   until symbol maps land. */
+/* Source-line breakpoints are stored but not armed: no source map yet, or
+   the source changed since the compile that produced it. */
 .debug-bp-dot.inert {
     background: transparent;
     border: 1px solid var(--dbg-red);
+}
+
+/* The address a line breakpoint armed at, from the source map. */
+.debug-bp-addr {
+    color: var(--dbg-dim);
+}
+
+.zx-bp-marker.inert {
+    opacity: 0.45;
 }
 
 .debug-bp-row .p-button.p-button-sm {
@@ -564,6 +573,16 @@
 .debug-placeholder {
     color: var(--dbg-dim);
     padding: 4px 0;
+}
+
+/* Command-backed panels show the engine's console text verbatim. */
+.debug-panel-pre {
+    margin: 0;
+    padding: 4px 0;
+    font-family: inherit;
+    font-size: inherit;
+    white-space: pre;
+    overflow: auto;
 }
 
 /* --- editor integration (outside .debug-dock) --- */

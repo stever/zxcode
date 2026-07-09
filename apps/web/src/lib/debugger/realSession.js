@@ -17,6 +17,13 @@ export function createRealSession(handle) {
     let disasmStart = null;
     let pauseCallback = null;
     let armedAddrs = [];
+    // Parsed SLD map (lib/debugger/sld.js) for the loaded program, pushed by
+    // the saga — already filtered to fresh (never stale). Null means source
+    // lines cannot arm and the pc maps to no line.
+    let sourceMap = null;
+    // Label addresses pushed into the engine's symbol table (`sym`), so a
+    // map change can retract them before pushing the replacement set.
+    let pushedLabelAddrs = [];
 
     // The whole 64K address space as the CPU sees it (MMU paging and the
     // divMMC overlay resolved). One 64K copy per snapshot is nothing next
@@ -65,8 +72,10 @@ export function createRealSession(handle) {
             disasm: disasmWindow(s.pc),
             memory: readMemory(),
             paging: dbg.paging ? dbg.paging() : null,
-            // Source-line mapping arrives with symbol maps (phase 3).
-            pausedLine: null,
+            // Null when the pc is outside the compiled program (ROM, the
+            // loader) — the editor then shows no paused line and the
+            // disassembly pane carries the position.
+            pausedLine: sourceMap ? (sourceMap.addrToLine.get(s.pc) ?? null) : null,
         };
     };
 
@@ -124,16 +133,43 @@ export function createRealSession(handle) {
             return snapshot("pause");
         },
 
-        // Only address breakpoints arm on the real backend for now; source
-        // lines join them when the compilers emit symbol maps.
-        setBreakpoints({ addrs }) {
-            for (const a of armedAddrs) {
-                if (!addrs.includes(a)) dbg.cmd(`clear-breakpoint ${hex(a)}`);
+        // Address breakpoints arm directly; source lines arm through the
+        // source map (lines the map cannot place — or all of them, without a
+        // map — stay stored in the store but set nothing here). The two can
+        // resolve to the same address; the Set collapses that to one arm and
+        // it survives until both are gone.
+        setBreakpoints({ lines = [], addrs = [] }) {
+            const wanted = new Set(addrs);
+            if (sourceMap) {
+                for (const line of lines) {
+                    const addr = sourceMap.lineToAddr.get(line);
+                    if (addr !== undefined) wanted.add(addr);
+                }
             }
-            for (const a of addrs) {
+            for (const a of armedAddrs) {
+                if (!wanted.has(a)) dbg.cmd(`clear-breakpoint ${hex(a)}`);
+            }
+            for (const a of wanted) {
                 if (!armedAddrs.includes(a)) dbg.cmd(`set-breakpoint ${hex(a)}`);
             }
-            armedAddrs = [...addrs];
+            armedAddrs = [...wanted];
+        },
+
+        // The saga pushes the map on session start and whenever it changes
+        // (loaded, cleared, or gone stale — stale arrives as null). The
+        // caller re-syncs breakpoints afterwards; nothing re-arms here.
+        // Labels feed the engine's symbol table so the disassembly rows,
+        // backtrace, and history annotate addresses with source names.
+        setSourceMap(map) {
+            sourceMap = map;
+            for (const a of pushedLabelAddrs) dbg.cmd(`sym clear ${hex(a)}`);
+            pushedLabelAddrs = [];
+            if (map) {
+                for (const [name, addr] of map.labels) {
+                    dbg.cmd(`sym ${hex(addr)} ${name}`);
+                    pushedLabelAddrs.push(addr);
+                }
+            }
         },
 
         async sendCommand(text) {
@@ -147,7 +183,11 @@ export function createRealSession(handle) {
         // resume:false tears down the JS side only — the machine this
         // session was attached to is being replaced (machine change/reset),
         // so continue/detach/start would land on its successor instead.
+        // Labels come out either way: the symbol table is engine-global,
+        // not per-machine, and the successor session re-pushes its own.
         dispose({resume = true} = {}) {
+            for (const a of pushedLabelAddrs) dbg.cmd(`sym clear ${hex(a)}`);
+            pushedLabelAddrs = [];
             dbg.offPause(onEnginePause);
             pauseCallback = null;
             if (resume) {

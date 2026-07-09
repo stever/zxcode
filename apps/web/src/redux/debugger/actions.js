@@ -17,6 +17,9 @@ export const actionTypes = {
     clearBreakpoints: 'debugger/clearBreakpoints',
     setDebugTab: 'debugger/setDebugTab',
     setMemoryAddress: 'debugger/setMemoryAddress',
+    sourceMapLoaded: 'debugger/sourceMapLoaded',
+    sourceMapCleared: 'debugger/sourceMapCleared',
+    panelOutput: 'debugger/panelOutput',
 };
 
 export const openDebugger = () => ({
@@ -110,4 +113,27 @@ export const setDebugTab = (tab) => ({
 export const setMemoryAddress = (address) => ({
     type: actionTypes.setMemoryAddress,
     address
+});
+
+// A parsed source map (lib/debugger/sld.js) from a successful compile. The
+// dispatcher sets `stale` when the editor moved on while the compile was in
+// flight; any later edit also stales it (see the reducer's setCode case).
+export const sourceMapLoaded = (map, stale = false) => ({
+    type: actionTypes.sourceMapLoaded,
+    map,
+    stale
+});
+
+// A program without a source map replaced the mapped one (another language
+// compiled, or sjasmplus produced no map).
+export const sourceMapCleared = () => ({
+    type: actionTypes.sourceMapCleared
+});
+
+// Refreshed text for a command-backed panel (backtrace / watches / Next
+// state / history) — the engine's own console output, shown verbatim.
+export const panelOutput = (panel, text) => ({
+    type: actionTypes.panelOutput,
+    panel,
+    text
 });

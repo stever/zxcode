@@ -1,4 +1,6 @@
 import {actionTypes} from "./actions";
+import {actionTypes as projectActionTypes} from "../project/actions";
+import {snapLine} from "../../lib/debugger/sld";
 
 // -----------------------------------------------------------------------------
 // Initial state
@@ -30,14 +32,25 @@ const initialState = {
     // when the mock session has nothing better to offer).
     pausedLine: null,
     // Source-line breakpoints; `file` stays null until multi-file projects
-    // (#79) give it a value. Inert on the real backend until symbol maps.
+    // (#79) give it a value. On the real backend they arm through sourceMap;
+    // without one (or with a stale one) they are stored but inert.
     breakpoints: [],
+    // Parsed SLD map from the last successful sjasmplus compile
+    // (lib/debugger/sld.js shape plus `stale`). Belongs to the loaded
+    // program, not the session, so it survives open/close. `stale` flips on
+    // the first edit after the compile — the map still describes the binary
+    // in the machine, but no longer the editor's line numbers.
+    sourceMap: null,
     // Address breakpoints (numbers), set from the disassembly pane.
     addrBreakpoints: [],
     // 'zxgo' (wasm bridge) or 'mock' (no bridge available).
     backend: null,
     consoleHistory: [],
     selectedTab: 'console',
+    // Command-backed panel text (backtrace/watches/nextState/history),
+    // refreshed by the saga while paused. Keyed by tab name; missing keys
+    // render as "no data yet".
+    panels: {},
 };
 
 // -----------------------------------------------------------------------------
@@ -66,11 +79,13 @@ export default function debuggerReducer(state = initialState, action) {
                 backend: action.backend,
             };
         case actionTypes.closeDebugger:
-            // Breakpoints survive the session; everything else resets.
+            // Breakpoints and the source map survive the session; everything
+            // else resets.
             return {
                 ...initialState,
                 breakpoints: state.breakpoints,
                 addrBreakpoints: state.addrBreakpoints,
+                sourceMap: state.sourceMap,
             };
         case actionTypes.debugSnapshot: {
             const s = action.snapshot;
@@ -115,12 +130,23 @@ export default function debuggerReducer(state = initialState, action) {
                 consoleHistory: [...state.consoleHistory, ...action.entries],
             };
         case actionTypes.toggleBreakpoint: {
+            // With a live map, snap the click to the next line that has code
+            // (so the dot sits on a real instruction) and refuse lines with
+            // nothing below — data and directives cannot break. Toggling an
+            // existing dot from the panel resolves to itself: stored lines
+            // are always mapped lines.
+            const map = state.sourceMap;
+            let line = action.line;
+            if (map && !map.stale) {
+                line = snapLine(map, line);
+                if (line === null) return state;
+            }
             const exists = state.breakpoints.some(
-                (bp) => bp.line === action.line && bp.file === null);
+                (bp) => bp.line === line && bp.file === null);
             const breakpoints = exists
                 ? state.breakpoints.filter(
-                    (bp) => !(bp.line === action.line && bp.file === null))
-                : [...state.breakpoints, {file: null, line: action.line}].sort(
+                    (bp) => !(bp.line === line && bp.file === null))
+                : [...state.breakpoints, {file: null, line}].sort(
                     (a, b) => a.line - b.line);
             return {...state, breakpoints};
         }
@@ -143,6 +169,26 @@ export default function debuggerReducer(state = initialState, action) {
                     seq: state.memoryJump.seq + 1,
                 },
             };
+        case actionTypes.panelOutput:
+            return {
+                ...state,
+                panels: {...state.panels, [action.panel]: action.text},
+            };
+        case actionTypes.sourceMapLoaded:
+            return {
+                ...state,
+                sourceMap: action.map ? {...action.map, stale: action.stale} : null,
+            };
+        case actionTypes.sourceMapCleared:
+            return state.sourceMap ? {...state, sourceMap: null} : state;
+        case projectActionTypes.setCode:
+            // Any edit after the compile means the map's line numbers no
+            // longer describe the buffer. One-way until the next compile;
+            // no-op (same state object) on the keystrokes that follow.
+            if (state.sourceMap && !state.sourceMap.stale) {
+                return {...state, sourceMap: {...state.sourceMap, stale: true}};
+            }
+            return state;
         default:
             return state;
     }

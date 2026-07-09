@@ -7,10 +7,12 @@ import {
     debugSnapshot,
     debugLiveUpdate,
     debugResumed,
-    consoleOutput
+    consoleOutput,
+    panelOutput
 } from "./actions";
 import {actionTypes as jsspeccyActionTypes} from "../jsspeccy/actions";
 import {actionTypes as appActionTypes} from "../app/actions";
+import {actionTypes as projectActionTypes} from "../project/actions";
 import {getJsspeccy} from "../jsspeccy/handle";
 import {createDebugSession} from "../../lib/debugger/mockSession";
 import {createRealSession} from "../../lib/debugger/realSession";
@@ -74,6 +76,36 @@ export function* watchForBreakpointChanges() {
             actionTypes.clearBreakpoints,
         ],
         handleBreakpointChanges);
+}
+
+// The command-backed panels refresh whenever a pause snapshot lands or the
+// user switches onto one of them. Never while running: state-reading
+// commands implicitly pause the CPU and leave it paused, so an automatic
+// refresh mid-run would silently stop the machine.
+// noinspection JSUnusedGlobalSymbols
+export function* watchForPanelRefresh() {
+    yield takeLatest(
+        [
+            actionTypes.debugSnapshot,
+            actionTypes.setDebugTab,
+        ],
+        refreshDebugPanel);
+}
+
+// The session's view of the source map follows the store: a compile loads
+// or clears it, and the first edit after a compile stales it (the reducer's
+// setCode case), which reaches the session as null so its line breakpoints
+// disarm. setCode fires per keystroke but only the first one changes
+// anything; the rest fall through the no-change guard in the handler.
+// noinspection JSUnusedGlobalSymbols
+export function* watchForSourceMapChanges() {
+    yield takeEvery(
+        [
+            actionTypes.sourceMapLoaded,
+            actionTypes.sourceMapCleared,
+            projectActionTypes.setCode,
+        ],
+        handleSourceMapChanges);
 }
 
 // The debug session binds to the machine instance that was live when it
@@ -145,6 +177,56 @@ function* syncBreakpointsToSession() {
         lines: breakpoints.map((bp) => bp.line),
         addrs: addrBreakpoints,
     });
+}
+
+// The map the session may act on: a stale one (edited since compile) is
+// withheld — its line numbers describe the old buffer, so arming or
+// highlighting with it would land on the wrong lines.
+const selectLiveSourceMap = (state) => {
+    const map = state?.debugger.sourceMap;
+    return map && !map.stale ? map : null;
+};
+
+// The map last pushed to the live session, so per-keystroke setCode
+// dispatches don't re-push and re-diff breakpoints. Sessions are recreated
+// with the same store state, so a stale ref only ever short-circuits a
+// genuinely redundant push (wireSession pushes unconditionally).
+let pushedSourceMap = null;
+
+function* handleSourceMapChanges() {
+    if (!session) return;
+    const live = yield select(selectLiveSourceMap);
+    if (live === pushedSourceMap) return;
+    pushedSourceMap = live;
+    session.setSourceMap(live);
+    yield call(syncBreakpointsToSession);
+}
+
+// Engine console commands behind each command-backed panel. Multiple
+// commands concatenate, blank-line separated.
+const PANEL_COMMANDS = {
+    backtrace: ["backtrace 16"],
+    watches: ["list-watches", "list-tp"],
+    nextState: ["nr-panel"],
+    history: ["history", "prev 24"],
+};
+
+function* refreshDebugPanel() {
+    if (!session) return;
+    const status = yield select((state) => state?.debugger.status);
+    if (status !== 'paused') return;
+    const tab = yield select((state) => state?.debugger.selectedTab);
+    const cmds = PANEL_COMMANDS[tab];
+    if (!cmds) return;
+    try {
+        const parts = [];
+        for (const cmd of cmds) {
+            parts.push(yield call([session, session.sendCommand], cmd));
+        }
+        yield put(panelOutput(tab, parts.join("\n\n")));
+    } catch (e) {
+        handleException(e);
+    }
 }
 
 function createSession() {
@@ -226,6 +308,9 @@ function* wireSession() {
         yield put(closeDebugger());
         return false;
     }
+    // Map before breakpoints, so line breakpoints arm in the same sync.
+    pushedSourceMap = yield select(selectLiveSourceMap);
+    session.setSourceMap(pushedSourceMap);
     yield call(syncBreakpointsToSession);
     yield put(debuggerOpened(session.backend));
     return true;
@@ -241,9 +326,13 @@ function* handleCloseDebuggerActions() {
 
 // Set by loadTap (a compiled program is about to be loaded) and consumed by
 // the reset that follows: the tape only loads on a running machine, so that
-// reattach must resume regardless of the debugger's previous run state. The
-// set and the read-and-clear are both synchronous at handler start (before
-// any yield), so takeLatest cancellation cannot lose or double-apply it.
+// reattach must resume regardless of the debugger's previous run state.
+// Consumed LATE (only once a reattach actually acts on it): takeLatest
+// cancels an in-flight handler whenever another invalidating action lands
+// inside its settle delay, and a flag consumed at handler start would leave
+// with the cancelled handler — the successor would then reattach paused and
+// the tape load would stall. A cancelled handler leaving the flag set is
+// harmless: its successor applies the same resume.
 let resumeOnReattach = false;
 
 function* handleSessionInvalidation(action) {
@@ -251,10 +340,11 @@ function* handleSessionInvalidation(action) {
         resumeOnReattach = true;
         return;
     }
-    const loadingProgram = resumeOnReattach;
-    resumeOnReattach = false;
     const active = yield select((state) => state?.debugger.active);
-    if (!active) return;
+    if (!active) {
+        resumeOnReattach = false;
+        return;
+    }
     // Machine change or reset: the machine under the session is being
     // replaced, but the panel stays open — reattach in place, without
     // re-dispatching openDebugger (its reducer resets the slice, which
@@ -265,10 +355,14 @@ function* handleSessionInvalidation(action) {
     // pick dispatches into a single reattach.
     yield delay(150);
     const stillActive = yield select((state) => state?.debugger.active);
-    if (!stillActive) return;
+    if (!stillActive) {
+        resumeOnReattach = false;
+        return;
+    }
     // Carry the run state across: a debugger left running (Continue) stays
     // running on the new machine; a paused one lands paused at entry —
     // except when a program is loading, which always needs a running machine.
+    const loadingProgram = resumeOnReattach;
     const wasRunning = loadingProgram || (yield select(
         (state) => state?.debugger.status === 'running'));
     if (session) {
@@ -278,7 +372,11 @@ function* handleSessionInvalidation(action) {
         session.dispose({resume: false});
         session = null;
     }
-    if (!(yield call(wireSession))) return;
+    if (!(yield call(wireSession))) {
+        resumeOnReattach = false;
+        return;
+    }
+    resumeOnReattach = false;
     yield fork(pumpPauseEvents, session);
     yield fork(pumpLiveUpdates, session);
     if (wasRunning) {
@@ -341,6 +439,9 @@ function* handleSendConsoleCommandActions(action) {
             kind: response.startsWith('ERR') ? 'err' : 'ok',
             text: response
         }]));
+        // The command may have changed what a panel shows (a new watch,
+        // history armed); keep the visible one in step.
+        yield call(refreshDebugPanel);
     } catch (e) {
         handleException(e);
     }

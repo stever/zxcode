@@ -65,11 +65,23 @@ describe("getSjasmplusTap error surfacing", () => {
         );
     });
 
-    test("returns bytes on success (NEX signature preserved)", async () => {
+    test("returns bytes and sld on success (NEX signature preserved)", async () => {
+        const b64 = Buffer.from("NextV1.2").toString("base64");
+        axios.post.mockResolvedValue({data: {data: {compileSjasmplus: {
+            base64_encoded: b64,
+            sld: "|SLD.data.version|1\n",
+        }}}});
+
+        const {tap, sld} = await getSjasmplusTap("good code", null);
+        expect(String.fromCharCode(...tap.slice(0, 4))).toBe("Next");
+        expect(sld).toBe("|SLD.data.version|1\n");
+    });
+
+    test("sld is null when the service returns none", async () => {
         const b64 = Buffer.from("NextV1.2").toString("base64");
         axios.post.mockResolvedValue({data: {data: {compileSjasmplus: {base64_encoded: b64}}}});
 
-        const bytes = await getSjasmplusTap("good code", null);
-        expect(String.fromCharCode(...bytes.slice(0, 4))).toBe("Next");
+        const {sld} = await getSjasmplusTap("good code", null);
+        expect(sld).toBeNull();
     });
 });

@@ -14,6 +14,11 @@
 //       resume()                  — run until a breakpoint hits (onPause fires)
 //       pause()                   -> snapshot
 //       setBreakpoints({lines, addrs})
+//       setSourceMap(map)         — parsed SLD map (lib/debugger/sld.js) or
+//                                   null; lets the real session arm line
+//                                   breakpoints and report pausedLine. The
+//                                   mock's canned program has no source, so
+//                                   it ignores this.
 //       sendCommand(text)         -> Promise<string>  ("OK ..." / "ERR ...")
 //       onPause(cb)               — breakpoint hits while running
 //       dispose({resume = true}?) — resume:false skips restarting the
@@ -191,6 +196,10 @@ export function createDebugSession() {
         setBreakpoints({lines, addrs}) {
             breakpointLines = [...lines].sort((a, b) => a - b);
             breakpointAddrs = [...addrs].sort((a, b) => a - b);
+        },
+
+        setSourceMap(_map) {
+            // The canned program has no source to map.
         },
 
         async sendCommand(text) {
