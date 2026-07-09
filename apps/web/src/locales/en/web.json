@@ -251,6 +251,8 @@
     "memoryHint": "click address to follow",
     "disasmHeld": "updates paused",
     "paging": "Memory Map",
+    "pagingHint": "click a slot to view it",
+    "pagingJump": "Show this slot in the memory pane",
     "pagingUnknown": "Memory map is not available yet.",
     "console": "Console",
     "breakpoints": "Breakpoints",

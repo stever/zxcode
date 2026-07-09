@@ -1,5 +1,6 @@
 import React from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { setMemoryAddress } from "../../redux/debugger/actions";
 import { hex16, hex8 } from "./format";
 import { useTranslation } from "@zxplay/i18n";
 
@@ -75,6 +76,7 @@ function classifyNext(slot, index, paging) {
 
 export function DebugPaging() {
   const { t } = useTranslation();
+  const dispatch = useDispatch();
   const paging = useSelector((state) => state?.debugger.paging);
 
   const isNext = paging?.mode === "next";
@@ -118,14 +120,32 @@ export function DebugPaging() {
 
   return (
     <div className="debug-pane debug-pane-paging">
-      <div className="debug-pane-head">{t("debug.paging")}</div>
+      <div className="debug-pane-head">
+        {t("debug.paging")}
+        <span className="hint">{t("debug.pagingHint")}</span>
+      </div>
       <div className={`debug-pane-body debug-pagemap${isNext ? " compact" : ""}`}>
         {cells.length === 0 ? (
           <div className="debug-placeholder">{t("debug.pagingUnknown")}</div>
         ) : (
           <>
             {cells.map((cell) => (
-              <div className={`debug-pagemap-cell ${cell.role}`} key={cell.base}>
+              // Click-through to the memory pane at the slot's base address
+              // (the pane also refreshes its address input from the jump).
+              <div
+                className={`debug-pagemap-cell ${cell.role}`}
+                key={cell.base}
+                role="button"
+                tabIndex={0}
+                title={t("debug.pagingJump")}
+                onClick={() => dispatch(setMemoryAddress(cell.base))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    dispatch(setMemoryAddress(cell.base));
+                  }
+                }}
+              >
                 <div className="range">{cell.range}</div>
                 <div className="bank">{cell.label}</div>
               </div>

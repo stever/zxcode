@@ -357,6 +357,15 @@
     color: #ffffff;
     font-size: 12px;
     line-height: 1.25;
+    cursor: pointer;
+}
+
+/* Slots click through to the memory pane; the amber edge is the same
+   affordance the disassembly's address column uses. */
+.debug-pagemap-cell:hover,
+.debug-pagemap-cell:focus-visible {
+    border-color: #ffb928;
+    outline: none;
 }
 
 .debug-pagemap-cell .range {
