@@ -1,5 +1,5 @@
 import { CompileError } from './errors.js';
-import { compileViaAction } from './hasura.js';
+import { compileViaAction, ProjectFileRecord } from './hasura.js';
 
 interface ToolMessage {
     type: string;
@@ -30,6 +30,16 @@ async function inProcess(run: () => Promise<Uint8Array>): Promise<Buffer> {
     }
 }
 
+// Additional project files as inputs for the in-process WASM tools: text
+// content as-is, binary assets decoded from base64.
+function toToolInputs(files: ProjectFileRecord[]): Record<string, Uint8Array | string> {
+    const inputs: Record<string, Uint8Array | string> = {};
+    for (const f of files) {
+        inputs[f.name] = f.is_binary ? Uint8Array.from(Buffer.from(f.content, 'base64')) : f.content;
+    }
+    return inputs;
+}
+
 /**
  * Compile a project's source to a self-loading TAP, dispatching on language.
  *
@@ -39,9 +49,16 @@ async function inProcess(run: () => Promise<Uint8Array>): Promise<Buffer> {
  * only in the web worker — see work item #44).
  *
  * `machine` ('48' | '128' | 'next') is only consulted by languages whose
- * codegen depends on the target — currently pascal (Pasta80).
+ * codegen depends on the target — currently pascal (Pasta80). `files` are the
+ * project's additional files (includes, INCBIN assets); the action-backed
+ * languages forward them and the zmac/sdcc pipelines stage them locally.
  */
-export async function compileProject(lang: string, code: string, machine?: string): Promise<Buffer> {
+export async function compileProject(
+    lang: string,
+    code: string,
+    machine?: string,
+    files: ProjectFileRecord[] = [],
+): Promise<Buffer> {
     switch (lang) {
         case 'basic':
             return inProcess(async () => {
@@ -59,27 +76,27 @@ export async function compileProject(lang: string, code: string, machine?: strin
                 return getPasmoTap(code);
             });
         case 'zxbasic':
-            return Buffer.from(await compileViaAction('compile', code));
+            return Buffer.from(await compileViaAction('compile', code, undefined, files));
         case 'c':
-            return Buffer.from(await compileViaAction('compileC', code));
+            return Buffer.from(await compileViaAction('compileC', code, undefined, files));
         case 'sjasmplus':
             // May return a TAP or (SAVENEX source) a NEX image; the emulator
             // sniffs the 'Next' signature at load and routes accordingly.
-            return Buffer.from(await compileViaAction('compileSjasmplus', code));
+            return Buffer.from(await compileViaAction('compileSjasmplus', code, undefined, files));
         case 'pascal':
             // Pasta80 Turbo Pascal; compiled for the machine the render will
             // boot so the linked runtime matches.
-            return Buffer.from(await compileViaAction('compilePascal', code, machine ?? '48'));
+            return Buffer.from(await compileViaAction('compilePascal', code, machine ?? '48', files));
         case 'zmac':
             return inProcess(async () => {
                 const { runTool } = await import('./wasm-tools.js');
-                const { files, errors } = runTool({
+                const { files: outFiles, errors } = runTool({
                     module: 'zmac',
-                    inputs: { 'in.asm': code },
+                    inputs: { ...toToolInputs(files), 'in.asm': code },
                     args: ['-z', '-c', '--oo', 'lst,cim', 'in.asm'],
                     outputs: ['zout/in.cim'],
                 });
-                const cim = files['zout/in.cim'];
+                const cim = outFiles['zout/in.cim'];
                 if (!cim || cim.length === 0) {
                     // errors are raw stderr strings; join them so the reason
                     // surfaces (logged + returned) rather than "unknown error".
@@ -92,7 +109,7 @@ export async function compileProject(lang: string, code: string, machine?: strin
         case 'sdcc':
             return inProcess(async () => {
                 const { compileSdcc } = await import('./tools-sdcc.js');
-                return compileSdcc(code);
+                return compileSdcc(code, files);
             });
         default:
             throw new CompileError(`Unknown language "${lang}"`);

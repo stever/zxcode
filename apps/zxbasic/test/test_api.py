@@ -160,6 +160,90 @@ def test_compile_endpoint_returns_valid_tap(monkeypatch):
     assert_valid_tap(base64.b64decode(payload["base64_encoded"]))
 
 
+INCLUDE_MAIN_BASIC = '#include "greet.bas"\n\ngreet()\n'
+INCLUDE_LIB_BASIC = 'SUB greet()\n    PRINT "Hello from include!"\nEND SUB\n'
+
+
+def test_compile_endpoint_include_staged_project_file(monkeypatch):
+    """Additional project files are staged next to program.bas so #include
+    resolves them."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.chdir(REPO_ROOT)
+
+    request_body = {
+        "session_variables": {
+            "x-hasura-role": "user",
+            "x-hasura-user-id": str(uuid4()),
+        },
+        "input": {
+            "basic": INCLUDE_MAIN_BASIC,
+            "files": [{"name": "greet.bas", "content": INCLUDE_LIB_BASIC}],
+        },
+        "action": {"name": "compile"},
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/compile/", json=request_body)
+
+    assert response.status_code == 200, response.text
+    assert_valid_tap(base64.b64decode(response.json()["base64_encoded"]))
+
+
+def test_compile_endpoint_rejects_reserved_file_name(monkeypatch):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.chdir(REPO_ROOT)
+
+    request_body = {
+        "session_variables": {
+            "x-hasura-role": "user",
+            "x-hasura-user-id": str(uuid4()),
+        },
+        "input": {
+            "basic": SAMPLE_BASIC,
+            "files": [{"name": "program.bas", "content": "REM shadow"}],
+        },
+        "action": {"name": "compile"},
+    }
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post("/compile/", json=request_body)
+
+    assert response.status_code == 400, response.text
+    assert "reserved" in response.json()["message"]
+
+
+def test_compile_endpoint_rejects_path_traversal_file_name(monkeypatch):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.chdir(REPO_ROOT)
+
+    request_body = {
+        "session_variables": {
+            "x-hasura-role": "user",
+            "x-hasura-user-id": str(uuid4()),
+        },
+        "input": {
+            "basic": SAMPLE_BASIC,
+            "files": [{"name": "../evil.bas", "content": "REM escape"}],
+        },
+        "action": {"name": "compile"},
+    }
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post("/compile/", json=request_body)
+
+    assert response.status_code == 400, response.text
+    assert response.json()["message"] == "Invalid compile request."
+
+
 def test_compile_endpoint_rejects_empty_input(monkeypatch):
     """Input validation contract: empty BASIC is rejected, not 500'd."""
     pytest.importorskip("fastapi")

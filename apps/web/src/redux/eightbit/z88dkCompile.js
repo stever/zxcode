@@ -6,8 +6,8 @@ import {getAuthToken, isExpired, refreshToken} from "../../auth";
 import {extractCompilerError} from "./zxbasicCompile";
 
 const COMPILE_MUTATION = gql`
-    mutation ($code: String!) {
-        compileC(code: $code) {
+    mutation ($code: String!, $files: [ProjectFileInput!]) {
+        compileC(code: $code, files: $files) {
             base64_encoded
         }
     }
@@ -22,10 +22,10 @@ const COMPILE_MUTATION = gql`
 // It is guaranteed to only ever throw an array of items: any unexpected error
 // (token refresh, malformed payload, ...) is normalised too, so a failure can
 // never surface as silence.
-export async function getZ88dkTap(code, userId) {
-    console.log("[z88dk] compile requested", {codeLength: code?.length, userId});
+export async function getZ88dkTap(code, userId, files = []) {
+    console.log("[z88dk] compile requested", {codeLength: code?.length, userId, files: files.length});
     try {
-        const tap = await compile(code, userId);
+        const tap = await compile(code, userId, files);
         console.log("[z88dk] compile succeeded", {tapBytes: tap.length});
         return tap;
     } catch (e) {
@@ -39,8 +39,8 @@ export async function getZ88dkTap(code, userId) {
     }
 }
 
-async function compile(code, userId) {
-    const variables = {code};
+async function compile(code, userId, files) {
+    const variables = {code, files};
 
     // Match gqlFetch: anonymous requests carry no token at all.
     let jwt = userId ? getAuthToken() : null;

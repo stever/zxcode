@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 import resource
 import shutil
 import signal
@@ -51,11 +52,76 @@ class SessionVars(BaseModel):
     x_hasura_user_id: Optional[UUID] = Field(default=None, alias="x-hasura-user-id")
 
 
+# Additional project files staged into the compile workdir so {$I file}
+# includes resolve next to program.pas. Names become real filenames there,
+# so they are held to a safe charset with no path separators (mirrors the
+# project_file DB constraint), and names stemmed 'program' are reserved for
+# the main source, its intermediates and the TAP output so a staged file
+# can't shadow them.
+MAX_PROJECT_FILES = 32
+MAX_FILE_CONTENT_SIZE = 256 * 1024  # matches the DB cap; base64 for binaries
+PROJECT_FILE_NAME_RE = re.compile(r'[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}')
+
+
+class ProjectFile(BaseModel):
+    name: str
+    content: str
+    is_binary: Optional[bool] = False
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if not PROJECT_FILE_NAME_RE.fullmatch(v):
+            raise ValueError(
+                'File names may only use letters, digits, dots, dashes and '
+                'underscores (max 64 chars, no leading dot)')
+        return v
+
+    @field_validator('content')
+    @classmethod
+    def validate_content_size(cls, v):
+        if len(v) > MAX_FILE_CONTENT_SIZE:
+            raise ValueError(
+                f'File too large. Maximum size is {MAX_FILE_CONTENT_SIZE} bytes')
+        return v
+
+
+def stage_project_files(workdir, files):
+    """Write the additional project files into the compile workdir."""
+    seen = set()
+    for pf in files or []:
+        lower = pf.name.lower()
+        stem = lower.split('.', 1)[0]
+        if stem == 'program':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File name '{pf.name}' is reserved for the main source")
+        if lower in seen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Duplicate file name '{pf.name}'")
+        seen.add(lower)
+        path = os.path.join(workdir, pf.name)
+        if pf.is_binary:
+            try:
+                data = base64.b64decode(pf.content, validate=True)
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File '{pf.name}' is not valid base64")
+            with open(path, 'wb') as f:
+                f.write(data)
+        else:
+            with open(path, 'w') as f:
+                f.write(pf.content)
+
+
 class Input(BaseModel):
     code: str
     # Optional so existing single-argument callers (and the GraphQL schema's
     # nullable machine) keep working; unset means the classic 48K target.
     machine: Optional[str] = '48'
+    files: Optional[list[ProjectFile]] = None
 
     @field_validator('code')
     @classmethod
@@ -64,6 +130,13 @@ class Input(BaseModel):
             raise ValueError('Input cannot be empty')
         if len(v) > MAX_INPUT_SIZE:
             raise ValueError(f'Input too large. Maximum size is {MAX_INPUT_SIZE} bytes')
+        return v
+
+    @field_validator('files')
+    @classmethod
+    def validate_file_count(cls, v):
+        if v and len(v) > MAX_PROJECT_FILES:
+            raise ValueError(f'Too many files. Maximum is {MAX_PROJECT_FILES}')
         return v
 
     @field_validator('machine')
@@ -106,6 +179,7 @@ def handle_compile_request(
     try:
         with open(os.path.join(workdir, 'program.pas'), 'w') as f:
             f.write(args.input.code)
+        stage_project_files(workdir, args.input.files)
 
         # Compile in its own process group so a timeout can kill pasta and
         # the sjasmplus backend it spawns, not just the parent. --opt --dep

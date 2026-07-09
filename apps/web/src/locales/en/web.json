@@ -177,7 +177,27 @@
     "unsavedTitle": "Unsaved Changes",
     "unsavedMessage": "This project has unsaved changes. Continuing will discard them.",
     "unsavedMessageNoSave": "This project has unsaved changes that cannot be saved here. Continuing will discard them.",
-    "discard": "Discard"
+    "discard": "Discard",
+    "files": {
+      "title": "Project Files",
+      "add": "Add file",
+      "newFile": "New file",
+      "uploadAsset": "Upload file",
+      "newFileTitle": "New File",
+      "renameTitle": "Rename File",
+      "rename": "Rename",
+      "delete": "Delete",
+      "fileName": "File Name",
+      "fileNameHelp": "Letters, digits, dots, dashes and underscores only. Reference the file from your code, e.g. INCLUDE or #include.",
+      "deleteConfirm": "Permanently remove \"{{name}}\" from this project?",
+      "invalidName": "File names may only use letters, digits, dots, dashes and underscores (max 64 characters, no leading dot).",
+      "reservedName": "Names starting with \"program\" are reserved for the main source file.",
+      "outputName": ".tap and .nex names clash with compiler output. Use a different extension.",
+      "duplicateName": "A file with this name already exists in the project.",
+      "tooLarge": "File is too large. The limit is 256KB.",
+      "assetSize": "{{size}} bytes",
+      "assetHint": "Binary asset. Reference it from your code (e.g. INCBIN \"name\") and it is placed alongside your source at compile time."
+    }
   },
   "projectList": {
     "title": "Project Title",

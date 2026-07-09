@@ -9,6 +9,13 @@ object_relationships:
     using:
       foreign_key_constraint_on: owner_user_id
 array_relationships:
+  - name: files
+    using:
+      foreign_key_constraint_on:
+        column: project_id
+        table:
+          name: project_file
+          schema: public
   - name: stars
     using:
       foreign_key_constraint_on:

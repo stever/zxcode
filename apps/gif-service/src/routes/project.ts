@@ -59,7 +59,7 @@ async function handle(format: Format, req: Request, res: Response): Promise<void
 
         let tap: Buffer;
         try {
-            tap = await compileProjectIsolated(project.lang, project.code, String(machineType));
+            tap = await compileProjectIsolated(project.lang, project.code, String(machineType), project.files);
         } catch (err) {
             if (err instanceof CompileError) {
                 res.status(400).json({ error: 'Project failed to compile', detail: err.message });

@@ -1,18 +1,21 @@
 type Mutation {
   compile(
     basic: String!
+    files: [ProjectFileInput!]
   ): CompileResult
 }
 
 type Mutation {
   compileC(
     code: String!
+    files: [ProjectFileInput!]
   ): CompileResult
 }
 
 type Mutation {
   compileSjasmplus(
     code: String!
+    files: [ProjectFileInput!]
   ): CompileResult
 }
 
@@ -20,7 +23,14 @@ type Mutation {
   compilePascal(
     code: String!
     machine: String
+    files: [ProjectFileInput!]
   ): CompileResult
+}
+
+input ProjectFileInput {
+  name: String!
+  content: String!
+  is_binary: Boolean
 }
 
 type CompileResult {

@@ -1,4 +1,5 @@
 import { CompileError } from './errors.js';
+import { ProjectFileRecord } from './hasura.js';
 import { loadTool, mountShare, readCrt0 } from './wasm-tools.js';
 
 // Mirrors the web app's 8bitworker C pipeline (Builder.ts PLATFORM_PARAMS).
@@ -57,10 +58,17 @@ function readOutput(instance: { FS: { readFile(p: string): Uint8Array } }, path:
  * mcpp (preprocess) -> sdcc --c1mode (compile, source on stdin) -> sdasz80
  * (assemble) -> sdldz80 (link with crt0 + z80 lib) -> Intel HEX -> bin2tap.
  */
-export async function compileSdcc(code: string): Promise<Buffer> {
+export async function compileSdcc(code: string, files: ProjectFileRecord[] = []): Promise<Buffer> {
     // 1) Preprocess with mcpp (asm.js).
     const mcpp = loadTool('mcpp', { asmjs: true, config: { noFSInit: true } });
     mountShare(mcpp.instance);
+    // Additional project text files sit beside main.c so #include "..."
+    // resolves them (binary assets are meaningless to the preprocessor).
+    for (const f of files) {
+        if (!f.is_binary) {
+            mcpp.instance.FS.writeFile(f.name, f.content);
+        }
+    }
     // Trailing newline avoids mcpp's benign "no newline at end" warning.
     mcpp.instance.FS.writeFile('main.c', code.endsWith('\n') ? code : `${code}\n`);
     mcpp.run([

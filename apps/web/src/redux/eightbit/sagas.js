@@ -10,6 +10,7 @@ import {getZXBasicTap} from "./zxbasicCompile";
 import {getZ88dkTap} from "./z88dkCompile";
 import {getSjasmplusTap} from "./sjasmplusCompile";
 import {getPascalTap} from "./pascalCompile";
+import {toActionFiles, toWorkerUpdates} from "./compileFiles";
 import {store} from "../store";
 import {
     actionTypes,
@@ -160,6 +161,9 @@ function* handleGetProjectTapActions(_) {
     const userId = yield select((state) => state.identity.userId);
     const lang = yield select((state) => state.project.lang);
     const code = yield select((state) => state.project.code);
+    // Additional project files (includes, INCBIN assets) ride along to the
+    // compile services so they can be staged next to the main source.
+    const files = toActionFiles(yield select((state) => state.project.files));
     const machine = yield select((state) => state.app.machine);
     const followTapAction = yield select((state) => state.eightbit.followTapAction);
     try {
@@ -225,7 +229,7 @@ function* handleGetProjectTapActions(_) {
             case 'zxbasic':
                 // Boriel ZX BASIC
                 try {
-                    tap = yield call(getZXBasicTap, code, userId);
+                    tap = yield call(getZXBasicTap, code, userId, files);
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
@@ -238,7 +242,7 @@ function* handleGetProjectTapActions(_) {
             case 'c':
                 // Z88DK
                 try {
-                    tap = yield call(getZ88dkTap, code, userId);
+                    tap = yield call(getZ88dkTap, code, userId, files);
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
@@ -253,7 +257,7 @@ function* handleGetProjectTapActions(_) {
                 // emulator machine (48/128/next link different runtimes), so
                 // the program is compiled for what it is about to run on.
                 try {
-                    tap = yield call(getPascalTap, code, String(machine), userId);
+                    tap = yield call(getPascalTap, code, String(machine), userId, files);
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
@@ -270,7 +274,7 @@ function* handleGetProjectTapActions(_) {
                 // with. A failed compile keeps the previous map: the machine
                 // still runs the previous build.
                 try {
-                    const result = yield call(getSjasmplusTap, code, userId);
+                    const result = yield call(getSjasmplusTap, code, userId, files);
                     const map = parseSld(result.sld);
                     if (map) {
                         // Stale on arrival when the editor moved on while
@@ -310,6 +314,7 @@ function* handleGetProjectTapActions(_) {
 
 function* handleGetSdccTapActions(_) {
     const code = yield select((state) => state.project.code);
+    const projectFiles = yield select((state) => state.project.files);
     try {
         // Build a WorkerMessage and post it to the worker.
         const msg = {updates: [], buildsteps: []};
@@ -318,9 +323,15 @@ function* handleGetSdccTapActions(_) {
         const mainFilename = 'source.c';
         msg.updates.push({path: mainFilename, data: code});
 
+        // Additional project files go into the worker VFS and the build
+        // step's file list, so #include resolves them; only source.c is
+        // compiled.
+        const extraUpdates = toWorkerUpdates(projectFiles);
+        msg.updates.push(...extraUpdates);
+
         msg.buildsteps.push({
             path: mainFilename,
-            files: [mainFilename],
+            files: [mainFilename, ...extraUpdates.map((u) => u.path)],
             tool: 'sdcc',
             mainfile: true
         });
@@ -334,6 +345,7 @@ function* handleGetSdccTapActions(_) {
 
 function* handleGetZmacTapActions(_) {
     const code = yield select((state) => state.project.code);
+    const projectFiles = yield select((state) => state.project.files);
     try {
         // Build a WorkerMessage and post it to the worker.
         const msg = {updates: [], buildsteps: []};
@@ -342,9 +354,15 @@ function* handleGetZmacTapActions(_) {
         const mainFilename = 'source.asm';
         msg.updates.push({path: mainFilename, data: code});
 
+        // Additional project files go into the worker VFS and the build
+        // step's file list, so include resolves them; only source.asm is
+        // assembled.
+        const extraUpdates = toWorkerUpdates(projectFiles);
+        msg.updates.push(...extraUpdates);
+
         msg.buildsteps.push({
             path: mainFilename,
-            files: [mainFilename],
+            files: [mainFilename, ...extraUpdates.map((u) => u.path)],
             tool: 'zmac',
             mainfile: true
         });

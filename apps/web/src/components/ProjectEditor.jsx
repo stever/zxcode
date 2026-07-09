@@ -2,9 +2,11 @@ import React, { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import CodeMirror from "./CodeMirror";
 import "codemirror/mode/z80/z80";
-import { setCode } from "../redux/project/actions";
+import { setCode, setFileContent } from "../redux/project/actions";
+import { selectActiveFile } from "../redux/project/selectors";
 import { toggleBreakpoint } from "../redux/debugger/actions";
 import { languageSupportsSourceDebug } from "../lib/lang";
+import { useTranslation } from "@zxplay/i18n";
 import "../lib/syntax/pasmo";
 import "../lib/syntax/pasta80";
 import "../lib/syntax/sjasmplus";
@@ -14,11 +16,22 @@ import "../lib/syntax/z88dk-c";
 import "../lib/syntax/zxbasic";
 
 export function ProjectEditor() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const cmRef = useRef(null);
 
   const lang = useSelector((state) => state?.project.lang);
   const code = useSelector((state) => state?.project.code);
+  // The editor buffer follows the active file tab; null means the main
+  // source (project.code). Binary assets swap the editor for an info panel.
+  const activeFile = useSelector(selectActiveFile);
+  const activeFileId = activeFile?.id ?? null;
+  const activeIsBinary = Boolean(activeFile?.isBinary);
+  const onMainFile = activeFileId === null;
+  // The change handler and the mount-time gutter handler need the current
+  // active file without re-binding CodeMirror events.
+  const activeFileIdRef = useRef(null);
+  activeFileIdRef.current = activeFileId;
   const lineNumbers = useSelector((state) => state?.app?.lineNumbers || false);
   const breakpoints = useSelector((state) => state?.debugger.breakpoints);
   const debugActive = useSelector((state) => state?.debugger.active);
@@ -93,12 +106,27 @@ export function ProjectEditor() {
     dispatch(setCode(cm.getValue()));
     if (sourceDebug) {
       cm.on("gutterClick", (instance, line, gutter) => {
-        if (gutter === "zx-bp-gutter") {
+        // Source-line breakpoints only map to the main source file.
+        if (gutter === "zx-bp-gutter" && activeFileIdRef.current === null) {
           dispatch(toggleBreakpoint(line + 1));
         }
       });
     }
   }, []);
+
+  // Swap the editor buffer when the active file changes. setValue doesn't
+  // fire the change handler (the wrapper filters origin 'setValue'), so this
+  // can't loop back into the store.
+  useEffect(() => {
+    const cm = cmRef.current?.getCodeMirror();
+    if (!cm || activeIsBinary) return;
+    const content = (activeFile ? activeFile.content : code) || "";
+    if (cm.getValue() !== content) {
+      cm.setValue(content);
+      // Undo must not cross file boundaries.
+      cm.clearHistory();
+    }
+  }, [activeFileId, activeIsBinary]);
 
   useEffect(() => {
     if (cmRef.current) {
@@ -115,6 +143,8 @@ export function ProjectEditor() {
     if (!cmRef.current || !sourceDebug) return;
     const cm = cmRef.current.getCodeMirror();
     cm.clearGutter("zx-bp-gutter");
+    // Breakpoints belong to the main source file; other buffers show none.
+    if (!onMainFile) return;
     for (const bp of breakpoints) {
       if (bp.line <= cm.lineCount()) {
         const marker = document.createElement("div");
@@ -123,7 +153,7 @@ export function ProjectEditor() {
         cm.setGutterMarker(bp.line - 1, "zx-bp-gutter", marker);
       }
     }
-  }, [breakpoints, bpsInert]);
+  }, [breakpoints, bpsInert, activeFileId]);
 
   // Highlight the source line the debugger is paused on and keep it in view.
   useEffect(() => {
@@ -133,18 +163,44 @@ export function ProjectEditor() {
       cm.removeLineClass(pausedLineRef.current, "background", "debug-paused-line");
       pausedLineRef.current = null;
     }
-    if (debugActive && pausedLine && pausedLine <= cm.lineCount()) {
+    // The paused-line highlight maps to the main source file only.
+    if (onMainFile && debugActive && pausedLine && pausedLine <= cm.lineCount()) {
       cm.addLineClass(pausedLine - 1, "background", "debug-paused-line");
       cm.scrollIntoView({ line: pausedLine - 1, ch: 0 }, 40);
       pausedLineRef.current = pausedLine - 1;
     }
-  }, [debugActive, pausedLine]);
+  }, [debugActive, pausedLine, activeFileId]);
+
+  // Binary asset size in raw bytes (content is base64).
+  const assetSize = activeIsBinary
+    ? Math.floor((activeFile.content.length * 3) / 4)
+      - (activeFile.content.endsWith("==") ? 2 : activeFile.content.endsWith("=") ? 1 : 0)
+    : 0;
 
   return (
-    <CodeMirror
-      ref={cmRef}
-      options={options}
-      onChange={(cm, _) => dispatch(setCode(cm.getValue()))}
-    />
+    <>
+      {activeIsBinary && (
+        <div className="binary-asset-panel">
+          <i className="pi pi-box" style={{ fontSize: "2rem" }} />
+          <div className="binary-asset-name">{activeFile.name}</div>
+          <div>{t("editor.files.assetSize", { size: assetSize })}</div>
+          <p>{t("editor.files.assetHint")}</p>
+        </div>
+      )}
+      <div style={activeIsBinary ? { display: "none" } : undefined}>
+        <CodeMirror
+          ref={cmRef}
+          options={options}
+          onChange={(cm, _) => {
+            const fileId = activeFileIdRef.current;
+            dispatch(
+              fileId === null
+                ? setCode(cm.getValue())
+                : setFileContent(fileId, cm.getValue())
+            );
+          }}
+        />
+      </div>
+    </>
   );
 }

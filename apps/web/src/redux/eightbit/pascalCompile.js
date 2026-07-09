@@ -6,8 +6,8 @@ import {getAuthToken, isExpired, refreshToken} from "../../auth";
 import {extractCompilerError} from "./zxbasicCompile";
 
 const COMPILE_MUTATION = gql`
-    mutation ($code: String!, $machine: String) {
-        compilePascal(code: $code, machine: $machine) {
+    mutation ($code: String!, $machine: String, $files: [ProjectFileInput!]) {
+        compilePascal(code: $code, machine: $machine, files: $files) {
             base64_encoded
         }
     }
@@ -23,10 +23,10 @@ const COMPILE_MUTATION = gql`
 // It is guaranteed to only ever throw an array of items: any unexpected error
 // (token refresh, malformed payload, ...) is normalised too, so a failure can
 // never surface as silence.
-export async function getPascalTap(code, machine, userId) {
-    console.log("[pasta80] compile requested", {codeLength: code?.length, machine, userId});
+export async function getPascalTap(code, machine, userId, files = []) {
+    console.log("[pasta80] compile requested", {codeLength: code?.length, machine, userId, files: files.length});
     try {
-        const tap = await compile(code, machine, userId);
+        const tap = await compile(code, machine, userId, files);
         console.log("[pasta80] compile succeeded", {bytes: tap.length});
         return tap;
     } catch (e) {
@@ -40,8 +40,8 @@ export async function getPascalTap(code, machine, userId) {
     }
 }
 
-async function compile(code, machine, userId) {
-    const variables = {code, machine: String(machine)};
+async function compile(code, machine, userId, files) {
+    const variables = {code, machine: String(machine), files};
 
     // Match gqlFetch: anonymous requests carry no token at all.
     let jwt = userId ? getAuthToken() : null;

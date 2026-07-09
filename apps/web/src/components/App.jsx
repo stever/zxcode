@@ -31,6 +31,7 @@ import PublicProfiles from "./PublicProfiles";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
 import UnsavedChangesGuard from "./UnsavedChangesGuard";
+import { selectHasUnsavedChanges } from "../redux/project/selectors";
 import clsx from "clsx";
 import { computeMode } from "../lib/layout";
 
@@ -38,9 +39,7 @@ export default function App() {
   const err = useSelector((state) => state?.error.msg);
   const width = useSelector((state) => state?.window.width);
   const height = useSelector((state) => state?.window.height);
-  const hasUnsavedCode = useSelector(
-    (state) => state?.project.code !== state?.project.savedCode
-  );
+  const hasUnsavedCode = useSelector(selectHasUnsavedChanges);
 
   // The unsaved draft only lives in the store, so leaving the page (refresh,
   // close, log-out redirect) would lose it silently. In-app navigation is

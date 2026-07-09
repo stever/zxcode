@@ -1,6 +1,7 @@
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CompileError } from './errors.js';
+import { ProjectFileRecord } from './hasura.js';
 
 // Run the worker under tsx (the service itself runs via tsx, so it's installed).
 const WORKER_PATH = fileURLToPath(new URL('./compile-worker.ts', import.meta.url));
@@ -13,7 +14,12 @@ const COMPILE_TIMEOUT_MS = parseInt(process.env.COMPILE_TIMEOUT_MS ?? '20000', 1
  * process always works. The service is single-client and sequential, so one
  * child per request is fine.
  */
-export function compileProjectIsolated(lang: string, code: string, machine?: string): Promise<Buffer> {
+export function compileProjectIsolated(
+    lang: string,
+    code: string,
+    machine?: string,
+    files: ProjectFileRecord[] = [],
+): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const child = fork(WORKER_PATH, { execArgv: ['--import', 'tsx'] });
         let settled = false;
@@ -45,6 +51,6 @@ export function compileProjectIsolated(lang: string, code: string, machine?: str
             finish(() => reject(new Error(`compile worker exited unexpectedly (code ${codeNum})`))),
         );
 
-        child.send({ lang, code, machine });
+        child.send({ lang, code, machine, files });
     });
 }

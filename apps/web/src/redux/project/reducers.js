@@ -11,6 +11,11 @@ const initialState = {
     title: undefined,
     code: '',
     savedCode: '',
+    // Additional project files: {id, name, content, savedContent, isBinary}.
+    // Binary asset content is base64. The main source stays in code above.
+    files: [],
+    // null selects the main source file.
+    activeFileId: null,
     errorItems: undefined,
     isPublic: false,
     slug: undefined,
@@ -20,6 +25,10 @@ const initialState = {
     ownerProfileIsPublic: false,
     machine: '48'
 };
+
+function filesDirty(state) {
+    return state.files.some((f) => f.content !== f.savedContent);
+}
 
 // -----------------------------------------------------------------------------
 // Actions
@@ -34,7 +43,8 @@ function loadProject(state, action) {
     // visiting About or profile settings) must keep the in-memory draft; the
     // matching saga skips the server refetch in this case. Everything else
     // starts from a clean slate as before.
-    if (action.id && action.id === state.id && state.code !== state.savedCode) {
+    if (action.id && action.id === state.id
+        && (state.code !== state.savedCode || filesDirty(state))) {
         return state;
     }
     return {...initialState};
@@ -63,6 +73,14 @@ function receiveLoadedProject(state, action) {
         lang: action.lang,
         code: action.code,
         savedCode: action.code,
+        files: (action.files || []).map((f) => ({
+            id: f.file_id,
+            name: f.name,
+            content: f.content,
+            savedContent: f.content,
+            isBinary: f.is_binary
+        })),
+        activeFileId: null,
         selectedTabIndex: 0,
         isPublic: action.isPublic,
         slug: action.slug,
@@ -102,6 +120,68 @@ function setProjectTitle(state, action) {
     };
 }
 
+function setActiveFile(state, action) {
+    return {
+        ...state,
+        activeFileId: action.fileId,
+    };
+}
+
+function setFileContent(state, action) {
+    return {
+        ...state,
+        files: state.files.map((f) =>
+            f.id === action.fileId ? {...f, content: action.content} : f),
+    };
+}
+
+function markFilesSaved(state) {
+    return {
+        ...state,
+        files: state.files.map((f) =>
+            f.content === f.savedContent ? f : {...f, savedContent: f.content}),
+    };
+}
+
+function revertUnsavedChanges(state) {
+    return {
+        ...state,
+        code: state.savedCode,
+        files: state.files.map((f) =>
+            f.content === f.savedContent ? f : {...f, content: f.savedContent}),
+    };
+}
+
+function receiveAddedFile(state, action) {
+    return {
+        ...state,
+        files: [...state.files, {
+            id: action.fileId,
+            name: action.name,
+            content: action.content,
+            savedContent: action.content,
+            isBinary: action.isBinary
+        }],
+        activeFileId: action.fileId,
+    };
+}
+
+function receiveRenamedFile(state, action) {
+    return {
+        ...state,
+        files: state.files.map((f) =>
+            f.id === action.fileId ? {...f, name: action.name} : f),
+    };
+}
+
+function receiveDeletedFile(state, action) {
+    return {
+        ...state,
+        files: state.files.filter((f) => f.id !== action.fileId),
+        activeFileId: state.activeFileId === action.fileId ? null : state.activeFileId,
+    };
+}
+
 // -----------------------------------------------------------------------------
 // Reducer
 // -----------------------------------------------------------------------------
@@ -116,6 +196,13 @@ const actionsMap = {
     [actionTypes.setSavedCode]: setSavedCode,
     [actionTypes.setErrorItems]: setErrorItems,
     [actionTypes.setProjectTitle]: setProjectTitle,
+    [actionTypes.setActiveFile]: setActiveFile,
+    [actionTypes.setFileContent]: setFileContent,
+    [actionTypes.markFilesSaved]: markFilesSaved,
+    [actionTypes.revertUnsavedChanges]: revertUnsavedChanges,
+    [actionTypes.receiveAddedFile]: receiveAddedFile,
+    [actionTypes.receiveRenamedFile]: receiveRenamedFile,
+    [actionTypes.receiveDeletedFile]: receiveDeletedFile,
 };
 
 export default function reducer(state = initialState, action) {

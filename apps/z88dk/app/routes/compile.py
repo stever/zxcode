@@ -3,9 +3,9 @@ import base64
 import os
 import re
 import resource
+import shutil
 import signal
 import subprocess
-from pathlib import Path
 from fastapi import APIRouter, Header, HTTPException, status
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
@@ -43,8 +43,73 @@ class SessionVars(BaseModel):
     x_hasura_user_id: Optional[UUID] = Field(default=None, alias="x-hasura-user-id")
 
 
+# Additional project files staged into the compile workdir so #include
+# "header.h" (and #incbin-style data pulls) resolve next to program.c. Names
+# become real filenames there, so they are held to a safe charset with no
+# path separators (mirrors the project_file DB constraint), and names stemmed
+# 'program' are reserved for the main source, the zcc intermediates and the
+# TAP output so a staged file can't shadow them.
+MAX_PROJECT_FILES = 32
+MAX_FILE_CONTENT_SIZE = 256 * 1024  # matches the DB cap; base64 for binaries
+PROJECT_FILE_NAME_RE = re.compile(r'[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}')
+
+
+class ProjectFile(BaseModel):
+    name: str
+    content: str
+    is_binary: Optional[bool] = False
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if not PROJECT_FILE_NAME_RE.fullmatch(v):
+            raise ValueError(
+                'File names may only use letters, digits, dots, dashes and '
+                'underscores (max 64 chars, no leading dot)')
+        return v
+
+    @field_validator('content')
+    @classmethod
+    def validate_content_size(cls, v):
+        if len(v) > MAX_FILE_CONTENT_SIZE:
+            raise ValueError(
+                f'File too large. Maximum size is {MAX_FILE_CONTENT_SIZE} bytes')
+        return v
+
+
+def stage_project_files(workdir, files):
+    """Write the additional project files into the compile workdir."""
+    seen = set()
+    for pf in files or []:
+        lower = pf.name.lower()
+        stem = lower.split('.', 1)[0]
+        if stem == 'program':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File name '{pf.name}' is reserved for the main source")
+        if lower in seen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Duplicate file name '{pf.name}'")
+        seen.add(lower)
+        path = os.path.join(workdir, pf.name)
+        if pf.is_binary:
+            try:
+                data = base64.b64decode(pf.content, validate=True)
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File '{pf.name}' is not valid base64")
+            with open(path, 'wb') as f:
+                f.write(data)
+        else:
+            with open(path, 'w') as f:
+                f.write(pf.content)
+
+
 class Input(BaseModel):
     code: str
+    files: Optional[list[ProjectFile]] = None
 
     @field_validator('code')
     @classmethod
@@ -53,6 +118,13 @@ class Input(BaseModel):
             raise ValueError('Input cannot be empty')
         if len(v) > MAX_INPUT_SIZE:
             raise ValueError(f'Input too large. Maximum size is {MAX_INPUT_SIZE} bytes')
+        return v
+
+    @field_validator('files')
+    @classmethod
+    def validate_file_count(cls, v):
+        if v and len(v) > MAX_PROJECT_FILES:
+            raise ValueError(f'Too many files. Maximum is {MAX_PROJECT_FILES}')
         return v
 
 
@@ -97,6 +169,11 @@ def sanitize_compiler_output(output: str, c_filename: str) -> str:
         return ""
 
     cleaned = output.replace(c_filename, "program.c")
+    # Diagnostics from staged include files carry the workdir prefix; strip
+    # it so they read as the bare project filename.
+    workdir = os.path.dirname(c_filename)
+    if workdir:
+        cleaned = cleaned.replace(workdir + os.sep, "").replace(workdir, "")
     # Defensive: catch any leftover /path/to/tmpXXXX.c that slipped through.
     cleaned = re.sub(r"\S*/tmp\w+\.c", "program.c", cleaned)
     return cleaned.strip()
@@ -107,19 +184,18 @@ def handle_compile_request(
         args: RequestArgs,
         authorization: Optional[str] = Header(None)) -> Optional[CompileResult]:
 
-    # Write C code to file.
-    tmp = tempfile.NamedTemporaryFile(delete=False)
-    tmp.close()
-    c_filename = f'{tmp.name}.c'
-    with open(c_filename, 'w') as f:
-        f.write(args.input.code)
-
-    path = os.path.dirname(os.path.abspath(c_filename))
-    stem = Path(c_filename).stem
-    out_filename = f'{os.path.join(path, stem)}'
+    # A fresh directory per request: the source is always program.c and any
+    # additional project files are staged alongside it so #include "..."
+    # resolves. Outputs and intermediates land in the same directory.
+    path = tempfile.mkdtemp(prefix='z88dk-')
+    c_filename = os.path.join(path, 'program.c')
+    out_filename = os.path.join(path, 'program')
     tap_filename = f'{out_filename}.tap'
 
     try:
+        with open(c_filename, 'w') as f:
+            f.write(args.input.code)
+        stage_project_files(path, args.input.files)
         # Compile in its own process group so a timeout can kill zcc and every
         # child it spawned (sdcc etc.), not just the parent.
         proc = subprocess.Popen(
@@ -154,9 +230,6 @@ def handle_compile_request(
             return CompileResult(base64_encoded=base64_encoded)
 
     finally:
-        # Clean up the source, the tape, and any intermediates zcc left behind.
-        for leftover in Path(path).glob(f'{stem}*'):
-            try:
-                leftover.unlink()
-            except OSError:
-                pass
+        # Clean up the per-request directory: source, staged files, the tape,
+        # and any intermediates zcc left behind.
+        shutil.rmtree(path, ignore_errors=True)

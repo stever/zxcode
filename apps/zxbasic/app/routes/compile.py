@@ -5,6 +5,7 @@ import io
 import os
 import re
 import resource
+import shutil
 import sys
 import signal
 import threading
@@ -12,7 +13,6 @@ import subprocess
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from pathlib import Path
 from fastapi import APIRouter, Header, HTTPException, status
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
@@ -39,8 +39,79 @@ class SessionVars(BaseModel):
     x_hasura_user_id: Optional[UUID] = Field(default=None, alias="x-hasura-user-id")
 
 
+# Additional project files staged into the compile workdir so #include
+# resolves next to program.bas. Names become real filenames there, so they
+# are held to a safe charset with no path separators (mirrors the
+# project_file DB constraint), and names stemmed 'program' are reserved for
+# the main source and its outputs so a staged file can't shadow them.
+MAX_PROJECT_FILES = 32
+MAX_FILE_CONTENT_SIZE = 256 * 1024  # matches the DB cap; base64 for binaries
+PROJECT_FILE_NAME_RE = re.compile(r'[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}')
+
+
+class ProjectFile(BaseModel):
+    name: str
+    content: str
+    is_binary: Optional[bool] = False
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if not PROJECT_FILE_NAME_RE.fullmatch(v):
+            raise ValueError(
+                'File names may only use letters, digits, dots, dashes and '
+                'underscores (max 64 chars, no leading dot)')
+        return v
+
+    @field_validator('content')
+    @classmethod
+    def validate_content_size(cls, v):
+        if len(v) > MAX_FILE_CONTENT_SIZE:
+            raise ValueError(
+                f'File too large. Maximum size is {MAX_FILE_CONTENT_SIZE} bytes')
+        return v
+
+
+def stage_project_files(workdir, files):
+    """Write the additional project files into the compile workdir."""
+    seen = set()
+    for pf in files or []:
+        lower = pf.name.lower()
+        stem = lower.split('.', 1)[0]
+        if stem == 'program':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File name '{pf.name}' is reserved for the main source")
+        if lower in seen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Duplicate file name '{pf.name}'")
+        seen.add(lower)
+        path = os.path.join(workdir, pf.name)
+        if pf.is_binary:
+            try:
+                data = base64.b64decode(pf.content, validate=True)
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File '{pf.name}' is not valid base64")
+            with open(path, 'wb') as f:
+                f.write(data)
+        else:
+            with open(path, 'w') as f:
+                f.write(pf.content)
+
+
 class Input(BaseModel):
     basic: str
+    files: Optional[list[ProjectFile]] = None
+
+    @field_validator('files')
+    @classmethod
+    def validate_file_count(cls, v):
+        if v and len(v) > MAX_PROJECT_FILES:
+            raise ValueError(f'Too many files. Maximum is {MAX_PROJECT_FILES}')
+        return v
 
     @field_validator('basic')
     @classmethod
@@ -123,6 +194,11 @@ def sanitize_compiler_output(output: str, bas_filename: str) -> str:
         return ""
 
     cleaned = output.replace(bas_filename, "program.bas")
+    # Diagnostics from staged include files carry the workdir prefix; strip
+    # it so they read as the bare project filename.
+    workdir = os.path.dirname(bas_filename)
+    if workdir:
+        cleaned = cleaned.replace(workdir + os.sep, "").replace(workdir, "")
     # Defensive: catch any leftover /path/to/tmpXXXX.bas that slipped through.
     cleaned = re.sub(r"\S*/tmp\w+\.bas", "program.bas", cleaned)
     cleaned = cleaned.strip()
@@ -338,17 +414,19 @@ def handle_compile_request(
             detail=reason
         )
 
-    # Write ZX Basic to file. Both the source and the .tap live in the temp
-    # dir (a writable tmpfs under read-only root), addressed absolutely so the
-    # compiler never writes into the process CWD / image layer.
-    tmp = tempfile.NamedTemporaryFile(delete=False)
-    bas_filename = f'{tmp.name}.bas'
-    tap_filename = os.path.join(
-        os.path.dirname(bas_filename), f'{Path(bas_filename).stem}.tap')
+    # A fresh directory per request: the source is always program.bas and any
+    # additional project files are staged alongside it so #include resolves.
+    # Everything lives in the temp dir (a writable tmpfs under read-only
+    # root), addressed absolutely so the compiler never writes into the
+    # process CWD / image layer.
+    workdir = tempfile.mkdtemp(prefix='zxbasic-')
+    bas_filename = os.path.join(workdir, 'program.bas')
+    tap_filename = os.path.join(workdir, 'program.tap')
 
     try:
         with open(bas_filename, 'w') as f:
             f.write(args.input.basic)
+        stage_project_files(workdir, args.input.files)
 
         # Compile the tape file from basic source with timeout
         try:
@@ -395,10 +473,5 @@ def handle_compile_request(
             return CompileResult(base64_encoded=base64_encoded)
 
     finally:
-        # Always clean up temporary files
-        for filename in [bas_filename, tap_filename, tmp.name]:
-            if os.path.exists(filename):
-                try:
-                    os.remove(filename)
-                except Exception as e:
-                    print(f"Warning: Could not remove {filename}: {e}")
+        # Always clean up the per-request directory
+        shutil.rmtree(workdir, ignore_errors=True)

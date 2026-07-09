@@ -3,7 +3,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { Button } from "primereact/button";
 import { Dialog } from "primereact/dialog";
 import { history } from "../redux/store";
-import { saveCodeChanges, setCode } from "../redux/project/actions";
+import { saveCodeChanges, revertUnsavedChanges } from "../redux/project/actions";
+import { selectHasUnsavedChanges } from "../redux/project/selectors";
 import { useTranslation } from "@zxplay/i18n";
 
 // Mirrors the route table in App.jsx. While a dirty draft only lives in the
@@ -43,11 +44,8 @@ export default function UnsavedChangesGuard() {
   const ownerSlug = useSelector((state) => state?.project.ownerSlug);
   const ownerId = useSelector((state) => state?.project.ownerId);
   const userId = useSelector((state) => state?.identity.userId);
-  const savedCode = useSelector((state) => state?.project.savedCode);
   const dirty = useSelector(
-    (state) =>
-      Boolean(state?.project.id) &&
-      state?.project.code !== state?.project.savedCode
+    (state) => Boolean(state?.project.id) && selectHasUnsavedChanges(state)
   );
 
   const isOwner = Boolean(userId && ownerId && userId === ownerId);
@@ -117,7 +115,7 @@ export default function UnsavedChangesGuard() {
             label={t("editor.discard")}
             icon="pi pi-trash"
             className="p-button-outlined p-button-danger"
-            onClick={() => dispatch(setCode(savedCode))}
+            onClick={() => dispatch(revertUnsavedChanges())}
           />
           {isOwner && (
             <Button

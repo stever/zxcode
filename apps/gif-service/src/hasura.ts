@@ -45,10 +45,21 @@ async function gql<T>(query: string, variables: Record<string, unknown>): Promis
     }
 }
 
+// Additional project file (include source or base64 binary asset) forwarded
+// to the compile actions so they can stage it next to the main source.
+export interface ProjectFileRecord {
+    name: string;
+    content: string;
+    is_binary: boolean;
+}
+
+const PROJECT_FILES_SELECTION = 'files(order_by: { name: asc }) { name content is_binary }';
+
 export interface ProjectRecord {
     lang: string;
     code: string;
     title: string;
+    files: ProjectFileRecord[];
 }
 
 export interface ProjectById {
@@ -56,6 +67,7 @@ export interface ProjectById {
     code: string;
     machine: string;
     updated_at: string;
+    files: ProjectFileRecord[];
 }
 
 /**
@@ -71,6 +83,7 @@ export async function fetchProjectById(projectId: string): Promise<ProjectById |
                 code
                 machine
                 updated_at
+                ${PROJECT_FILES_SELECTION}
             }
         }
     `;
@@ -100,6 +113,7 @@ export async function fetchProject(
                 lang
                 code
                 title
+                ${PROJECT_FILES_SELECTION}
             }
         }
     `;
@@ -159,10 +173,10 @@ export async function fetchProjectMetaById(id: string): Promise<ProjectMeta | nu
 // takes the machine target, since Pasta80 links a different runtime per
 // machine.
 const ACTION_MUTATIONS = {
-    compile: `mutation ($src: String!) { compile(basic: $src) { base64_encoded } }`,
-    compileC: `mutation ($src: String!) { compileC(code: $src) { base64_encoded } }`,
-    compileSjasmplus: `mutation ($src: String!) { compileSjasmplus(code: $src) { base64_encoded } }`,
-    compilePascal: `mutation ($src: String!, $machine: String) { compilePascal(code: $src, machine: $machine) { base64_encoded } }`,
+    compile: `mutation ($src: String!, $files: [ProjectFileInput!]) { compile(basic: $src, files: $files) { base64_encoded } }`,
+    compileC: `mutation ($src: String!, $files: [ProjectFileInput!]) { compileC(code: $src, files: $files) { base64_encoded } }`,
+    compileSjasmplus: `mutation ($src: String!, $files: [ProjectFileInput!]) { compileSjasmplus(code: $src, files: $files) { base64_encoded } }`,
+    compilePascal: `mutation ($src: String!, $machine: String, $files: [ProjectFileInput!]) { compilePascal(code: $src, machine: $machine, files: $files) { base64_encoded } }`,
 } as const;
 
 /**
@@ -177,6 +191,7 @@ export async function compileViaAction(
     action: keyof typeof ACTION_MUTATIONS,
     code: string,
     machine?: string,
+    files: ProjectFileRecord[] = [],
 ): Promise<Uint8Array> {
     const query = ACTION_MUTATIONS[action];
     try {
@@ -184,7 +199,7 @@ export async function compileViaAction(
         // it, and an undeclared variable is a GraphQL error.
         const data = await gql<Record<string, { base64_encoded: string } | null>>(
             query,
-            machine === undefined ? { src: code } : { src: code, machine },
+            machine === undefined ? { src: code, files } : { src: code, machine, files },
         );
         const result = data[action];
         if (!result?.base64_encoded) {

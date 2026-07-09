@@ -6,7 +6,7 @@ import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 import clsx from "clsx";
 import { Emulator } from "./Emulator";
-import { ProjectEditor } from "./ProjectEditor";
+import { ProjectFileTabView } from "./ProjectFileTabView";
 import { ProjectToolbar } from "./ProjectToolbar";
 import { DebuggerDock } from "./debugger/DebuggerDock";
 import StarButton from "./StarButton";
@@ -118,7 +118,7 @@ export default function ProjectPage({ projectId }) {
                 </div>
               </TabPanel>,
               <TabPanel key="editor" header={editorTitle}>
-                <ProjectEditor id={effectiveId} />
+                <ProjectFileTabView />
                 <ProjectToolbar />
               </TabPanel>,
               ...(debugAttached
@@ -138,14 +138,12 @@ export default function ProjectPage({ projectId }) {
                 className={clsx("col p-0 mr-2", debugAttached && "debug-session")}
                 style={{ maxWidth: `calc(100vw - ${emuW + 41}px` }}
               >
-                {/* Single tab, pinned: the shared selectedTabIndex belongs to
-                    tab mode (0 emulator / 1 editor / 2 debug) and would blank
-                    this panel after a narrow-mode debug session. */}
-                <TabView activeIndex={0}>
-                  <TabPanel header={editorTitle}>
-                    <ProjectEditor id={effectiveId} />
-                  </TabPanel>
-                </TabView>
+                {/* The tab bar is the project's file list: the language-named
+                    tab is the main source, one tab per additional file, and a
+                    "+" for owners. It tracks activeFileId, not the shared
+                    selectedTabIndex (which belongs to tab mode's
+                    emulator/editor/debug selector). */}
+                <ProjectFileTabView />
                 {debugAttached && <DebuggerDock />}
               </div>
               <div

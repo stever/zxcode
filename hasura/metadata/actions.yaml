@@ -30,7 +30,8 @@ actions:
       - role: zxplay-user
 custom_types:
   enums: []
-  input_objects: []
+  input_objects:
+    - name: ProjectFileInput
   objects:
     - name: CompileResult
   scalars: []

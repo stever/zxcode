@@ -13,6 +13,7 @@ import {
   saveCodeChanges,
   copyProject,
 } from "../redux/project/actions";
+import { selectFiles, selectHasUnsavedChanges } from "../redux/project/selectors";
 import { runProjectCode } from "../redux/eightbit/actions";
 import { openDebugger, closeDebugger } from "../redux/debugger/actions";
 import { dashboardLock } from "../dashboard_lock";
@@ -40,8 +41,9 @@ export function ProjectToolbar() {
 
   const lang = useSelector((state) => state?.project.lang);
   const code = useSelector((state) => state?.project.code);
+  const files = useSelector(selectFiles);
   const debugActive = useSelector((state) => state?.debugger.active);
-  const savedCode = useSelector((state) => state?.project.savedCode);
+  const hasUnsavedChanges = useSelector(selectHasUnsavedChanges);
   const isMobile = useSelector((state) => state?.window.isMobile);
   const projectName = useSelector((state) => state?.project.title);
   const projectId = useSelector((state) => state?.project.id);
@@ -73,7 +75,7 @@ export function ProjectToolbar() {
     const newTitle = copyProjectName || `${projectName} (Copy)`;
 
     // Use the new copyProject action which handles everything
-    dispatch(copyProject(newTitle, lang, code));
+    dispatch(copyProject(newTitle, lang, code, files));
 
     if (toast.current) {
       toast.current.show({
@@ -137,7 +139,7 @@ export function ProjectToolbar() {
                 label={t("actions.save")}
                 icon="pi pi-save"
                 className="p-button-outlined"
-                disabled={code === savedCode}
+                disabled={!hasUnsavedChanges}
                 onClick={() => dispatch(saveCodeChanges())}
               />
               <Button

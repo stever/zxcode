@@ -5,8 +5,8 @@ import Constants from "../../constants";
 import {getAuthToken, isExpired, refreshToken} from "../../auth";
 
 const COMPILE_MUTATION = gql`
-    mutation ($basic: String!) {
-        compile(basic: $basic) {
+    mutation ($basic: String!, $files: [ProjectFileInput!]) {
+        compile(basic: $basic, files: $files) {
             base64_encoded
         }
     }
@@ -38,10 +38,10 @@ export function extractCompilerError(envelope, axiosError) {
 // It is guaranteed to only ever throw an array of items: any unexpected error
 // (token refresh, malformed payload, ...) is normalised too, so a failure can
 // never surface as silence.
-export async function getZXBasicTap(code, userId) {
-    console.log("[zxbasic] compile requested", {codeLength: code?.length, userId});
+export async function getZXBasicTap(code, userId, files = []) {
+    console.log("[zxbasic] compile requested", {codeLength: code?.length, userId, files: files.length});
     try {
-        const tap = await compile(code, userId);
+        const tap = await compile(code, userId, files);
         console.log("[zxbasic] compile succeeded", {tapBytes: tap.length});
         return tap;
     } catch (e) {
@@ -55,8 +55,8 @@ export async function getZXBasicTap(code, userId) {
     }
 }
 
-async function compile(code, userId) {
-    const variables = {basic: code};
+async function compile(code, userId, files) {
+    const variables = {basic: code, files};
 
     // Match gqlFetch: anonymous requests carry no token at all.
     let jwt = userId ? getAuthToken() : null;

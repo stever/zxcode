@@ -9,6 +9,7 @@ import {setSelectedTabIndex} from "../redux/demo/actions";
 import {reset as resetProject, setErrorItems} from "../redux/project/actions";
 import {reset} from "../redux/jsspeccy/actions";
 import {showToastsForErrorItems} from "../errors";
+import {selectHasUnsavedChanges} from "../redux/project/selectors";
 import {useTranslation} from "@zxplay/i18n";
 import {computeMode, currentKeystr, keyboardAspect, tabEmulatorWidth} from "../lib/layout";
 
@@ -18,9 +19,7 @@ export default function HomePage() {
 
     const selectedTabIndex = useSelector(state => state?.demo.selectedTabIndex);
     const errorItems = useSelector(state => state?.project.errorItems);
-    const hasUnsavedCode = useSelector(
-        state => state?.project.code !== state?.project.savedCode
-    );
+    const hasUnsavedCode = useSelector(selectHasUnsavedChanges);
     const windowWidth = useSelector(state => state?.window.width);
     const windowHeight = useSelector(state => state?.window.height);
 

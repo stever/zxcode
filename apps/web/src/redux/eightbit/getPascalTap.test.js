@@ -62,7 +62,17 @@ describe("getPascalTap error surfacing", () => {
         const bytes = await getPascalTap("good code", "next", null);
         expect(bytes.length).toBeGreaterThan(0);
         const [, body] = axios.post.mock.calls[0];
-        expect(body.variables).toEqual({code: "good code", machine: "next"});
+        expect(body.variables).toEqual({code: "good code", machine: "next", files: []});
+    });
+
+    test("passes additional project files through", async () => {
+        const b64 = Buffer.from("tap").toString("base64");
+        axios.post.mockResolvedValue({data: {data: {compilePascal: {base64_encoded: b64}}}});
+
+        const files = [{name: "part.inc", content: "procedure P; begin end;", is_binary: false}];
+        await getPascalTap("good code", "48", null, files);
+        const [, body] = axios.post.mock.calls[0];
+        expect(body.variables.files).toEqual(files);
     });
 
     test("numeric machine values are normalised to strings", async () => {

@@ -2,7 +2,18 @@ import {takeLatest, put, select, call} from "redux-saga/effects";
 import gql from "graphql-tag";
 import {history} from "../store";
 import {gqlFetch} from "../../graphql_fetch";
-import {actionTypes, reset, receiveLoadedProject, setSavedCode, setSelectedTabIndex, setProjectTitle} from "./actions";
+import {
+    actionTypes,
+    reset,
+    receiveLoadedProject,
+    setSavedCode,
+    setSelectedTabIndex,
+    setProjectTitle,
+    markFilesSaved,
+    receiveAddedFile,
+    receiveRenamedFile,
+    receiveDeletedFile
+} from "./actions";
 import {pause, reset as resetMachine} from "../jsspeccy/actions";
 import {setMachine} from "../app/actions";
 import {handleException} from "../../errors";
@@ -45,6 +56,21 @@ export function* watchForRenameProjectActions() {
 // noinspection JSUnusedGlobalSymbols
 export function* watchForCopyProjectActions() {
     yield takeLatest(actionTypes.copyProject, handleCopyProjectActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchForAddFileActions() {
+    yield takeLatest(actionTypes.addFile, handleAddFileActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchForRenameFileActions() {
+    yield takeLatest(actionTypes.renameFile, handleRenameFileActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchForDeleteFileActions() {
+    yield takeLatest(actionTypes.deleteFile, handleDeleteFileActions);
 }
 
 // -----------------------------------------------------------------------------
@@ -142,7 +168,9 @@ function* handleLoadProjectActions(action) {
         const currentId = yield select((state) => state.project.id);
         const code = yield select((state) => state.project.code);
         const savedCode = yield select((state) => state.project.savedCode);
-        if (currentId === action.id && code !== savedCode) {
+        const filesDirty = yield select((state) =>
+            state.project.files.some((f) => f.content !== f.savedContent));
+        if (currentId === action.id && (code !== savedCode || filesDirty)) {
             return;
         }
 
@@ -162,6 +190,12 @@ function* handleLoadProjectActions(action) {
                         slug
                         greeting_name
                         profile_is_public
+                    }
+                    files(order_by: {name: asc}) {
+                        file_id
+                        name
+                        content
+                        is_binary
                     }
                 }
             }
@@ -204,7 +238,8 @@ function* handleLoadProjectActions(action) {
             ownerId,
             ownerName,
             ownerProfileIsPublic,
-            machine
+            machine,
+            proj.files || []
         ));
 
         // Boot the emulator to the machine the project targets, so a Next
@@ -231,6 +266,7 @@ function* handleSaveCodeChangesActions(_) {
         const userId = yield select((state) => state.identity.userId);
         const projectId = yield select((state) => state.project.id);
         const code = yield select((state) => state.project.code);
+        const files = yield select((state) => state.project.files);
 
         const query = gql`
             mutation ($project_id: uuid!, $code: String!) {
@@ -251,7 +287,121 @@ function* handleSaveCodeChangesActions(_) {
         // noinspection JSUnresolvedVariable
         console.assert(response?.data?.update_project_by_pk?.project_id, response);
 
+        // Persist every additional file with a dirty draft.
+        const fileQuery = gql`
+            mutation ($file_id: uuid!, $content: String!) {
+                update_project_file_by_pk(pk_columns: {file_id: $file_id}, _set: {content: $content}) {
+                    file_id
+                }
+            }
+        `;
+        for (const file of files.filter((f) => f.content !== f.savedContent)) {
+            const fileResponse = yield call(gqlFetch, userId, fileQuery, {
+                'file_id': file.id,
+                'content': file.content
+            });
+            // noinspection JSUnresolvedVariable
+            console.assert(fileResponse?.data?.update_project_file_by_pk?.file_id, fileResponse);
+        }
+
         yield put(setSavedCode(code));
+        yield put(markFilesSaved());
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleAddFileActions(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+        const projectId = yield select((state) => state.project.id);
+
+        const query = gql`
+            mutation ($project_id: uuid!, $name: String!, $content: String!, $is_binary: Boolean!) {
+                insert_project_file_one(object: {project_id: $project_id, name: $name, content: $content, is_binary: $is_binary}) {
+                    file_id
+                }
+            }
+        `;
+
+        const variables = {
+            'project_id': projectId,
+            'name': action.name,
+            'content': action.content,
+            'is_binary': action.isBinary
+        };
+
+        // noinspection JSCheckFunctionSignatures
+        const response = yield call(gqlFetch, userId, query, variables);
+
+        // noinspection JSUnresolvedVariable
+        const fileId = response?.data?.insert_project_file_one?.file_id;
+        if (!fileId) {
+            return;
+        }
+
+        yield put(receiveAddedFile(fileId, action.name, action.content, action.isBinary));
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleRenameFileActions(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+
+        const query = gql`
+            mutation ($file_id: uuid!, $name: String!) {
+                update_project_file_by_pk(pk_columns: {file_id: $file_id}, _set: {name: $name}) {
+                    file_id
+                }
+            }
+        `;
+
+        const variables = {
+            'file_id': action.fileId,
+            'name': action.name
+        };
+
+        // noinspection JSCheckFunctionSignatures
+        const response = yield call(gqlFetch, userId, query, variables);
+
+        // noinspection JSUnresolvedVariable
+        if (!response?.data?.update_project_file_by_pk?.file_id) {
+            return;
+        }
+
+        yield put(receiveRenamedFile(action.fileId, action.name));
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleDeleteFileActions(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+
+        const query = gql`
+            mutation ($file_id: uuid!) {
+                delete_project_file_by_pk(file_id: $file_id) {
+                    file_id
+                }
+            }
+        `;
+
+        const variables = {
+            'file_id': action.fileId
+        };
+
+        // noinspection JSCheckFunctionSignatures
+        const response = yield call(gqlFetch, userId, query, variables);
+
+        // noinspection JSUnresolvedVariable
+        if (!response?.data?.delete_project_file_by_pk?.file_id) {
+            return;
+        }
+
+        yield put(receiveDeletedFile(action.fileId));
     } catch (e) {
         handleException(e);
     }
@@ -476,10 +626,16 @@ function* handleCopyProjectActions(action) {
         const machine = yield select((state) => state.app.machine);
 
         const query = gql`
-            mutation ($title: String!, $lang: String!, $code: String!, $slug: String!, $machine: String!) {
-                insert_project_one(object: {title: $title, lang: $lang, code: $code, slug: $slug, machine: $machine}) {
+            mutation ($title: String!, $lang: String!, $code: String!, $slug: String!, $machine: String!, $files: [project_file_insert_input!]!) {
+                insert_project_one(object: {title: $title, lang: $lang, code: $code, slug: $slug, machine: $machine, files: {data: $files}}) {
                     project_id
                     slug
+                    files(order_by: {name: asc}) {
+                        file_id
+                        name
+                        content
+                        is_binary
+                    }
                 }
             }
         `;
@@ -489,7 +645,13 @@ function* handleCopyProjectActions(action) {
             'lang': action.lang,
             'code': action.code,
             'slug': slug,
-            'machine': String(machine)
+            'machine': String(machine),
+            // Duplicate the source project's files (current drafts included).
+            'files': (action.files || []).map((f) => ({
+                name: f.name,
+                content: f.content,
+                is_binary: f.isBinary
+            }))
         };
 
         // noinspection JSCheckFunctionSignatures
@@ -501,10 +663,11 @@ function* handleCopyProjectActions(action) {
         // noinspection JSUnresolvedVariable
         const id = response?.data?.insert_project_one?.project_id;
         const projectSlug = response?.data?.insert_project_one?.slug;
+        const copiedFiles = response?.data?.insert_project_one?.files || [];
 
         const currentUserName = yield select((state) => state.identity.greetingName);
 
-        yield put(receiveLoadedProject(id, action.title, action.lang, action.code, false, projectSlug, userSlug, userId, currentUserName, true));
+        yield put(receiveLoadedProject(id, action.title, action.lang, action.code, false, projectSlug, userSlug, userId, currentUserName, true, String(machine), copiedFiles));
 
         // Navigate to the new project using the slug-based URL
         if (userSlug && projectSlug) {
