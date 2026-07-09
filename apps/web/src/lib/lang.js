@@ -32,3 +32,13 @@ export function allowedMachines(lang) {
 export function languageAllowedOnMachine(lang, machine) {
   return allowedMachines(lang).includes(String(machine));
 }
+
+// Languages whose compile path returns a line-to-address source map, enabling
+// editor gutter breakpoints and the paused-line highlight. Only the sjasmplus
+// service emits one today (SLD); other toolchains would need a listing/map
+// parser first (see apps/web/src/lib/debugger/sld.js for the shape).
+const SOURCE_DEBUG_LANGS = new Set(["sjasmplus"]);
+
+export function languageSupportsSourceDebug(lang) {
+  return SOURCE_DEBUG_LANGS.has(lang);
+}

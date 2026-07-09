@@ -4,6 +4,7 @@ import CodeMirror from "./CodeMirror";
 import "codemirror/mode/z80/z80";
 import { setCode } from "../redux/project/actions";
 import { toggleBreakpoint } from "../redux/debugger/actions";
+import { languageSupportsSourceDebug } from "../lib/lang";
 import "../lib/syntax/pasmo";
 import "../lib/syntax/pasta80";
 import "../lib/syntax/sjasmplus";
@@ -64,16 +65,21 @@ export function ProjectEditor() {
       throw `unexpected case: ${lang}`;
   }
 
+  // Only languages with a source map get the breakpoint gutter — a dot the
+  // debugger can never arm would just mislead. Lang is fixed for the life of
+  // this mount (the page remounts per project), so a static option is safe.
+  const sourceDebug = languageSupportsSourceDebug(lang);
+
   const options = {
     mode,
     theme: "mbo",
     readOnly: false,
     lineWrapping: false,
     lineNumbers: lineNumbers,
-    // The breakpoint gutter is always present, so breakpoints can be set
-    // before a debug session starts. The line-numbers gutter is appended
-    // implicitly when enabled.
-    gutters: ["zx-bp-gutter"],
+    // The breakpoint gutter is present whenever the language supports it, so
+    // breakpoints can be set before a debug session starts. The line-numbers
+    // gutter is appended implicitly when enabled.
+    gutters: sourceDebug ? ["zx-bp-gutter"] : [],
     matchBrackets: true,
     tabSize: 4,
     indentAuto: true,
@@ -85,11 +91,13 @@ export function ProjectEditor() {
     // Undo must stop at the loaded content, not the empty pre-load document.
     cm.clearHistory();
     dispatch(setCode(cm.getValue()));
-    cm.on("gutterClick", (instance, line, gutter) => {
-      if (gutter === "zx-bp-gutter") {
-        dispatch(toggleBreakpoint(line + 1));
-      }
-    });
+    if (sourceDebug) {
+      cm.on("gutterClick", (instance, line, gutter) => {
+        if (gutter === "zx-bp-gutter") {
+          dispatch(toggleBreakpoint(line + 1));
+        }
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -104,7 +112,7 @@ export function ProjectEditor() {
   // backs them (none compiled, or the source changed since the compile).
   const bpsInert = debugActive && backend === "zxgo" && !sourceMapLive;
   useEffect(() => {
-    if (!cmRef.current) return;
+    if (!cmRef.current || !sourceDebug) return;
     const cm = cmRef.current.getCodeMirror();
     cm.clearGutter("zx-bp-gutter");
     for (const bp of breakpoints) {
