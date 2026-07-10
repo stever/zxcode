@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Button } from "primereact/button";
 import { Dialog } from "primereact/dialog";
@@ -36,6 +36,7 @@ export function ProjectFileTabView() {
   const addMenu = useRef(null);
   const uploadInput = useRef(null);
   const nameInputReference = useRef(null);
+  const tabViewRef = useRef(null);
 
   const [nameDialogVisible, setNameDialogVisible] = useState(false);
   // null: the dialog creates a new file; a file id: it renames that file.
@@ -48,10 +49,25 @@ export function ProjectFileTabView() {
   const userId = useSelector((state) => state?.identity.userId);
   const ownerId = useSelector((state) => state?.project.ownerId);
   const isOwner = Boolean(userId && ownerId && userId === ownerId);
+  const windowWidth = useSelector((state) => state?.window.width);
 
   const canAdd = isOwner && files.length < MAX_PROJECT_FILES;
   const activeFileIndex = files.findIndex((f) => f.id === activeFileId);
   const activeIndex = activeFileIndex < 0 ? 0 : activeFileIndex + 1;
+
+  // PrimeReact recomputes the scroll-arrow visibility only inside its own
+  // scroll handler (and the forward arrow starts enabled), so adding,
+  // deleting or renaming tabs — or resizing the window — leaves stale
+  // arrows, e.g. a right arrow lingering after enough tabs were removed
+  // that nothing overflows. Nudge the handler with a synthetic scroll
+  // whenever the tab set or the layout width changes.
+  const tabSetKey = files.map((f) => f.name).join("\n");
+  useEffect(() => {
+    const nav = tabViewRef.current
+      ?.getElement()
+      ?.querySelector(".p-tabview-nav-content");
+    if (nav) nav.dispatchEvent(new Event("scroll"));
+  }, [tabSetKey, canAdd, windowWidth]);
 
   const showError = (detail) => {
     if (toast.current) {
@@ -225,6 +241,7 @@ export function ProjectFileTabView() {
       <Toast ref={toast} />
       <ConfirmPopup />
       <TabView
+        ref={tabViewRef}
         // Arrow buttons appear at the strip's edges when the tabs overflow
         // (matching the debugger panel's tab bar behaviour).
         scrollable
