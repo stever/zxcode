@@ -165,11 +165,13 @@ export function isTextFileName(name) {
   return TEXT_FILE_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
 }
 
-// Languages whose compile path returns a line-to-address source map, enabling
-// editor gutter breakpoints and the paused-line highlight. Only the sjasmplus
-// service emits one today (SLD); other toolchains would need a listing/map
-// parser first (see apps/web/src/lib/debugger/sld.js for the shape).
-const SOURCE_DEBUG_LANGS = new Set(["sjasmplus"]);
+// Languages whose compile path returns a source map, enabling editor gutter
+// breakpoints and the paused-line highlight. sjasmplus emits an SLD
+// line-to-address map (lib/debugger/sld.js); nextbas maps editor lines to
+// BASIC line numbers instead (lib/debugger/basicMap.js) — same shape, armed
+// through the engine's PPC-watching basic-bp rather than address
+// breakpoints. Other toolchains would need a listing/map parser first.
+const SOURCE_DEBUG_LANGS = new Set(["sjasmplus", "nextbas"]);
 
 export function languageSupportsSourceDebug(lang) {
   return SOURCE_DEBUG_LANGS.has(lang);

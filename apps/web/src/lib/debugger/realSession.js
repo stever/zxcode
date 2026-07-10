@@ -12,6 +12,11 @@ import {locToAddr} from "./sld";
 const DISASM_ROWS = 32;
 const MEM_BYTES = 0x10000;
 
+// PPC system variable: the BASIC line number the NextZXOS/48K interpreter
+// is executing. How a `kind: "basic"` map resolves the paused line — the
+// Z80 pc is inside interpreter ROM and means nothing to a BASIC source.
+const PPC_ADDR = 0x5C45;
+
 const hex = (v) => "$" + (v & 0xFFFF).toString(16).toUpperCase().padStart(4, "0");
 
 export function createRealSession(handle) {
@@ -19,6 +24,9 @@ export function createRealSession(handle) {
     let disasmStart = null;
     let pauseCallback = null;
     let armedAddrs = [];
+    // BASIC line numbers armed via `set-basic-bp` (nextbas projects — the
+    // sourceMap carries kind: "basic" and its "addresses" are BASIC lines).
+    let armedBasicLines = [];
     // Parsed SLD map (lib/debugger/sld.js) for the loaded program, pushed by
     // the saga — already filtered to fresh (never stale). Null means source
     // lines cannot arm and the pc maps to no line.
@@ -67,17 +75,28 @@ export function createRealSession(handle) {
     const snapshot = (reason) => {
         const s = dbg.state();
         if (!s) return null;
-        // Null when the pc is outside the compiled program (ROM, the
-        // loader) — the editor then shows no paused line and the
-        // disassembly pane carries the position. pausedFile names the
-        // project file the line lives in (null = the main source).
-        const loc = sourceMap ? (sourceMap.addrToLoc.get(s.pc) ?? null) : null;
+        const memory = readMemory();
+        // Null when the paused position is outside the program — the editor
+        // then shows no paused line and the disassembly pane carries the
+        // position. pausedFile names the project file the line lives in
+        // (null = the main source). A basic map keys on the interpreter's
+        // current BASIC line (PPC), not the Z80 pc: the pc is in ROM for
+        // every BASIC line, and PPC holds interpreter states (e.g. $FFFE
+        // for a direct command) outside program execution — those miss the
+        // map and report no line, exactly as an out-of-program pc does.
+        let loc = null;
+        if (sourceMap) {
+            const key = sourceMap.kind === "basic"
+                ? memory.bytes[PPC_ADDR] | (memory.bytes[PPC_ADDR + 1] << 8)
+                : s.pc;
+            loc = sourceMap.addrToLoc.get(key) ?? null;
+        }
         return {
             reason,
             pc: s.pc,
             registers: registersFrom(s),
             disasm: disasmWindow(s.pc),
-            memory: readMemory(),
+            memory,
             paging: dbg.paging ? dbg.paging() : null,
             pausedLine: loc ? loc.line : null,
             pausedFile: loc ? loc.file : null,
@@ -109,6 +128,15 @@ export function createRealSession(handle) {
         },
 
         stepOver() {
+            // On a BASIC project the useful "next" unit is the next BASIC
+            // line, not the next ROM instruction: arm the engine's one-shot
+            // line-transition halt and run until it fires (delivered via
+            // onEnginePause, like a step-over landing).
+            if (sourceMap && sourceMap.kind === "basic") {
+                dbg.cmd("basic-step");
+                dbg.resume();
+                return { running: true };
+            }
             const response = dbg.cmd("step-over");
             if (response.startsWith("OK step-over running")) {
                 // Call-like instruction: the one-shot is armed; run frames
@@ -146,12 +174,27 @@ export function createRealSession(handle) {
         // survives until both are gone.
         setBreakpoints({ lines = [], addrs = [] }) {
             const wanted = new Set(addrs);
+            // With a basic map, source locations resolve to BASIC line
+            // numbers and arm via the engine's PPC watch instead of
+            // address breakpoints; a map going away (stale, cleared)
+            // disarms them the same way it disarms address-resolved ones.
+            const isBasic = Boolean(sourceMap && sourceMap.kind === "basic");
+            const wantedBasic = new Set();
             if (sourceMap) {
                 for (const loc of lines) {
                     const addr = locToAddr(sourceMap, loc.file, loc.line);
-                    if (addr !== undefined) wanted.add(addr);
+                    if (addr === undefined) continue;
+                    if (isBasic) wantedBasic.add(addr);
+                    else wanted.add(addr);
                 }
             }
+            for (const l of armedBasicLines) {
+                if (!wantedBasic.has(l)) dbg.cmd(`clear-basic-bp ${l}`);
+            }
+            for (const l of wantedBasic) {
+                if (!armedBasicLines.includes(l)) dbg.cmd(`set-basic-bp ${l}`);
+            }
+            armedBasicLines = [...wantedBasic];
             for (const a of armedAddrs) {
                 if (!wanted.has(a)) dbg.cmd(`clear-breakpoint ${hex(a)}`);
             }
@@ -204,6 +247,15 @@ export function createRealSession(handle) {
             dbg.offPause(onEnginePause);
             pauseCallback = null;
             if (resume) {
+                // Disarm the engine's BASIC-line watch before detaching:
+                // the PPC hook outlives attach/detach (it's a memory hook,
+                // not the attach-gated M1 check), so armed lines left
+                // behind would keep firing against the orphaned debugger
+                // core — log noise on every entry to the line — until the
+                // machine is rebuilt. No-ops when nothing was armed.
+                dbg.cmd("clear-basic-bp");
+                dbg.cmd("basic-step off");
+                armedBasicLines = [];
                 dbg.cmd("continue");
                 dbg.detach();
                 handle.start();

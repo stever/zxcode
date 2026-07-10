@@ -1,5 +1,6 @@
 import {createRealSession} from "./realSession";
 import {parseSld} from "./sld";
+import {parseBasicMap} from "./basicMap";
 
 // Code on lines 4 ($8000) and 15 ($8010).
 const SLD = `|SLD.data.version|1
@@ -7,8 +8,13 @@ program.asm|4||0|2|32768|T|
 program.asm|15||0|2|32784|T|
 `;
 
-function fakeHandle(pc = 0x8000) {
+function fakeHandle(pc = 0x8000, ppc = 0) {
     const cmds = [];
+    // PPC ($5C45/6): the BASIC line the interpreter is executing, read from
+    // the memory snapshot by basic-map paused-line resolution.
+    const memory = new Uint8Array(0x10000);
+    memory[0x5C45] = ppc & 0xFF;
+    memory[0x5C46] = (ppc >> 8) & 0xFF;
     const dbg = {
         attach: () => true,
         detach: jest.fn(),
@@ -17,7 +23,7 @@ function fakeHandle(pc = 0x8000) {
             pc, sp: 0xFF00, af: 0, bc: 0, de: 0, hl: 0, ix: 0, iy: 0,
             afAlt: 0, bcAlt: 0, deAlt: 0, hlAlt: 0, im: 1, iff1: 1,
         }),
-        mem: () => new Uint8Array(0x10000),
+        mem: () => memory,
         disasm: () => [{addr: pc, bytes: [0], text: "nop"}],
         paging: () => null,
         render: () => {},
@@ -126,5 +132,80 @@ describe("realSession multi-file breakpoints", () => {
         const snap = session.snapshot("breakpoint");
         expect(snap.pausedLine).toBe(4);
         expect(snap.pausedFile).toBeNull();
+    });
+});
+
+// Editor lines 1-3 carry BASIC lines 10/20/30.
+const BASIC_SRC = "10 PRINT 1\n20 GO TO 10\n30 STOP";
+
+describe("realSession NextBASIC breakpoints", () => {
+    test("lines arm as basic-bps through a basic map, and diff-clear", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        session.setSourceMap(parseBasicMap(BASIC_SRC));
+        cmds.length = 0;
+        session.setBreakpoints({lines: [{file: null, line: 1}, {file: null, line: 3}], addrs: []});
+        expect(cmds).toEqual(["set-basic-bp 10", "set-basic-bp 30"]);
+        cmds.length = 0;
+        session.setBreakpoints({lines: [{file: null, line: 3}], addrs: []});
+        expect(cmds).toEqual(["clear-basic-bp 10"]);
+    });
+
+    test("address breakpoints stay address breakpoints alongside a basic map", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        session.setSourceMap(parseBasicMap(BASIC_SRC));
+        cmds.length = 0;
+        session.setBreakpoints({lines: [{file: null, line: 2}], addrs: [0x8000]});
+        expect(cmds).toEqual(["set-basic-bp 20", "set-breakpoint $8000 any-bank"]);
+    });
+
+    test("map withdrawal clears armed basic-bps on the next sync", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        session.setSourceMap(parseBasicMap(BASIC_SRC));
+        session.setBreakpoints({lines: [{file: null, line: 1}], addrs: []});
+        session.setSourceMap(null);
+        cmds.length = 0;
+        session.setBreakpoints({lines: [{file: null, line: 1}], addrs: []});
+        expect(cmds).toEqual(["clear-basic-bp 10"]);
+    });
+
+    test("snapshot resolves the paused line from PPC, not the pc", () => {
+        // pc deep in ROM, PPC says BASIC line 20 -> editor line 2.
+        const {handle} = fakeHandle(0x3986, 20);
+        const session = createRealSession(handle);
+        session.setSourceMap(parseBasicMap(BASIC_SRC));
+        const snap = session.snapshot("breakpoint");
+        expect(snap.pausedLine).toBe(2);
+        expect(snap.pausedFile).toBeNull();
+    });
+
+    test("interpreter PPC states outside the program report no line", () => {
+        // $FFFE = direct command; and a pc that happens to equal a BASIC
+        // line number must not leak through the basic map.
+        const {handle} = fakeHandle(10, 0xFFFE);
+        const session = createRealSession(handle);
+        session.setSourceMap(parseBasicMap(BASIC_SRC));
+        expect(session.snapshot("pause").pausedLine).toBeNull();
+    });
+
+    test("stepOver on a basic map arms a one-shot line step and runs", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        session.setSourceMap(parseBasicMap(BASIC_SRC));
+        cmds.length = 0;
+        expect(session.stepOver()).toEqual({running: true});
+        expect(cmds).toEqual(["basic-step"]);
+    });
+
+    test("dispose disarms the engine's line watch before detaching", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        session.setSourceMap(parseBasicMap(BASIC_SRC));
+        session.setBreakpoints({lines: [{file: null, line: 1}], addrs: []});
+        cmds.length = 0;
+        session.dispose();
+        expect(cmds).toEqual(["clear-basic-bp", "basic-step off", "continue"]);
     });
 });

@@ -27,6 +27,7 @@ import {loadTap} from "../jsspeccy/actions";
 import {setErrorItems, setSelectedTabIndex} from "../project/actions";
 import {sourceMapLoaded, sourceMapCleared} from "../debugger/actions";
 import {parseSld} from "../../lib/debugger/sld";
+import {parseBasicMap} from "../../lib/debugger/basicMap";
 import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
@@ -169,8 +170,9 @@ function* handleGetProjectTapActions(_) {
     const followTapAction = yield select((state) => state.eightbit.followTapAction);
     try {
         // Any other toolchain replacing the program invalidates the
-        // sjasmplus source map; the sjasmplus branch reloads its own.
-        if (lang !== 'sjasmplus') {
+        // debugger's source map; the sjasmplus and nextbas branches
+        // reload their own (SLD and BASIC line map respectively).
+        if (lang !== 'sjasmplus' && lang !== 'nextbas') {
             yield put(sourceMapCleared());
         }
         let tap;
@@ -236,6 +238,22 @@ function* handleGetProjectTapActions(_) {
                         }));
                     }
                     tap = yield call(getNextBasicProgram, code);
+                    // The debugger's line map comes straight from the
+                    // source: BASIC lines are numbered, so no toolchain
+                    // artifact is needed (kind: "basic" — armed via the
+                    // engine's PPC watch, see lib/debugger/basicMap.js).
+                    // A failed tokenise keeps the previous map, like a
+                    // failed sjasmplus compile: the machine still runs
+                    // the previous build.
+                    const basicMap = parseBasicMap(code);
+                    if (basicMap) {
+                        // Stale on arrival if the editor moved on while
+                        // this handler was in flight.
+                        const codeNow = yield select((state) => state.project.code);
+                        yield put(sourceMapLoaded(basicMap, codeNow !== code));
+                    } else {
+                        yield put(sourceMapCleared());
+                    }
                     yield put(followTapAction(tap, toSdFiles(projectFiles)));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
