@@ -13,7 +13,7 @@ func TestTapeSoundWaveform(t *testing.T) {
 		state = !state
 		events = append(events, audioEvent{tstateOffset: off, state: state})
 	}
-	samples, _ := generateSquareWaveFrame(events, false, -tapeAudioAmplitude, tapeAudioAmplitude)
+	samples, _ := generateSquareWaveFrame(events, false, -tapeAudioAmplitude, tapeAudioAmplitude, 69888)
 
 	var lo, hi int16 = 32767, -32768
 	for _, s := range samples {
@@ -32,7 +32,7 @@ func TestTapeSoundWaveform(t *testing.T) {
 	}
 
 	// No transitions → flat DC at the low level (inaudible), not noise.
-	silent, _ := generateSquareWaveFrame(nil, false, -tapeAudioAmplitude, tapeAudioAmplitude)
+	silent, _ := generateSquareWaveFrame(nil, false, -tapeAudioAmplitude, tapeAudioAmplitude, 69888)
 	for i, s := range silent {
 		if s != -tapeAudioAmplitude {
 			t.Fatalf("silent tape sample %d = %d, want flat %d", i, s, -tapeAudioAmplitude)
@@ -44,7 +44,7 @@ func TestTapeSoundWaveform(t *testing.T) {
 // refactor that extracted generateSquareWaveFrame.
 func TestBeeperFrameUnchangedByRefactor(t *testing.T) {
 	events := []audioEvent{{tstateOffset: 0, state: true}, {tstateOffset: 34944, state: false}}
-	samples, final := generateBeeperFrame(events, false)
+	samples, final := generateBeeperFrame(events, false, 69888)
 	if len(samples) == 0 {
 		t.Fatal("no beeper samples")
 	}

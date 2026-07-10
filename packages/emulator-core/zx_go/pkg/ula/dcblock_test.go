@@ -90,7 +90,7 @@ func TestDCBlockerPreservesTone(t *testing.T) {
 // a full beeperLow DC rail; once DC-blocked it must be silence.
 func TestIdleFrameProducesSilenceAfterDCBlock(t *testing.T) {
 	var d dcBlocker
-	samples, _ := generateBeeperFrame(nil, false) // all beeperLow
+	samples, _ := generateBeeperFrame(nil, false, 69888) // all beeperLow
 	d.process(samples)
 	for i, s := range samples {
 		if s < -1 || s > 1 {

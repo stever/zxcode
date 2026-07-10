@@ -74,20 +74,10 @@ const (
 )
 
 // frameTStatesForModel returns the ULA frame length in 3.5 MHz T-states
-// for a machine model: 48K = 69888; the 128K family (128K/+2/+2A/+3) and
-// the Spectrum Next (which boots in +3/128K timing) = 70908. Matches the
-// per-model convention in z80.ExecuteFrame and the 70908 stepFrameBudget
-// used by StepInstructionWithIRQ, and the FPGA frame geometry
-// (zxula_timing.vhd c_max_hc/c_max_vc → (456·311)/2 = 70908).
+// for a machine model. The table lives on roms.SpectrumModel so pkg/ula's
+// audio reconstruction shares the same per-model lengths.
 func frameTStatesForModel(model roms.SpectrumModel) int {
-	switch model {
-	case roms.Model48K:
-		return tstatesPerFrame // 69888
-	case roms.ModelPentagon:
-		return 71680 // Pentagon 128: 320 lines × 224 T-states, no contention
-	default:
-		return 70908
-	}
+	return model.FrameTStates()
 }
 
 type keyState struct {

@@ -1817,6 +1817,16 @@ func (u *ULA) SetTapePlayer(tp *TapePlayer) {
 // integrates over a 3.5MHz frame window — unscaled offsets fall past the
 // window's end and every event is dropped, which silenced the Next's
 // beeper/DACs whenever the CPU ran turbo.
+// frameTStates returns the current model's real frame length in 3.5 MHz
+// T-states — the window the per-frame audio reconstruction integrates over.
+// Looked up per frame (not cached) so a runtime SwitchModel is picked up.
+func (u *ULA) frameTStates() int {
+	if u.mem == nil {
+		return roms.Model48K.FrameTStates()
+	}
+	return u.mem.GetCurrentModel().FrameTStates()
+}
+
 func (u *ULA) audioFrameOffset() int {
 	off := int(*u.mem.TStates - u.frameStartTstate)
 	if u.mem.SpeedMultiplier != nil {
@@ -1856,7 +1866,7 @@ func (u *ULA) tapeLevel() bool {
 	u.lastTapeTstate = now
 	// Record EAR transitions so flushAudioFrame can reproduce the loading sound.
 	if u.audio != nil && playing && u.TapeIn != prev {
-		if off := u.audioFrameOffset(); off >= 0 && off < 69888 {
+		if off := u.audioFrameOffset(); off >= 0 && off < u.frameTStates() {
 			u.tapeAudioEvents = append(u.tapeAudioEvents, audioEvent{tstateOffset: off, state: u.TapeIn})
 		}
 	}
@@ -1958,20 +1968,19 @@ func (u *ULA) flushAudioFrame() {
 		return
 	}
 	u.LastAudioEventCount = len(u.audioEvents)
-	samples, finalState := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState)
+	tpf := u.frameTStates()
+	samples, finalState := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState, tpf)
 	// Mix the SpecDrum/Covox DAC frame (event-timed, sample-accurate) into the
 	// beeper waveform before pushing it.
 	if u.speccyDAC != nil && u.speccyDAC.Enabled() {
-		const tstatesPerFrame = 69888
-		mixInt16(samples, u.speccyDAC.GenerateFrame(audio.SamplesPerFrame, tstatesPerFrame))
+		mixInt16(samples, u.speccyDAC.GenerateFrame(audio.SamplesPerFrame, tpf))
 	}
 	// Spectrum Next 4-channel DAC: event-timed, mixed the same way (replaces the
 	// old per-pull MixInto snapshot).
 	if gen, ok := u.nextDAC.(interface {
 		GenerateFrame(int, int) []int16
 	}); ok && gen != nil {
-		const tstatesPerFrame = 69888
-		mixInt16(samples, gen.GenerateFrame(audio.SamplesPerFrame, tstatesPerFrame))
+		mixInt16(samples, gen.GenerateFrame(audio.SamplesPerFrame, tpf))
 	}
 	// Tape-loading sound: reconstruct the EAR waveform and mix it in (the
 	// audible pilot whistle + data screech). Only while a tape is playing
@@ -1987,7 +1996,7 @@ func (u *ULA) flushAudioFrame() {
 	u.lastFlushFEReads = u.feReadCount
 	if u.tape != nil && u.tape.IsPlaying() && feReads >= tapeAudioMinFEReads {
 		tapeSamples, finalTape := generateSquareWaveFrame(
-			u.tapeAudioEvents, u.frameStartTapeState, -tapeAudioAmplitude, tapeAudioAmplitude)
+			u.tapeAudioEvents, u.frameStartTapeState, -tapeAudioAmplitude, tapeAudioAmplitude, tpf)
 		mixInt16(samples, tapeSamples)
 		u.frameStartTapeState = finalTape
 	} else {
@@ -2047,17 +2056,20 @@ func mixInt16(dst, src []int16) {
 // midpoint version had on a clean square wave. Integration converts
 // the jitter into amplitude variation, which is much less perceptible
 // and naturally low-pass-filters the output.
-func generateBeeperFrame(events []audioEvent, initialState bool) (samples []int16, finalState bool) {
-	return generateSquareWaveFrame(events, initialState, beeperLow, beeperHigh)
+func generateBeeperFrame(events []audioEvent, initialState bool, tstatesPerFrame int) (samples []int16, finalState bool) {
+	return generateSquareWaveFrame(events, initialState, beeperLow, beeperHigh, tstatesPerFrame)
 }
 
 // generateSquareWaveFrame is the box-filter square-wave reconstruction shared by
 // the beeper and the tape-loading sound: it integrates a 1-bit signal (toggled
 // by `events`) into one frame of samples between `low` (state false) and `high`
 // (state true). See generateBeeperFrame for why integration (not point-sampling)
-// is used.
-func generateSquareWaveFrame(events []audioEvent, initialState bool, low, high int16) (samples []int16, finalState bool) {
-	const tstatesPerFrame = 69888
+// is used. tstatesPerFrame is the real frame length for the current model
+// (roms.SpectrumModel.FrameTStates) — with the 48K value hardcoded here, the
+// 128K/Next frame's last ~1020 T-states of toggles were dropped every frame and
+// finalState missed them, phase-inverting whole frames: an audible 50Hz buzz on
+// any sustained tone.
+func generateSquareWaveFrame(events []audioEvent, initialState bool, low, high int16, tstatesPerFrame int) (samples []int16, finalState bool) {
 	samples = make([]int16, audio.SamplesPerFrame)
 	state := initialState
 	eventIdx := 0
@@ -2096,6 +2108,14 @@ func generateSquareWaveFrame(events []audioEvent, initialState bool, low, high i
 		} else {
 			samples[i] = low
 		}
+	}
+	// Any event at or after the frame's final sample boundary never entered a
+	// [sampleStart, sampleEnd) window above (the last window is exclusive at
+	// tstatesPerFrame, and turbo-division rounding can land an offset on the
+	// boundary), so it never updated state — drain the tail so finalState seeds
+	// the next frame correctly instead of phase-inverting it.
+	if eventIdx < len(events) {
+		state = events[len(events)-1].state
 	}
 	return samples, state
 }

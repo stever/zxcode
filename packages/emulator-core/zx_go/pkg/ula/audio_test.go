@@ -14,7 +14,7 @@ func TestFlushAudioFrameSilent(t *testing.T) {
 	u.Speaker = false
 	u.frameStartSpeakerState = false
 
-	samples, _ := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState)
+	samples, _ := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState, 69888)
 
 	if len(samples) != audio.SamplesPerFrame {
 		t.Fatalf("len(samples) = %d, want %d", len(samples), audio.SamplesPerFrame)
@@ -33,7 +33,7 @@ func TestFlushAudioFrameInitialHigh(t *testing.T) {
 	u := newAudioTestULA(t)
 	u.frameStartSpeakerState = true
 
-	samples, _ := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState)
+	samples, _ := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState, 69888)
 	for i, s := range samples {
 		if s != beeperHigh {
 			t.Errorf("sample %d = %d, want %d (high)", i, s, beeperHigh)
@@ -55,7 +55,7 @@ func TestFlushAudioFrameSquareWave(t *testing.T) {
 		{tstateOffset: 69888 / 2, state: true},
 	}
 
-	samples, _ := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState)
+	samples, _ := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState, 69888)
 
 	// First sample must be low.
 	if samples[0] != beeperLow {
@@ -95,7 +95,7 @@ func TestFlushAudioFrameMultipleToggles(t *testing.T) {
 		{tstateOffset: 3 * tpf / 4, state: true},
 	}
 
-	samples, _ := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState)
+	samples, _ := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState, 69888)
 
 	// Sample at the middle of each quarter and check the level.
 	check := func(t *testing.T, sampleIdx int, want int16, label string) {
@@ -134,7 +134,7 @@ func TestFlushAudioFrameIntegratesSubSampleToggles(t *testing.T) {
 		{tstateOffset: 3 * tstatesPerSample / 4, state: false},
 	}
 
-	samples, _ := generateBeeperFrame(events, false)
+	samples, _ := generateBeeperFrame(events, false, 69888)
 
 	// Sample 0 should be near the midpoint between beeperLow and
 	// beeperHigh. Without the integration fix, sample 0 would be
@@ -160,13 +160,103 @@ func TestFlushAudioFramePartialOverlap(t *testing.T) {
 	events := []audioEvent{
 		{tstateOffset: 101 * tpf / samples, state: true},
 	}
-	out, _ := generateBeeperFrame(events, false)
+	out, _ := generateBeeperFrame(events, false, 69888)
 
 	if out[100] != beeperLow {
 		t.Errorf("sample 100 (just before boundary): got %d, want %d", out[100], beeperLow)
 	}
 	if out[101] != beeperHigh {
 		t.Errorf("sample 101 (at boundary): got %d, want %d", out[101], beeperHigh)
+	}
+}
+
+// TestFrameTailEventsNotDropped is the regression test for the hardcoded
+// 48K frame length: on the 128K family and the Next a frame is 70908
+// T-states, so toggles in the [69888, 70908) tail must still be integrated
+// into the last samples and reflected in finalState. With the old 69888
+// window they were silently dropped and the next frame started with an
+// inverted speaker level — a 50Hz buzz on any sustained tone.
+func TestFrameTailEventsNotDropped(t *testing.T) {
+	const tpf = 70908 // 128K/Next frame
+	events := []audioEvent{
+		{tstateOffset: 70000, state: true},
+	}
+	samples, finalState := generateBeeperFrame(events, false, tpf)
+
+	if !finalState {
+		t.Errorf("finalState = false, want true (tail toggle at 70000 must count)")
+	}
+	last := samples[len(samples)-1]
+	if last <= beeperLow {
+		t.Errorf("last sample = %d, want > %d (tail toggle must raise the final window's average)", last, beeperLow)
+	}
+}
+
+// TestFrameBoundaryEventDrained: an event at exactly tstatesPerFrame never
+// lands in a [sampleStart, sampleEnd) window (the last window is exclusive
+// at the boundary; turbo-division rounding can produce such offsets), so it
+// contributes nothing to this frame's samples but must still update
+// finalState for the next frame's seed.
+func TestFrameBoundaryEventDrained(t *testing.T) {
+	const tpf = 70908
+	events := []audioEvent{
+		{tstateOffset: tpf, state: true},
+	}
+	samples, finalState := generateBeeperFrame(events, false, tpf)
+
+	if !finalState {
+		t.Errorf("finalState = false, want true (boundary event must be drained into finalState)")
+	}
+	for i, s := range samples {
+		if s != beeperLow {
+			t.Errorf("sample %d = %d, want %d (boundary event is outside every window)", i, s, beeperLow)
+			break
+		}
+	}
+}
+
+// TestCrossFrameToneContinuity plays a constant-period square wave across two
+// 128K-length frames and verifies the second frame is seeded with the correct
+// phase. The period (997 T) is chosen so frame 1's last toggle lands in the
+// [69888, 70908) tail region and frame 2's first toggle falls beyond sample
+// 0's window; with the old 69888 window the tail toggle was lost and frame 2
+// started phase-inverted.
+func TestCrossFrameToneContinuity(t *testing.T) {
+	const tpf = 70908
+	const period = 997
+
+	var frame1, frame2 []audioEvent
+	state := false
+	toggles1 := 0
+	for tp := period; tp < 2*tpf; tp += period {
+		state = !state
+		if tp < tpf {
+			frame1 = append(frame1, audioEvent{tstateOffset: tp, state: state})
+			toggles1++
+		} else {
+			frame2 = append(frame2, audioEvent{tstateOffset: tp - tpf, state: state})
+		}
+	}
+
+	_, finalState := generateBeeperFrame(frame1, false, tpf)
+	wantSeed := toggles1%2 == 1
+	if finalState != wantSeed {
+		t.Fatalf("finalState after frame 1 = %v, want %v (%d toggles from low)", finalState, wantSeed, toggles1)
+	}
+
+	// Frame 2's first sample window ([0, ~80) T) is covered by finalState up
+	// to the first frame-2 event; its level must match that seed, not the
+	// inverse — the audible symptom of the dropped-tail bug.
+	samples2, _ := generateBeeperFrame(frame2, finalState, tpf)
+	if firstEvent := frame2[0].tstateOffset; firstEvent <= tpf/audio.SamplesPerFrame {
+		t.Fatalf("test setup: frame 2 first event at %d T lands inside sample 0's window", firstEvent)
+	}
+	want := beeperLow
+	if finalState {
+		want = beeperHigh
+	}
+	if samples2[0] != want {
+		t.Errorf("frame 2 sample 0 = %d, want %d (seeded phase)", samples2[0], want)
 	}
 }
 

@@ -84,6 +84,13 @@ func (b *Bank) GenerateFrame(samplesPerFrame, tstatesPerFrame int) []int16 {
 		}
 		out[i] = (int16(avg) - 128) * dacMixAmplitude
 	}
+	// Any event at or after the frame's final sample boundary didn't land in
+	// a [sampleStart, sampleEnd) window above and so never updated level —
+	// without this it would be silently discarded below instead of carrying
+	// into the next frame.
+	if idx < len(b.events) {
+		level = b.events[len(b.events)-1].level
+	}
 	b.startLevel = level
 	b.events = b.events[:0]
 	return out
