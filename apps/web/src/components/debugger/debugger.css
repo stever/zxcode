@@ -710,8 +710,10 @@
 
 /* While a session is active the editor gives up height to the dock so the
    editor column stays level with the (untouched) emulator column:
-   406 (editor) + 8 (dock margin) + 356 (dock) = 770 = the emulator frame. */
+   408 (editor) + 8 (dock margin) + 354 (dock) = 770 = the emulator frame.
+   The dock's 354 = 2 border + 39 transport + 31 registers + 30 pane head
+   + 252 pane body (border-box, so its 2px paddings are inside). */
 .desktop .debug-session .CodeMirror {
-    height: 406px !important;
-    max-height: 406px !important;
+    height: 408px !important;
+    max-height: 408px !important;
 }
