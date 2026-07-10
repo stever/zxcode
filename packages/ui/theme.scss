@@ -113,10 +113,13 @@
 
 // Language tags label a project; they aren't actions. The base theme renders
 // every tag as a filled cyan chip, which reads like a button next to the real
-// buttons. Give the language tag an outline instead: cyan border and text on a
-// transparent fill. Other tags (status, owner) keep the filled style.
+// buttons. Give the language tag an outline instead: cyan border and text on
+// the card surface. The fill matches the card it sits on (so it still reads
+// as an outline there) but stays opaque where the chip row overlaps a card's
+// tilted screenshot thumbnail. Other tags (status, owner) keep the filled
+// style.
 .p-tag.lang-tag {
-    background: transparent;
+    background: var(--zx-surface);
     border: 1px solid var(--zx-cyan);
     color: var(--zx-cyan);
     font-weight: 600;
@@ -126,7 +129,7 @@
 // (128K / Next). Same outlined-chip shape as the language tag, but in the
 // muted neutral so the cyan language tag stays the row's accent.
 .p-tag.machine-tag {
-    background: transparent;
+    background: var(--zx-surface);
     border: 1px solid var(--zx-muted);
     color: var(--zx-text);
     font-weight: 600;

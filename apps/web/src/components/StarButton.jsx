@@ -131,6 +131,9 @@ export default function StarButton({ projectId, className, onToggle }) {
     <span
       className={`inline-flex ${className || ""}`}
       style={{
+        // Card-surface fill (not transparent) so the chip stays readable
+        // where a card's tilted screenshot thumbnail runs underneath it.
+        background: "var(--zx-surface)",
         border: "1px solid #6c757d",
         borderRadius: "6px",
         overflow: "hidden",

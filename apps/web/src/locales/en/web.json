@@ -205,7 +205,22 @@
     "compiler": "Compiler",
     "created": "Created",
     "updated": "Updated",
-    "itemsPerPage": "Items per page:"
+    "itemsPerPage": "Items per page:",
+    "searchPlaceholder": "Search projects",
+    "allCompilers": "All compilers",
+    "sortBy": "Sort by",
+    "sortUpdated": "Recently updated",
+    "sortCreated": "Recently created",
+    "sortOldest": "Oldest first",
+    "sortTitleAz": "Title A-Z",
+    "sortTitleZa": "Title Z-A",
+    "gridView": "Grid view",
+    "tableView": "Table view",
+    "public": "Public",
+    "none": "No projects yet",
+    "noneHint": "Create your first project from the New Project menu.",
+    "noMatches": "No projects match your search.",
+    "actions": "Project actions"
   },
   "feed": {
     "none": "No activity yet",

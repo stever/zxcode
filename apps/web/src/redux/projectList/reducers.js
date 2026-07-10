@@ -4,22 +4,27 @@ import {actionTypes} from "./actions";
 // Initial state
 // -----------------------------------------------------------------------------
 
-// Load preferences from localStorage if available
+// Load preferences from localStorage if available. Saved preferences are
+// merged over the defaults so entries saved before a preference existed
+// (e.g. viewMode) still pick up its default.
+const defaultPreferences = {
+    rowsPerPage: 10,
+    currentPage: 0,
+    sortField: null,
+    sortOrder: null,
+    viewMode: 'grid'
+};
+
 const loadPreferences = () => {
     try {
         const saved = localStorage.getItem('projectListPreferences');
         if (saved) {
-            return JSON.parse(saved);
+            return {...defaultPreferences, ...JSON.parse(saved)};
         }
     } catch (e) {
         console.error('Failed to load project list preferences:', e);
     }
-    return {
-        rowsPerPage: 10,
-        currentPage: 0,
-        sortField: null,
-        sortOrder: null
-    };
+    return {...defaultPreferences};
 };
 
 const savedPreferences = loadPreferences();
@@ -31,7 +36,9 @@ const initialState = {
     currentPage: savedPreferences.currentPage,
     // Sorting preferences
     sortField: savedPreferences.sortField,
-    sortOrder: savedPreferences.sortOrder
+    sortOrder: savedPreferences.sortOrder,
+    // Grid or table presentation
+    viewMode: savedPreferences.viewMode
 };
 
 // -----------------------------------------------------------------------------
@@ -61,7 +68,8 @@ function setProjectListPreferences(state, action) {
             rowsPerPage: newState.rowsPerPage,
             currentPage: newState.currentPage,
             sortField: newState.sortField,
-            sortOrder: newState.sortOrder
+            sortOrder: newState.sortOrder,
+            viewMode: newState.viewMode
         };
         localStorage.setItem('projectListPreferences', JSON.stringify(preferences));
     } catch (e) {

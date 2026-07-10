@@ -181,7 +181,22 @@
     "compiler": "Kompilátor",
     "created": "Vytvořeno",
     "updated": "Aktualizováno",
-    "itemsPerPage": "Položek na stránku:"
+    "itemsPerPage": "Položek na stránku:",
+    "searchPlaceholder": "Hledat projekty",
+    "allCompilers": "Všechny kompilátory",
+    "sortBy": "Řadit podle",
+    "sortUpdated": "Naposledy aktualizované",
+    "sortCreated": "Naposledy vytvořené",
+    "sortOldest": "Nejstarší první",
+    "sortTitleAz": "Název A-Z",
+    "sortTitleZa": "Název Z-A",
+    "gridView": "Zobrazení mřížky",
+    "tableView": "Zobrazení tabulky",
+    "public": "Veřejný",
+    "none": "Zatím žádné projekty",
+    "noneHint": "Vytvořte svůj první projekt z nabídky Nový projekt.",
+    "noMatches": "Hledání neodpovídá žádný projekt.",
+    "actions": "Akce projektu"
   },
   "feed": {
     "none": "Zatím žádná aktivita",

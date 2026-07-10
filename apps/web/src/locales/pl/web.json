@@ -181,7 +181,22 @@
     "compiler": "Kompilator",
     "created": "Utworzono",
     "updated": "Zaktualizowano",
-    "itemsPerPage": "Elementów na stronę:"
+    "itemsPerPage": "Elementów na stronę:",
+    "searchPlaceholder": "Szukaj projektów",
+    "allCompilers": "Wszystkie kompilatory",
+    "sortBy": "Sortuj według",
+    "sortUpdated": "Ostatnio zaktualizowane",
+    "sortCreated": "Ostatnio utworzone",
+    "sortOldest": "Najstarsze najpierw",
+    "sortTitleAz": "Tytuł A-Z",
+    "sortTitleZa": "Tytuł Z-A",
+    "gridView": "Widok siatki",
+    "tableView": "Widok tabeli",
+    "public": "Publiczny",
+    "none": "Brak projektów",
+    "noneHint": "Utwórz swój pierwszy projekt z menu Nowy projekt.",
+    "noMatches": "Żaden projekt nie pasuje do wyszukiwania.",
+    "actions": "Akcje projektu"
   },
   "feed": {
     "none": "Brak aktywności",

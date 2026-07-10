@@ -181,7 +181,22 @@
     "compiler": "Compilator",
     "created": "Creat",
     "updated": "Actualizat",
-    "itemsPerPage": "Elemente pe pagină:"
+    "itemsPerPage": "Elemente pe pagină:",
+    "searchPlaceholder": "Caută proiecte",
+    "allCompilers": "Toate compilatoarele",
+    "sortBy": "Sortează după",
+    "sortUpdated": "Actualizate recent",
+    "sortCreated": "Create recent",
+    "sortOldest": "Cele mai vechi primele",
+    "sortTitleAz": "Titlu A-Z",
+    "sortTitleZa": "Titlu Z-A",
+    "gridView": "Vizualizare grilă",
+    "tableView": "Vizualizare tabel",
+    "public": "Public",
+    "none": "Niciun proiect încă",
+    "noneHint": "Creează primul tău proiect din meniul Proiect nou.",
+    "noMatches": "Niciun proiect nu corespunde căutării.",
+    "actions": "Acțiuni proiect"
   },
   "feed": {
     "none": "Încă nu există activitate",
