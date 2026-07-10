@@ -33,7 +33,9 @@ export async function getPascalTap(code, machine, userId, files = []) {
         const result = await compile(code, machine, userId, files);
         console.log("[pasta80] compile succeeded", {
             bytes: result.tap.length,
-            debugLines: result.debug?.entries?.length || 0,
+            debugFiles: result.debug?.files
+                ? Object.keys(result.debug.files).length
+                : (result.debug?.entries ? 1 : 0),
         });
         return result;
     } catch (e) {
@@ -89,7 +91,11 @@ async function compile(code, machine, userId, files) {
     if (sld) {
         try {
             const parsed = JSON.parse(sld);
-            if (parsed?.kind === "pasta80" && Array.isArray(parsed.entries)) {
+            // Current services send per-file `files`; older ones the
+            // single-file `entries` shape. Both are accepted downstream.
+            if (parsed?.kind === "pasta80"
+                && (Array.isArray(parsed.entries)
+                    || (parsed.files && typeof parsed.files === "object"))) {
                 debug = parsed;
             }
         } catch (e) {

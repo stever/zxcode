@@ -185,10 +185,11 @@ class CompileResult(BaseModel):
     base64_encoded: str
     # Debugger line map, riding the CompileResult.sld field the Hasura action
     # type already declares (SLD text for sjasmplus, JSON for zxbasic; JSON
-    # here): {"kind": "pasta80", "entries": [[line, addr], ...]} mapping
-    # 1-based main-source lines to the address of the first code emitted for
-    # them. Null when the debug-info phase fails — the compile itself still
-    # succeeds without it.
+    # here): {"kind": "pasta80", "files": {"<file>": [[line, addr], ...]}}
+    # mapping 1-based source lines to the address of the first code emitted
+    # for them — "" keys the main source, other keys are staged {$i} include
+    # files by their relative path. Null when the debug-info phase fails —
+    # the compile itself still succeeds without it.
     sld: Optional[str] = None
 
 
@@ -203,23 +204,29 @@ class CompileResult(BaseModel):
 # Rows from include files (the rtl .asm sources) are flagged with `+` after
 # the listing line number; the compiler-generated .z80 — runtime .pas
 # markers, user includes and the main program alike — lists unflagged.
-# Main-source markers are recognised by their echoed text matching the
-# submitted source at that line, which holds regardless of how {$i}
-# includes interleave their own `[0]`-based blocks.
+# Markers are attributed to a source by their echoed text matching that
+# source at the marker's 0-based line, which holds regardless of how {$i}
+# includes interleave their own `[0]`-based blocks: the main source, each
+# staged include, and the runtime's .pas files all become candidates, and a
+# marker matching MORE than one candidate is ambiguous and dropped rather
+# than guessed (a marker matching only runtime text matches no candidate
+# and drops the same way).
 LST_ROW_RE = re.compile(r'^\s*(\d+)(\+*)\s+([0-9A-F]{4})(.*)$')
 LST_MARKER_RE = re.compile(r'^\s*; \[(\d+)\] (.*)$')
 LST_BYTES_RE = re.compile(r'^\s[0-9A-F]{2}[\s$]')
 
 
-def parse_listing_line_map(lst_path: str, source: str) -> list[list[int]]:
-    """[[1-based line, address], ...] for main-source lines with code.
+def parse_listing_line_map(lst_path: str, sources: dict) -> dict:
+    """{file_key: [[1-based line, address], ...]} for source lines with code.
 
-    A marker only maps when at least one unflagged row between it and the
-    next marker emits bytes — declarations and blank lines produce no code
-    and would otherwise alias onto the next real line's address.
+    `sources` maps file keys to their text ('' = the main source, staged
+    text files by relative path). A marker only maps when at least one
+    unflagged row between it and the next marker emits bytes — declarations
+    and blank lines produce no code and would otherwise alias onto the next
+    real line's address.
     """
-    source_lines = source.split('\n')
-    pending = None  # (line0, addr) awaiting a code row
+    split = {key: text.split('\n') for key, text in sources.items()}
+    pending = None  # (file_key, line0, addr) awaiting a code row
     entries = {}
     with open(lst_path, errors='replace') as f:
         for row in f:
@@ -231,30 +238,38 @@ def parse_listing_line_map(lst_path: str, source: str) -> list[list[int]]:
             if marker:
                 line0 = int(marker.group(1))
                 echoed = marker.group(2).rstrip()
-                if (line0 < len(source_lines)
-                        and echoed == source_lines[line0].rstrip()):
-                    pending = (line0, addr)
-                else:
-                    pending = None
+                candidates = [
+                    key for key, lines in split.items()
+                    if line0 < len(lines) and echoed == lines[line0].rstrip()
+                ]
+                pending = ((candidates[0], line0, addr)
+                           if len(candidates) == 1 else None)
                 continue
             if pending is not None and LST_BYTES_RE.match(rest):
-                line0, marker_addr = pending
-                if line0 + 1 not in entries:
-                    entries[line0 + 1] = marker_addr
+                key, line0, marker_addr = pending
+                entries.setdefault(key, {}).setdefault(line0 + 1, marker_addr)
                 pending = None
-    return [[line, addr] for line, addr in sorted(entries.items())]
+    return {
+        key: [[line, addr] for line, addr in sorted(per_file.items())]
+        for key, per_file in entries.items()
+    }
 
 
-def build_debug_info(workdir: str, source: str) -> Optional[str]:
+def build_debug_info(workdir: str, source: str, files) -> Optional[str]:
     """The debugger line-map JSON from the --keepint listing, or None.
     Best-effort by design: any failure here only costs the debug map,
     never the compile."""
     try:
-        entries = parse_listing_line_map(
-            os.path.join(workdir, 'program.lst'), source)
-        if not entries:
+        sources = {'': source}
+        for pf in files or []:
+            if not pf.is_binary:
+                sources[pf.name] = pf.content
+        file_maps = parse_listing_line_map(
+            os.path.join(workdir, 'program.lst'), sources)
+        file_maps = {k: v for k, v in file_maps.items() if v}
+        if not file_maps:
             return None
-        return json.dumps({'kind': 'pasta80', 'entries': entries})
+        return json.dumps({'kind': 'pasta80', 'files': file_maps})
     except Exception as e:
         print(f"debug-info generation failed (compile unaffected): {e}")
         return None
@@ -328,7 +343,7 @@ def handle_compile_request(
         with open(tap_path, 'rb') as f:
             return CompileResult(
                 base64_encoded=base64.b64encode(f.read()).decode(),
-                sld=build_debug_info(workdir, args.input.code))
+                sld=build_debug_info(workdir, args.input.code, args.input.files))
 
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
