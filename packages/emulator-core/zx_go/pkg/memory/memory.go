@@ -119,11 +119,20 @@ type Memory struct {
 	// turbo. Set by ModelNext construction to cpu.SpeedMultiplier;
 	// nil on every other model (treated as 1).
 	//
-	// NOTE: pkg/ula's scanline / audio-event tracking does NOT
-	// yet honour this multiplier — turbo-mode border timing and
-	// audio offsets are wrong above 3.5 MHz. Sprint 6 (video) is
-	// the natural place to land the rest of the ULA-side scaling.
+	// NOTE: pkg/ula's audio/tape event timing uses RefTstates below
+	// (not this multiplier); its scanline/border tracking honours
+	// neither yet — turbo-mode border timing is wrong above 3.5 MHz.
+	// Sprint 6 (video) is the natural place to land that scaling.
 	SpeedMultiplier func() int
+
+	// RefTstates returns the CPU timeline in 3.5 MHz-reference T-states:
+	// the raw counter scaled down through turbo speed changes segment by
+	// segment (see z80.CPU.RefTstates). Set by ModelNext construction to
+	// cpu.RefTstates; nil on every other model, where the raw TStates
+	// counter is already reference-rate. pkg/ula times audio/tape events
+	// with this so a mid-frame NR$07 speed change (games drop to 3.5 MHz
+	// just for their beeper routines) doesn't misplace or drop them.
+	RefTstates func() uint64
 
 	// PeripheralRead is called for reads in the ROM area (0x0000-0x3FFF).
 	// If it returns (value, true), the peripheral ROM overrides the normal ROM.

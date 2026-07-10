@@ -205,8 +205,28 @@ type CPU struct {
 	// speed contention-magnitude work the memory pkg still defers.
 	MemContend bool
 
-	// T-state counter for timing
+	// T-state counter for timing. Counts CPU-clock cycles: at Next turbo
+	// speeds it advances SpeedMultiplier× faster than the 3.5 MHz
+	// reference clock.
 	tstates uint64
+
+	// refClock8/refMark maintain the 3.5 MHz-REFERENCE view of the same
+	// timeline (in eighths of a reference T-state, exact for the 1/2/4/8
+	// multipliers): refClock8 banks completed constant-speed segments,
+	// refMark is the raw tstates position of the last fold (every speed
+	// change folds). RefTstates() derives the reference counter the ULA
+	// times audio/tape events with — correct through any pattern of
+	// mid-frame NR$07 speed changes, unlike dividing a raw delta by the
+	// current multiplier.
+	refClock8 uint64
+	refMark   uint64
+
+	// frameEnd is the absolute raw-tstates boundary of the ExecuteFrame
+	// in flight. setSpeed rescales the remaining budget on a mid-frame
+	// speed change so a frame always spans ~tstatesPerFrame REFERENCE
+	// T-states (20ms of machine time) however the guest mixes speeds
+	// within it.
+	frameEnd uint64
 
 	// instructionCount is a free-running tally of opcode fetches
 	// (M1 cycles), incremented in fetch() and NMI() alongside the
@@ -477,6 +497,8 @@ func (c *CPU) Reset() {
 	c.IM = 0
 	c.Halted = false
 	c.tstates = 0
+	c.refClock8, c.refMark = 0, 0
+	c.frameEnd = 0
 	c.IM2Vector = 0xFF // ZX Spectrum ULA puts 0xFF on data bus during INTA
 }
 
@@ -565,8 +587,16 @@ func (c *CPU) Tstates() uint64 {
 
 // SetTstates overrides the T-state counter. Used by RZX playback to
 // align timing with the recorded T-state offset before resuming the
-// CPU from a snapshot.
+// CPU from a snapshot, and by the DMA engine to burn bus cycles
+// (forward jumps count toward the reference clock at the current
+// speed, which is right for DMA transfers — they occupy real time on
+// the CPU clock). A backward jump resyncs the reference-clock fold
+// mark so its arithmetic never underflows.
 func (c *CPU) SetTstates(t uint64) {
+	if t < c.refMark {
+		c.foldRefClock()
+		c.refMark = t
+	}
 	c.tstates = t
 }
 
@@ -621,6 +651,43 @@ func (c *CPU) SpeedMultiplier() int {
 // SetRETNHook installs it; pass nil to remove.
 func (c *CPU) SetRETNHook(fn func()) { c.retnHook = fn }
 
+// foldRefClock banks the reference-clock progress of the constant-speed
+// segment ending now. Called before every speed change (and on backward
+// T-state overrides) so RefTstates stays exact across it.
+func (c *CPU) foldRefClock() {
+	c.refClock8 += (c.tstates - c.refMark) * 8 / uint64(c.SpeedMultiplier())
+	c.refMark = c.tstates
+}
+
+// RefTstates returns the CPU timeline in 3.5 MHz-reference T-states: raw
+// T-states scaled down by the turbo multiplier segment by segment, so it
+// advances at machine wall-clock rate through any pattern of NR$07 speed
+// changes. Identical to Tstates() on models without turbo.
+func (c *CPU) RefTstates() uint64 {
+	return (c.refClock8 + (c.tstates-c.refMark)*8/uint64(c.SpeedMultiplier())) / 8
+}
+
+// setSpeed applies a validated speed selector: it folds the reference
+// clock at the outgoing speed and rescales any in-flight ExecuteFrame
+// budget so the frame still ends after its full 20ms of machine time.
+// Without the rescale, a game that drops to 3.5 MHz mid-frame for a
+// beeper effect (returning to turbo afterwards) would play the effect
+// against the turbo-sized budget — up to 8 frames of 3.5 MHz CPU time
+// crammed into one 20ms frame, i.e. the sound runs up to 8× too fast.
+func (c *CPU) setSpeed(v byte) {
+	v &= 0x03
+	if v == c.speedSelect {
+		return
+	}
+	oldM := uint64(c.SpeedMultiplier())
+	c.foldRefClock()
+	c.speedSelect = v
+	newM := uint64(c.SpeedMultiplier())
+	if c.frameEnd > c.tstates {
+		c.frameEnd = c.tstates + (c.frameEnd-c.tstates)*newM/oldM
+	}
+}
+
 // SetSpeedSelect installs the NextReg 0x07 speed selector. Only
 // the low 2 bits are honoured; other bits are ignored. A no-op once
 // the speed has been locked (see LockSpeedSelect) — used by the
@@ -630,7 +697,7 @@ func (c *CPU) SetSpeedSelect(v byte) {
 	if c.speedLocked {
 		return
 	}
-	c.speedSelect = v & 0x03
+	c.setSpeed(v)
 }
 
 // LockSpeedSelect pins the speed selector to v and ignores all
@@ -640,7 +707,7 @@ func (c *CPU) SetSpeedSelect(v byte) {
 // NextZXOS would otherwise run too fast at 28 MHz) — the emulator
 // equivalent of the Next's menu speed selector / F8 speed hotkey.
 func (c *CPU) LockSpeedSelect(v byte) {
-	c.speedSelect = v & 0x03
+	c.setSpeed(v)
 	c.speedLocked = true
 }
 
@@ -754,8 +821,13 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	// 2 / 4 / 8 times more T-states per ULA frame than at the
 	// 3.5 MHz reference. SpeedMultiplier returns 1 on every other
 	// model so this is a no-op there.
+	// The budget is sampled at the CURRENT speed; a mid-frame NR$07
+	// change rescales the remainder (setSpeed adjusts c.frameEnd) so the
+	// frame spans a constant amount of machine time regardless of how
+	// the guest mixes speeds within it.
 	budget := uint64(tstatesPerFrame) * uint64(c.SpeedMultiplier())
-	tstatesEnd := c.tstates + budget
+	frameStart := c.tstates
+	c.frameEnd = c.tstates + budget
 
 	// ULA INT line: asserted at the start of every ULA frame and
 	// held until the CPU acknowledges or the next frame begins.
@@ -780,7 +852,6 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	// (IntPulseTstates>0): raise/withdraw a fixed-width pulse via
 	// frameIntPulse() inside the loop, so a DI covering the pulse misses
 	// the INT (matches the FPGA, zxnext.vhd:2014-2033).
-	frameStart := tstatesEnd - budget
 	narrowPulse := c.IntPulseTstates > 0
 	c.frameIntFired = false
 	c.frameIntDeasct = false
@@ -798,7 +869,7 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	}
 	c.lineIntFired = false
 
-	for c.tstates < tstatesEnd {
+	for c.tstates < c.frameEnd {
 		// Narrow-pulse frame INT: raise at the pulse start, withdraw once
 		// at the pulse end if un-accepted. Runs BEFORE the line-INT block
 		// so a later line INT still re-raises the shared latch.
@@ -887,7 +958,15 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 		c.IRQPending.Store(false)
 	}
 
-	c.tstates -= tstatesEnd
+	// Wrap the raw counter to its per-frame overshoot (keeps it small and
+	// frame-relative for the display/contention paths). Fold the reference
+	// clock first and rebase its mark so RefTstates stays monotonic across
+	// the wrap; clear frameEnd so a between-frames speed change doesn't
+	// rescale a stale boundary.
+	c.foldRefClock()
+	c.tstates -= c.frameEnd
+	c.refMark = c.tstates
+	c.frameEnd = 0
 }
 
 func (c *CPU) executeInstruction() {

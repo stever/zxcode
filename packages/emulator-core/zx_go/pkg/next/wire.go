@@ -929,6 +929,7 @@ func Wire(opts WireOpts) {
 	WirePeripheralMasks(opts.Dispatcher)
 	WireClipWindows(opts.Dispatcher, opts.Tilemap, opts.Sprites)
 	opts.Memory.SpeedMultiplier = opts.CPU.SpeedMultiplier
+	opts.Memory.RefTstates = opts.CPU.RefTstates
 	applyTBBLUEFWBootDefaults(opts.Dispatcher)
 }
 

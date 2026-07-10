@@ -91,12 +91,13 @@ type ULA struct {
 	BorderColour byte
 	Mic          bool
 	TapeIn       bool
-	// lastTapeTstate is the monotonic CPU T-state at which the tape was last
-	// advanced. The tape is driven from each port-$FE read (tapeLevel), so the
-	// EAR bit reflects the live tape level at microsecond resolution — which is
-	// what edge-timed ROM and custom (turbo) loaders sample. (The old once-per-
-	// frame Update froze the level for a whole 69888-T frame, so custom loaders
-	// saw no pulses and never loaded.)
+	// lastTapeTstate is the monotonic reference T-state (refNow: 3.5 MHz-
+	// equivalent) at which the tape was last advanced. The tape is driven from
+	// each port-$FE read (tapeLevel), so the EAR bit reflects the live tape
+	// level at microsecond resolution — which is what edge-timed ROM and
+	// custom (turbo) loaders sample. (The old once-per-frame Update froze the
+	// level for a whole 69888-T frame, so custom loaders saw no pulses and
+	// never loaded.)
 	lastTapeTstate uint64
 	// Tape-loading sound: EAR-level transitions recorded during the frame so
 	// flushAudioFrame can reconstruct the audible loading tone (the pilot
@@ -135,11 +136,15 @@ type ULA struct {
 	// bit 4 appends an (offset, state) tuple here. Render() walks the
 	// list at end of frame to synthesise audio samples and pushes
 	// them to the audio system. Reset at start of every frame.
-	audioEvents            []audioEvent
-	frameStartTstate       uint64
+	audioEvents      []audioEvent
+	frameStartTstate uint64
+	// frameStartRefTstate is frameStartTstate's counterpart on the 3.5 MHz-
+	// reference timeline (refNow); audio/tape event offsets are measured
+	// against it so mid-frame turbo changes can't misplace them.
+	frameStartRefTstate uint64
 	// LastAudioEventCount is how many speaker toggles the previous frame
 	// recorded — a diagnostic for audio-silence investigations.
-	LastAudioEventCount int
+	LastAudioEventCount    int
 	frameStartSpeakerState bool
 
 	// dc models the capacitor-coupled audio output: it high-pass-filters the
@@ -1801,22 +1806,13 @@ func (u *ULA) FEReadCount() uint64 {
 }
 
 // SetTapePlayer sets the tape player for tape loading. The tape clock is
-// re-synced to the current CPU T-state so playback starts "now" rather than
-// jumping forward by the whole elapsed run.
+// re-synced to the current reference T-state so playback starts "now" rather
+// than jumping forward by the whole elapsed run.
 func (u *ULA) SetTapePlayer(tp *TapePlayer) {
 	u.tape = tp
-	if u.mem != nil && u.mem.TStates != nil {
-		u.lastTapeTstate = *u.mem.TStates
-	}
+	u.lastTapeTstate = u.refNow()
 }
 
-// audioFrameOffset returns the current position within the frame on the
-// 3.5MHz audio timeline. The Next's T-state counter advances at the NR07
-// turbo multiplier (up to 8x at 28MHz), but the per-frame waveform
-// reconstruction (generateSquareWaveFrame, the DAC GenerateFrame paths)
-// integrates over a 3.5MHz frame window — unscaled offsets fall past the
-// window's end and every event is dropped, which silenced the Next's
-// beeper/DACs whenever the CPU ran turbo.
 // frameTStates returns the current model's real frame length in 3.5 MHz
 // T-states — the window the per-frame audio reconstruction integrates over.
 // Looked up per frame (not cached) so a runtime SwitchModel is picked up.
@@ -1827,41 +1823,54 @@ func (u *ULA) frameTStates() int {
 	return u.mem.GetCurrentModel().FrameTStates()
 }
 
-func (u *ULA) audioFrameOffset() int {
-	off := int(*u.mem.TStates - u.frameStartTstate)
-	if u.mem.SpeedMultiplier != nil {
-		if m := u.mem.SpeedMultiplier(); m > 1 {
-			off /= m
-		}
+// refNow returns the current position on the 3.5 MHz-reference timeline used
+// for audio/tape event timing: the CPU's segment-scaled reference clock on
+// the Next (z80.CPU.RefTstates — correct across mid-frame NR$07 turbo
+// changes), the raw T-state counter on every other model.
+func (u *ULA) refNow() uint64 {
+	if u.mem == nil {
+		return 0
 	}
-	return off
+	if u.mem.RefTstates != nil {
+		return u.mem.RefTstates()
+	}
+	if u.mem.TStates != nil {
+		return *u.mem.TStates
+	}
+	return 0
 }
 
-// tapeLevel advances the tape player to the current CPU T-state and returns the
-// live EAR level. Called from every port-$FE read so edge-timed loaders (the
-// ROM's LD-BYTES and games' custom turbo loaders alike) sample real pulses
-// instead of a per-frame-frozen level. When no tape is loaded it's a cheap
-// no-op returning the last level.
+// audioFrameOffset returns the current event offset within the audio frame,
+// in 3.5 MHz-reference T-states. It reads the CPU's reference clock rather
+// than dividing the raw within-frame delta by the CURRENT turbo multiplier:
+// the division was only correct while the whole frame ran at one speed. A
+// game that drops to 3.5 MHz mid-frame just for a beeper effect (Next games
+// do exactly this, since a timed loop plays 8x too high at 28 MHz) had its
+// slow-segment offsets left at turbo scale — events landed past the frame
+// window (dropped, so silence) or out of order (garbled reconstruction).
+func (u *ULA) audioFrameOffset() int {
+	return int(u.refNow() - u.frameStartRefTstate)
+}
+
+// tapeLevel advances the tape player to the current reference T-state and
+// returns the live EAR level. Called from every port-$FE read so edge-timed
+// loaders (the ROM's LD-BYTES and games' custom turbo loaders alike) sample
+// real pulses instead of a per-frame-frozen level. When no tape is loaded
+// it's a cheap no-op returning the last level. Tape pulses are defined in
+// 3.5 MHz T-states; the reference clock advances at exactly that rate
+// through any turbo changes, so no per-call multiplier scaling is needed —
+// an edge-timed loader polling at 28 MHz still sees correctly-sized pulses
+// (a raw-clock delta would look 8x too long and NextZXOS's Tape Loader
+// would hang on a blank screen).
 func (u *ULA) tapeLevel() bool {
 	if u.tape == nil || u.mem == nil || u.mem.TStates == nil {
 		return u.TapeIn
 	}
-	now := *u.mem.TStates
+	now := u.refNow()
 	prev := u.TapeIn
 	playing := u.tape.IsPlaying()
 	if now > u.lastTapeTstate && playing {
-		dt := now - u.lastTapeTstate
-		// Tape pulses are defined in 3.5MHz T-states, but on the Next the
-		// T-state counter advances at the turbo multiplier (NR07: up to 8x
-		// at 28MHz). Scale elapsed time back to the tape's clock, or an
-		// edge-timed loader polling at 28MHz sees every pulse 8x too long
-		// and never syncs — NextZXOS's Tape Loader hangs on a blank screen.
-		if u.mem.SpeedMultiplier != nil {
-			if m := u.mem.SpeedMultiplier(); m > 1 {
-				dt /= uint64(m)
-			}
-		}
-		u.TapeIn = u.tape.Update(dt)
+		u.TapeIn = u.tape.Update(now - u.lastTapeTstate)
 	}
 	u.lastTapeTstate = now
 	// Record EAR transitions so flushAudioFrame can reproduce the loading sound.
@@ -1942,6 +1951,7 @@ func (u *ULA) Reset() {
 	u.frameStartSpeakerState = false
 	if u.mem.TStates != nil {
 		u.frameStartTstate = *u.mem.TStates
+		u.frameStartRefTstate = u.refNow()
 	}
 }
 
@@ -1964,6 +1974,7 @@ func (u *ULA) flushAudioFrame() {
 		u.audio.PushBeeperSamples(make([]int16, audio.SamplesPerFrame))
 		if u.mem.TStates != nil {
 			u.frameStartTstate = *u.mem.TStates
+			u.frameStartRefTstate = u.refNow()
 		}
 		return
 	}
@@ -2017,6 +2028,7 @@ func (u *ULA) flushAudioFrame() {
 	u.audioEvents = u.audioEvents[:0]
 	if u.mem.TStates != nil {
 		u.frameStartTstate = *u.mem.TStates
+		u.frameStartRefTstate = u.refNow()
 	}
 }
 
