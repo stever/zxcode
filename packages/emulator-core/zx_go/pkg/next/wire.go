@@ -927,7 +927,7 @@ func Wire(opts WireOpts) {
 		WireTilemap(opts.Dispatcher, opts.Tilemap, opts.Palette)
 	}
 	WirePeripheralMasks(opts.Dispatcher)
-	WireClipWindows(opts.Dispatcher, opts.Tilemap, opts.Sprites)
+	WireClipWindows(opts.Dispatcher, opts.Tilemap, opts.Sprites, opts.Layer2)
 	opts.Memory.SpeedMultiplier = opts.CPU.SpeedMultiplier
 	opts.Memory.RefTstates = opts.CPU.RefTstates
 	applyTBBLUEFWBootDefaults(opts.Dispatcher)
@@ -961,7 +961,7 @@ func (c *clipWindow) reset() {
 // plus the NR$1C index reset/read-back, replacing the old single-byte
 // approximation. Reset defaults per zxnext.vhd 4959-4982: Layer2/sprite/ULA
 // = {00,FF,00,BF}; tilemap = {00,9F,00,FF}.
-func WireClipWindows(d *nextregs.Dispatcher, tmLayer *tilemap.Tilemap, sprites *sprite.Engine) {
+func WireClipWindows(d *nextregs.Dispatcher, tmLayer *tilemap.Tilemap, sprites *sprite.Engine, l2Layer *layer2.Layer2) {
 	l2 := &clipWindow{def: [4]byte{0x00, 0xFF, 0x00, 0xBF}}
 	spr := &clipWindow{def: [4]byte{0x00, 0xFF, 0x00, 0xBF}}
 	ula := &clipWindow{def: [4]byte{0x00, 0xFF, 0x00, 0xBF}}
@@ -987,14 +987,22 @@ func WireClipWindows(d *nextregs.Dispatcher, tmLayer *tilemap.Tilemap, sprites *
 		}
 	}
 	pushSpr()
-	wire := func(reg byte, c *clipWindow) {
-		d.SetOnWrite(reg, func(_ *nextregs.Dispatcher, v byte) { c.write(v) })
-		d.SetOnRead(reg, func(_ *nextregs.Dispatcher) byte { return c.read() })
+	// Push the Layer 2 clip coords into the live Layer 2 layer so NR$18
+	// actually clips the render (not just stores the register) — without
+	// this a top-clipped Layer 2 (e.g. leaving the top char row to a ULA
+	// title bar) still covers the full screen.
+	pushL2 := func() {
+		if l2Layer != nil {
+			l2Layer.SetClip(l2.coord[0], l2.coord[1], l2.coord[2], l2.coord[3])
+		}
 	}
-	wire(0x18, l2)
+	pushL2()
+	d.SetOnWrite(0x18, func(_ *nextregs.Dispatcher, v byte) { l2.write(v); pushL2() })
+	d.SetOnRead(0x18, func(_ *nextregs.Dispatcher) byte { return l2.read() })
 	d.SetOnWrite(0x19, func(_ *nextregs.Dispatcher, v byte) { spr.write(v); pushSpr() })
 	d.SetOnRead(0x19, func(_ *nextregs.Dispatcher) byte { return spr.read() })
-	wire(0x1A, ula)
+	d.SetOnWrite(0x1A, func(_ *nextregs.Dispatcher, v byte) { ula.write(v) })
+	d.SetOnRead(0x1A, func(_ *nextregs.Dispatcher) byte { return ula.read() })
 	d.SetOnWrite(0x1B, func(_ *nextregs.Dispatcher, v byte) { tm.write(v); pushTM() })
 	d.SetOnRead(0x1B, func(_ *nextregs.Dispatcher) byte { return tm.read() })
 	// NR$1C write: bits 0/1/2/3 reset the L2/sprite/ULA/tilemap index
@@ -1021,6 +1029,9 @@ func WireClipWindows(d *nextregs.Dispatcher, tmLayer *tilemap.Tilemap, sprites *
 		for _, c := range all {
 			c.reset()
 		}
+		pushTM()
+		pushSpr()
+		pushL2()
 	})
 }
 

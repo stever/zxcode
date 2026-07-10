@@ -3,6 +3,7 @@ package next
 import (
 	"testing"
 
+	"github.com/conorarmstrong/zx_go/pkg/next/layer2"
 	"github.com/conorarmstrong/zx_go/pkg/next/nextregs"
 )
 
@@ -19,7 +20,7 @@ import (
 
 func clipDisp() *nextregs.Dispatcher {
 	d := nextregs.New()
-	WireClipWindows(d, nil, nil)
+	WireClipWindows(d, nil, nil, nil)
 	return d
 }
 
@@ -85,5 +86,32 @@ func TestClipWindow_DispatcherResetRestoresDefaults(t *testing.T) {
 	d.Reset()
 	if got := d.ReadReg(0x18); got != 0x00 {
 		t.Errorf("NR$18 after Reset reads $%02X, want $00 (x1 default, idx 0)", got)
+	}
+}
+
+// NR$18 writes must reach the LIVE Layer 2 layer (like NR$19 → sprites and
+// NR$1B → tilemap), or the stored window never clips the render — the
+// work item #92 map-screen bug: a Y1=8 top clip was stored but Layer 2
+// still covered the ULA title row.
+func TestClipWindow_Layer2PushesToLayer(t *testing.T) {
+	l2Layer := layer2.New(&tilemapBanks{})
+	d := nextregs.New()
+	WireClipWindows(d, nil, nil, l2Layer)
+
+	for _, v := range []byte{0, 255, 8, 191} { // x1, x2, y1, y2
+		d.WriteReg(0x18, v)
+	}
+	if _, _, ok := l2Layer.ClipBounds(7); ok {
+		t.Error("row 7 visible after Y1=8 clip write, want clipped")
+	}
+	x0, x1, ok := l2Layer.ClipBounds(8)
+	if !ok || x0 != 0 || x1 != 255 {
+		t.Errorf("row 8 = [%d,%d] ok=%v, want [0,255] true", x0, x1, ok)
+	}
+
+	// Dispatcher reset restores the full default window on the layer.
+	d.Reset()
+	if _, _, ok := l2Layer.ClipBounds(7); !ok {
+		t.Error("row 7 still clipped after reset, want default full window")
 	}
 }

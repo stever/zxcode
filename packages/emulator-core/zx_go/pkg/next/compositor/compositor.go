@@ -185,11 +185,15 @@ func (c *Compositor) ComposeWideLayer2Row(y int, dst []byte) {
 	if w > 2*FullWidth || len(dst) < w*4 {
 		return
 	}
+	clipX0, clipX1, rowVisible := c.l2.ClipBounds(y)
+	if !rowVisible {
+		return
+	}
 	var scan [2 * FullWidth]byte // up to 640 indices
 	c.l2.RenderScanline(y, scan[:w])
 	for x := 0; x < w; x++ {
 		idx := scan[x]
-		if c.l2Transparent(l2Pal, idx) {
+		if x < clipX0 || x > clipX1 || c.l2Transparent(l2Pal, idx) {
 			continue
 		}
 		r, g, b := l2Pal.RGB(idx)
@@ -415,6 +419,17 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 	// Pre-fetch active layers' scanlines + their palettes.
 	var l2Scanline []byte
 	var l2Pal *palette.Palette
+	var l2ClipX0, l2ClipX1 int
+	if doL2 {
+		// The NR$18 clip window gates Layer 2 per display pixel (the
+		// FPGA's pixel enable): rows outside [Y1, Y2] and columns
+		// outside [X1, X2] show the layers beneath.
+		var rowVisible bool
+		l2ClipX0, l2ClipX1, rowVisible = c.l2.ClipBounds(y)
+		if !rowVisible {
+			doL2 = false
+		}
+	}
 	if doL2 {
 		// PaletteForLayer reads the per-layer "first/second"
 		// selection (NextReg 0x43 bits 4-7) independently of the
@@ -521,7 +536,7 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 		paintULA(off)
 	}
 	paintL2 := func(off, x int) {
-		if !doL2 {
+		if !doL2 || x < l2ClipX0 || x > l2ClipX1 {
 			return
 		}
 		if idx := l2Scanline[x]; !c.l2Transparent(l2Pal, idx) {
@@ -537,7 +552,7 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 	// Layer 2 normally sits below the ULA (zxnext.vhd:7123). A no-op when
 	// the pixel is transparent or lacks the priority bit.
 	paintL2Priority := func(off, x int) {
-		if !doL2 {
+		if !doL2 || x < l2ClipX0 || x > l2ClipX1 {
 			return
 		}
 		idx := l2Scanline[x]

@@ -49,13 +49,50 @@ type Layer2 struct {
 	// address generator (layer2.vhd:152, :156).
 	scrollX uint16
 	scrollY byte
+	// clipX1..clipY2 mirror the NR$18 clip window. The compare is on
+	// DISPLAY coordinates (scroll moves the framebuffer under a fixed
+	// window). In the wide modes (NR$70 res 1/2) the X coordinates are
+	// doubled: the FPGA compares against the 320-wide column counter,
+	// so a 640-mode display pixel is inside when its byte column
+	// (x>>1) is. Defaults are the register reset values {0,FF,0,BF} —
+	// note Y2=191, which is why wide-mode software must widen the
+	// window itself to see rows 192-255.
+	clipX1, clipX2, clipY1, clipY2 byte
 }
 
 // New constructs a Layer 2 reader backed by the given memory bus.
 // Disabled by default — guest code (or test code) flips it on
 // when ready.
 func New(mem BankReader) *Layer2 {
-	return &Layer2{mem: mem}
+	return &Layer2{mem: mem, clipX2: 0xFF, clipY2: 0xBF}
+}
+
+// SetClip installs the NR$18 clip window (X1, X2, Y1, Y2 raw register
+// coordinates). Pushed by the NextReg wiring on every NR$18 write.
+func (l *Layer2) SetClip(x1, x2, y1, y2 byte) {
+	l.clipX1, l.clipX2, l.clipY1, l.clipY2 = x1, x2, y1, y2
+}
+
+// ClipBounds returns the clip-visible display-pixel X span [x0, x1] for
+// displayed row y in the layer's own coordinate space (256-, 320- or
+// 640-wide), and whether the row shows at all. Rows outside [Y1, Y2] —
+// and every row, when the window is degenerate (X1 > X2) — are fully
+// clipped.
+func (l *Layer2) ClipBounds(y int) (x0, x1 int, visible bool) {
+	if y < int(l.clipY1) || y > int(l.clipY2) || l.clipX1 > l.clipX2 {
+		return 0, 0, false
+	}
+	x0, x1 = int(l.clipX1), int(l.clipX2)
+	switch l.resolution {
+	case 1: // 320x256: X coords doubled
+		x0, x1 = x0*2, x1*2+1
+	case 2: // 640x256: doubled column compare, two pixels per column
+		x0, x1 = x0*4, x1*4+3
+	}
+	if w := l.LineWidth(); x1 >= w {
+		x1 = w - 1
+	}
+	return x0, x1, true
 }
 
 // SetActiveBank installs the RAM bank that holds the first 16 KB
