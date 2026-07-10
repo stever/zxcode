@@ -29,14 +29,17 @@ import {sourceMapLoaded, sourceMapCleared} from "../debugger/actions";
 import {parseSld} from "../../lib/debugger/sld";
 import {parseBasicMap} from "../../lib/debugger/basicMap";
 import {buildLineCallMap} from "../../lib/debugger/lineCallMap";
+import {buildPasta80Map} from "../../lib/debugger/pasta80Map";
 import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
 // Languages whose compile branch publishes a debugger source map itself:
-// sjasmplus reloads its SLD, the interpreted BASICs their line maps, and
-// zxbasic its linecall map from the compile service. Every other toolchain
-// clears the map when it replaces the program.
-const SOURCE_MAP_LANGS = new Set(["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic"]);
+// sjasmplus reloads its SLD, the interpreted BASICs their line maps,
+// zxbasic its linecall map and pascal its listing-derived address map from
+// their compile services. Every other toolchain clears the map when it
+// replaces the program.
+const SOURCE_MAP_LANGS = new Set(
+    ["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal"]);
 
 // Interpreted-BASIC languages derive the debugger's line map straight from
 // the numbered source — no toolchain artifact (lib/debugger/basicMap.js).
@@ -320,9 +323,29 @@ function* handleGetProjectTapActions(_) {
                 // Pasta80 Turbo Pascal — the codegen target follows the
                 // emulator machine (48/128/next link different runtimes), so
                 // the program is compiled for what it is about to run on.
+                // The service also reports the debugger's line→address map
+                // parsed from the sjasmplus listing (plain address map —
+                // sjasmplus-style breakpoints, pause-before-line). A failed
+                // compile keeps the previous map, like the other
+                // map-publishing branches.
                 try {
-                    tap = yield call(getPascalTap, code, String(machine), userId, files);
-                    yield put(followTapAction(tap));
+                    const pasResult = yield call(getPascalTap, code, String(machine), userId, files);
+                    const pasMap = buildPasta80Map(pasResult.debug);
+                    if (pasMap) {
+                        // Stale on arrival when the editor moved on while
+                        // the compile was in flight — in the main source or
+                        // in any additional file the compile consumed.
+                        const codeNow = yield select((state) => state.project.code);
+                        const filesNow = toActionFiles(
+                            yield select((state) => state.project.files));
+                        const filesMoved = filesNow.length !== files.length
+                            || filesNow.some((f, i) =>
+                                f.name !== files[i].name || f.content !== files[i].content);
+                        yield put(sourceMapLoaded(pasMap, codeNow !== code || filesMoved));
+                    } else {
+                        yield put(sourceMapCleared());
+                    }
+                    yield put(followTapAction(pasResult.tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
                     console.error('[pasta80] dispatching setErrorItems', errorItems);

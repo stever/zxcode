@@ -59,10 +59,29 @@ describe("getPascalTap error surfacing", () => {
         const b64 = Buffer.from("\x13\x00\x00run.bas").toString("base64");
         axios.post.mockResolvedValue({data: {data: {compilePascal: {base64_encoded: b64}}}});
 
-        const bytes = await getPascalTap("good code", "next", null);
-        expect(bytes.length).toBeGreaterThan(0);
+        const result = await getPascalTap("good code", "next", null);
+        expect(result.tap.length).toBeGreaterThan(0);
+        expect(result.debug).toBeNull();
         const [, body] = axios.post.mock.calls[0];
         expect(body.variables).toEqual({code: "good code", machine: "next", files: []});
+    });
+
+    test("parses the service's debugger line map from sld", async () => {
+        const b64 = Buffer.from("tap").toString("base64");
+        const sld = JSON.stringify({kind: "pasta80", entries: [[5, 0x8100], [6, 0x8108]]});
+        axios.post.mockResolvedValue({data: {data: {compilePascal: {base64_encoded: b64, sld}}}});
+
+        const result = await getPascalTap("good code", "48", null);
+        expect(result.debug).toEqual({kind: "pasta80", entries: [[5, 0x8100], [6, 0x8108]]});
+    });
+
+    test("a malformed debug map is ignored, never fatal", async () => {
+        const b64 = Buffer.from("tap").toString("base64");
+        axios.post.mockResolvedValue({data: {data: {compilePascal: {base64_encoded: b64, sld: "{nope"}}}});
+
+        const result = await getPascalTap("good code", "48", null);
+        expect(result.tap.length).toBeGreaterThan(0);
+        expect(result.debug).toBeNull();
     });
 
     test("passes additional project files through", async () => {

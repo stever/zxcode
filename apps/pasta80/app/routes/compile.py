@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 import re
 import resource
@@ -182,6 +183,81 @@ class RequestArgs(BaseModel):
 
 class CompileResult(BaseModel):
     base64_encoded: str
+    # Debugger line map, riding the CompileResult.sld field the Hasura action
+    # type already declares (SLD text for sjasmplus, JSON for zxbasic; JSON
+    # here): {"kind": "pasta80", "entries": [[line, addr], ...]} mapping
+    # 1-based main-source lines to the address of the first code emitted for
+    # them. Null when the debug-info phase fails — the compile itself still
+    # succeeds without it.
+    sld: Optional[str] = None
+
+
+# Pasta80's code generator writes every Pascal source line into the .z80 as
+# a comment marker `; [N] <raw source line>` (N 0-based within the file
+# being inlined at that point), and the sjasmplus listing then carries each
+# marker WITH the address where that line's code begins:
+#
+#     2145  A21C              ; [6]     WriteLn(I);
+#     2146  A21C 21 B8 A1                     ld      hl,global102 + 0
+#
+# Rows from include files (the rtl .asm sources) are flagged with `+` after
+# the listing line number; the compiler-generated .z80 — runtime .pas
+# markers, user includes and the main program alike — lists unflagged.
+# Main-source markers are recognised by their echoed text matching the
+# submitted source at that line, which holds regardless of how {$i}
+# includes interleave their own `[0]`-based blocks.
+LST_ROW_RE = re.compile(r'^\s*(\d+)(\+*)\s+([0-9A-F]{4})(.*)$')
+LST_MARKER_RE = re.compile(r'^\s*; \[(\d+)\] (.*)$')
+LST_BYTES_RE = re.compile(r'^\s[0-9A-F]{2}[\s$]')
+
+
+def parse_listing_line_map(lst_path: str, source: str) -> list[list[int]]:
+    """[[1-based line, address], ...] for main-source lines with code.
+
+    A marker only maps when at least one unflagged row between it and the
+    next marker emits bytes — declarations and blank lines produce no code
+    and would otherwise alias onto the next real line's address.
+    """
+    source_lines = source.split('\n')
+    pending = None  # (line0, addr) awaiting a code row
+    entries = {}
+    with open(lst_path, errors='replace') as f:
+        for row in f:
+            m = LST_ROW_RE.match(row)
+            if not m or m.group(2):
+                continue
+            addr, rest = int(m.group(3), 16), m.group(4)
+            marker = LST_MARKER_RE.match(rest)
+            if marker:
+                line0 = int(marker.group(1))
+                echoed = marker.group(2).rstrip()
+                if (line0 < len(source_lines)
+                        and echoed == source_lines[line0].rstrip()):
+                    pending = (line0, addr)
+                else:
+                    pending = None
+                continue
+            if pending is not None and LST_BYTES_RE.match(rest):
+                line0, marker_addr = pending
+                if line0 + 1 not in entries:
+                    entries[line0 + 1] = marker_addr
+                pending = None
+    return [[line, addr] for line, addr in sorted(entries.items())]
+
+
+def build_debug_info(workdir: str, source: str) -> Optional[str]:
+    """The debugger line-map JSON from the --keepint listing, or None.
+    Best-effort by design: any failure here only costs the debug map,
+    never the compile."""
+    try:
+        entries = parse_listing_line_map(
+            os.path.join(workdir, 'program.lst'), source)
+        if not entries:
+            return None
+        return json.dumps({'kind': 'pasta80', 'entries': entries})
+    except Exception as e:
+        print(f"debug-info generation failed (compile unaffected): {e}")
+        return None
 
 
 compile_endpoint = APIRouter()
@@ -206,9 +282,12 @@ def handle_compile_request(
         # the sjasmplus backend it spawns, not just the parent. --opt --dep
         # is the author-recommended flag set: without dependency analysis
         # the full runtime is linked in and larger programs don't fit.
+        # --keepint keeps the intermediates (program.z80, program.lst) the
+        # debugger line map is parsed from; they live in the per-request
+        # tmpfs workdir and vanish with it.
         proc = subprocess.Popen(
             ['pasta', MACHINE_FLAGS[args.input.machine], '--opt', '--dep',
-             '--tap', 'program.pas'],
+             '--keepint', '--tap', 'program.pas'],
             cwd=workdir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -247,7 +326,9 @@ def handle_compile_request(
                 detail=diagnostics.strip()[:2000] or 'Compilation failed')
 
         with open(tap_path, 'rb') as f:
-            return CompileResult(base64_encoded=base64.b64encode(f.read()).decode())
+            return CompileResult(
+                base64_encoded=base64.b64encode(f.read()).decode(),
+                sld=build_debug_info(workdir, args.input.code))
 
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
