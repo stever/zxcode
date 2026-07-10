@@ -15,6 +15,7 @@ insert_permissions:
       columns:
         - project_id
         - name
+        - folder
         - content
         - is_binary
 select_permissions:
@@ -24,6 +25,7 @@ select_permissions:
         - file_id
         - project_id
         - name
+        - folder
         - content
         - is_binary
         - created_at
@@ -39,6 +41,7 @@ select_permissions:
         - file_id
         - project_id
         - name
+        - folder
         - content
         - is_binary
         - created_at
@@ -57,6 +60,7 @@ update_permissions:
     permission:
       columns:
         - name
+        - folder
         - content
         - is_binary
       filter:

@@ -507,6 +507,14 @@ func basis(name string) (base, ext string, fits83, caseOnly bool) {
 	return cb, ce, fits83, caseOnly
 }
 
+// Fits83 reports whether name fits a FAT 8.3 short name with no character
+// loss. Staging callers use it to guarantee a literal path lookup (file or
+// directory) matches the on-card short name rather than a ~ alias.
+func Fits83(name string) bool {
+	_, _, fits83, _ := basis(name)
+	return fits83
+}
+
 func padName83(base, ext string) []byte {
 	out := make([]byte, 11)
 	copy(out, "           ")

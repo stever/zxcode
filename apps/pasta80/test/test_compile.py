@@ -124,3 +124,35 @@ def test_path_traversal_file_name_rejected():
     ])
     assert response.status_code == 400
     assert response.json()['message'] == 'Invalid compile request.'
+
+
+FOLDER_INCLUDE_SOURCE = """program Included;
+{$i lib/hello.inc}
+begin
+  Hello
+end.
+"""
+
+
+def test_include_staged_folder_file():
+    decoded_tap(compile_request(FOLDER_INCLUDE_SOURCE, files=[
+        {'name': 'lib/hello.inc', 'content': INCLUDE_FILE},
+    ]))
+
+
+def test_folder_path_traversal_rejected():
+    for name in ('lib/../evil.pas', '/etc/evil.pas', 'lib//evil.pas', 'lib/'):
+        response = compile_request(HELLO_SOURCE, files=[
+            {'name': name, 'content': 'x'},
+        ])
+        assert response.status_code == 400, name
+        assert response.json()['message'] == 'Invalid compile request.'
+
+
+def test_file_and_folder_name_clash_rejected():
+    response = compile_request(HELLO_SOURCE, files=[
+        {'name': 'lib', 'content': 'x'},
+        {'name': 'lib/hello.inc', 'content': INCLUDE_FILE},
+    ])
+    assert response.status_code == 400
+    assert 'clashes with another project file' in response.json()['message']

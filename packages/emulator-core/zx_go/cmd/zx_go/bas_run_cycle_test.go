@@ -178,6 +178,83 @@ func TestPutSDFileRuntimeLoad(t *testing.T) {
 	t.Logf("staged asset LOADed at runtime after %d frames", frame)
 }
 
+// TestPutSDFileFolderRuntimeLoad is the project-folders variant of the
+// runtime-asset test: putSDFile stages a file under a subdirectory (creating
+// it on the card) and the delivered program LOADs it by the same relative
+// path — the layout a project's download ZIP produces when unzipped onto a
+// real card. Also checks that a directory segment that cannot fit 8.3 is
+// rejected up front (directory lookup is by 8.3 short name, so a ~ alias
+// would silently never match the program's literal path).
+func TestPutSDFileFolderRuntimeLoad(t *testing.T) {
+	prev := cliFlagsActive
+	nf := cliFlags{}
+	if prev != nil {
+		nf = *prev
+	}
+	nf.noSound = true
+	cliFlagsActive = &nf
+	t.Cleanup(func() { cliFlagsActive = prev })
+
+	emu, err := newNextEmulator()
+	if err != nil {
+		t.Skipf("Next ROMs not installed: %v", err)
+	}
+	if emu.sdImageSrc == nil {
+		t.Skip("no SD image mounted (set ZX_GO_NEXT_SD_IMG); the load path needs one")
+	}
+
+	if err := emu.putSDFile("toolongdirname99/spr.bin", []byte{1}); err == nil {
+		t.Fatal("putSDFile accepted a directory that does not fit 8.3")
+	}
+	if err := emu.putSDFile("gfx//spr.bin", []byte{1}); err == nil {
+		t.Fatal("putSDFile accepted an empty path segment")
+	}
+
+	asset := []byte{123, 45, 67}
+	if err := emu.putSDFile("gfx/spr.bin", asset); err != nil {
+		t.Fatalf("putSDFile: %v", err)
+	}
+
+	// 10 LOAD "gfx/spr.bin" CODE 32768 — tokenised +3 BASIC.
+	prog := []byte{
+		0x00, 0x0A, // line 10 (big-endian)
+		0x1B, 0x00, // line length 27 (little-endian)
+		0xEF, // LOAD
+		'"', 'g', 'f', 'x', '/', 's', 'p', 'r', '.', 'b', 'i', 'n', '"',
+		0xAF,                    // CODE
+		'3', '2', '7', '6', '8', // 32768
+		0x0E, 0x00, 0x00, 0x00, 0x80, 0x00,
+		0x0D,
+	}
+	if err := emu.importAndRunBas(plus3dosProgram(prog, 10)); err != nil {
+		t.Fatalf("importAndRunBas: %v", err)
+	}
+
+	sentinel := emu.mem.GetPage(2)
+	sentinel[0], sentinel[1], sentinel[2] = 0, 0, 0
+
+	const maxFrames = 6000
+	frame := 0
+	for ; frame < maxFrames && sentinel[0] != 123; frame++ {
+		emu.cpu.ExecuteFrame(frameTStatesForModel(roms.ModelNext))
+		if emu.peripherals != nil {
+			emu.peripherals.Frame()
+		}
+		if emu.kbd != nil {
+			emu.kbd.Tick()
+		}
+		if emu.nexloadMacro != nil && emu.nexloadMacro.tick(emu) {
+			emu.nexloadMacro = nil
+		}
+		emu.noteBootFrame()
+	}
+	if sentinel[0] != 123 || sentinel[1] != 45 || sentinel[2] != 67 {
+		t.Fatalf("folder asset never loaded: bank2[0:3]=%v after %d frames (PC=%#04x, macro done=%v)",
+			sentinel[0:3], frame, emu.cpu.PC, emu.nexloadMacro == nil)
+	}
+	t.Logf("folder-staged asset LOADed at runtime after %d frames", frame)
+}
+
 // TestImportAndRunBasCycle drives the site's full compile-and-run delivery
 // end to end: importAndRunBas writes the program to the in-memory SD card,
 // reboots, and its keystroke macro types `load "/zx.bas"` at the NextZXOS

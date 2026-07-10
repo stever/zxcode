@@ -11,8 +11,9 @@ const initialState = {
     title: undefined,
     code: '',
     savedCode: '',
-    // Additional project files: {id, name, content, savedContent, isBinary}.
-    // Binary asset content is base64. The main source stays in code above.
+    // Additional project files: {id, name, folder, content, savedContent,
+    // isBinary}. Binary asset content is base64; folder is '' for root files.
+    // The main source stays in code above.
     files: [],
     // null selects the main source file.
     activeFileId: null,
@@ -76,6 +77,7 @@ function receiveLoadedProject(state, action) {
         files: (action.files || []).map((f) => ({
             id: f.file_id,
             name: f.name,
+            folder: f.folder || '',
             content: f.content,
             savedContent: f.content,
             isBinary: f.is_binary
@@ -158,6 +160,7 @@ function receiveAddedFile(state, action) {
         files: [...state.files, {
             id: action.fileId,
             name: action.name,
+            folder: action.folder || '',
             content: action.content,
             savedContent: action.content,
             isBinary: action.isBinary
@@ -170,7 +173,9 @@ function receiveRenamedFile(state, action) {
     return {
         ...state,
         files: state.files.map((f) =>
-            f.id === action.fileId ? {...f, name: action.name} : f),
+            f.id === action.fileId
+                ? {...f, name: action.name, folder: action.folder || ''}
+                : f),
     };
 }
 

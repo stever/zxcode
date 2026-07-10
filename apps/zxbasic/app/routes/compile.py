@@ -40,16 +40,20 @@ class SessionVars(BaseModel):
 
 
 # Additional project files staged into the compile workdir so #include
-# resolves next to program.bas. Names become real filenames there, so they
-# are held to a safe charset with no path separators (mirrors the
-# project_file DB constraint), and names stemmed 'program' are reserved for
-# the main source and its outputs so a staged file can't shadow them.
+# resolves relative to program.bas. Names are relative paths (e.g.
+# lib/util.bas) staged under their folders — mirroring the project's download
+# ZIP — whose segments are held to a safe charset with no leading dot (so no
+# '.'/'..' segments: staging can never escape the workdir; mirrors the
+# project_file DB constraints). Segments stemmed 'program' are reserved for
+# the main source and its outputs so a staged file or folder can't shadow
+# them.
 MAX_PROJECT_FILES = 32
 MAX_FILE_CONTENT_SIZE = 256 * 1024  # matches the DB cap; base64 for binaries
 # Bound the whole request, not just each file: 32 x 256KB would otherwise
 # let one compile call carry ~8MB into the tmpfs.
 MAX_TOTAL_FILES_SIZE = 2 * 1024 * 1024
-PROJECT_FILE_NAME_RE = re.compile(r'[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}')
+PROJECT_FILE_SEGMENT_RE = re.compile(r'[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}')
+MAX_FILE_PATH_LENGTH = 193  # DB folder cap (128) + '/' + name cap (64)
 
 
 class ProjectFile(BaseModel):
@@ -60,10 +64,12 @@ class ProjectFile(BaseModel):
     @field_validator('name')
     @classmethod
     def validate_name(cls, v):
-        if not PROJECT_FILE_NAME_RE.fullmatch(v):
+        if len(v) > MAX_FILE_PATH_LENGTH or not all(
+                PROJECT_FILE_SEGMENT_RE.fullmatch(seg) for seg in v.split('/')):
             raise ValueError(
-                'File names may only use letters, digits, dots, dashes and '
-                'underscores (max 64 chars, no leading dot)')
+                'File paths may only use letters, digits, dots, dashes and '
+                'underscores in each segment (max 64 chars, no leading dot), '
+                'joined by single slashes')
         return v
 
     @field_validator('content')
@@ -76,33 +82,43 @@ class ProjectFile(BaseModel):
 
 
 def stage_project_files(workdir, files):
-    """Write the additional project files into the compile workdir."""
+    """Write the additional project files into the compile workdir, creating
+    their folders. Validated segments cannot traverse out of workdir."""
     seen = set()
     for pf in files or []:
         lower = pf.name.lower()
-        stem = lower.split('.', 1)[0]
-        if stem == 'program':
+        # Once folders exist on disk, a directory can shadow the main source
+        # or its outputs just like a file, so the rule covers every segment.
+        if any(seg.split('.', 1)[0] == 'program' for seg in lower.split('/')):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File name '{pf.name}' is reserved for the main source")
+                detail=f"Path '{pf.name}' is reserved for the main source")
         if lower in seen:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Duplicate file name '{pf.name}'")
         seen.add(lower)
-        path = os.path.join(workdir, pf.name)
+        path = os.path.join(workdir, *pf.name.split('/'))
         if pf.is_binary:
             try:
-                data = base64.b64decode(pf.content, validate=True)
+                payload = base64.b64decode(pf.content, validate=True)
             except (ValueError, TypeError):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"File '{pf.name}' is not valid base64")
-            with open(path, 'wb') as f:
-                f.write(data)
+            mode = 'wb'
         else:
-            with open(path, 'w') as f:
-                f.write(pf.content)
+            payload, mode = pf.content, 'w'
+        # A file and a folder cannot share a name on disk; the OS error from
+        # creating one over the other surfaces as a clean rejection.
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, mode) as f:
+                f.write(payload)
+        except (FileExistsError, NotADirectoryError, IsADirectoryError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Path '{pf.name}' clashes with another project file")
 
 
 class Input(BaseModel):

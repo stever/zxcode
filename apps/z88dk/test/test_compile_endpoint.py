@@ -75,3 +75,41 @@ def test_path_traversal_file_name_rejected():
     ])
     assert response.status_code == 400
     assert response.json()['message'] == 'Invalid compile request.'
+
+
+FOLDER_INCLUDE_MAIN_SOURCE = """#include <stdio.h>
+#include "lib/greeting.h"
+
+int main()
+{
+    printf(GREETING);
+    return 0;
+}
+"""
+
+
+def test_include_staged_folder_file():
+    response = compile_request(FOLDER_INCLUDE_MAIN_SOURCE, files=[
+        {'name': 'lib/greeting.h', 'content': INCLUDE_HEADER},
+    ])
+    assert response.status_code == 200
+    tap = base64.b64decode(response.json()['base64_encoded'])
+    assert len(tap) > 0
+
+
+def test_folder_path_traversal_rejected():
+    for name in ('lib/../evil.h', '/etc/evil.h', 'lib//evil.h', 'lib/'):
+        response = compile_request(MAIN_SOURCE, files=[
+            {'name': name, 'content': 'x'},
+        ])
+        assert response.status_code == 400, name
+        assert response.json()['message'] == 'Invalid compile request.'
+
+
+def test_file_and_folder_name_clash_rejected():
+    response = compile_request(MAIN_SOURCE, files=[
+        {'name': 'lib', 'content': 'x'},
+        {'name': 'lib/greeting.h', 'content': INCLUDE_HEADER},
+    ])
+    assert response.status_code == 400
+    assert 'clashes with another project file' in response.json()['message']

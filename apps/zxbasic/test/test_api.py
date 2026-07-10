@@ -192,6 +192,93 @@ def test_compile_endpoint_include_staged_project_file(monkeypatch):
     assert_valid_tap(base64.b64decode(response.json()["base64_encoded"]))
 
 
+FOLDER_INCLUDE_MAIN_BASIC = '#include "lib/greet.bas"\n\ngreet()\n'
+
+
+def test_compile_endpoint_include_staged_folder_file(monkeypatch):
+    """Files in project folders are staged under their folder so #include
+    resolves the same relative path the download ZIP uses."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.chdir(REPO_ROOT)
+
+    request_body = {
+        "session_variables": {
+            "x-hasura-role": "user",
+            "x-hasura-user-id": str(uuid4()),
+        },
+        "input": {
+            "basic": FOLDER_INCLUDE_MAIN_BASIC,
+            "files": [{"name": "lib/greet.bas", "content": INCLUDE_LIB_BASIC}],
+        },
+        "action": {"name": "compile"},
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/compile/", json=request_body)
+
+    assert response.status_code == 200, response.text
+    assert_valid_tap(base64.b64decode(response.json()["base64_encoded"]))
+
+
+def test_compile_endpoint_rejects_folder_path_traversal(monkeypatch):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.chdir(REPO_ROOT)
+
+    for name in ("lib/../evil.bas", "/etc/evil.bas", "lib//evil.bas", "lib/"):
+        request_body = {
+            "session_variables": {
+                "x-hasura-role": "user",
+                "x-hasura-user-id": str(uuid4()),
+            },
+            "input": {
+                "basic": SAMPLE_BASIC,
+                "files": [{"name": name, "content": "REM escape"}],
+            },
+            "action": {"name": "compile"},
+        }
+
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post("/compile/", json=request_body)
+
+        assert response.status_code == 400, (name, response.text)
+        assert response.json()["message"] == "Invalid compile request."
+
+
+def test_compile_endpoint_rejects_file_and_folder_name_clash(monkeypatch):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.chdir(REPO_ROOT)
+
+    request_body = {
+        "session_variables": {
+            "x-hasura-role": "user",
+            "x-hasura-user-id": str(uuid4()),
+        },
+        "input": {
+            "basic": SAMPLE_BASIC,
+            "files": [
+                {"name": "lib", "content": "REM file"},
+                {"name": "lib/greet.bas", "content": INCLUDE_LIB_BASIC},
+            ],
+        },
+        "action": {"name": "compile"},
+    }
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post("/compile/", json=request_body)
+
+    assert response.status_code == 400, response.text
+    assert "clashes with another project file" in response.json()["message"]
+
+
 def test_compile_endpoint_rejects_reserved_file_name(monkeypatch):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient

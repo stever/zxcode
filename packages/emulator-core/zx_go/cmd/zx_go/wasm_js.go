@@ -337,11 +337,14 @@ func setupWasmExports() {
 		return ""
 	}))
 
-	// zxPutFile(name, Uint8Array) -> "" | errorString. Writes (or overwrites) a
-	// file at the SD card root so a program delivered via zxRunBas can LOAD
-	// project assets (sprite files etc.) at runtime. name must fit FAT 8.3 —
-	// the program references it literally. Call before zxRunBas: its reboot
-	// re-reads the card, so files staged first are visible to the program.
+	// zxPutFile(path, Uint8Array) -> "" | errorString. Writes (or overwrites) a
+	// file at path relative to the SD card root, creating directories as
+	// needed, so a program delivered via zxRunBas can LOAD project assets
+	// (sprite files etc.) at runtime by the same relative path — matching the
+	// project ZIP's layout unzipped onto a real card. Every path segment must
+	// fit FAT 8.3 — the program references the path literally. Call before
+	// zxRunBas: its reboot re-reads the card, so files staged first are
+	// visible to the program.
 	g.Set("zxPutFile", js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if wasmEmu == nil {
 			return "not booted"

@@ -35,6 +35,18 @@ describe("expandPasmoIncludes", () => {
         expect(out).toBe("NOP\nHALT");
     });
 
+    test("resolves includes by their folder path", () => {
+        const out = expandPasmoIncludes(
+            'INCLUDE "lib/util.asm"',
+            [{...text("util.asm", "HALT"), folder: "lib"}]);
+        expect(out).toBe("HALT");
+        // The bare name does not match a file that lives in a folder.
+        const untouched = 'INCLUDE "util.asm"';
+        expect(expandPasmoIncludes(
+            untouched,
+            [{...text("util.asm", "HALT"), folder: "lib"}])).toBe(untouched);
+    });
+
     test("expands INCBIN to DEFB rows preserving indentation", () => {
         const bytes = Array.from({length: 18}, (_, i) => i + 1);
         const out = expandPasmoIncludes(

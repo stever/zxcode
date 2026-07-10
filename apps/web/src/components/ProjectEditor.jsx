@@ -5,7 +5,7 @@ import "codemirror/mode/z80/z80";
 import { setCode, setFileContent } from "../redux/project/actions";
 import { selectActiveFile } from "../redux/project/selectors";
 import { toggleBreakpoint } from "../redux/debugger/actions";
-import { languageSupportsSourceDebug } from "../lib/lang";
+import { joinProjectFilePath, languageSupportsSourceDebug } from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
 import "../lib/syntax/pasmo";
 import "../lib/syntax/pasta80";
@@ -26,9 +26,12 @@ export function ProjectEditor() {
   // source (project.code). Binary assets swap the editor for an info panel.
   const activeFile = useSelector(selectActiveFile);
   const activeFileId = activeFile?.id ?? null;
-  // Breakpoints and the source map key files by NAME (matching the SLD
-  // records); null means the main source.
-  const activeFileName = activeFile?.name ?? null;
+  // Breakpoints and the source map key files by relative PATH (folder/name,
+  // matching the SLD records — sjasmplus stages files under their folders and
+  // records the include path); null means the main source.
+  const activeFileName = activeFile
+    ? joinProjectFilePath(activeFile.folder, activeFile.name)
+    : null;
   const activeIsBinary = Boolean(activeFile?.isBinary);
   // The change handler and the mount-time gutter handler need the current
   // active file without re-binding CodeMirror events.
@@ -198,7 +201,7 @@ export function ProjectEditor() {
       {activeIsBinary && (
         <div className="binary-asset-panel">
           <i className="pi pi-box" style={{ fontSize: "2rem" }} />
-          <div className="binary-asset-name">{activeFile.name}</div>
+          <div className="binary-asset-name">{activeFileName}</div>
           <div>{t("editor.files.assetSize", { size: assetSize })}</div>
           <p>{t("editor.files.assetHint")}</p>
         </div>

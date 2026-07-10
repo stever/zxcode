@@ -196,7 +196,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r31-layer2-clip-window';
+        const ENGINE_REV = 'r32-sd-folder-staging';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -663,11 +663,14 @@ export class GoEmulator extends EventEmitter {
         return Promise.reject(res);
     }
 
-    // Stage project asset files at the SD card root before a program is run on
-    // the Next, so it can LOAD them at runtime (sprite files etc. — the program
-    // itself lands at the root as /zx.bas, so relative names resolve there).
-    // sdFiles: [{name, data: Uint8Array}]. Names must fit FAT 8.3 (the program
-    // references them literally); callers validate, the core also rejects.
+    // Stage project asset files onto the SD card before a program is run on
+    // the Next, so it can LOAD them at runtime (sprite files etc.). Each name
+    // is a path relative to the card root — folders are created as needed —
+    // mirroring the project ZIP's layout unzipped onto a real card; the
+    // program itself lands at the root as /zx.bas, so its LOAD paths resolve
+    // the same way in both worlds. sdFiles: [{name, data: Uint8Array}]. Every
+    // path segment must fit FAT 8.3 (the program references the path
+    // literally); callers validate, the core also rejects.
     // Returns an error string, or null when all files landed.
     stageSdFiles(sdFiles) {
         for (const f of (sdFiles || [])) {

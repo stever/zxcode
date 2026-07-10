@@ -84,31 +84,37 @@ export const revertUnsavedChanges = () => ({
     type: actionTypes.revertUnsavedChanges
 });
 
-export const addFile = (name, content = '', isBinary = false) => ({
+export const addFile = (name, content = '', isBinary = false, folder = '') => ({
     type: actionTypes.addFile,
     name,
     content,
-    isBinary
+    isBinary,
+    folder
 });
 
-export const receiveAddedFile = (fileId, name, content, isBinary) => ({
+export const receiveAddedFile = (fileId, name, content, isBinary, folder = '') => ({
     type: actionTypes.receiveAddedFile,
     fileId,
     name,
     content,
-    isBinary
+    isBinary,
+    folder
 });
 
-export const renameFile = (fileId, name) => ({
+// Rename covers moving between folders too: the dialog edits the full
+// "folder/name" path in one field.
+export const renameFile = (fileId, name, folder = '') => ({
     type: actionTypes.renameFile,
     fileId,
-    name
+    name,
+    folder
 });
 
-export const receiveRenamedFile = (fileId, name) => ({
+export const receiveRenamedFile = (fileId, name, folder = '') => ({
     type: actionTypes.receiveRenamedFile,
     fileId,
-    name
+    name,
+    folder
 });
 
 export const deleteFile = (fileId) => ({

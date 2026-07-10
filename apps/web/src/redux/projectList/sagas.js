@@ -202,6 +202,7 @@ function* handleCopyListProjectActions(action) {
                     machine
                     files {
                         name
+                        folder
                         content
                         is_binary
                     }
@@ -239,6 +240,7 @@ function* handleCopyListProjectActions(action) {
             'machine': source.machine,
             'files': (source.files || []).map((f) => ({
                 name: f.name,
+                folder: f.folder || '',
                 content: f.content,
                 is_binary: f.is_binary
             }))

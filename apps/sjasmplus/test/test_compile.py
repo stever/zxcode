@@ -213,6 +213,79 @@ def test_path_traversal_file_name_rejected():
     assert response.json()['message'] == 'Invalid compile request.'
 
 
+FOLDER_INCLUDE_MAIN = """    DEVICE ZXSPECTRUM48
+    ORG $8000
+start:
+    INCLUDE "lib/part.asm"
+    SAVETAP "out.tap",start
+"""
+
+FOLDER_INCBIN_MAIN = """    DEVICE ZXSPECTRUM48
+    ORG $8000
+start:
+    ret
+data:
+    INCBIN "assets/gfx/sprite.bin"
+    SAVETAP "out.tap",start
+"""
+
+
+def test_include_staged_folder_file():
+    response = compile_request(FOLDER_INCLUDE_MAIN, files=[
+        {'name': 'lib/part.asm', 'content': '    ld a,2\n    ret\n'},
+    ])
+    assert response.status_code == 200
+    tap = base64.b64decode(response.json()['base64_encoded'])
+    assert len(tap) > 0
+
+
+def test_incbin_staged_nested_folder_asset():
+    sprite = bytes(range(16))
+    response = compile_request(FOLDER_INCBIN_MAIN, files=[
+        {'name': 'assets/gfx/sprite.bin',
+         'content': base64.b64encode(sprite).decode(),
+         'is_binary': True},
+    ])
+    assert response.status_code == 200
+    tap = base64.b64decode(response.json()['base64_encoded'])
+    assert sprite in tap
+
+
+def test_folder_path_traversal_rejected():
+    for name in ('lib/../evil.asm', '/etc/evil.asm', 'lib//evil.asm', 'lib/'):
+        response = compile_request(TAP_SOURCE, files=[
+            {'name': name, 'content': 'nop'},
+        ])
+        assert response.status_code == 400, name
+        assert response.json()['message'] == 'Invalid compile request.'
+
+
+def test_reserved_folder_segment_rejected():
+    response = compile_request(TAP_SOURCE, files=[
+        {'name': 'program.d/part.asm', 'content': 'nop'},
+    ])
+    assert response.status_code == 400
+    assert 'reserved' in response.json()['message']
+
+
+def test_output_extension_folder_segment_rejected():
+    # A directory named *.tap would match the output glob.
+    response = compile_request(TAP_SOURCE, files=[
+        {'name': 'data.tap/part.asm', 'content': 'nop'},
+    ])
+    assert response.status_code == 400
+    assert 'clashes with compiler output' in response.json()['message']
+
+
+def test_file_and_folder_name_clash_rejected():
+    response = compile_request(TAP_SOURCE, files=[
+        {'name': 'lib', 'content': 'nop'},
+        {'name': 'lib/part.asm', 'content': 'nop'},
+    ])
+    assert response.status_code == 400
+    assert 'clashes with another project file' in response.json()['message']
+
+
 def test_invalid_base64_rejected():
     response = compile_request(TAP_SOURCE, files=[
         {'name': 'data.bin', 'content': 'not base64!!!', 'is_binary': True},

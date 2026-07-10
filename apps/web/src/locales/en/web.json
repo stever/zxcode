@@ -190,15 +190,17 @@
       "rename": "Rename",
       "delete": "Delete",
       "fileName": "File Name",
-      "fileNameHelp": "Letters, digits, dots, dashes and underscores only. Reference the file from your code, e.g. INCLUDE or #include.",
+      "fileNameHelp": "Letters, digits, dots, dashes and underscores only, with an optional folder prefix like assets/name.ext. Reference the file from your code by the same path, e.g. INCLUDE \"assets/name.ext\" or LOAD \"assets/name.ext\" — the download ZIP uses that layout too, so it works unchanged on a real SD card.",
       "deleteConfirm": "Permanently remove \"{{name}}\" from this project?",
       "invalidName": "File names may only use letters, digits, dots, dashes and underscores (max 64 characters, no leading dot).",
+      "invalidFolder": "Folder paths may only use letters, digits, dots, dashes and underscores, with single slashes between folders (max 128 characters, no leading dot).",
       "reservedName": "Names starting with \"program\" are reserved for the main source file.",
       "outputName": ".tap and .nex names clash with compiler output. Use a different extension.",
-      "duplicateName": "A file with this name already exists in the project.",
+      "duplicateName": "A file with this path already exists in the project.",
+      "pathConflict": "This path clashes with an existing file: a file and a folder cannot share a name.",
       "tooLarge": "File is too large. The limit is 256KB.",
       "assetSize": "{{size}} bytes",
-      "assetHint": "Binary asset. Reference it from your code (e.g. INCBIN \"name\") and it is placed alongside your source at compile time."
+      "assetHint": "Binary asset. Reference it from your code by its path (e.g. INCBIN \"folder/name\") and it is staged under your source's directory at compile time."
     }
   },
   "projectList": {

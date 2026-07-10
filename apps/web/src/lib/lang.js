@@ -73,7 +73,7 @@ export const MAX_FILE_CONTENT_SIZE = 256 * 1024;
 const PROJECT_FILE_NAME_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}$/;
 
 // Returns an i18n key describing the problem, or null when the name is valid.
-export function projectFileNameError(name, existingNames = []) {
+export function projectFileNameError(name) {
   if (!PROJECT_FILE_NAME_RE.test(name || "")) {
     return "editor.files.invalidName";
   }
@@ -84,8 +84,71 @@ export function projectFileNameError(name, existingNames = []) {
   if (lower.endsWith(".tap") || lower.endsWith(".nex")) {
     return "editor.files.outputName";
   }
-  if (existingNames.some((n) => n.toLowerCase() === lower)) {
-    return "editor.files.duplicateName";
+  return null;
+}
+
+// Files can carry an optional folder path (mirrors the project_file_folder_check
+// DB constraint). The relative path folder/name is the file's identity
+// everywhere: how code references it (INCLUDE, #include, LOAD), where the
+// compile services and the Next's SD card stage it, and where it sits in the
+// downloaded ZIP — so the bundle works unchanged on a real card. Uniqueness
+// is per full path, letting different folders hold the same base name.
+export const MAX_FOLDER_LENGTH = 128;
+const PROJECT_FOLDER_RE =
+  /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}(\/[A-Za-z0-9_-][A-Za-z0-9._-]{0,63})*$/;
+
+// Splits "assets/sprites/tiles.spr" into folder "assets/sprites" and name
+// "tiles.spr"; a path without a slash is a root file with an empty folder.
+export function splitProjectFilePath(path) {
+  const input = path || "";
+  const slash = input.lastIndexOf("/");
+  if (slash < 0) {
+    return { folder: "", name: input };
+  }
+  return { folder: input.slice(0, slash), name: input.slice(slash + 1) };
+}
+
+export function joinProjectFilePath(folder, name) {
+  return folder ? `${folder}/${name}` : name;
+}
+
+// Validates a full "folder/name" path as typed in the file-name dialog,
+// against the project's other paths for duplicates. Returns an i18n key
+// describing the problem, or null when valid.
+export function projectFilePathError(path, existingPaths = []) {
+  const { folder, name } = splitProjectFilePath(path);
+  if ((path || "").includes("/")
+      && (folder.length > MAX_FOLDER_LENGTH || !PROJECT_FOLDER_RE.test(folder))) {
+    return "editor.files.invalidFolder";
+  }
+  const nameError = projectFileNameError(name);
+  if (nameError) {
+    return nameError;
+  }
+  // The reserved/output rules cover folder segments too: on disk a directory
+  // named program.* would clash with the main source, and a *.tap/*.nex
+  // directory would match the compile services' output scan.
+  for (const seg of folder ? folder.split("/") : []) {
+    const segLower = seg.toLowerCase();
+    if (segLower.split(".", 1)[0] === "program") {
+      return "editor.files.reservedName";
+    }
+    if (segLower.endsWith(".tap") || segLower.endsWith(".nex")) {
+      return "editor.files.outputName";
+    }
+  }
+  const lower = (path || "").toLowerCase();
+  for (const p of existingPaths) {
+    const pl = p.toLowerCase();
+    if (pl === lower) {
+      return "editor.files.duplicateName";
+    }
+    // Staged on disk, a file and a folder cannot share a name: reject a path
+    // that would nest inside an existing file, or turn an existing file's
+    // parent path into a file.
+    if (pl.startsWith(`${lower}/`) || lower.startsWith(`${pl}/`)) {
+      return "editor.files.pathConflict";
+    }
   }
   return null;
 }

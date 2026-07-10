@@ -69,9 +69,18 @@ describe("project reducer: additional files", () => {
     it("loads files with saved content and null active file", () => {
         const state = loadedState("abc", "10 PRINT", FILES);
         expect(state.files).toEqual([
-            {id: "f1", name: "lib.bas", content: "REM lib", savedContent: "REM lib", isBinary: false},
+            {id: "f1", name: "lib.bas", folder: "", content: "REM lib", savedContent: "REM lib", isBinary: false},
         ]);
         expect(state.activeFileId).toBeNull();
+    });
+
+    it("loads a file's folder, defaulting to the root for rows without one", () => {
+        const state = loadedState("abc", "10 PRINT", [
+            {file_id: "f1", name: "lib.bas", folder: "src", content: "REM lib", is_binary: false},
+            {file_id: "f2", name: "tiles.spr", content: "AAAA", is_binary: true},
+        ]);
+        expect(state.files[0].folder).toBe("src");
+        expect(state.files[1].folder).toBe("");
     });
 
     it("tracks dirty state across main code and files", () => {
@@ -103,10 +112,23 @@ describe("project reducer: additional files", () => {
         expect(selectHasUnsavedChanges({project: state})).toBe(false);
     });
 
+    it("adds a file into a folder", () => {
+        let state = loadedState("abc", "10 PRINT");
+        state = reducer(state, receiveAddedFile("f2", "tiles.spr", "AAAA", true, "assets"));
+        expect(state.files[0]).toMatchObject({name: "tiles.spr", folder: "assets"});
+    });
+
     it("renames a file in place", () => {
         let state = loadedState("abc", "10 PRINT", FILES);
         state = reducer(state, receiveRenamedFile("f1", "library.bas"));
         expect(state.files[0].name).toBe("library.bas");
+        expect(state.files[0].folder).toBe("");
+    });
+
+    it("moves a file between folders via rename", () => {
+        let state = loadedState("abc", "10 PRINT", FILES);
+        state = reducer(state, receiveRenamedFile("f1", "lib.bas", "src/lib"));
+        expect(state.files[0]).toMatchObject({name: "lib.bas", folder: "src/lib"});
     });
 
     it("deleting the active file falls back to the main source", () => {

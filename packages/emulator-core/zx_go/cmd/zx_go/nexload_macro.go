@@ -332,25 +332,36 @@ func (e *emulator) importAndRunBas(data []byte) error {
 	return nil
 }
 
-// putSDFile writes data to fileName at the SD card root, overwriting any
-// existing file of that name — the runtime-asset side of importAndRunBas: a
-// NextBASIC program LOADs project files (sprite sheets etc.) from the card,
-// so they are staged where the program (also at root, /zx.bas) resolves
-// relative names. fileName must fit FAT 8.3: the program references it
-// literally, so a ~ alias would never be found. Pauses the emulator around
-// the write like the importers.
-func (e *emulator) putSDFile(fileName string, data []byte) error {
+// putSDFile writes data to filePath relative to the SD card root, creating
+// intermediate directories and overwriting any existing file of that name —
+// the runtime-asset side of importAndRunBas: a NextBASIC program LOADs
+// project files (sprite sheets etc.) from the card, so they are staged where
+// the program (at root, /zx.bas) resolves the same relative path the source
+// spells out, mirroring the layout of the project's download ZIP unzipped
+// onto a real card. Every path segment must fit FAT 8.3: the program
+// references the path literally, and both files and directories are matched
+// by their 8.3 short names, so a ~ alias would never be found. Pauses the
+// emulator around the write like the importers.
+func (e *emulator) putSDFile(filePath string, data []byte) error {
 	if e.sdImageSrc == nil {
 		return fmt.Errorf("no SD image mounted")
 	}
+	segments := strings.Split(filePath, "/")
+	for _, seg := range segments[:len(segments)-1] {
+		if seg == "" || !sdcard.Fits83(seg) {
+			return fmt.Errorf("directory %q does not fit an 8.3 name", seg)
+		}
+	}
+	dirPath := strings.Join(segments[:len(segments)-1], "/")
+	fileName := segments[len(segments)-1]
 	e.paused.Store(true)
 	defer e.paused.Store(false)
-	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "", fileName, data); err != nil {
+	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), dirPath, fileName, data); err != nil {
 		return err
 	}
 	if e.sdImagePath != "" {
 		if err := e.sdImageSrc.WriteBackTo(e.sdImagePath); err != nil {
-			slog.Warn("sd put: persisting to the SD image failed", "file", fileName, "err", err)
+			slog.Warn("sd put: persisting to the SD image failed", "file", filePath, "err", err)
 		}
 	}
 	return nil

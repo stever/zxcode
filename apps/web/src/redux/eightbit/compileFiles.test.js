@@ -1,4 +1,4 @@
-import {toSdFiles, sdFileNameErrors} from "./compileFiles";
+import {toActionFiles, toSdFiles, toWorkerUpdates, sdFileNameErrors} from "./compileFiles";
 
 // jest's jsdom environment lacks TextEncoder; Node's is identical.
 if (typeof global.TextEncoder === "undefined") {
@@ -25,6 +25,28 @@ describe("toSdFiles", () => {
     test("handles a missing file list", () => {
         expect(toSdFiles(undefined)).toEqual([]);
     });
+
+    test("stages files under their folder path", () => {
+        const [out] = toSdFiles([
+            {name: "tiles.spr", folder: "gfx", content: "hi", isBinary: false},
+        ]);
+        expect(out.name).toBe("gfx/tiles.spr");
+    });
+});
+
+describe("path-bearing adapters", () => {
+    test("toActionFiles sends the relative path as name", () => {
+        expect(toActionFiles([
+            {name: "util.asm", folder: "lib", content: "ret", isBinary: false},
+            {name: "notes.txt", folder: "", content: "hi", isBinary: false},
+        ]).map((f) => f.name)).toEqual(["lib/util.asm", "notes.txt"]);
+    });
+
+    test("toWorkerUpdates uses the relative path as the VFS path", () => {
+        expect(toWorkerUpdates([
+            {name: "util.h", folder: "inc", content: "x", isBinary: false},
+        ])[0].path).toBe("inc/util.h");
+    });
 });
 
 describe("sdFileNameErrors", () => {
@@ -46,5 +68,16 @@ describe("sdFileNameErrors", () => {
 
     test("handles a missing file list", () => {
         expect(sdFileNameErrors(undefined)).toEqual([]);
+    });
+
+    test("checks every folder segment against 8.3", () => {
+        expect(sdFileNameErrors([
+            {name: "tiles.spr", folder: "sprites"},
+            {name: "tiles.spr", folder: "gfx/level1"},
+        ])).toEqual([]);
+        expect(sdFileNameErrors([
+            {name: "tiles.spr", folder: "loading-screens"},
+            {name: "tiles.spr", folder: "gfx/level.one.x"},
+        ])).toEqual(["loading-screens/tiles.spr", "gfx/level.one.x/tiles.spr"]);
     });
 });

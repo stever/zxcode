@@ -197,9 +197,10 @@ function* handleLoadProjectActions(action) {
                         greeting_name
                         profile_is_public
                     }
-                    files(order_by: {name: asc}) {
+                    files(order_by: [{folder: asc}, {name: asc}]) {
                         file_id
                         name
+                        folder
                         content
                         is_binary
                     }
@@ -323,8 +324,8 @@ function* handleAddFileActions(action) {
         const projectId = yield select((state) => state.project.id);
 
         const query = gql`
-            mutation ($project_id: uuid!, $name: String!, $content: String!, $is_binary: Boolean!) {
-                insert_project_file_one(object: {project_id: $project_id, name: $name, content: $content, is_binary: $is_binary}) {
+            mutation ($project_id: uuid!, $name: String!, $folder: String!, $content: String!, $is_binary: Boolean!) {
+                insert_project_file_one(object: {project_id: $project_id, name: $name, folder: $folder, content: $content, is_binary: $is_binary}) {
                     file_id
                 }
             }
@@ -333,6 +334,7 @@ function* handleAddFileActions(action) {
         const variables = {
             'project_id': projectId,
             'name': action.name,
+            'folder': action.folder || '',
             'content': action.content,
             'is_binary': action.isBinary
         };
@@ -346,7 +348,7 @@ function* handleAddFileActions(action) {
             return;
         }
 
-        yield put(receiveAddedFile(fileId, action.name, action.content, action.isBinary));
+        yield put(receiveAddedFile(fileId, action.name, action.content, action.isBinary, action.folder || ''));
     } catch (e) {
         handleException(e);
     }
@@ -357,8 +359,8 @@ function* handleRenameFileActions(action) {
         const userId = yield select((state) => state.identity.userId);
 
         const query = gql`
-            mutation ($file_id: uuid!, $name: String!) {
-                update_project_file_by_pk(pk_columns: {file_id: $file_id}, _set: {name: $name}) {
+            mutation ($file_id: uuid!, $name: String!, $folder: String!) {
+                update_project_file_by_pk(pk_columns: {file_id: $file_id}, _set: {name: $name, folder: $folder}) {
                     file_id
                 }
             }
@@ -366,7 +368,8 @@ function* handleRenameFileActions(action) {
 
         const variables = {
             'file_id': action.fileId,
-            'name': action.name
+            'name': action.name,
+            'folder': action.folder || ''
         };
 
         // noinspection JSCheckFunctionSignatures
@@ -377,7 +380,7 @@ function* handleRenameFileActions(action) {
             return;
         }
 
-        yield put(receiveRenamedFile(action.fileId, action.name));
+        yield put(receiveRenamedFile(action.fileId, action.name, action.folder || ''));
     } catch (e) {
         handleException(e);
     }
@@ -658,9 +661,10 @@ function* handleCopyProjectActions(action) {
                 insert_project_one(object: {title: $title, lang: $lang, code: $code, slug: $slug, machine: $machine, files: {data: $files}}) {
                     project_id
                     slug
-                    files(order_by: {name: asc}) {
+                    files(order_by: [{folder: asc}, {name: asc}]) {
                         file_id
                         name
+                        folder
                         content
                         is_binary
                     }
@@ -677,6 +681,7 @@ function* handleCopyProjectActions(action) {
             // Duplicate the source project's files (current drafts included).
             'files': (action.files || []).map((f) => ({
                 name: f.name,
+                folder: f.folder || '',
                 content: f.content,
                 is_binary: f.isBinary
             }))

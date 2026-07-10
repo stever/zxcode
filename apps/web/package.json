@@ -3,8 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "run-s build:clean:all build:8bitworker:es:debug build:emulator:debug serve",
-    "test": "run-s jest",
-    "test:jest": "jest",
+    "test": "jest",
     "build": "npm run build:all:release",
     "build:all:debug": "run-s build:clean:all build:copyfiles build:8bitworker:es:debug build:babel build:emulator:debug build:js:debug build:manifest build:clean",
     "build:all:release": "run-s build:clean:all build:copyfiles build:8bitworker:es:release build:babel build:emulator:release build:js:release build:manifest build:clean",

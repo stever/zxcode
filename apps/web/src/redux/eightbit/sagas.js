@@ -220,9 +220,11 @@ function* handleGetProjectTapActions(_) {
                 // detects the PLUS3DOS magic and runs it via zxRunBas, so it
                 // rides the same followTapAction path as the TAP compilers.
                 // Extra project files (sprite sheets etc.) ride along too:
-                // they are staged onto the SD card so the program can LOAD
-                // them at runtime — which is why their names must fit FAT
-                // 8.3 (a ~ alias would never match the LOADed name).
+                // they are staged onto the SD card, folders included, so the
+                // program can LOAD them at runtime by the same relative path
+                // as the project ZIP unzipped onto a real card — which is
+                // why every path segment must fit FAT 8.3 (a ~ alias would
+                // never match the LOADed path).
                 try {
                     const projectFiles = yield select((state) => state.project.files);
                     const badNames = sdFileNameErrors(projectFiles);
@@ -230,7 +232,7 @@ function* handleGetProjectTapActions(_) {
                         // noinspection ExceptionCaughtLocallyJS
                         throw badNames.map((name) => ({
                             type: "err",
-                            text: `"${name}" cannot go on the Next's SD card: names must fit 8.3 (up to 8 characters, then a dot and up to 3). Rename the file so the program can LOAD it.`,
+                            text: `"${name}" cannot go on the Next's SD card: every folder and file name must fit 8.3 (up to 8 characters, then a dot and up to 3). Rename it so the program can LOAD it.`,
                         }));
                     }
                     tap = yield call(getNextBasicProgram, code);

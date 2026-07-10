@@ -9,6 +9,8 @@
 // Trade-off: pasmo's error line numbers refer to the expanded source, so
 // diagnostics after a large INCBIN drift from the editor's line numbers.
 
+import {joinProjectFilePath} from "../../lib/lang";
+
 // Leading whitespace, the directive, a quoted or bare filename, then only
 // whitespace/comment — anything else (e.g. a label in column 0) is left to
 // pasmo, matching how the directives are conventionally written.
@@ -48,32 +50,36 @@ function expand(code, byName, stack) {
             out.push(...toDefbLines(fileBytes(file), m[1]));
             continue;
         }
+        const path = joinProjectFilePath(file.folder, file.name);
         if (file.isBinary) {
             throw [{
                 type: "err",
-                text: `INCLUDE "${file.name}" refers to a binary file; use INCBIN for binary data.`,
+                text: `INCLUDE "${path}" refers to a binary file; use INCBIN for binary data.`,
             }];
         }
-        if (stack.has(file.name)) {
+        if (stack.has(path)) {
             throw [{
                 type: "err",
-                text: `Circular INCLUDE of "${file.name}".`,
+                text: `Circular INCLUDE of "${path}".`,
             }];
         }
-        stack.add(file.name);
+        stack.add(path);
         out.push(expand(file.content, byName, stack));
-        stack.delete(file.name);
+        stack.delete(path);
     }
     return out.join("\n");
 }
 
-// files use the store's project-file shape ({name, content, isBinary}).
-// Throws an error-items array (the pasmo compile's error contract) on a
-// circular INCLUDE or an INCLUDE of a binary asset.
+// files use the store's project-file shape ({name, folder, content,
+// isBinary}); directives reference them by relative path (folder/name),
+// matching how the other toolchains stage them on disk. Throws an
+// error-items array (the pasmo compile's error contract) on a circular
+// INCLUDE or an INCLUDE of a binary asset.
 export function expandPasmoIncludes(code, files) {
     if (!files || files.length === 0) return code;
-    // Duplicate project file names are already rejected case-insensitively,
+    // Duplicate project file paths are already rejected case-insensitively,
     // so a lower-cased map resolves the case-insensitive directive lookup.
-    const byName = new Map(files.map((f) => [f.name.toLowerCase(), f]));
+    const byName = new Map(files.map(
+        (f) => [joinProjectFilePath(f.folder, f.name).toLowerCase(), f]));
     return expand(code, byName, new Set());
 }

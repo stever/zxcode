@@ -18,8 +18,10 @@ import { selectFiles } from "../redux/project/selectors";
 import {
   getLanguageLabel,
   isTextFileName,
+  joinProjectFilePath,
   languageSupportsProjectFiles,
-  projectFileNameError,
+  projectFilePathError,
+  splitProjectFilePath,
   MAX_FILE_CONTENT_SIZE,
   MAX_PROJECT_FILES,
 } from "../lib/lang";
@@ -67,7 +69,9 @@ export function ProjectFileTabView() {
   // arrows, e.g. a right arrow lingering after enough tabs were removed
   // that nothing overflows. Nudge the handler with a synthetic scroll
   // whenever the tab set or the layout width changes.
-  const tabSetKey = files.map((f) => f.name).join("\n");
+  const tabSetKey = files
+    .map((f) => joinProjectFilePath(f.folder, f.name))
+    .join("\n");
   useEffect(() => {
     const nav = tabViewRef.current
       ?.getElement()
@@ -86,8 +90,10 @@ export function ProjectFileTabView() {
     }
   };
 
-  const otherNames = (excludeId) =>
-    files.filter((f) => f.id !== excludeId).map((f) => f.name);
+  const otherPaths = (excludeId) =>
+    files
+      .filter((f) => f.id !== excludeId)
+      .map((f) => joinProjectFilePath(f.folder, f.name));
 
   const closeNameDialog = () => {
     setNameDialogVisible(false);
@@ -96,16 +102,19 @@ export function ProjectFileTabView() {
   };
 
   const submitNameDialog = () => {
-    const name = fileName.trim();
-    const errorKey = projectFileNameError(name, otherNames(nameDialogFileId));
+    // The single input edits the full "folder/name" path, so renaming and
+    // moving between folders are the same gesture.
+    const path = fileName.trim();
+    const errorKey = projectFilePathError(path, otherPaths(nameDialogFileId));
     if (errorKey) {
       showError(t(errorKey));
       return;
     }
+    const { folder, name } = splitProjectFilePath(path);
     if (nameDialogFileId === null) {
-      dispatch(addFile(name));
+      dispatch(addFile(name, "", false, folder));
     } else {
-      dispatch(renameFile(nameDialogFileId, name));
+      dispatch(renameFile(nameDialogFileId, name, folder));
     }
     closeNameDialog();
   };
@@ -123,7 +132,8 @@ export function ProjectFileTabView() {
     event.target.value = "";
     if (!file) return;
 
-    const errorKey = projectFileNameError(file.name, otherNames(null));
+    // Uploads land at the project root (browser File names carry no path).
+    const errorKey = projectFilePathError(file.name, otherPaths(null));
     if (errorKey) {
       showError(t(errorKey));
       return;
@@ -158,7 +168,9 @@ export function ProjectFileTabView() {
   const deleteConfirm = (event, file) => {
     confirmPopup({
       target: event.currentTarget,
-      message: t("editor.files.deleteConfirm", { name: file.name }),
+      message: t("editor.files.deleteConfirm", {
+        name: joinProjectFilePath(file.folder, file.name),
+      }),
       icon: "pi pi-exclamation-triangle",
       accept: () => dispatch(deleteFile(file.id)),
       reject: () => {},
@@ -196,7 +208,7 @@ export function ProjectFileTabView() {
     >
       {file.isBinary && <i className="pi pi-box mr-1" />}
       <span className={options.titleClassName}>
-        {file.name}
+        {joinProjectFilePath(file.folder, file.name)}
         {file.content !== file.savedContent && " •"}
       </span>
       {isOwner && options.selected && (
@@ -207,7 +219,7 @@ export function ProjectFileTabView() {
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
-              openNameDialog(file.id, file.name);
+              openNameDialog(file.id, joinProjectFilePath(file.folder, file.name));
             }}
           />
           <i
