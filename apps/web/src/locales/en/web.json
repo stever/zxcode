@@ -163,6 +163,7 @@
     "tip": "Tip: Use arrow buttons to browse more patterns, or click Randomize for a surprise!"
   },
   "editor": {
+    "downloadZip": "Download ZIP",
     "projectCopied": "Project Copied",
     "renameTitle": "Rename Project",
     "projectName": "Project Name",

@@ -22,6 +22,7 @@ export const actionTypes = {
     setProjectTitle: 'project/setProjectTitle',
     setErrorItems: 'project/setErrorItems',
     copyProject: 'project/copyProject',
+    downloadProjectZip: 'project/downloadProjectZip',
 };
 
 export const reset = () => ({
@@ -158,4 +159,8 @@ export const copyProject = (title, lang, code, files = []) => ({
     lang,
     code,
     files
+});
+
+export const downloadProjectZip = () => ({
+    type: actionTypes.downloadProjectZip
 });

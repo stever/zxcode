@@ -18,6 +18,7 @@ import {pause, reset as resetMachine} from "../jsspeccy/actions";
 import {setMachine} from "../app/actions";
 import {handleException} from "../../errors";
 import {generateSlug} from "../../utils/slug";
+import {buildProjectZip} from "./projectZip";
 
 // -----------------------------------------------------------------------------
 // Action watchers
@@ -71,6 +72,11 @@ export function* watchForRenameFileActions() {
 // noinspection JSUnusedGlobalSymbols
 export function* watchForDeleteFileActions() {
     yield takeLatest(actionTypes.deleteFile, handleDeleteFileActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchForDownloadProjectZipActions() {
+    yield takeLatest(actionTypes.downloadProjectZip, handleDownloadProjectZipActions);
 }
 
 // -----------------------------------------------------------------------------
@@ -402,6 +408,28 @@ function* handleDeleteFileActions(action) {
         }
 
         yield put(receiveDeletedFile(action.fileId));
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+// The ZIP is built entirely from redux state: the load query fetches every
+// file's content up front, so no extra network round-trip is needed.
+function* handleDownloadProjectZipActions(_) {
+    try {
+        const title = yield select((state) => state.project.title);
+        const lang = yield select((state) => state.project.lang);
+        const code = yield select((state) => state.project.code);
+        const files = yield select((state) => state.project.files);
+
+        const zip = buildProjectZip(lang, code, files);
+        const blob = yield call([zip, zip.generateAsync], {type: 'blob'});
+
+        const objURL = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `${title || 'project'}.zip`;
+        link.href = objURL;
+        link.click();
     } catch (e) {
         handleException(e);
     }

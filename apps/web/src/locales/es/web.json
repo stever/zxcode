@@ -159,6 +159,7 @@
     "tip": "Consejo: usa las flechas para ver más patrones, o pulsa Aleatorio para una sorpresa."
   },
   "editor": {
+    "downloadZip": "Descargar ZIP",
     "projectCopied": "Proyecto copiado",
     "renameTitle": "Renombrar proyecto",
     "projectName": "Nombre del proyecto",

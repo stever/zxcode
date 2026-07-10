@@ -12,6 +12,7 @@ import {
   renameProject,
   saveCodeChanges,
   copyProject,
+  downloadProjectZip,
 } from "../redux/project/actions";
 import { selectFiles, selectHasUnsavedChanges } from "../redux/project/selectors";
 import { runProjectCode } from "../redux/eightbit/actions";
@@ -153,6 +154,12 @@ export function ProjectToolbar() {
                   setRenameDialogVisible(true);
                   setTimeout(() => renameInputReference.current.focus(), 100);
                 }}
+              />
+              <Button
+                label={t("editor.downloadZip")}
+                icon="pi pi-download"
+                className="p-button-outlined"
+                onClick={() => dispatch(downloadProjectZip())}
               />
               <Button
                 label={t("actions.delete")}

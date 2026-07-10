@@ -159,6 +159,7 @@
     "tip": "Dica: use os botões de seta para ver mais padrões ou clique em Aleatório para uma surpresa!"
   },
   "editor": {
+    "downloadZip": "Transferir ZIP",
     "projectCopied": "Projeto copiado",
     "renameTitle": "Renomear projeto",
     "projectName": "Nome do projeto",
