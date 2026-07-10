@@ -65,12 +65,31 @@ describe("getZ88dkTap error surfacing", () => {
         );
     });
 
-    test("returns bytes on success", async () => {
+    test("returns bytes on success, with a null debug map when absent", async () => {
         // base64 of the two bytes [0x13, 0x00]
         const b64 = Buffer.from([0x13, 0x00]).toString("base64");
         axios.post.mockResolvedValue({data: {data: {compileC: {base64_encoded: b64}}}});
 
-        const tap = await getZ88dkTap("good code", null);
-        expect(Array.from(tap)).toEqual([0x13, 0x00]);
+        const result = await getZ88dkTap("good code", null);
+        expect(Array.from(result.tap)).toEqual([0x13, 0x00]);
+        expect(result.debug).toBeNull();
+    });
+
+    test("parses the service's debugger line map from sld", async () => {
+        const b64 = Buffer.from([0x13, 0x00]).toString("base64");
+        const sld = JSON.stringify({kind: "z88dk", files: {"": [[5, 0x9364]]}});
+        axios.post.mockResolvedValue({data: {data: {compileC: {base64_encoded: b64, sld}}}});
+
+        const result = await getZ88dkTap("good code", null);
+        expect(result.debug).toEqual({kind: "z88dk", files: {"": [[5, 0x9364]]}});
+    });
+
+    test("a malformed debug map is ignored, never fatal", async () => {
+        const b64 = Buffer.from([0x13, 0x00]).toString("base64");
+        axios.post.mockResolvedValue({data: {data: {compileC: {base64_encoded: b64, sld: "{nope"}}}});
+
+        const result = await getZ88dkTap("good code", null);
+        expect(Array.from(result.tap)).toEqual([0x13, 0x00]);
+        expect(result.debug).toBeNull();
     });
 });

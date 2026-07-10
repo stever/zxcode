@@ -172,12 +172,12 @@ export function isTextFileName(name) {
 // (lib/debugger/basicMap.js), armed through the engine's PPC-watching
 // basic-bp; zxbasic (Boriel, compiled) maps file lines through the
 // --enable-break per-line runtime call (lib/debugger/lineCallMap.js),
-// armed through the engine's linecall breakpoints; pascal (Pasta80) maps
-// file lines to addresses via the sjasmplus listing its service parses
-// (lib/debugger/pasta80Map.js), armed as plain address breakpoints. Other
-// toolchains would need a listing/map parser first.
+// armed through the engine's linecall breakpoints; pascal (Pasta80) and c
+// (z88dk) map file lines to addresses via listings their services parse
+// (lib/debugger/pasta80Map.js, z88dkMap.js), armed as plain address
+// breakpoints. Other toolchains would need a listing/map parser first.
 const SOURCE_DEBUG_LANGS = new Set(
-    ["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal"]);
+    ["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal", "c"]);
 
 export function languageSupportsSourceDebug(lang) {
   return SOURCE_DEBUG_LANGS.has(lang);

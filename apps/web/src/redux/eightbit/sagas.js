@@ -30,6 +30,7 @@ import {parseSld} from "../../lib/debugger/sld";
 import {parseBasicMap} from "../../lib/debugger/basicMap";
 import {buildLineCallMap} from "../../lib/debugger/lineCallMap";
 import {buildPasta80Map} from "../../lib/debugger/pasta80Map";
+import {buildZ88dkMap} from "../../lib/debugger/z88dkMap";
 import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
@@ -39,7 +40,7 @@ import {dashboardUnlock} from "../../dashboard_lock";
 // their compile services. Every other toolchain clears the map when it
 // replaces the program.
 const SOURCE_MAP_LANGS = new Set(
-    ["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal"]);
+    ["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal", "c"]);
 
 // Interpreted-BASIC languages derive the debugger's line map straight from
 // the numbered source — no toolchain artifact (lib/debugger/basicMap.js).
@@ -307,10 +308,29 @@ function* handleGetProjectTapActions(_) {
                 }
                 break;
             case 'c':
-                // Z88DK
+                // Z88DK — the service parses the compiler's listing + link
+                // map into the debugger's per-file line→address map (plain
+                // address map, sjasmplus-style breakpoints). A failed
+                // compile keeps the previous map, like the other
+                // map-publishing branches.
                 try {
-                    tap = yield call(getZ88dkTap, code, userId, files);
-                    yield put(followTapAction(tap));
+                    const z88Result = yield call(getZ88dkTap, code, userId, files);
+                    const z88Map = buildZ88dkMap(z88Result.debug);
+                    if (z88Map) {
+                        // Stale on arrival when the editor moved on while
+                        // the compile was in flight — in the main source or
+                        // in any additional file the compile consumed.
+                        const codeNow = yield select((state) => state.project.code);
+                        const filesNow = toActionFiles(
+                            yield select((state) => state.project.files));
+                        const filesMoved = filesNow.length !== files.length
+                            || filesNow.some((f, i) =>
+                                f.name !== files[i].name || f.content !== files[i].content);
+                        yield put(sourceMapLoaded(z88Map, codeNow !== code || filesMoved));
+                    } else {
+                        yield put(sourceMapCleared());
+                    }
+                    yield put(followTapAction(z88Result.tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
                     console.error('[z88dk] dispatching setErrorItems', errorItems);

@@ -1,5 +1,6 @@
 import tempfile
 import base64
+import json
 import os
 import re
 import resource
@@ -161,6 +162,13 @@ class RequestArgs(BaseModel):
 
 class CompileResult(BaseModel):
     base64_encoded: str
+    # Debugger line map, riding the CompileResult.sld field the Hasura action
+    # type already declares (SLD text for sjasmplus, JSON for zxbasic and
+    # pasta80; JSON here): {"kind": "z88dk", "files": {"<file>": [[line,
+    # addr], ...]}} where the "" key is the main source (program.c) and other
+    # keys are staged project files by their relative path. Null when the
+    # debug-info phase fails — the compile itself still succeeds without it.
+    sld: Optional[str] = None
 
 
 compile_endpoint = APIRouter()
@@ -175,10 +183,144 @@ CLASSIC_INCLUDE_RE = re.compile(r"#include\s*[<\"]spectrum\.h[>\"]")
 
 
 def zcc_args(source: str) -> list:
-    """Build the zcc argument list for a program source."""
+    """Build the zcc argument list for a program source.
+
+    --list --c-code-in-asm -m emit the debug artifacts the IDE's line
+    breakpoints are parsed from (program.c.lis + program.map — see
+    build_debug_info); they do not change codegen.
+    """
+    debug = ['--list', '--c-code-in-asm', '-m']
     if CLASSIC_INCLUDE_RE.search(source):
-        return ['zcc', '+zx', '-vn', '-create-app', '-lndos']
-    return ['zcc', '+zx', '-vn', '-create-app', '-clib=sdcc_iy', '-startup=0']
+        return ['zcc', '+zx', '-vn', '-create-app', '-lndos', *debug]
+    return ['zcc', '+zx', '-vn', '-create-app', '-clib=sdcc_iy', '-startup=0', *debug]
+
+
+# ---------------------------------------------------------------------------
+# Debugger line map.
+#
+# Only program.c is compiled (staged files are #include material), so all
+# user code appears in program.c.lis with MODULE-RELATIVE offsets; the .map
+# from -m carries the linked absolute addresses. The listing marks C lines
+# in one of two dialects, depending on which compiler zcc picked:
+#
+#   zsdcc  (sdcc_iy):   ;<file>:<line>: <source text>     (comment rows)
+#   sccz80 (classic):   C_LINE <line>,"<file[::scope]>"   (directives)
+#
+# In both, the code emitted for the marked line follows as rows carrying a
+# 4-hex-digit module offset plus byte columns. Absolute address = offset +
+# module base, where base comes from any user-module symbol the .map and
+# the listing share (e.g. _main: map $9380, listing offset 001c -> base
+# $9364). Marker files that are neither the main source nor a staged
+# project file (system headers) are dropped.
+# ---------------------------------------------------------------------------
+
+# z80asm derives the module name from the source path: 'program_c' for a
+# relative program.c, 'X_tmp_..._program_c' when zcc was handed an absolute
+# path (as the endpoint does). Match by suffix — the 'program' stem is
+# reserved for the main source, so nothing else can end this way.
+USER_MODULE_SUFFIX = 'program_c'
+MAP_SYMBOL_RE = re.compile(
+    r'^(\w+)\s+= \$([0-9A-Fa-f]{1,4}) ; addr, (?:public|local), , (\S+), (\S+),')
+LIS_OFFSET_RE = re.compile(r'^\s*\d*\s+([0-9a-f]{4})\s+[0-9a-f]{2}')
+LIS_LABEL_RE = re.compile(r'^\s*\d*\s+\.?(\w+):?\s*$')
+LIS_SDCC_MARKER_RE = re.compile(r'^\s*\d*\s+;([^\s:][^:]*):(\d+):')
+LIS_CLINE_RE = re.compile(r'^\s*\d*\s+C_LINE\s+(\d+),"([^"]+)"')
+
+
+def parse_map_symbols(map_path: str) -> dict:
+    """{symbol: address} for the user module's code section."""
+    symbols = {}
+    with open(map_path, errors='replace') as f:
+        for row in f:
+            m = MAP_SYMBOL_RE.match(row)
+            if (m and m.group(3).endswith(USER_MODULE_SUFFIX)
+                    and m.group(4) == 'code_compiler'):
+                symbols[m.group(1)] = int(m.group(2), 16)
+    return symbols
+
+
+def normalise_marker_file(raw: str, staged: set) -> Optional[str]:
+    """The project-file key for a marker's file reference, or None to drop.
+    '' = the main source; staged files key by their relative path."""
+    # sccz80 suffixes scope onto the file ("c.c::main::0::1"): strip it.
+    name = raw.split('::', 1)[0].strip()
+    if name in ('program.c', './program.c') or name.endswith('/program.c'):
+        return ''
+    if name.startswith('./'):
+        name = name[2:]
+    return name if name in staged else None
+
+
+def parse_listing_line_map(lis_path: str, staged: set) -> tuple:
+    """({file_key: {line: offset}}, {symbol: offset}) from a .lis.
+
+    Offsets are module-relative; the caller rebases them with the map. The
+    marker (either dialect) applies to the first offset-bearing row after
+    it; first-wins per (file, line), so a line maps to where its code
+    starts. Labels are collected alongside so the caller can anchor the
+    module base.
+    """
+    lines = {}
+    labels = {}
+    pending = None        # (file_key, line) awaiting a code row
+    pending_labels = []   # label names awaiting their offset
+    with open(lis_path, errors='replace') as f:
+        for row in f:
+            m = LIS_SDCC_MARKER_RE.match(row) or LIS_CLINE_RE.match(row)
+            if m:
+                # The two regexes disagree on group order.
+                raw_file, line = ((m.group(1), m.group(2))
+                                  if m.re is LIS_SDCC_MARKER_RE
+                                  else (m.group(2), m.group(1)))
+                key = normalise_marker_file(raw_file, staged)
+                pending = (key, int(line)) if key is not None else None
+                continue
+            lm = LIS_LABEL_RE.match(row)
+            if lm:
+                pending_labels.append(lm.group(1))
+                continue
+            om = LIS_OFFSET_RE.match(row)
+            if not om:
+                continue
+            offset = int(om.group(1), 16)
+            for name in pending_labels:
+                labels.setdefault(name, offset)
+            pending_labels = []
+            if pending is not None:
+                key, line = pending
+                lines.setdefault(key, {}).setdefault(line, offset)
+                pending = None
+    return lines, labels
+
+
+def build_debug_info(workdir: str, staged: set) -> Optional[str]:
+    """The debugger line-map JSON from the --list/-m artifacts, or None.
+    Best-effort by design: any failure here only costs the debug map,
+    never the compile."""
+    try:
+        symbols = parse_map_symbols(os.path.join(workdir, 'program.map'))
+        lines, labels = parse_listing_line_map(
+            os.path.join(workdir, 'program.c.lis'), staged)
+        # Anchor the module base on a symbol both artifacts know. Verify
+        # with a second when available: a disagreement means the listing
+        # and map came from different layouts, and wrong addresses are
+        # worse than no map.
+        bases = [addr - labels[sym] for sym, addr in symbols.items()
+                 if sym in labels]
+        if not bases or any(b != bases[0] or b < 0 for b in bases):
+            return None
+        base = bases[0]
+        files = {
+            key: sorted([line, base + off] for line, off in per_file.items())
+            for key, per_file in lines.items()
+        }
+        files = {k: v for k, v in files.items() if v}
+        if not files:
+            return None
+        return json.dumps({'kind': 'z88dk', 'files': files})
+    except Exception as e:
+        print(f"debug-info generation failed (compile unaffected): {e}")
+        return None
 
 
 def sanitize_compiler_output(output: str, c_filename: str) -> str:
@@ -248,7 +390,10 @@ def handle_compile_request(
 
         with open(tap_filename, 'rb') as f:
             base64_encoded = base64.b64encode(f.read()).decode()
-            return CompileResult(base64_encoded=base64_encoded)
+        staged_names = {pf.name for pf in args.input.files or []}
+        return CompileResult(
+            base64_encoded=base64_encoded,
+            sld=build_debug_info(path, staged_names))
 
     finally:
         # Clean up the per-request directory: source, staged files, the tape,
