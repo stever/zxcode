@@ -60,6 +60,66 @@ export function parseListing(code: string,
     return lines;
 }
 
+// Like parseSourceLines, but the marker regex captures (path, line) so
+// multi-file sources attribute correctly: SDCC's .rst listings mark C lines
+// as `;<path>:<line>:` where <path> is `<stdin>` for the piped main source
+// and the include path as written for everything else. Each marker applies
+// to the next offset-bearing row.
+export function parseSourceLinesWithFiles(code: string, lineMatch, offsetMatch): SourceSnippet[] {
+    const lines: SourceSnippet[] = [];
+    let pending: { path: string, line: number } = null;
+
+    for (let line of code.split(re_crlf)) {
+        let linem = lineMatch.exec(line);
+        if (linem && linem[1]) {
+            pending = {path: linem[1], line: parseInt(linem[2])};
+            continue;
+        }
+        if (pending) {
+            linem = offsetMatch.exec(line);
+            if (linem && linem[1]) {
+                lines.push({
+                    line: pending.line,
+                    offset: parseInt(linem[1], 16),
+                    path: pending.path,
+                });
+                pending = null;
+            }
+        }
+    }
+
+    return lines;
+}
+
+// zmac listings interleave include files, marking each switch with a
+// `**** <path> ****` banner and restarting line numbers per file. Rows are
+// `LINE:\tADDR  BYTES\tsource`; only byte-emitting rows map (org/label-only
+// rows carry no bytes). `path` is undefined for the main file's rows and
+// the include path as written otherwise.
+export function parseZmacListing(code: string, mainpath: string): SourceSnippet[] {
+    const lines: SourceSnippet[] = [];
+    let path: string = undefined;
+
+    for (const row of code.split(re_crlf)) {
+        const banner = /^\*{4} (.+?) \*{4}\s*$/.exec(row);
+        if (banner) {
+            path = banner[1] === mainpath ? undefined : banner[1];
+            continue;
+        }
+        const m = /^\s*(\d+):\s*([0-9a-f]{4})\s+([0-9a-f]+)\s/i.exec(row);
+        if (m) {
+            lines.push({
+                line: parseInt(m[1]),
+                offset: parseInt(m[2], 16),
+                insns: m[3],
+                path,
+            });
+        }
+    }
+
+    return lines;
+}
+
 export function parseSourceLines(code: string, lineMatch, offsetMatch, funcMatch?, segMatch?) {
     const lines = [];
 

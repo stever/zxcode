@@ -31,6 +31,8 @@ import {parseBasicMap} from "../../lib/debugger/basicMap";
 import {buildLineCallMap} from "../../lib/debugger/lineCallMap";
 import {buildPasta80Map} from "../../lib/debugger/pasta80Map";
 import {buildZ88dkMap} from "../../lib/debugger/z88dkMap";
+import {buildWorkerListingMap} from "../../lib/debugger/workerListingMap";
+import {joinProjectFilePath} from "../../lib/lang";
 import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
@@ -40,7 +42,13 @@ import {dashboardUnlock} from "../../dashboard_lock";
 // their compile services. Every other toolchain clears the map when it
 // replaces the program.
 const SOURCE_MAP_LANGS = new Set(
-    ["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal", "c"]);
+    ["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal", "c",
+     "sdcc", "zmac"]);
+
+// The main-source text the last sdcc/zmac worker build was posted with, so
+// the async result can flag its map stale when the editor moved on while
+// the worker built. Null until the first worker compile.
+let workerCompileCode = null;
 
 // Interpreted-BASIC languages derive the debugger's line map straight from
 // the numbered source — no toolchain artifact (lib/debugger/basicMap.js).
@@ -129,7 +137,28 @@ function* handleWorkerMessageActions(action) {
         if (data.errors && data.errors.length > 0) {
             console.error('[worker] dispatching setErrorItems', data.errors);
             yield put(setErrorItems(data.errors));
-            return; // Don't continue on errors.
+            return; // Don't continue on errors — the previous map survives,
+                    // like a failed compile on the service-backed languages.
+        }
+
+        // The worker's build result carries per-file line→address listings
+        // (see lib/debugger/workerListingMap.js) — publish them as the
+        // debugger's source map for the worker-compiled languages.
+        const lang = yield select((state) => state.project.lang);
+        if (lang === 'sdcc' || lang === 'zmac') {
+            const projectFiles = yield select((state) => state.project.files);
+            const staged = new Set(
+                (projectFiles || []).map((f) => joinProjectFilePath(f.folder, f.name)));
+            const map = buildWorkerListingMap(lang, data.listings, staged);
+            if (map) {
+                // Stale on arrival when the editor moved on while the
+                // worker was building.
+                const codeNow = yield select((state) => state.project.code);
+                yield put(sourceMapLoaded(
+                    map, workerCompileCode !== null && codeNow !== workerCompileCode));
+            } else {
+                yield put(sourceMapCleared());
+            }
         }
 
         /*
@@ -434,6 +463,7 @@ function* handleGetSdccTapActions(_) {
 
         // Add main source file.
         const mainFilename = 'source.c';
+        workerCompileCode = code;
         msg.updates.push({path: mainFilename, data: code});
 
         // Additional project files go into the worker VFS and the build
@@ -465,6 +495,7 @@ function* handleGetZmacTapActions(_) {
 
         // Add main source file.
         const mainFilename = 'source.asm';
+        workerCompileCode = code;
         msg.updates.push({path: mainFilename, data: code});
 
         // Additional project files go into the worker VFS and the build

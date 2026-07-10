@@ -7,7 +7,7 @@ import {
 } from "../files";
 import {emglobal} from "../shared_vars";
 import {EmscriptenModule, loadWASM, instantiateWASM} from "../modules";
-import {parseListing} from "../parsing";
+import {parseZmacListing} from "../parsing";
 import {print_fn, makeErrorMatcher} from "../shared_funcs";
 import {BuildStep} from "../defs_build";
 import {BuildStepResult, CodeListingMap} from "../defs_build_result";
@@ -52,8 +52,10 @@ export function assembleZMAC(step: BuildStep): BuildStepResult {
         }
         */
 
-        //  230: 1739+7+x   017A  1600      L017A: LD      D,00h
-        const lines = parseListing(lstout, /\s*(\d+):\s*([0-9a-f]+)\s+([0-9a-f]+)\s+(.+)/i, 1, 2, 3);
+        // `LINE:\tADDR  BYTES\tsource`, with `**** file ****` banners at
+        // include switches — parsed per file so multi-file sources
+        // attribute correctly (SourceSnippet.path; undefined = main).
+        const lines = parseZmacListing(lstout, step.path);
         const listings: CodeListingMap = {};
         listings[lstpath] = {lines: lines};
 

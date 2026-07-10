@@ -11,7 +11,7 @@ import {emglobal} from "../shared_vars";
 import {EmscriptenModule, loadWASM, instantiateWASM} from "../modules";
 import {setupFS} from "../files";
 import {preprocessMCPP} from "./mcpp";
-import {parseListing, parseSourceLines} from "../parsing";
+import {parseListing, parseSourceLinesWithFiles} from "../parsing";
 import {print_fn} from "../shared_funcs";
 import {BuildStep} from "../defs_build";
 import {BuildStepResult, CodeListingMap, WorkerError} from "../defs_build_result";
@@ -216,7 +216,10 @@ export function linkSDLDZ80(step: BuildStep) {
                 const rstout = FS.readFile(fn.replace('.lst', '.rst'), {encoding: 'utf8'});
                 //   0000 21 02 00      [10]   52 	ld	hl, #2
                 const asmlines = parseListing(rstout, /^\s*([0-9A-F]{4})\s+([0-9A-F][0-9A-F r]*[0-9A-F])\s+\[([0-9 ]+)\]?\s+(\d+) (.*)/i, 4, 1, 2, 3);
-                const srclines = parseSourceLines(rstout, /^\s+\d+ ;<stdin>:(\d+):/i, /^\s*([0-9A-F]{4})/i);
+                // C-line markers carry the file: `<stdin>` for the piped
+                // main source, the include path for #include'd files — so
+                // srclines attribute per file (SourceSnippet.path).
+                const srclines = parseSourceLinesWithFiles(rstout, /^\s+\d+ ;([^\s:][^:]*):(\d+):/i, /^\s*([0-9A-F]{4})/i);
                 putWorkFile(fn, rstout);
                 listings[fn] = {
                     asmlines: srclines.length ? asmlines : null,
