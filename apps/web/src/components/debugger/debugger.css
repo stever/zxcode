@@ -717,3 +717,26 @@
     height: 408px !important;
     max-height: 408px !important;
 }
+
+/* The dock pins to the column's bottom edge: the grid stretches the editor
+   column to the emulator column's height, and the auto margin soaks up the
+   slack regardless of what sits above — the 408px editor, or the shorter
+   binary-asset panel, which must NOT resize when a session starts. flex:
+   none stops the children compressing when a narrow window wraps the dock's
+   panes and the content outgrows the emulator column (the row grows
+   instead, as before). The tab view's 8px keeps the editor-to-dock gap the
+   dock's own margin-top provided before the auto margin overrode it. */
+.desktop .debug-session {
+    display: flex;
+    flex-direction: column;
+}
+
+.desktop .debug-session > .p-tabview {
+    flex: none;
+    margin-bottom: 8px;
+}
+
+.desktop .debug-session > .debug-dock {
+    flex: none;
+    margin-top: auto;
+}
