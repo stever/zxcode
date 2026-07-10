@@ -24,9 +24,18 @@ export function createRealSession(handle) {
     let disasmStart = null;
     let pauseCallback = null;
     let armedAddrs = [];
-    // BASIC line numbers armed via `set-basic-bp` (nextbas projects — the
-    // sourceMap carries kind: "basic" and its "addresses" are BASIC lines).
+    // BASIC line numbers armed via `set-basic-bp` (interpreted-BASIC
+    // projects — the sourceMap carries kind: "basic" and its "addresses"
+    // are BASIC lines).
     let armedBasicLines = [];
+    // File lines armed via `set-linecall-bp` (compiled Boriel projects —
+    // kind: "linecall"), plus the anchor address last pushed to the engine
+    // so map changes re-anchor and withdrawals disarm. `undefined` = never
+    // pushed: the engine's anchor state survives session swaps (package-
+    // level there), so the first map push always sends a command, even
+    // "off" for a session with no linecall map.
+    let armedLineCalls = [];
+    let pushedAnchor;
     // Parsed SLD map (lib/debugger/sld.js) for the loaded program, pushed by
     // the saga — already filtered to fresh (never stale). Null means source
     // lines cannot arm and the pc maps to no line.
@@ -84,11 +93,16 @@ export function createRealSession(handle) {
         // every BASIC line, and PPC holds interpreter states (e.g. $FFFE
         // for a direct command) outside program execution — those miss the
         // map and report no line, exactly as an out-of-program pc does.
+        // A linecall map keys on HL, but only while paused at the anchor
+        // (the per-line runtime call) — anywhere else HL is arbitrary.
         let loc = null;
         if (sourceMap) {
-            const key = sourceMap.kind === "basic"
-                ? memory.bytes[PPC_ADDR] | (memory.bytes[PPC_ADDR + 1] << 8)
-                : s.pc;
+            let key = s.pc;
+            if (sourceMap.kind === "basic") {
+                key = memory.bytes[PPC_ADDR] | (memory.bytes[PPC_ADDR + 1] << 8);
+            } else if (sourceMap.kind === "linecall") {
+                key = s.pc === sourceMap.anchor ? s.hl : -1;
+            }
             loc = sourceMap.addrToLoc.get(key) ?? null;
         }
         return {
@@ -128,12 +142,19 @@ export function createRealSession(handle) {
         },
 
         stepOver() {
-            // On a BASIC project the useful "next" unit is the next BASIC
-            // line, not the next ROM instruction: arm the engine's one-shot
-            // line-transition halt and run until it fires (delivered via
-            // onEnginePause, like a step-over landing).
+            // On a BASIC project the useful "next" unit is the next source
+            // line, not the next machine instruction: arm the engine's
+            // one-shot line halt and run until it fires (delivered via
+            // onEnginePause, like a step-over landing). Interpreted BASICs
+            // halt on the next PPC transition; compiled Boriel programs on
+            // the next anchored per-line call.
             if (sourceMap && sourceMap.kind === "basic") {
                 dbg.cmd("basic-step");
+                dbg.resume();
+                return { running: true };
+            }
+            if (sourceMap && sourceMap.kind === "linecall") {
+                dbg.cmd("linecall-step");
                 dbg.resume();
                 return { running: true };
             }
@@ -174,17 +195,20 @@ export function createRealSession(handle) {
         // survives until both are gone.
         setBreakpoints({ lines = [], addrs = [] }) {
             const wanted = new Set(addrs);
-            // With a basic map, source locations resolve to BASIC line
-            // numbers and arm via the engine's PPC watch instead of
-            // address breakpoints; a map going away (stale, cleared)
-            // disarms them the same way it disarms address-resolved ones.
-            const isBasic = Boolean(sourceMap && sourceMap.kind === "basic");
+            // Source locations arm through the mechanism the map's kind
+            // names: BASIC line numbers via the engine's PPC watch
+            // (`basic`), file lines via the anchored per-line call
+            // (`linecall`), Z80 addresses otherwise (SLD). A map going
+            // away (stale, cleared) disarms each kind the same way.
+            const kind = sourceMap?.kind ?? null;
             const wantedBasic = new Set();
+            const wantedLineCalls = new Set();
             if (sourceMap) {
                 for (const loc of lines) {
                     const addr = locToAddr(sourceMap, loc.file, loc.line);
                     if (addr === undefined) continue;
-                    if (isBasic) wantedBasic.add(addr);
+                    if (kind === "basic") wantedBasic.add(addr);
+                    else if (kind === "linecall") wantedLineCalls.add(addr);
                     else wanted.add(addr);
                 }
             }
@@ -195,6 +219,13 @@ export function createRealSession(handle) {
                 if (!armedBasicLines.includes(l)) dbg.cmd(`set-basic-bp ${l}`);
             }
             armedBasicLines = [...wantedBasic];
+            for (const l of armedLineCalls) {
+                if (!wantedLineCalls.has(l)) dbg.cmd(`clear-linecall-bp ${l}`);
+            }
+            for (const l of wantedLineCalls) {
+                if (!armedLineCalls.includes(l)) dbg.cmd(`set-linecall-bp ${l}`);
+            }
+            armedLineCalls = [...wantedLineCalls];
             for (const a of armedAddrs) {
                 if (!wanted.has(a)) dbg.cmd(`clear-breakpoint ${hex(a)}`);
             }
@@ -218,6 +249,16 @@ export function createRealSession(handle) {
         // backtrace, and history annotate addresses with source names.
         setSourceMap(map) {
             sourceMap = map;
+            // The linecall anchor is per-build: re-anchor on a fresh map,
+            // disarm when the map goes away — a stale anchor address would
+            // sit on arbitrary code of the next binary.
+            const anchor = map && map.kind === "linecall" ? map.anchor : null;
+            if (anchor !== pushedAnchor) {
+                dbg.cmd(anchor !== null
+                    ? `linecall-anchor ${hex(anchor)}`
+                    : "linecall-anchor off");
+                pushedAnchor = anchor;
+            }
             for (const a of pushedLabelAddrs) dbg.cmd(`sym clear ${hex(a)}`);
             pushedLabelAddrs = [];
             if (map) {
@@ -252,10 +293,16 @@ export function createRealSession(handle) {
                 // not the attach-gated M1 check), so armed lines left
                 // behind would keep firing against the orphaned debugger
                 // core — log noise on every entry to the line — until the
-                // machine is rebuilt. No-ops when nothing was armed.
+                // machine is rebuilt. The linecall state is package-level
+                // in the engine too, so sweep it as well. No-ops when
+                // nothing was armed.
                 dbg.cmd("clear-basic-bp");
                 dbg.cmd("basic-step off");
                 armedBasicLines = [];
+                dbg.cmd("clear-linecall-bp");
+                dbg.cmd("linecall-anchor off");
+                armedLineCalls = [];
+                pushedAnchor = undefined;
                 dbg.cmd("continue");
                 dbg.detach();
                 handle.start();

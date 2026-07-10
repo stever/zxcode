@@ -2,6 +2,7 @@ import tempfile
 import base64
 import contextlib
 import io
+import json
 import os
 import re
 import resource
@@ -167,6 +168,14 @@ class RequestArgs(BaseModel):
 
 class CompileResult(BaseModel):
     base64_encoded: str
+    # Debugger line map, riding the CompileResult.sld field the Hasura action
+    # type already declares (the sjasmplus service returns SLD text in it;
+    # here it carries JSON): {"kind": "zxbasic", "anchor": N, "lines": [...]}.
+    # anchor = the address of the runtime's per-line CHECK_BREAK call target
+    # (from zxbc's -M label map); lines = the source lines that received an
+    # --enable-break check (from a -f asm pass). Null when the debug-info
+    # phase fails — the compile itself still succeeds without it.
+    sld: Optional[str] = None
 
 
 compile_endpoint = APIRouter()
@@ -306,11 +315,101 @@ ZXNEXT_INCLUDE_RE = re.compile(r"(?i)#include\s*<NextLibLite\.bas>")
 
 
 def zxbc_args(source: str) -> list[str]:
-    """Build the zxbc argument list for a program source."""
-    args = ['-f', 'tap', '-a', '-B']
+    """Build the zxbc argument list for a program source.
+
+    --enable-break makes the BREAK key work in compiled programs AND is what
+    the IDE's line breakpoints ride on: it compiles in one CHECK_BREAK call
+    per source line with the line number in HL, which the emulator's
+    linecall breakpoints anchor to (see build_debug_info).
+    """
+    args = ['-f', 'tap', '-a', '-B', '--enable-break']
     if ZXNEXT_DIRECTIVE_RE.search(source) or ZXNEXT_INCLUDE_RE.search(source):
         args += ['--arch', 'zxnext']
     return args
+
+
+# The zxbc -M label map is `HEX: label` per line; the linecall anchor is the
+# runtime's per-line break-check routine.
+CHECK_BREAK_LABEL = '.core.CHECK_BREAK'
+MMAP_LINE_RE = re.compile(r'^([0-9A-Fa-f]{4}):\s+(\S+)\s*$')
+
+# In `-f asm` output, each --enable-break check is the adjacent pair
+#   ld hl, <LINE>
+#   call .core.CHECK_BREAK
+# and `#line N "path"` directives track which source file the following
+# region came from (runtime includes carry their own paths; the region
+# before any directive — and regions returning to program.bas — are the
+# main source).
+ASM_LD_HL_RE = re.compile(r'^\s*ld hl, (\d+)\s*$')
+ASM_CHECK_BREAK_RE = re.compile(r'^\s*call \.core\.CHECK_BREAK\s*$')
+ASM_LINE_DIRECTIVE_RE = re.compile(r'^#line \d+ "([^"]*)"')
+
+
+def parse_check_break_anchor(mmap_path: str) -> Optional[int]:
+    """The CHECK_BREAK address from a -M label map, or None."""
+    with open(mmap_path) as f:
+        for row in f:
+            m = MMAP_LINE_RE.match(row)
+            if m and m.group(2) == CHECK_BREAK_LABEL:
+                return int(m.group(1), 16)
+    return None
+
+
+def parse_checked_lines(asm_path: str) -> list[int]:
+    """The main-source line numbers that received an --enable-break check,
+    sorted and deduplicated. Lines from #include'd files are excluded: the
+    check's HL value cannot say which file it belongs to, so only main-file
+    breakpoints are offered."""
+    lines = set()
+    in_main = True
+    pending = None
+    with open(asm_path) as f:
+        for row in f:
+            m = ASM_LINE_DIRECTIVE_RE.match(row)
+            if m:
+                in_main = m.group(1).endswith('program.bas')
+                pending = None
+                continue
+            if not in_main:
+                continue
+            m = ASM_LD_HL_RE.match(row)
+            if m:
+                pending = int(m.group(1))
+                continue
+            if pending is not None and ASM_CHECK_BREAK_RE.match(row):
+                if 1 <= pending <= 0xFFFF:
+                    lines.add(pending)
+            pending = None
+    return sorted(lines)
+
+
+def build_debug_info(workdir: str, bas_filename: str, source: str) -> Optional[str]:
+    """The debugger line-map JSON for a program that just compiled, or None.
+
+    Best-effort by design: the anchor comes from a -M label map emitted by a
+    dedicated (cheap, codegen-free consistent) compile pass to asm, which
+    also yields the exact set of lines carrying a break check. Any failure
+    here only costs the debug map, never the compile.
+    """
+    asm_filename = os.path.join(workdir, 'program.asm')
+    mmap_filename = os.path.join(workdir, 'program.mmap')
+    try:
+        args = ['-f', 'asm', '--enable-break']
+        if ZXNEXT_DIRECTIVE_RE.search(source) or ZXNEXT_INCLUDE_RE.search(source):
+            args += ['--arch', 'zxnext']
+        if not compile_with_subprocess(bas_filename, asm_filename, args):
+            return None
+        # The label map must come from the real binary build (the asm pass
+        # assigns no addresses), so it is requested on the tap compile — see
+        # the caller, which passes mmap_filename through zxbc's -M.
+        anchor = parse_check_break_anchor(mmap_filename)
+        lines = parse_checked_lines(asm_filename)
+        if not anchor or not lines:
+            return None
+        return json.dumps({'kind': 'zxbasic', 'anchor': anchor, 'lines': lines})
+    except Exception as e:
+        print(f"debug-info generation failed (compile unaffected): {e}")
+        return None
 
 
 def compile_with_subprocess(bas_filename, tap_filename, args):
@@ -444,15 +543,19 @@ def handle_compile_request(
     workdir = tempfile.mkdtemp(prefix='zxbasic-')
     bas_filename = os.path.join(workdir, 'program.bas')
     tap_filename = os.path.join(workdir, 'program.tap')
+    mmap_filename = os.path.join(workdir, 'program.mmap')
 
     try:
         with open(bas_filename, 'w') as f:
             f.write(args.input.basic)
         stage_project_files(workdir, args.input.files)
 
-        # Compile the tape file from basic source with timeout
+        # Compile the tape file from basic source with timeout. -M emits the
+        # label memory map the debugger's linecall anchor is read from.
         try:
-            success = compile_with_subprocess(bas_filename, tap_filename, zxbc_args(args.input.basic))
+            success = compile_with_subprocess(
+                bas_filename, tap_filename,
+                [*zxbc_args(args.input.basic), '-M', mmap_filename])
             if not success:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -492,7 +595,9 @@ def handle_compile_request(
         # Read and base64 encode the binary tape file.
         with open(tap_filename, 'rb') as f:
             base64_encoded = base64.b64encode(f.read()).decode()
-            return CompileResult(base64_encoded=base64_encoded)
+        return CompileResult(
+            base64_encoded=base64_encoded,
+            sld=build_debug_info(workdir, bas_filename, args.input.basic))
 
     finally:
         # Always clean up the per-request directory

@@ -28,13 +28,15 @@ import {setErrorItems, setSelectedTabIndex} from "../project/actions";
 import {sourceMapLoaded, sourceMapCleared} from "../debugger/actions";
 import {parseSld} from "../../lib/debugger/sld";
 import {parseBasicMap} from "../../lib/debugger/basicMap";
+import {buildLineCallMap} from "../../lib/debugger/lineCallMap";
 import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
 // Languages whose compile branch publishes a debugger source map itself:
-// sjasmplus reloads its SLD, the interpreted BASICs their line maps. Every
-// other toolchain clears the map when it replaces the program.
-const SOURCE_MAP_LANGS = new Set(["sjasmplus", "nextbas", "basic", "bas2tap"]);
+// sjasmplus reloads its SLD, the interpreted BASICs their line maps, and
+// zxbasic its linecall map from the compile service. Every other toolchain
+// clears the map when it replaces the program.
+const SOURCE_MAP_LANGS = new Set(["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic"]);
 
 // Interpreted-BASIC languages derive the debugger's line map straight from
 // the numbered source — no toolchain artifact (lib/debugger/basicMap.js).
@@ -271,10 +273,28 @@ function* handleGetProjectTapActions(_) {
                 }
                 break;
             case 'zxbasic':
-                // Boriel ZX BASIC
+                // Boriel ZX BASIC — the service compiles with --enable-break
+                // and reports the debugger's linecall map (anchor + breakable
+                // lines) alongside the TAP. A failed compile keeps the
+                // previous map, like the other map-publishing branches.
                 try {
-                    tap = yield call(getZXBasicTap, code, userId, files);
-                    yield put(followTapAction(tap));
+                    const zxbResult = yield call(getZXBasicTap, code, userId, files);
+                    const lineCallMap = buildLineCallMap(zxbResult.debug);
+                    if (lineCallMap) {
+                        // Stale on arrival when the editor moved on while
+                        // the compile was in flight — in the main source or
+                        // in any additional file the compile consumed.
+                        const codeNow = yield select((state) => state.project.code);
+                        const filesNow = toActionFiles(
+                            yield select((state) => state.project.files));
+                        const filesMoved = filesNow.length !== files.length
+                            || filesNow.some((f, i) =>
+                                f.name !== files[i].name || f.content !== files[i].content);
+                        yield put(sourceMapLoaded(lineCallMap, codeNow !== code || filesMoved));
+                    } else {
+                        yield put(sourceMapCleared());
+                    }
+                    yield put(followTapAction(zxbResult.tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
                     console.error('[zxbasic] dispatching setErrorItems', errorItems);

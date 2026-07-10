@@ -1,6 +1,7 @@
 import {createRealSession} from "./realSession";
 import {parseSld} from "./sld";
 import {parseBasicMap} from "./basicMap";
+import {buildLineCallMap} from "./lineCallMap";
 
 // Code on lines 4 ($8000) and 15 ($8010).
 const SLD = `|SLD.data.version|1
@@ -8,10 +9,11 @@ program.asm|4||0|2|32768|T|
 program.asm|15||0|2|32784|T|
 `;
 
-function fakeHandle(pc = 0x8000, ppc = 0) {
+function fakeHandle(pc = 0x8000, ppc = 0, hl = 0) {
     const cmds = [];
     // PPC ($5C45/6): the BASIC line the interpreter is executing, read from
-    // the memory snapshot by basic-map paused-line resolution.
+    // the memory snapshot by basic-map paused-line resolution. hl feeds the
+    // linecall-map resolution (the per-line call's line-number register).
     const memory = new Uint8Array(0x10000);
     memory[0x5C45] = ppc & 0xFF;
     memory[0x5C46] = (ppc >> 8) & 0xFF;
@@ -20,7 +22,7 @@ function fakeHandle(pc = 0x8000, ppc = 0) {
         detach: jest.fn(),
         cmd: (line) => { cmds.push(line); return "OK"; },
         state: () => ({
-            pc, sp: 0xFF00, af: 0, bc: 0, de: 0, hl: 0, ix: 0, iy: 0,
+            pc, sp: 0xFF00, af: 0, bc: 0, de: 0, hl, ix: 0, iy: 0,
             afAlt: 0, bcAlt: 0, deAlt: 0, hlAlt: 0, im: 1, iff1: 1,
         }),
         mem: () => memory,
@@ -206,6 +208,69 @@ describe("realSession NextBASIC breakpoints", () => {
         session.setBreakpoints({lines: [{file: null, line: 1}], addrs: []});
         cmds.length = 0;
         session.dispose();
-        expect(cmds).toEqual(["clear-basic-bp", "basic-step off", "continue"]);
+        expect(cmds).toEqual([
+            "clear-basic-bp", "basic-step off",
+            "clear-linecall-bp", "linecall-anchor off",
+            "continue",
+        ]);
+    });
+});
+
+// Boriel (compiled) projects: the map carries the per-line runtime call's
+// address (anchor) and the file lines that received a check.
+const LINECALL_DEBUG = {kind: "zxbasic", anchor: 0x9333, lines: [2, 3, 5]};
+
+describe("realSession Boriel linecall breakpoints", () => {
+    test("map push anchors the engine; withdrawal disarms it", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        cmds.length = 0;
+        session.setSourceMap(buildLineCallMap(LINECALL_DEBUG));
+        expect(cmds).toEqual(["linecall-anchor $9333"]);
+        cmds.length = 0;
+        session.setSourceMap(null);
+        expect(cmds).toEqual(["linecall-anchor off"]);
+    });
+
+    test("a session with no linecall map disarms a leftover engine anchor", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        cmds.length = 0;
+        session.setSourceMap(null);
+        expect(cmds).toEqual(["linecall-anchor off"]);
+    });
+
+    test("lines arm as linecall-bps and diff-clear", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        session.setSourceMap(buildLineCallMap(LINECALL_DEBUG));
+        cmds.length = 0;
+        session.setBreakpoints({lines: [{file: null, line: 2}, {file: null, line: 5}], addrs: []});
+        expect(cmds).toEqual(["set-linecall-bp 2", "set-linecall-bp 5"]);
+        cmds.length = 0;
+        session.setBreakpoints({lines: [{file: null, line: 5}], addrs: []});
+        expect(cmds).toEqual(["clear-linecall-bp 2"]);
+    });
+
+    test("paused line resolves from HL at the anchor only", () => {
+        const atAnchor = fakeHandle(0x9333, 0, 3);
+        const s1 = createRealSession(atAnchor.handle);
+        s1.setSourceMap(buildLineCallMap(LINECALL_DEBUG));
+        expect(s1.snapshot("breakpoint").pausedLine).toBe(3);
+
+        // Away from the anchor HL is arbitrary program state, not a line.
+        const elsewhere = fakeHandle(0x8000, 0, 3);
+        const s2 = createRealSession(elsewhere.handle);
+        s2.setSourceMap(buildLineCallMap(LINECALL_DEBUG));
+        expect(s2.snapshot("pause").pausedLine).toBeNull();
+    });
+
+    test("stepOver arms a one-shot line step and runs", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        session.setSourceMap(buildLineCallMap(LINECALL_DEBUG));
+        cmds.length = 0;
+        expect(session.stepOver()).toEqual({running: true});
+        expect(cmds).toEqual(["linecall-step"]);
     });
 });

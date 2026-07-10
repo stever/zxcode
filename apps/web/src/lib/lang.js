@@ -169,10 +169,12 @@ export function isTextFileName(name) {
 // breakpoints and the paused-line highlight. sjasmplus emits an SLD
 // line-to-address map (lib/debugger/sld.js); the interpreted BASICs
 // (nextbas, basic/zmakebas, bas2tap) map editor lines to BASIC line numbers
-// instead (lib/debugger/basicMap.js) — same shape, armed through the
-// engine's PPC-watching basic-bp rather than address breakpoints. Other
-// toolchains would need a listing/map parser first.
-const SOURCE_DEBUG_LANGS = new Set(["sjasmplus", "nextbas", "basic", "bas2tap"]);
+// (lib/debugger/basicMap.js), armed through the engine's PPC-watching
+// basic-bp; zxbasic (Boriel, compiled) maps file lines through the
+// --enable-break per-line runtime call (lib/debugger/lineCallMap.js),
+// armed through the engine's linecall breakpoints. Other toolchains would
+// need a listing/map parser first.
+const SOURCE_DEBUG_LANGS = new Set(["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic"]);
 
 export function languageSupportsSourceDebug(lang) {
   return SOURCE_DEBUG_LANGS.has(lang);

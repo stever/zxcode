@@ -8,6 +8,7 @@ const COMPILE_MUTATION = gql`
     mutation ($basic: String!, $files: [ProjectFileInput!]) {
         compile(basic: $basic, files: $files) {
             base64_encoded
+            sld
         }
     }
 `;
@@ -30,10 +31,14 @@ export function extractCompilerError(envelope, axiosError) {
     return axiosError?.message || "Compilation failed.";
 }
 
-// Compile Boriel ZX BASIC and return the TAP bytes. On failure it throws an
-// array of build-error items ({type: 'err', text}) - the same shape the other
-// in-browser compilers reject with - so the saga surfaces them as build-error
-// toasts rather than the full-page error banner that gqlFetch would trigger.
+// Compile Boriel ZX BASIC and return {tap, debug}: the TAP bytes plus the
+// service's debugger line map ({kind: "zxbasic", anchor, lines} parsed from
+// the JSON it sends in CompileResult.sld; null when the service produced
+// none — the debugger then simply has no source map). On failure it throws
+// an array of build-error items ({type: 'err', text}) - the same shape the
+// other in-browser compilers reject with - so the saga surfaces them as
+// build-error toasts rather than the full-page error banner that gqlFetch
+// would trigger.
 //
 // It is guaranteed to only ever throw an array of items: any unexpected error
 // (token refresh, malformed payload, ...) is normalised too, so a failure can
@@ -41,9 +46,12 @@ export function extractCompilerError(envelope, axiosError) {
 export async function getZXBasicTap(code, userId, files = []) {
     console.log("[zxbasic] compile requested", {codeLength: code?.length, userId, files: files.length});
     try {
-        const tap = await compile(code, userId, files);
-        console.log("[zxbasic] compile succeeded", {tapBytes: tap.length});
-        return tap;
+        const result = await compile(code, userId, files);
+        console.log("[zxbasic] compile succeeded", {
+            tapBytes: result.tap.length,
+            debugLines: result.debug?.lines?.length || 0,
+        });
+        return result;
     } catch (e) {
         // Re-throw our own build-error arrays unchanged; wrap anything else.
         if (Array.isArray(e)) {
@@ -90,6 +98,26 @@ async function compile(code, userId, files) {
         throw [{type: "err", text: "Compilation produced no output."}];
     }
 
+    // The debug map is best-effort on the service side; a missing or
+    // malformed one must never fail the compile.
+    let debug = null;
+    const sld = envelope?.data?.compile?.sld;
+    if (sld) {
+        try {
+            const parsed = JSON.parse(sld);
+            if (parsed?.kind === "zxbasic"
+                && Number.isInteger(parsed.anchor)
+                && Array.isArray(parsed.lines)) {
+                debug = parsed;
+            }
+        } catch (e) {
+            console.warn("[zxbasic] unparseable debug map ignored", e);
+        }
+    }
+
     // noinspection JSDeprecatedSymbols
-    return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    return {
+        tap: Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)),
+        debug,
+    };
 }

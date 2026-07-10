@@ -544,6 +544,11 @@ func newDebuggerCore(emu *emulator, pauseAtStart bool, historySize int, historyW
 				return true
 			}
 		}
+		// Line-call breakpoints (compiled BASIC, linecallbp_cmd.go):
+		// one atomic load + compare when disarmed.
+		if d.checkLineCallBP(pc) {
+			return true
+		}
 		entry, ok := d.bps.Lookup(pc)
 		if !ok {
 			return false
@@ -948,7 +953,7 @@ func (d *remoteDebugger) handleCommand(line string) string {
 	}
 	switch cmd {
 	case "help", "?":
-		return "OK pause set-pause-timeout break-on-sd continue step step-over get-registers get-stack backtrace history history-on history-off prev hot callgraph retgraph rstgraph get-memory hexdump read-memory write-memory set-breakpoint clear-breakpoint list-breakpoints set-basic-bp clear-basic-bp list-basic-bps basic-step bp-first-entry disassemble disasm-bank get-mmu get-divmmc nr-panel copper-disasm layer-state sprite-list palette-dump nextreg-read nextreg-write nr-snap nr-diff bank-peek bank-poke pool-scan load-bin list-banks watch-reg list-watches clear-watch watch-mem clear-watch-mem watch-read clear-watch-read watch-zero watch-port tp list-tp clear-tp nr-trace trace-divmmc-ram trace-writes trace-nextreg-deltas irq-stats catch snapshot-on-bp compare-foreign crash-detect tt-on tt-off tt-status tt-snap tt-rewind tt-find-pc tt-clear quit"
+		return "OK pause set-pause-timeout break-on-sd continue step step-over get-registers get-stack backtrace history history-on history-off prev hot callgraph retgraph rstgraph get-memory hexdump read-memory write-memory set-breakpoint clear-breakpoint list-breakpoints set-basic-bp clear-basic-bp list-basic-bps basic-step linecall-anchor set-linecall-bp clear-linecall-bp list-linecall-bps linecall-step bp-first-entry disassemble disasm-bank get-mmu get-divmmc nr-panel copper-disasm layer-state sprite-list palette-dump nextreg-read nextreg-write nr-snap nr-diff bank-peek bank-poke pool-scan load-bin list-banks watch-reg list-watches clear-watch watch-mem clear-watch-mem watch-read clear-watch-read watch-zero watch-port tp list-tp clear-tp nr-trace trace-divmmc-ram trace-writes trace-nextreg-deltas irq-stats catch snapshot-on-bp compare-foreign crash-detect tt-on tt-off tt-status tt-snap tt-rewind tt-find-pc tt-clear quit"
 	case "set-pause-timeout":
 		// Query form (no arg) reports the current value; otherwise set
 		// the pause-ack wait to N seconds. Used to await a `continue`
@@ -1102,6 +1107,16 @@ func (d *remoteDebugger) handleCommand(line string) string {
 		return d.cmdListBasicBPs()
 	case "basic-step":
 		return d.cmdBasicStep(args)
+	case "linecall-anchor":
+		return d.cmdLineCallAnchor(args)
+	case "set-linecall-bp":
+		return d.cmdSetLineCallBP(args)
+	case "clear-linecall-bp":
+		return d.cmdClearLineCallBP(args)
+	case "list-linecall-bps":
+		return d.cmdListLineCallBPs()
+	case "linecall-step":
+		return d.cmdLineCallStep(args)
 	case "disassemble", "disasm", "d":
 		return d.cmdDisasm(args)
 	case "get-mmu", "mmu":
