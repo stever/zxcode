@@ -75,8 +75,10 @@ export function Emulator(props) {
             // Keep the desktop's original top spacing; phones sit flush.
             paddingTop: isMobile ? 0 : '8px',
         }}>
-            {screen}
-            {keyboard}
+            <div className="emulator-frame">
+                {screen}
+                {keyboard}
+            </div>
         </div>
     )
 }

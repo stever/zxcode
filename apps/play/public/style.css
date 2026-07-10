@@ -100,10 +100,19 @@ code {
     background-color: transparent !important;
 }
 
+.desktop .emulator-frame {
+    border: 1px solid #5B5B5B;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
 /* Cyan ring = the emulator owns the keyboard. Capture is focus-scoped:
    click the screen to type into the machine, click anywhere else to give
-   the keyboard back to the page (the emulator keeps running either way). */
-#jsspeccy-screen:focus-within {
+   the keyboard back to the page (the emulator keeps running either way).
+   The ring wraps the whole frame (screen + keyboard); the side-by-side
+   layout has no frame, so there it stays on the screen alone. */
+.emulator-frame:focus-within,
+.emulator-flat #jsspeccy-screen:focus-within {
     box-shadow: 0 0 0 2px #00d8d8, 0 0 18px rgba(0, 216, 216, 0.35);
 }
 
