@@ -337,6 +337,26 @@ func setupWasmExports() {
 		return ""
 	}))
 
+	// zxPutFile(name, Uint8Array) -> "" | errorString. Writes (or overwrites) a
+	// file at the SD card root so a program delivered via zxRunBas can LOAD
+	// project assets (sprite files etc.) at runtime. name must fit FAT 8.3 —
+	// the program references it literally. Call before zxRunBas: its reboot
+	// re-reads the card, so files staged first are visible to the program.
+	g.Set("zxPutFile", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if wasmEmu == nil {
+			return "not booted"
+		}
+		if len(a) < 2 || a[1].IsNull() || a[1].IsUndefined() {
+			return "put_file: missing data"
+		}
+		data := make([]byte, a[1].Get("length").Int())
+		js.CopyBytesToGo(data, a[1])
+		if err := wasmEmu.putSDFile(a[0].String(), data); err != nil {
+			return err.Error()
+		}
+		return ""
+	}))
+
 	// zxFrame(optional Uint8Array dst) -> {w,h[,debug,paused,pc]}. Advances one
 	// frame and, if dst is given, copies the RGBA framebuffer into it. While a
 	// debug session (wasm_debug_js.go) holds the machine paused, execution is

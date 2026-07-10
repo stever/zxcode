@@ -10,7 +10,8 @@ import {getZXBasicTap} from "./zxbasicCompile";
 import {getZ88dkTap} from "./z88dkCompile";
 import {getSjasmplusTap} from "./sjasmplusCompile";
 import {getPascalTap} from "./pascalCompile";
-import {toActionFiles, toWorkerUpdates} from "./compileFiles";
+import {toActionFiles, toWorkerUpdates, toSdFiles, sdFileNameErrors} from "./compileFiles";
+import {expandPasmoIncludes} from "./pasmoIncludes";
 import {store} from "../store";
 import {
     actionTypes,
@@ -175,9 +176,12 @@ function* handleGetProjectTapActions(_) {
         let tap;
         switch (lang) {
             case 'asm':
-                // Pasmo
+                // Pasmo — its emscripten FS only ever holds the main source,
+                // so project INCLUDE/INCBIN files are inlined first
+                // (pasmoIncludes.js).
                 try {
-                    tap = yield call(getPasmoTap, code);
+                    const projectFiles = yield select((state) => state.project.files);
+                    tap = yield call(getPasmoTap, expandPasmoIncludes(code, projectFiles));
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
@@ -215,9 +219,22 @@ function* handleGetProjectTapActions(_) {
                 // than a TAP. The Next delivery (GoEmulator.openTapeBytes)
                 // detects the PLUS3DOS magic and runs it via zxRunBas, so it
                 // rides the same followTapAction path as the TAP compilers.
+                // Extra project files (sprite sheets etc.) ride along too:
+                // they are staged onto the SD card so the program can LOAD
+                // them at runtime — which is why their names must fit FAT
+                // 8.3 (a ~ alias would never match the LOADed name).
                 try {
+                    const projectFiles = yield select((state) => state.project.files);
+                    const badNames = sdFileNameErrors(projectFiles);
+                    if (badNames.length > 0) {
+                        // noinspection ExceptionCaughtLocallyJS
+                        throw badNames.map((name) => ({
+                            type: "err",
+                            text: `"${name}" cannot go on the Next's SD card: names must fit 8.3 (up to 8 characters, then a dot and up to 3). Rename the file so the program can LOAD it.`,
+                        }));
+                    }
                     tap = yield call(getNextBasicProgram, code);
-                    yield put(followTapAction(tap));
+                    yield put(followTapAction(tap, toSdFiles(projectFiles)));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
                     console.error('[nextbas] dispatching setErrorItems', errorItems);
@@ -406,7 +423,7 @@ function* handleBrowserTapDownloadActions(action) {
 }
 
 function* handleRunTapActions(action) {
-    store.dispatch(loadTap(action.tap));
+    store.dispatch(loadTap(action.tap, action.sdFiles));
 }
 
 // -----------------------------------------------------------------------------

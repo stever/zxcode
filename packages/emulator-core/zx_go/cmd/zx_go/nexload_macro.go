@@ -332,6 +332,30 @@ func (e *emulator) importAndRunBas(data []byte) error {
 	return nil
 }
 
+// putSDFile writes data to fileName at the SD card root, overwriting any
+// existing file of that name — the runtime-asset side of importAndRunBas: a
+// NextBASIC program LOADs project files (sprite sheets etc.) from the card,
+// so they are staged where the program (also at root, /zx.bas) resolves
+// relative names. fileName must fit FAT 8.3: the program references it
+// literally, so a ~ alias would never be found. Pauses the emulator around
+// the write like the importers.
+func (e *emulator) putSDFile(fileName string, data []byte) error {
+	if e.sdImageSrc == nil {
+		return fmt.Errorf("no SD image mounted")
+	}
+	e.paused.Store(true)
+	defer e.paused.Store(false)
+	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "", fileName, data); err != nil {
+		return err
+	}
+	if e.sdImagePath != "" {
+		if err := e.sdImageSrc.WriteBackTo(e.sdImagePath); err != nil {
+			slog.Warn("sd put: persisting to the SD image failed", "file", fileName, "err", err)
+		}
+	}
+	return nil
+}
+
 // startNexloadMacro reboots into a clean NextZXOS and begins driving the
 // .nexload command to load the .nex at sdPath (an absolute SD-card path) via
 // the genuine OS loader. The reboot guarantees a fresh OS state regardless of

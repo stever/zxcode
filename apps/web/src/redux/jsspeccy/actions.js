@@ -24,9 +24,13 @@ export const loadEmulator = (target) => ({
     target
 });
 
-export const loadTap = (tap) => ({
+// sdFiles ([{name, data: Uint8Array}], optional) are project asset files
+// staged onto the Next's SD card before the program runs, so it can LOAD
+// them at runtime (see GoEmulator.stageSdFiles).
+export const loadTap = (tap, sdFiles) => ({
     type: actionTypes.loadTap,
-    tap
+    tap,
+    sdFiles
 });
 
 export const loadUrl = (url) => ({
@@ -63,9 +67,10 @@ export const viewFullScreen = () => ({
     type: actionTypes.viewFullScreen
 });
 
-export const openTAPFile = (buffer) => ({
+export const openTAPFile = (buffer, sdFiles) => ({
     type: actionTypes.openTAPFile,
-    buffer
+    buffer,
+    sdFiles
 });
 
 export const openUrl = (url) => ({

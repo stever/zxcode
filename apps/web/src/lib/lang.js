@@ -53,6 +53,17 @@ export function mainFileName(lang) {
   return `program.${MAIN_FILE_EXTENSIONS[lang] || "txt"}`;
 }
 
+// Languages whose toolchain can consume additional project files (compile
+// includes / INCBIN assets, or SD-card files LOADed at runtime on the Next).
+// zmakebas and bas2tap have no include mechanism and their TAPs carry only
+// the tokenised program, so extra files would be dead weight — the add-file
+// UI is hidden for them.
+const NO_PROJECT_FILE_LANGS = new Set(["basic", "bas2tap"]);
+
+export function languageSupportsProjectFiles(lang) {
+  return !NO_PROJECT_FILE_LANGS.has(lang);
+}
+
 // Additional project files: constraints shared with the project_file DB check
 // and the compile services' staging validation. Names stemmed 'program' are
 // reserved for the main source and compiler outputs; .tap/.nex would collide

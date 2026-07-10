@@ -195,7 +195,7 @@ function* handleLoadTapActions(action) {
         yield put(showActiveEmulator());
         yield put(reset());
         yield put(start());
-        yield put(openTAPFile(action.tap.buffer));
+        yield put(openTAPFile(action.tap.buffer, action.sdFiles));
     } catch (e) {
         handleException(e);
     }
@@ -268,7 +268,7 @@ function* handleViewFullScreenActions(_) {
 
 function* handleOpenTAPFileActions(action) {
     try {
-        jsspeccy.openTAPFile(action.buffer).catch((err) => {
+        jsspeccy.openTAPFile(action.buffer, action.sdFiles).catch((err) => {
             // e.g. a program the Next translator cannot convert — surface it
             // instead of silently doing nothing.
             alert(err && err.message ? err.message : String(err));

@@ -46,7 +46,10 @@ export const browserTapDownload = (tap) => ({
     tap
 });
 
-export const runTap = (tap) => ({
+// sdFiles: optional project asset files for the Next's SD card (the follow
+// action for a run; the download follow action ignores them).
+export const runTap = (tap, sdFiles) => ({
     type: actionTypes.runTap,
-    tap
+    tap,
+    sdFiles
 });

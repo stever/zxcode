@@ -196,7 +196,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r29-audio-midframe-turbo';
+        const ENGINE_REV = 'r30-sd-file-staging';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -663,7 +663,21 @@ export class GoEmulator extends EventEmitter {
         return Promise.reject(res);
     }
 
-    async openTapeBytes(arrayBuffer) {
+    // Stage project asset files at the SD card root before a program is run on
+    // the Next, so it can LOAD them at runtime (sprite files etc. — the program
+    // itself lands at the root as /zx.bas, so relative names resolve there).
+    // sdFiles: [{name, data: Uint8Array}]. Names must fit FAT 8.3 (the program
+    // references them literally); callers validate, the core also rejects.
+    // Returns an error string, or null when all files landed.
+    stageSdFiles(sdFiles) {
+        for (const f of (sdFiles || [])) {
+            const err = globalThis.zxPutFile(f.name, f.data);
+            if (err) return `SD file "${f.name}": ${err}`;
+        }
+        return null;
+    }
+
+    async openTapeBytes(arrayBuffer, sdFiles) {
         // A Next boot from setMachine('next') may still be in flight (its 64MB
         // SD fetch takes seconds over the network). Wait for it so machineType
         // has settled to 'next' and the core is constructed before we branch or
@@ -678,6 +692,9 @@ export class GoEmulator extends EventEmitter {
         // TAP translation. The autostart line baked into the header runs it.
         if (isPlus3Dos(data)) {
             if (this.machineType !== 'next') await this.bootNext();
+            // Assets go on before zxRunBas: its reboot re-reads the card.
+            const ferr = this.stageSdFiles(sdFiles);
+            if (ferr) return Promise.reject('Next: ' + ferr);
             const err = globalThis.zxRunBas('program.bas', data);
             if (err) return Promise.reject('Next: ' + err);
             this.emit('openedTapeFile');
@@ -688,6 +705,8 @@ export class GoEmulator extends EventEmitter {
         // PLUS3DOS path, boot the Next if needed and run it via .nexload.
         if (isNexImage(data)) {
             if (this.machineType !== 'next') await this.bootNext();
+            const ferr = this.stageSdFiles(sdFiles);
+            if (ferr) return Promise.reject('Next: ' + ferr);
             const err = globalThis.zxRunNex('program.nex', data);
             if (err) return Promise.reject('Next: ' + err);
             this.emit('openedTapeFile');
@@ -700,6 +719,8 @@ export class GoEmulator extends EventEmitter {
                 // into NextZXOS's native delivery (a LOADable PLUS3DOS
                 // program or a generated .nex) so it runs ON the Next.
                 try {
+                    const ferr = this.stageSdFiles(sdFiles);
+                    if (ferr) throw new Error(ferr);
                     const next = tapToNext(data);
                     const err = (next.kind === 'bas')
                         ? globalThis.zxRunBas(next.name, next.data)
@@ -734,8 +755,8 @@ export class GoEmulator extends EventEmitter {
         return Promise.resolve({ mediaType: 'tape' });
     }
 
-    openTAPFile(data) { return this.openTapeBytes(data); }
-    openTZXFile(data) { return this.openTapeBytes(data); }
+    openTAPFile(data, sdFiles) { return this.openTapeBytes(data, sdFiles); }
+    openTZXFile(data, sdFiles) { return this.openTapeBytes(data, sdFiles); }
 
     getFileOpener(filename) {
         const cleanName = filename.toLowerCase();

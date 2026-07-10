@@ -111,7 +111,7 @@
   "jest": {
     "testEnvironment": "jsdom",
     "transformIgnorePatterns": [
-      "/node_modules/(?!@zxplay/)"
+      "/node_modules/(?!@zxplay/|pasmo/)"
     ],
     "transform": {
       "^.+\\.[t|j]sx?$": [

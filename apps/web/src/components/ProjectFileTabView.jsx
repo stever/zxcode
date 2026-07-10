@@ -18,6 +18,7 @@ import { selectFiles } from "../redux/project/selectors";
 import {
   getLanguageLabel,
   isTextFileName,
+  languageSupportsProjectFiles,
   projectFileNameError,
   MAX_FILE_CONTENT_SIZE,
   MAX_PROJECT_FILES,
@@ -51,7 +52,12 @@ export function ProjectFileTabView() {
   const isOwner = Boolean(userId && ownerId && userId === ownerId);
   const windowWidth = useSelector((state) => state?.window.width);
 
-  const canAdd = isOwner && files.length < MAX_PROJECT_FILES;
+  // Existing files still render (and can be deleted) even when the language
+  // can't use them, e.g. after a project's language stopped supporting files.
+  const canAdd =
+    isOwner &&
+    languageSupportsProjectFiles(lang) &&
+    files.length < MAX_PROJECT_FILES;
   const activeFileIndex = files.findIndex((f) => f.id === activeFileId);
   const activeIndex = activeFileIndex < 0 ? 0 : activeFileIndex + 1;
 
