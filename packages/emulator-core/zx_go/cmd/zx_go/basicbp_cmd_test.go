@@ -3,6 +3,10 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/conorarmstrong/zx_go/pkg/memory"
+	"github.com/conorarmstrong/zx_go/pkg/roms"
+	"github.com/conorarmstrong/zx_go/pkg/z80"
 )
 
 // writePPC mimics the interpreter's LD (PPC),HL store order: low
@@ -205,6 +209,29 @@ func TestBasicStep_ResumesPausedCPU(t *testing.T) {
 	case <-d.resumeCh:
 	default:
 		t.Fatal("basic-step did not signal resumeCh")
+	}
+}
+
+// Sinclair BASIC on the classic machines uses the same PPC sysvar the
+// Next does, and every classic memory setup maps $4000 to page index 5 —
+// the hook's bank filter. Pin that for the 48K, where zmakebas/bas2tap
+// programs most often run.
+func TestBasicBP_FiresOn48KModel(t *testing.T) {
+	resetBasicBPGlobals(t)
+	mem, err := memory.New(newTestRomDir(t), roms.Model48K)
+	if err != nil {
+		t.Fatalf("memory.New: %v", err)
+	}
+	d := &remoteDebugger{emu: &emulator{cpu: z80.New(mem, nil), mem: mem}}
+	d.cmdSetBasicBP([]string{"30"})
+
+	writePPC(d, 20)
+	if d.paused.Load() {
+		t.Fatal("paused before target line reached")
+	}
+	writePPC(d, 30)
+	if !d.paused.Load() {
+		t.Fatal("did not pause on target line 30 on the 48K model")
 	}
 }
 

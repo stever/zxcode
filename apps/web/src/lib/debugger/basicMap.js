@@ -1,9 +1,11 @@
-// Source map builder for NextBASIC programs — the interpreted counterpart
-// to the sjasmplus SLD parser (sld.js). BASIC lines carry their own numbers
-// in the source, so the "address" a breakpoint arms at is simply the BASIC
-// line number; the engine watches the interpreter's PPC system variable
-// ($5C45, the line being executed) and halts when it enters an armed line
-// (`set-basic-bp` — see zx_go's basicbp_cmd.go).
+// Source map builder for interpreted-BASIC programs — the counterpart to
+// the sjasmplus SLD parser (sld.js) for every dialect that runs under the
+// ROM interpreter: nextbas (txt2bas), basic (zmakebas) and bas2tap. BASIC
+// lines carry their own numbers in the source, so the "address" a
+// breakpoint arms at is simply the BASIC line number; the engine watches
+// the interpreter's PPC system variable ($5C45, the line being executed —
+// identical on the 48K-derived ROMs and NextZXOS) and halts when it enters
+// an armed line (`set-basic-bp` — see zx_go's basicbp_cmd.go).
 //
 // The returned object matches the parseSld shape so the debugger reducer's
 // snapping/re-anchoring and the session's map plumbing work unchanged:
@@ -12,13 +14,19 @@
 // through basic-bp commands and to resolve the paused line from PPC instead
 // of the Z80 pc.
 //
-// Only the main source participates: extra project files on a Next are SD
-// card assets, not compiled code. Unnumbered lines (#program/#autostart
-// directives, blanks, txt2bas comments) get no mapping — a gutter click on
-// one snaps to the next numbered line, like a click on an asm comment.
+// Only the main source participates: extra project files are SD card
+// assets, not compiled code. Unnumbered lines get no mapping — a gutter
+// click on one snaps to the next numbered line, like a click on an asm
+// comment. That covers every dialect's non-code syntax: txt2bas
+// #program/#autostart directives, zmakebas `#` comments and trailing-`\`
+// continuation lines, and blanks. All three tokenisers reject unnumbered
+// CODE lines in the modes the IDE invokes (zmakebas label mode is never
+// enabled — see the getZmakebasTap calls), so every executable line is
+// numbered in a source that compiles.
 
-// NextZXOS accepts program lines 1-9999; anything else on the front of a
-// line is not a line number (and PPC values above this range are
+// The ROM editors and all three tokenisers cap program lines at 9999
+// (zmakebas: "line no. out of range" above it); anything else on the front
+// of a line is not a line number (and PPC values above this range are
 // interpreter states, never program lines).
 const MAX_BASIC_LINE = 9999;
 

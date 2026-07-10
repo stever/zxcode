@@ -48,6 +48,18 @@ describe("parseBasicMap", () => {
         expect(locToAddr(map, null, 5)).toBeUndefined();
     });
 
+    test("handles zmakebas syntax: hash comments and continuation lines", () => {
+        // `# ...` comment lines and trailing-`\` continuations are the
+        // zmakebas non-code forms; both are unnumbered and get no mapping.
+        const map = parseBasicMap(
+            '# setup\n10 PRINT "A";\\\n   "B"\n20 GO TO 10');
+        expect(map.mappedLines).toEqual([2, 4]);
+        expect(map.lineToAddr.get(2)).toBe(10);
+        expect(map.lineToAddr.get(4)).toBe(20);
+        // A click on the continuation line snaps to the next numbered line.
+        expect(snapLine(map, 3, null)).toBe(4);
+    });
+
     test("first occurrence wins for duplicate BASIC line numbers", () => {
         const map = parseBasicMap("10 PRINT 1\n10 PRINT 2");
         expect(map.addrToLoc.get(10)).toEqual({file: null, line: 1});

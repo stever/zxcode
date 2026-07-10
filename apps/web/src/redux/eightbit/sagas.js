@@ -31,6 +31,26 @@ import {parseBasicMap} from "../../lib/debugger/basicMap";
 import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
+// Languages whose compile branch publishes a debugger source map itself:
+// sjasmplus reloads its SLD, the interpreted BASICs their line maps. Every
+// other toolchain clears the map when it replaces the program.
+const SOURCE_MAP_LANGS = new Set(["sjasmplus", "nextbas", "basic", "bas2tap"]);
+
+// Interpreted-BASIC languages derive the debugger's line map straight from
+// the numbered source — no toolchain artifact (lib/debugger/basicMap.js).
+// Called only after a successful tokenise, so a failed compile keeps the
+// previous map: the machine still runs the previous build. Stale on arrival
+// if the editor moved on while the compile handler was in flight.
+function* publishBasicSourceMap(code) {
+    const map = parseBasicMap(code);
+    if (map) {
+        const codeNow = yield select((state) => state.project.code);
+        yield put(sourceMapLoaded(map, codeNow !== code));
+    } else {
+        yield put(sourceMapCleared());
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Action watchers
 // -----------------------------------------------------------------------------
@@ -170,9 +190,9 @@ function* handleGetProjectTapActions(_) {
     const followTapAction = yield select((state) => state.eightbit.followTapAction);
     try {
         // Any other toolchain replacing the program invalidates the
-        // debugger's source map; the sjasmplus and nextbas branches
-        // reload their own (SLD and BASIC line map respectively).
-        if (lang !== 'sjasmplus' && lang !== 'nextbas') {
+        // debugger's source map; the sjasmplus branch reloads its SLD and
+        // the interpreted-BASIC branches their line maps.
+        if (!SOURCE_MAP_LANGS.has(lang)) {
             yield put(sourceMapCleared());
         }
         let tap;
@@ -196,6 +216,7 @@ function* handleGetProjectTapActions(_) {
                 // Sinclair BASIC (zmakebas)
                 try {
                     tap = yield call(getZmakebasTap, code);
+                    yield* publishBasicSourceMap(code);
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
@@ -208,6 +229,7 @@ function* handleGetProjectTapActions(_) {
                 // Sinclair BASIC (bas2tap)
                 try {
                     tap = yield call(getBas2Tap, code);
+                    yield* publishBasicSourceMap(code);
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
@@ -238,22 +260,7 @@ function* handleGetProjectTapActions(_) {
                         }));
                     }
                     tap = yield call(getNextBasicProgram, code);
-                    // The debugger's line map comes straight from the
-                    // source: BASIC lines are numbered, so no toolchain
-                    // artifact is needed (kind: "basic" — armed via the
-                    // engine's PPC watch, see lib/debugger/basicMap.js).
-                    // A failed tokenise keeps the previous map, like a
-                    // failed sjasmplus compile: the machine still runs
-                    // the previous build.
-                    const basicMap = parseBasicMap(code);
-                    if (basicMap) {
-                        // Stale on arrival if the editor moved on while
-                        // this handler was in flight.
-                        const codeNow = yield select((state) => state.project.code);
-                        yield put(sourceMapLoaded(basicMap, codeNow !== code));
-                    } else {
-                        yield put(sourceMapCleared());
-                    }
+                    yield* publishBasicSourceMap(code);
                     yield put(followTapAction(tap, toSdFiles(projectFiles)));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
