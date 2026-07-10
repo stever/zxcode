@@ -39,7 +39,8 @@
     "tabEmulator": "Emulator",
     "tabBasic": "BASIC",
     "tabZ80Assembly": "Asamblare Z80",
-    "projectLabel": "Proiect: {{title}}"
+    "projectLabel": "Proiect: {{title}}",
+    "demoNotice": "Aceste două limbaje sunt o demonstrație. <signInLink>Autentificați-vă</signInLink> pentru mai multe limbaje, proiecte multi-fișier și un depanator. Înregistrarea este gratuită."
   },
   "profiles": {
     "title": "Profiluri publice",

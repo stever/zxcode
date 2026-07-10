@@ -39,7 +39,8 @@
     "tabEmulator": "Эмулятор",
     "tabBasic": "BASIC",
     "tabZ80Assembly": "Ассемблер Z80",
-    "projectLabel": "Проект: {{title}}"
+    "projectLabel": "Проект: {{title}}",
+    "demoNotice": "Эти два языка представлены как демо. <signInLink>Войдите</signInLink>, чтобы получить больше языков, многофайловые проекты и отладчик. Регистрация бесплатна."
   },
   "profiles": {
     "title": "Открытые профили",

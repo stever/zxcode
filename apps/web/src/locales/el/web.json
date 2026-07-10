@@ -39,7 +39,8 @@
     "tabEmulator": "Εξομοιωτής",
     "tabBasic": "BASIC",
     "tabZ80Assembly": "Assembly Z80",
-    "projectLabel": "Έργο: {{title}}"
+    "projectLabel": "Έργο: {{title}}",
+    "demoNotice": "Αυτές οι δύο γλώσσες είναι μια επίδειξη. <signInLink>Συνδεθείτε</signInLink> για περισσότερες γλώσσες, έργα πολλών αρχείων και αποσφαλματωτή. Η εγγραφή είναι δωρεάν."
   },
   "profiles": {
     "title": "Δημόσια προφίλ",

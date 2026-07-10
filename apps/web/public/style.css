@@ -490,3 +490,43 @@ code {
         width: 30%;
     }
 }
+
+/* Logged-out demo notice on the home page: a surface callout with a skewed
+   rainbow tail on the right, echoing the nav's brand mark. */
+.demo-notice {
+    position: relative;
+    overflow: hidden;
+    padding: 0.3rem 3.2rem 0.3rem 0.85rem;
+    border: 1px solid var(--zx-line-2);
+    border-radius: 6px;
+    background: var(--zx-surface-2);
+    color: var(--zx-text);
+    font-size: 0.875rem;
+    line-height: 1.25;
+}
+
+.demo-notice::after {
+    content: "";
+    position: absolute;
+    top: -10px;
+    bottom: -10px;
+    right: 10px;
+    width: 28px;
+    transform: skewX(-22deg);
+    background: var(--zx-rainbow);
+    opacity: 0.9;
+    pointer-events: none;
+}
+
+.demo-notice a,
+.demo-notice a:active,
+.demo-notice a:visited {
+    color: var(--zx-cyan);
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.demo-notice a:hover {
+    text-decoration: underline;
+}

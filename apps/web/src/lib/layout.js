@@ -78,13 +78,15 @@ export function fitEmulatorWidth({availW, availH, kbAspect, maxW = MAX_EMU_W}) {
 /**
  * Emulator width for tab mode: the screen + keyboard centred in the tab, sized
  * to fit the viewport width and the height left under the nav and tab strip.
- * @param {{width:Number, height:Number, kbAspect:Number}} params
+ * extraChrome adds page-specific chrome above the tabs (e.g. the logged-out
+ * demo notice on the home page), estimated by the caller.
+ * @param {{width:Number, height:Number, kbAspect:Number, extraChrome?:Number}} params
  * @returns {Number}
  */
-export function tabEmulatorWidth({width, height, kbAspect}) {
+export function tabEmulatorWidth({width, height, kbAspect, extraChrome = 0}) {
     return fitEmulatorWidth({
         availW: width,
-        availH: Math.max(0, height - TAB_CHROME),
+        availH: Math.max(0, height - TAB_CHROME - extraChrome),
         kbAspect,
     });
 }

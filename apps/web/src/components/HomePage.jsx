@@ -10,8 +10,9 @@ import {reset as resetProject, setErrorItems} from "../redux/project/actions";
 import {reset} from "../redux/jsspeccy/actions";
 import {showToastsForErrorItems} from "../errors";
 import {selectHasUnsavedChanges} from "../redux/project/selectors";
-import {useTranslation} from "@zxplay/i18n";
+import {useTranslation, Trans} from "@zxplay/i18n";
 import {computeMode, currentKeystr, keyboardAspect, tabEmulatorWidth} from "../lib/layout";
+import {login} from "../auth";
 
 export default function HomePage() {
     const {t} = useTranslation();
@@ -22,6 +23,7 @@ export default function HomePage() {
     const hasUnsavedCode = useSelector(selectHasUnsavedChanges);
     const windowWidth = useSelector(state => state?.window.width);
     const windowHeight = useSelector(state => state?.window.height);
+    const userId = useSelector(state => state?.identity.userId);
 
     // Both machines share one neutral BASIC sample, so the tab is just "BASIC".
     // The editor still highlights the machine's dialect and the run saga routes
@@ -32,10 +34,20 @@ export default function HomePage() {
 
     const mode = computeMode(windowWidth, windowHeight);
     const kbAspect = keyboardAspect(currentKeystr());
+    // The identity saga resolves userId to null when logged out; while it is
+    // still undefined the notice is held back to avoid flashing it at users
+    // who are about to be recognised as logged in.
+    const showDemoNotice = userId === null;
+    // Tab mode shows the demo notice above the tabs, so its height (banner plus
+    // margins; the text wraps to a third line on narrow screens) comes out of
+    // the emulator's box. An estimate is enough — see TAB_CHROME in layout.js.
+    const noticeChrome = showDemoNotice && mode === 'tab'
+        ? (windowWidth >= 520 ? 68 : 88)
+        : 0;
     // Tab mode sizes the emulator to its box (fixing portrait clipping and
     // landscape overflow); split keeps the original 640px (2x) size.
     const emuW = mode === 'tab'
-        ? tabEmulatorWidth({width: windowWidth, height: windowHeight, kbAspect})
+        ? tabEmulatorWidth({width: windowWidth, height: windowHeight, kbAspect, extraChrome: noticeChrome})
         : 640;
     const zoom = emuW / 320;
 
@@ -62,10 +74,27 @@ export default function HomePage() {
 
     const className = mode === 'tab' ? '' : 'mx-2 mb-1';
 
+    const demoNotice = showDemoNotice && (
+        <Trans
+            i18nKey="home.demoNotice"
+            components={{
+                signInLink: <a href="#" onClick={(e) => {
+                    e.preventDefault();
+                    login();
+                }}/>
+            }}
+        />
+    );
+
     return (
         <>
             <Toast ref={toast}/>
             <div className={className}>
+                {mode === 'tab' && demoNotice && (
+                    <div className="demo-notice mt-2 mb-2 mx-2">
+                        {demoNotice}
+                    </div>
+                )}
                 {mode === 'tab' && (
                     <TabView
                         activeIndex={selectedTabIndex}
@@ -98,8 +127,17 @@ export default function HomePage() {
                             </TabView>
                         </div>
                         <div className="col-fixed p-0 pt-1" style={{width: `${emuW}px`}}>
-                            <div className="height-53 pt-3 pl-1">
-
+                            {/* Header slot above the emulator; the project page
+                                shows the project title here. The slot height
+                                keeps the emulator aligned with the editor pane,
+                                so the banner is compact enough to leave its
+                                breathing room at the bottom of the slot. */}
+                            <div className="height-53">
+                                {demoNotice && (
+                                    <div className="demo-notice">
+                                        {demoNotice}
+                                    </div>
+                                )}
                             </div>
                             <Emulator zoom={zoom} width={emuW}/>
                         </div>
