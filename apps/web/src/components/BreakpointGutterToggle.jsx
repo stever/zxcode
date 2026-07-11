@@ -15,10 +15,12 @@ export default function BreakpointGutterToggle() {
   const breakpointGutter = useSelector(
     (state) => state?.app?.breakpointGutter ?? true
   );
+  const debugActive = useSelector((state) => state?.debugger.active);
 
-  // Languages without source debug never show the gutter, so the toggle
-  // would be a no-op — hide it rather than present a dead control.
-  if (!languageSupportsSourceDebug(lang)) return null;
+  // The gutter only shows while the debug panel is open and the language
+  // supports source debug (#113); outside that the toggle would be a no-op —
+  // hide it rather than present a dead control.
+  if (!languageSupportsSourceDebug(lang) || !debugActive) return null;
 
   return (
     <ToggleButton

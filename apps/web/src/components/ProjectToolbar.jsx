@@ -218,12 +218,13 @@ export function ProjectToolbar() {
           )}
 
           {/* Editor display toggles for everyone (the breakpoint gutter
-              toggle renders nothing for languages without source debug) */}
-          <div className="inline-flex">
-            <BreakpointGutterToggle />
-          </div>
+              toggle renders nothing unless the debug panel is open for a
+              language with source debug) */}
           <div className="inline-flex">
             <LineNumbersToggle iconOnly />
+          </div>
+          <div className="inline-flex">
+            <BreakpointGutterToggle />
           </div>
         </div>
       </div>
