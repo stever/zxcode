@@ -3,7 +3,7 @@ import {eventChannel} from "redux-saga";
 import getZmakebasTap from "zmakebas";
 import getBas2Tap from "bas2tap";
 import getPasmoTap, {bin2tap} from "pasmo";
-import getNextBasicProgram from "../../lib/nextbas";
+import getBasicProgram from "../../lib/nextbas";
 import {assetUrl} from "@zxplay/emulator";
 import {tapDownloadFile} from "./tapDownload";
 import {getZXBasicTap} from "./zxbasicCompile";
@@ -264,22 +264,37 @@ function* handleGetProjectTapActions(_) {
                 }
                 break;
             case 'basic':
+                // Sinclair BASIC (zmakebas) — its own conventions (backslash
+                // escapes, case-insensitive keywords), always a plain tape;
+                // on the Next the delivery translates it (tapToNext).
+                try {
+                    tap = yield call(getZmakebasTap, code);
+                    yield* publishBasicSourceMap(code);
+                    yield put(followTapAction(tap));
+                    yield put(setFollowTapAction(undefined));
+                } catch (errorItems) {
+                    yield put(setErrorItems(errorItems));
+                } finally {
+                    dashboardUnlock();
+                }
+                break;
             case 'nextbas':
-                // Consolidated Sinclair/Next BASIC (#110) — the same source
-                // compiles for the machine it will run on, the split the demo
-                // editor has always used. 'basic' and 'nextbas' are aliases
-                // ('nextbas' survives on pre-consolidation projects).
+                // Consolidated Sinclair/Next BASIC (#110) — txt2bas is the
+                // single tokeniser on every machine, so one source convention
+                // covers the range; only the output format follows the target
+                // (lib/nextbas.js).
                 //
-                // On 48/128: zmakebas → a plain tape. Next-only keywords
-                // surface as a normal compile error, and there is no SD card,
-                // so extra project files can't ride along.
+                // On 48/128: a program TAP, classic tape load. Next-only
+                // keywords fail the compile with a named lint error, and
+                // there is no SD card, so extra project files can't ride
+                // along.
                 //
-                // On the Next: txt2bas tokenises to a PLUS3DOS program rather
-                // than a TAP. The Next delivery (GoEmulator.openTapeBytes)
-                // detects the PLUS3DOS magic and runs it via zxRunBas, so it
-                // rides the same followTapAction path as the TAP compilers.
-                // Extra project files (sprite sheets etc.) ride along too:
-                // they are staged onto the SD card, folders included, so the
+                // On the Next: a PLUS3DOS program rather than a TAP. The
+                // Next delivery (GoEmulator.openTapeBytes) detects the
+                // PLUS3DOS magic and runs it via zxRunBas, so it rides the
+                // same followTapAction path as the TAP compilers. Extra
+                // project files (sprite sheets etc.) ride along too: they
+                // are staged onto the SD card, folders included, so the
                 // program can LOAD them at runtime by the same relative path
                 // as the project ZIP unzipped onto a real card — which is
                 // why every path segment must fit FAT 8.3 (a ~ alias would
@@ -287,7 +302,7 @@ function* handleGetProjectTapActions(_) {
                 try {
                     const targetMachine = yield select((state) => state.app.machine);
                     if (targetMachine !== 'next') {
-                        tap = yield call(getZmakebasTap, code);
+                        tap = yield call(getBasicProgram, code, targetMachine);
                         yield* publishBasicSourceMap(code);
                         yield put(followTapAction(tap));
                         yield put(setFollowTapAction(undefined));
@@ -302,12 +317,12 @@ function* handleGetProjectTapActions(_) {
                             text: `"${name}" cannot go on the Next's SD card: every folder and file name must fit 8.3 (up to 8 characters, then a dot and up to 3). Rename it so the program can LOAD it.`,
                         }));
                     }
-                    tap = yield call(getNextBasicProgram, code);
+                    tap = yield call(getBasicProgram, code, 'next');
                     yield* publishBasicSourceMap(code);
                     yield put(followTapAction(tap, toSdFiles(projectFiles)));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
-                    console.error('[basic] dispatching setErrorItems', errorItems);
+                    console.error('[nextbas] dispatching setErrorItems', errorItems);
                     yield put(setErrorItems(errorItems));
                 } finally {
                     dashboardUnlock();

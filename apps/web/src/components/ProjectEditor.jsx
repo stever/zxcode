@@ -53,23 +53,21 @@ export function ProjectEditor() {
   );
   const pausedLineRef = useRef(null);
 
-  const machine = useSelector((state) => state?.app.machine);
-
   let mode;
   switch (lang) {
     case "asm":
       mode = "text/x-pasmo";
       break;
     case "basic":
-    case "nextbas":
-      // Consolidated Sinclair/Next BASIC (#110): highlight the dialect that
-      // matches the machine the program will compile for — NextBASIC
-      // (txt2bas) on the Next, Sinclair BASIC (zmakebas) on 48/128 — the
-      // same split the demo editor uses.
-      mode = machine === "next" ? "text/x-nextbas" : "text/x-zmakebas";
+      mode = "text/x-zmakebas";
       break;
     case "bas2tap":
       mode = "text/x-zmakebas";
+      break;
+    case "nextbas":
+      // Consolidated Sinclair/Next BASIC (#110): txt2bas tokenises for
+      // every machine, so the NextBASIC highlight always applies.
+      mode = "text/x-nextbas";
       break;
     case "c":
       mode = "text/x-z88dk-csrc";
@@ -157,15 +155,6 @@ export function ProjectEditor() {
       cm.setOption("lineNumbers", lineNumbers);
     }
   }, [lineNumbers]);
-
-  // The BASIC highlight dialect follows the machine (#110), and the machine
-  // can change mid-mount (nav menu / target toggle) — retro-apply it.
-  useEffect(() => {
-    if (cmRef.current) {
-      const cm = cmRef.current.getCodeMirror();
-      cm.setOption("mode", mode);
-    }
-  }, [mode]);
 
   // Hiding the gutter is display-only: breakpoints stay in the store (and
   // still arm during a debug session); their dots return with the gutter.

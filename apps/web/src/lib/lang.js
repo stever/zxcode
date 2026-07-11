@@ -1,11 +1,12 @@
 export function getLanguageLabel(lang) {
   const labels = {
     asm: "Pasmo",
-    // 'basic' and 'nextbas' are one consolidated language (#110): the same
-    // source compiles per machine — zmakebas on 48/128, txt2bas on the Next
-    // — so both codes present under one name. 'nextbas' survives only as a
-    // legacy code on existing projects; new projects get 'basic'.
-    basic: "Sinclair/Next BASIC",
+    // 'nextbas' is the consolidated BASIC (#110): txt2bas tokenises the
+    // same source for every machine (a TAP for 48/128, PLUS3DOS for the
+    // Next), so it carries the headline name. 'basic' (zmakebas) and
+    // 'bas2tap' keep their own source conventions as standalone tools
+    // under the Other menu.
+    basic: "zmakebas",
     nextbas: "Sinclair/Next BASIC",
     bas2tap: "bas2tap",
     c: "z88dk C",
@@ -19,9 +20,9 @@ export function getLanguageLabel(lang) {
 }
 
 // The BASIC dialects: on the Next their compiled program is a PLUS3DOS .bas
-// NextZXOS LOADs (tokenised by txt2bas, or a translated bas2tap TAP), not a
-// generated .nex like the machine-code languages. No language pins the
-// machine (#110) — every project can switch freely.
+// NextZXOS LOADs (tokenised by txt2bas, or a zmakebas/bas2tap TAP translated
+// by tapToNext), not a generated .nex like the machine-code languages. No
+// language pins the machine (#110) — every project can switch freely.
 const BASIC_LANGS = new Set(["basic", "bas2tap", "nextbas"]);
 
 export function isBasicLang(lang) {
@@ -50,12 +51,12 @@ export function mainFileName(lang) {
 
 // Languages whose toolchain can consume additional project files (compile
 // includes / INCBIN assets, or SD-card files LOADed at runtime on the Next).
-// The consolidated BASIC ('basic'/'nextbas') stages files onto the Next's SD
-// card, so it keeps the add-file UI (on 48/128 there is nowhere to deliver
-// them — they only matter when the project runs on the Next). bas2tap has no
-// include mechanism and its TAP carries only the tokenised program, so extra
-// files would be dead weight — the add-file UI is hidden for it.
-const NO_PROJECT_FILE_LANGS = new Set(["bas2tap"]);
+// The consolidated BASIC (nextbas) stages files onto the Next's SD card, so
+// it keeps the add-file UI (on 48/128 there is nowhere to deliver them).
+// zmakebas and bas2tap have no include mechanism and their TAPs carry only
+// the tokenised program, so extra files would be dead weight — the add-file
+// UI is hidden for them.
+const NO_PROJECT_FILE_LANGS = new Set(["basic", "bas2tap"]);
 
 export function languageSupportsProjectFiles(lang) {
   return !NO_PROJECT_FILE_LANGS.has(lang);

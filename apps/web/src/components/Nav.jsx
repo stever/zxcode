@@ -97,10 +97,20 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
-  // One consolidated BASIC (#110): "Sinclair/Next BASIC" compiles per
-  // machine (zmakebas on 48/128, txt2bas on the Next), so there is a single
-  // entry instead of the old machine-dependent zmakebas/NextBASIC pair.
+  // One consolidated BASIC (#110): "Sinclair/Next BASIC" (lang nextbas) is
+  // txt2bas-tokenised for every machine, so there is a single headline entry
+  // instead of the old machine-dependent zmakebas/NextBASIC pair. zmakebas
+  // and bas2tap live on under Other as standalone classic tokenisers with
+  // their own source conventions.
   const newBasic = {
+    label: getLanguageLabel("nextbas"),
+    command: () => {
+      dispatch(pause());
+      navigate("/new/nextbas");
+    },
+  };
+
+  const newZmakebas = {
     label: getLanguageLabel("basic"),
     command: () => {
       dispatch(pause());
@@ -141,6 +151,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   };
 
   const otherMenu = { label: t("nav.other"), items: [] };
+  otherMenu.items.push(newZmakebas);
   otherMenu.items.push(newBas2Tap);
   otherMenu.items.push(newZmac);
   otherMenu.items.push(newSdcc);

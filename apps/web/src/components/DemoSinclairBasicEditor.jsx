@@ -3,7 +3,6 @@ import {useDispatch, useSelector} from "react-redux";
 import {Button} from "primereact/button";
 import CodeMirror from "./CodeMirror";
 import {setSinclairBasicCode, runSinclairBasic} from "../redux/demo/actions";
-import "../lib/syntax/zmakebas";
 import "../lib/syntax/nextbas";
 import {dashboardLock} from "../dashboard_lock";
 import {showLoading} from "../dashboard_loading";
@@ -17,12 +16,11 @@ export function DemoSinclairBasicEditor() {
     const cmRef = useRef(null);
     const code = useSelector(state => state?.demo.sinclairBasicCode);
     const lineNumbers = useSelector((state) => state?.app?.lineNumbers ?? true);
-    const machine = useSelector(state => state?.app.machine);
 
-    // Highlight the BASIC dialect that matches the selected machine: NextBASIC
-    // on the Next (tokenised by txt2bas), Sinclair BASIC on the 48K/128K.
+    // The demo is the consolidated Sinclair/Next BASIC (#110): txt2bas
+    // tokenises for every machine, so the NextBASIC highlight always applies.
     const options = {
-        mode: machine === 'next' ? 'text/x-nextbas' : 'text/x-zmakebas',
+        mode: 'text/x-nextbas',
         theme: 'mbo',
         readOnly: false,
         lineWrapping: false,

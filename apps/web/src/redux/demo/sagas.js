@@ -1,7 +1,6 @@
 import {takeLatest, select, put, call} from "redux-saga/effects";
-import getZmakebasTap from "zmakebas";
 import getPasmoTap from "pasmo";
-import getNextBasicProgram from "../../lib/nextbas";
+import getBasicProgram from "../../lib/nextbas";
 import {actionTypes, setSelectedTabIndex} from "./actions";
 import {loadTap, pause} from "../jsspeccy/actions";
 import {setErrorItems} from "../project/actions";
@@ -56,13 +55,11 @@ function* handleRunSinclairBasicActions(_) {
         const code = yield select((state) => state.demo.sinclairBasicCode);
         const machine = yield select((state) => state.app.machine);
         console.log(`[demo-basic] run requested machine=${machine} codeLength=${code?.length}`);
-        // On the Next, tokenise the source straight to a PLUS3DOS program via
-        // txt2bas and hand it to the Next delivery — no .tap detour. The
-        // GoEmulator delivery detects the PLUS3DOS magic and runs it directly.
-        // The 48K/128K path stays zmakebas -> .tap.
-        const program = machine === 'next'
-            ? yield call(getNextBasicProgram, code)
-            : yield call(getZmakebasTap, code);
+        // The demo editor is the consolidated Sinclair/Next BASIC (#110):
+        // txt2bas tokenises for every machine, only the output format follows
+        // the target — a PLUS3DOS program handed to the Next delivery, a
+        // program TAP for the 48K/128K (lib/nextbas.js).
+        const program = yield call(getBasicProgram, code, machine);
         yield put(loadTap(program));
 
         // Mobile view has emulator on a tab. Switch to the emulator tab when running code.

@@ -44,9 +44,8 @@ function toToolInputs(files: ProjectFileRecord[]): Record<string, Uint8Array | s
  * Compile a project's source to a self-loading TAP, dispatching on language.
  *
  * In-process WASM: basic (zmakebas), bas2tap, asm (pasmo --tapbas loader).
+ * In-process JS: nextbas (txt2bas — the consolidated Sinclair/Next BASIC).
  * Via Hasura actions: zxbasic (Boriel), c (z88dk), sjasmplus, pascal.
- * Not yet supported: zmac / sdcc (multi-step WASM toolchains that today live
- * only in the web worker — see work item #44).
  *
  * `machine` ('48' | '128' | 'next') is only consulted by languages whose
  * codegen depends on the target — currently pascal (Pasta80). `files` are the
@@ -69,6 +68,22 @@ export async function compileProject(
             return inProcess(async () => {
                 const { default: getBas2Tap } = await import('bas2tap');
                 return getBas2Tap(code);
+            });
+        case 'nextbas':
+            // Consolidated Sinclair/Next BASIC: txt2bas tokenises for every
+            // machine. Always emit the TAP format — a Next render translates
+            // it into NextZXOS's native delivery exactly as the sites do
+            // (tap-to-next.mjs), and a classic render tape-loads it. The
+            // autostart line rides in the TAP header (injected from the
+            // first line when the source doesn't set one, mirroring the
+            // web app's lib/nextbas.js).
+            return inProcess(async () => {
+                const { file2bas } = await import('txt2bas');
+                const firstLine = code.match(/^\s*(\d+)\b/m);
+                const src = /^\s*#autostart\b/m.test(code) || !firstLine
+                    ? code
+                    : `#autostart ${firstLine[1]}\n${code}`;
+                return file2bas(src, { filename: 'PROGRAM', format: 'tap' });
             });
         case 'asm':
             return inProcess(async () => {
