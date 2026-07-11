@@ -160,13 +160,11 @@
   },
   "editor": {
     "downloadZip": "Stáhnout ZIP",
-    "projectCopied": "Projekt zkopírován",
     "renameTitle": "Přejmenovat projekt",
     "projectName": "Název projektu",
     "urlSlug": "URL slug",
     "copyTitle": "Kopírovat projekt",
     "newProjectName": "Název nového projektu",
-    "copiedDetail": "Vytvořeno „{{name}}“",
     "deleteConfirm": "Opravdu chcete tento projekt trvale odstranit?",
     "projectBy": "Autor projektu:",
     "renameNameHelp": "Aktualizujte nebo zadejte text pro přejmenování projektu.",

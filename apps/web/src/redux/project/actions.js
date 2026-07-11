@@ -21,7 +21,6 @@ export const actionTypes = {
     renameProject: 'project/renameProject',
     setProjectTitle: 'project/setProjectTitle',
     setErrorItems: 'project/setErrorItems',
-    copyProject: 'project/copyProject',
     downloadProjectZip: 'project/downloadProjectZip',
 };
 
@@ -157,14 +156,6 @@ function toErrorItems(value) {
 export const setErrorItems = (errorItems) => ({
     type: actionTypes.setErrorItems,
     errorItems: toErrorItems(errorItems)
-});
-
-export const copyProject = (title, lang, code, files = []) => ({
-    type: actionTypes.copyProject,
-    title,
-    lang,
-    code,
-    files
 });
 
 export const downloadProjectZip = () => ({

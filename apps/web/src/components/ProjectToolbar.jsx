@@ -4,17 +4,15 @@ import { Link } from "react-router-dom";
 import { Button } from "primereact/button";
 import { ConfirmPopup, confirmPopup } from "primereact/confirmpopup";
 import { Tag } from "primereact/tag";
-import { Toast } from "primereact/toast";
 import { Dialog } from "primereact/dialog";
 import { InputText } from "primereact/inputtext";
 import {
   deleteProject,
   renameProject,
   saveCodeChanges,
-  copyProject,
   downloadProjectZip,
 } from "../redux/project/actions";
-import { selectFiles, selectHasUnsavedChanges } from "../redux/project/selectors";
+import { selectHasUnsavedChanges } from "../redux/project/selectors";
 import { runProjectCode } from "../redux/eightbit/actions";
 import { openDebugger, closeDebugger } from "../redux/debugger/actions";
 import { dashboardLock } from "../dashboard_lock";
@@ -33,17 +31,11 @@ export function ProjectToolbar() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const renameInputReference = useRef(null);
-  const toast = useRef(null);
 
   const [renameDialogVisible, setRenameDialogVisible] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectSlug, setNewProjectSlug] = useState("");
-  const [copyDialogVisible, setCopyDialogVisible] = useState(false);
-  const [copyProjectName, setCopyProjectName] = useState("");
 
-  const lang = useSelector((state) => state?.project.lang);
-  const code = useSelector((state) => state?.project.code);
-  const files = useSelector(selectFiles);
   const debugActive = useSelector((state) => state?.debugger.active);
   const hasUnsavedChanges = useSelector(selectHasUnsavedChanges);
   const isMobile = useSelector((state) => state?.window.isMobile);
@@ -73,28 +65,8 @@ export function ProjectToolbar() {
     });
   };
 
-  const handleCopyProject = () => {
-    const newTitle = copyProjectName || `${projectName} (Copy)`;
-
-    // Use the new copyProject action which handles everything
-    dispatch(copyProject(newTitle, lang, code, files));
-
-    if (toast.current) {
-      toast.current.show({
-        severity: "success",
-        summary: t("editor.projectCopied"),
-        detail: t("editor.copiedDetail", { name: newTitle }),
-        life: 3000,
-      });
-    }
-
-    setCopyDialogVisible(false);
-    setCopyProjectName("");
-  };
-
   return (
     <>
-      <Toast ref={toast} />
       <div className="editor-toolbar mt-2">
         <div className="editor-toolbar-group">
           <Button
@@ -120,19 +92,6 @@ export function ProjectToolbar() {
               dispatch(debugActive ? closeDebugger() : openDebugger());
             }}
           />
-
-          {/* Show Copy button for non-owners (if logged in) */}
-          {!isOwner && userId && (
-            <Button
-              label={t("actions.copy")}
-              icon="pi pi-copy"
-              className="p-button-outlined p-button-secondary"
-              onClick={() => {
-                setCopyProjectName(`${projectName} (Copy)`);
-                setCopyDialogVisible(true);
-              }}
-            />
-          )}
 
           {/* Show Save, Rename, Delete only for owner */}
           {isOwner && (
@@ -299,50 +258,6 @@ export function ProjectToolbar() {
               }}
             />
             <small id="project-slug-help">{t("editor.renameSlugHelp")}</small>
-          </div>
-        </div>
-      </Dialog>
-      <Dialog
-        header={t("editor.copyTitle")}
-        visible={copyDialogVisible}
-        className="editor-dialog-50vw"
-        onHide={() => setCopyDialogVisible(false)}
-        footer={
-          <>
-            <Button
-              label={t("actions.cancel")}
-              icon="pi pi-times"
-              onClick={() => {
-                setCopyProjectName("");
-                setCopyDialogVisible(false);
-              }}
-              className="p-button-text"
-            />
-            <Button
-              label={t("actions.copy")}
-              icon="pi pi-copy"
-              onClick={handleCopyProject}
-              autoFocus
-            />
-          </>
-        }
-      >
-        <div className="flex flex-column gap-3">
-          <div className="flex flex-column gap-2">
-            <label htmlFor="copy-project-name">{t("editor.newProjectName")}</label>
-            <InputText
-              id="copy-project-name"
-              aria-describedby="copy-project-name-help"
-              value={copyProjectName}
-              onChange={(e) => setCopyProjectName(e.target.value)}
-              onFocus={(e) => e.target.select()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleCopyProject();
-                }
-              }}
-            />
-            <small id="copy-project-name-help">{t("editor.copyNameHelp")}</small>
           </div>
         </div>
       </Dialog>

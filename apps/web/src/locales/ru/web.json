@@ -160,13 +160,11 @@
   },
   "editor": {
     "downloadZip": "Скачать ZIP",
-    "projectCopied": "Проект скопирован",
     "renameTitle": "Переименовать проект",
     "projectName": "Название проекта",
     "urlSlug": "URL (slug)",
     "copyTitle": "Копировать проект",
     "newProjectName": "Название нового проекта",
-    "copiedDetail": "Создан проект «{{name}}»",
     "deleteConfirm": "Вы уверены, что хотите навсегда удалить этот проект?",
     "projectBy": "Автор проекта:",
     "renameNameHelp": "Измените или введите текст, чтобы переименовать проект.",

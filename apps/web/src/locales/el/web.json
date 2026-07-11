@@ -160,13 +160,11 @@
   },
   "editor": {
     "downloadZip": "Λήψη ZIP",
-    "projectCopied": "Το έργο αντιγράφηκε",
     "renameTitle": "Μετονομασία έργου",
     "projectName": "Όνομα έργου",
     "urlSlug": "Slug URL",
     "copyTitle": "Αντιγραφή έργου",
     "newProjectName": "Όνομα νέου έργου",
-    "copiedDetail": "Δημιουργήθηκε το \"{{name}}\"",
     "deleteConfirm": "Είστε σίγουροι ότι θέλετε να αφαιρέσετε οριστικά αυτό το έργο;",
     "projectBy": "Έργο του:",
     "renameNameHelp": "Ενημερώστε ή εισαγάγετε κείμενο για να μετονομάσετε το έργο.",

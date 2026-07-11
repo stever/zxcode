@@ -160,13 +160,11 @@
   },
   "editor": {
     "downloadZip": "Descarcă ZIP",
-    "projectCopied": "Proiect copiat",
     "renameTitle": "Redenumește proiectul",
     "projectName": "Nume proiect",
     "urlSlug": "Slug URL",
     "copyTitle": "Copiază proiectul",
     "newProjectName": "Nume proiect nou",
-    "copiedDetail": "S-a creat \"{{name}}\"",
     "deleteConfirm": "Sigur vrei să elimini definitiv acest proiect?",
     "projectBy": "Proiect de:",
     "renameNameHelp": "Actualizează sau introdu text pentru a redenumi proiectul.",

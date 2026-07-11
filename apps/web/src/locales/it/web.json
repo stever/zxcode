@@ -160,13 +160,11 @@
   },
   "editor": {
     "downloadZip": "Scarica ZIP",
-    "projectCopied": "Progetto copiato",
     "renameTitle": "Rinomina progetto",
     "projectName": "Nome del progetto",
     "urlSlug": "Slug dell'URL",
     "copyTitle": "Copia progetto",
     "newProjectName": "Nome del nuovo progetto",
-    "copiedDetail": "Creato \"{{name}}\"",
     "deleteConfirm": "Sei sicuro di voler rimuovere definitivamente questo progetto?",
     "projectBy": "Progetto di:",
     "renameNameHelp": "Aggiorna o inserisci il testo per rinominare il progetto.",
