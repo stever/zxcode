@@ -53,10 +53,12 @@ export default function ProjectMachineToggle({ project, userId }) {
   // Sinclair BASIC is 48/128-only, everything else is free. Only offer machines
   // the language can target (the current value always qualifies for a valid
   // project, so it stays selectable).
+  // Short labels — the "Target machine" caption already gives the context
+  // and the toolbar has to fit on one line (the nav menu keeps full names).
   const options = [
-    { label: t("nav.machine48"), value: "48" },
-    { label: t("nav.machine128"), value: "128" },
-    { label: t("machine.next"), value: "next" },
+    { label: t("machine.short48"), value: "48" },
+    { label: t("machine.short128"), value: "128" },
+    { label: t("machine.shortNext"), value: "next" },
   ].filter((o) => languageAllowedOnMachine(lang, o.value));
 
   // Route changes reuse this mounted component: re-seed against the new

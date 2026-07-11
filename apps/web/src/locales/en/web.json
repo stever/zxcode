@@ -23,7 +23,10 @@
   },
   "machine": {
     "label": "Target machine",
-    "next": "ZX Spectrum Next"
+    "next": "ZX Spectrum Next",
+    "short48": "48K",
+    "short128": "128K",
+    "shortNext": "Next"
   },
   "errorPage": {
     "errorTitle": "Error",
@@ -250,7 +253,8 @@
   "pages": {
     "yourProfile": "Your Profile",
     "yourProjects": "Your Projects",
-    "lineNumbers": "Line Numbers"
+    "lineNumbers": "Line Numbers",
+    "breakpointGutter": "Breakpoint Gutter"
   },
   "publicProject": {
     "loginRequired": "Please log in to view this project",

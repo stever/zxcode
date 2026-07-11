@@ -39,7 +39,10 @@ export function ProjectEditor() {
   activeFileIdRef.current = activeFileId;
   const activeFileNameRef = useRef(null);
   activeFileNameRef.current = activeFileName;
-  const lineNumbers = useSelector((state) => state?.app?.lineNumbers || false);
+  const lineNumbers = useSelector((state) => state?.app?.lineNumbers ?? true);
+  const breakpointGutter = useSelector(
+    (state) => state?.app?.breakpointGutter ?? true
+  );
   const breakpoints = useSelector((state) => state?.debugger.breakpoints);
   const debugActive = useSelector((state) => state?.debugger.active);
   const pausedLine = useSelector((state) => state?.debugger.pausedLine);
@@ -97,10 +100,11 @@ export function ProjectEditor() {
     readOnly: false,
     lineWrapping: false,
     lineNumbers: lineNumbers,
-    // The breakpoint gutter is present whenever the language supports it, so
-    // breakpoints can be set before a debug session starts. The line-numbers
-    // gutter is appended implicitly when enabled.
-    gutters: sourceDebug ? ["zx-bp-gutter"] : [],
+    // The breakpoint gutter is present whenever the language supports it and
+    // the display toggle is on, so breakpoints can be set before a debug
+    // session starts. The line-numbers gutter is appended implicitly when
+    // enabled.
+    gutters: sourceDebug && breakpointGutter ? ["zx-bp-gutter"] : [],
     matchBrackets: true,
     tabSize: 4,
     indentAuto: true,
@@ -150,12 +154,20 @@ export function ProjectEditor() {
     }
   }, [lineNumbers]);
 
+  // Hiding the gutter is display-only: breakpoints stay in the store (and
+  // still arm during a debug session); their dots return with the gutter.
+  useEffect(() => {
+    if (!cmRef.current || !sourceDebug) return;
+    const cm = cmRef.current.getCodeMirror();
+    cm.setOption("gutters", breakpointGutter ? ["zx-bp-gutter"] : []);
+  }, [breakpointGutter]);
+
   // Render breakpoint dots into the gutter (breakpoint lines are 1-based).
   // During a real-backend session they dim to hollow when no live source map
   // backs them (none compiled, or the source changed since the compile).
   const bpsInert = debugActive && backend === "zxgo" && !sourceMapLive;
   useEffect(() => {
-    if (!cmRef.current || !sourceDebug) return;
+    if (!cmRef.current || !sourceDebug || !breakpointGutter) return;
     const cm = cmRef.current.getCodeMirror();
     cm.clearGutter("zx-bp-gutter");
     // Each buffer shows only its own file's dots.
@@ -167,7 +179,7 @@ export function ProjectEditor() {
         cm.setGutterMarker(bp.line - 1, "zx-bp-gutter", marker);
       }
     }
-  }, [breakpoints, bpsInert, activeFileName]);
+  }, [breakpoints, bpsInert, activeFileName, breakpointGutter]);
 
   // Highlight the source line the debugger is paused on and keep it in view.
   useEffect(() => {

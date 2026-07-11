@@ -15,7 +15,7 @@ export function DemoAssemblyEditor() {
   const dispatch = useDispatch();
   const cmRef = useRef(null);
   const asmCode = useSelector((state) => state?.demo.asmCode);
-  const lineNumbers = useSelector((state) => state?.app?.lineNumbers || false);
+  const lineNumbers = useSelector((state) => state?.app?.lineNumbers ?? true);
 
   const options = {
     mode: "text/x-pasmo",

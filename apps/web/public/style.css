@@ -381,6 +381,17 @@ code {
     margin-left: 2px;
 }
 
+/* Icon-only view toggles (breakpoint gutter / line numbers): PrimeReact 9's
+   ToggleButton renders a literal "&nbsp;" label when label-less. Collapse it
+   to zero width but keep it in flow: its text line box is what gives the
+   labelled buttons their height, so the toggles stay exactly as tall as the
+   Target machine buttons beside them (a bare pi icon's line box is shorter). */
+.editor-toolbar .p-togglebutton .p-button-label {
+    width: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
 .project-divider {
     margin: 0 12px !important;
     height: 32px !important;

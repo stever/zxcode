@@ -6,6 +6,7 @@ export const actionTypes = {
     requestPrivacyPolicy: 'app/requestPrivacyPolicy',
     receivePrivacyPolicy: 'app/receivePrivacyPolicy',
     toggleLineNumbers: 'app/toggleLineNumbers',
+    toggleBreakpointGutter: 'app/toggleBreakpointGutter',
     setMachine: 'app/setMachine',
     machineChanged: 'app/machineChanged',
 };
@@ -38,6 +39,11 @@ export const receivePrivacyPolicy = (text) => ({
 
 export const toggleLineNumbers = (enabled) => ({
     type: actionTypes.toggleLineNumbers,
+    enabled
+})
+
+export const toggleBreakpointGutter = (enabled) => ({
+    type: actionTypes.toggleBreakpointGutter,
     enabled
 })
 

@@ -224,7 +224,8 @@
   "pages": {
     "yourProfile": "Il tuo profilo",
     "yourProjects": "I tuoi progetti",
-    "lineNumbers": "Numeri di riga"
+    "lineNumbers": "Numeri di riga",
+    "breakpointGutter": "Margine dei punti di interruzione"
   },
   "publicProject": {
     "loginRequired": "Accedi per visualizzare questo progetto",

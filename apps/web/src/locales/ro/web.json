@@ -224,7 +224,8 @@
   "pages": {
     "yourProfile": "Profilul tău",
     "yourProjects": "Proiectele tale",
-    "lineNumbers": "Numere de linie"
+    "lineNumbers": "Numere de linie",
+    "breakpointGutter": "Margine puncte de întrerupere"
   },
   "publicProject": {
     "loginRequired": "Autentifică-te pentru a vedea acest proiect",

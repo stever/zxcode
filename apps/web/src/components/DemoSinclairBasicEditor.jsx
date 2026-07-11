@@ -16,7 +16,7 @@ export function DemoSinclairBasicEditor() {
     const dispatch = useDispatch();
     const cmRef = useRef(null);
     const code = useSelector(state => state?.demo.sinclairBasicCode);
-    const lineNumbers = useSelector((state) => state?.app?.lineNumbers || false);
+    const lineNumbers = useSelector((state) => state?.app?.lineNumbers ?? true);
     const machine = useSelector(state => state?.app.machine);
 
     // Highlight the BASIC dialect that matches the selected machine: NextBASIC

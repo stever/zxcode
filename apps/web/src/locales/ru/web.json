@@ -224,7 +224,8 @@
   "pages": {
     "yourProfile": "Ваш профиль",
     "yourProjects": "Ваши проекты",
-    "lineNumbers": "Номера строк"
+    "lineNumbers": "Номера строк",
+    "breakpointGutter": "Поле точек останова"
   },
   "publicProject": {
     "loginRequired": "Войдите, чтобы просмотреть этот проект",

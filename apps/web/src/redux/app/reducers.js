@@ -5,7 +5,8 @@ import {actionTypes} from "./actions";
 // Initial state
 // -----------------------------------------------------------------------------
 
-// Load the persisted line numbers preference if available
+// Gutters (line numbers, breakpoints) are on by default; the toggles are
+// opt-outs, so absence of a saved preference means visible.
 const loadLineNumbers = () => {
     try {
         const saved = localStorage.getItem('lineNumbers');
@@ -15,7 +16,19 @@ const loadLineNumbers = () => {
     } catch (e) {
         console.error('Failed to load line numbers preference:', e);
     }
-    return false;
+    return true;
+};
+
+const loadBreakpointGutter = () => {
+    try {
+        const saved = localStorage.getItem('breakpointGutter');
+        if (saved !== null) {
+            return saved === 'true';
+        }
+    } catch (e) {
+        console.error('Failed to load breakpoint gutter preference:', e);
+    }
+    return true;
 };
 
 const MACHINE_KEY = 'machine';
@@ -58,6 +71,7 @@ const initialState = {
     privacyPolicy: undefined,
     termsOfUse: undefined,
     lineNumbers: loadLineNumbers(),
+    breakpointGutter: loadBreakpointGutter(),
     machine: machineState.machine,
     machineLocked: machineState.machineLocked
 };
@@ -92,6 +106,18 @@ function toggleLineNumbers(state, action) {
     }
 }
 
+function toggleBreakpointGutter(state, action) {
+    try {
+        localStorage.setItem('breakpointGutter', String(action.enabled));
+    } catch (e) {
+        console.error('Failed to save breakpoint gutter preference:', e);
+    }
+    return {
+        ...state,
+        breakpointGutter: action.enabled
+    }
+}
+
 function setMachine(state, action) {
     if (state.machineLocked) return state;
     try {
@@ -113,6 +139,7 @@ const actionsMap = {
     [actionTypes.receivePrivacyPolicy]: receivePrivacyPolicy,
     [actionTypes.receiveTermsOfUse]: receiveTermsOfUse,
     [actionTypes.toggleLineNumbers]: toggleLineNumbers,
+    [actionTypes.toggleBreakpointGutter]: toggleBreakpointGutter,
     [actionTypes.setMachine]: setMachine,
     [actionTypes.machineChanged]: setMachine,
 };

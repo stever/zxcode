@@ -224,7 +224,8 @@
   "pages": {
     "yourProfile": "Váš profil",
     "yourProjects": "Vaše projekty",
-    "lineNumbers": "Čísla řádků"
+    "lineNumbers": "Čísla řádků",
+    "breakpointGutter": "Sloupec zarážek"
   },
   "publicProject": {
     "loginRequired": "Pro zobrazení tohoto projektu se přihlaste",

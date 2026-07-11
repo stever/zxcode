@@ -23,6 +23,7 @@ import clsx from "clsx";
 import ProjectVisibilityToggle from "./ProjectVisibilityToggle";
 import ProjectMachineToggle from "./ProjectMachineToggle";
 import LineNumbersToggle from "./LineNumbersToggle";
+import BreakpointGutterToggle from "./BreakpointGutterToggle";
 import { useTranslation } from "@zxplay/i18n";
 
 // The action bar beneath the editor/emulator. It is rendered full page width
@@ -216,9 +217,13 @@ export function ProjectToolbar() {
             </>
           )}
 
-          {/* Line numbers toggle for everyone */}
+          {/* Editor display toggles for everyone (the breakpoint gutter
+              toggle renders nothing for languages without source debug) */}
           <div className="inline-flex">
-            <LineNumbersToggle />
+            <BreakpointGutterToggle />
+          </div>
+          <div className="inline-flex">
+            <LineNumbersToggle iconOnly />
           </div>
         </div>
       </div>

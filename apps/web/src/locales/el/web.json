@@ -224,7 +224,8 @@
   "pages": {
     "yourProfile": "Το προφίλ σου",
     "yourProjects": "Τα έργα σου",
-    "lineNumbers": "Αριθμοί γραμμών"
+    "lineNumbers": "Αριθμοί γραμμών",
+    "breakpointGutter": "Περιθώριο σημείων διακοπής"
   },
   "publicProject": {
     "loginRequired": "Συνδεθείτε για να δείτε αυτό το έργο",

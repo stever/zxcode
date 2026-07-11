@@ -224,7 +224,8 @@
   "pages": {
     "yourProfile": "Вашият профил",
     "yourProjects": "Вашите проекти",
-    "lineNumbers": "Номера на редове"
+    "lineNumbers": "Номера на редове",
+    "breakpointGutter": "Поле за точки на прекъсване"
   },
   "publicProject": {
     "loginRequired": "Влезте, за да видите този проект",

@@ -224,7 +224,8 @@
   "pages": {
     "yourProfile": "Váš profil",
     "yourProjects": "Vaše projekty",
-    "lineNumbers": "Čísla riadkov"
+    "lineNumbers": "Čísla riadkov",
+    "breakpointGutter": "Stĺpec zarážok"
   },
   "publicProject": {
     "loginRequired": "Pre zobrazenie tohto projektu sa prihláste",
