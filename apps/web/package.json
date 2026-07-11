@@ -35,7 +35,7 @@
     "@zxplay/i18n": "*",
     "@zxplay/ui": "*",
     "axios": "^1.16.0",
-    "bas2tap": "^0.0.1-alpha.4",
+    "bas2tap": "2.6.0",
     "clsx": "^2.1.1",
     "codemirror": "^5.65.11",
     "date-fns": "^4.1.0",
@@ -46,7 +46,7 @@
     "jszip": "^3.10.1",
     "lodash.debounce": "^4.0.8",
     "pako": "^2.1.0",
-    "pasmo": "0.0.1-alpha.6",
+    "pasmo": "0.5.5",
     "primeflex": "^4.0.0",
     "primeicons": "^7.0.0",
     "primereact": "^9.6.4",
@@ -62,7 +62,7 @@
     "redux-saga": "^1.3.0",
     "sass": "^1.93.2",
     "txt2bas": "^1.22.3",
-    "zmakebas": "0.0.1-alpha.4"
+    "zmakebas": "1.3.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.28.3",

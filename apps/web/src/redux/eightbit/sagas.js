@@ -11,7 +11,6 @@ import {getZ88dkTap} from "./z88dkCompile";
 import {getSjasmplusTap} from "./sjasmplusCompile";
 import {getPascalTap} from "./pascalCompile";
 import {toActionFiles, toWorkerUpdates, toSdFiles, sdFileNameErrors} from "./compileFiles";
-import {expandPasmoIncludes} from "./pasmoIncludes";
 import {store} from "../store";
 import {
     actionTypes,
@@ -233,12 +232,16 @@ function* handleGetProjectTapActions(_) {
         let tap;
         switch (lang) {
             case 'asm':
-                // Pasmo — its emscripten FS only ever holds the main source,
-                // so project INCLUDE/INCBIN files are inlined first
-                // (pasmoIncludes.js).
+                // Pasmo — project files are staged into the emscripten
+                // module's virtual FS at their folder/name paths (pasmo
+                // 0.0.1-alpha.7's files map), so INCLUDE/INCBIN resolve
+                // natively and diagnostics carry each file's own name and
+                // line numbers.
                 try {
                     const projectFiles = yield select((state) => state.project.files);
-                    tap = yield call(getPasmoTap, expandPasmoIncludes(code, projectFiles));
+                    const pasmoFiles = Object.fromEntries(
+                        toWorkerUpdates(projectFiles).map((u) => [u.path, u.data]));
+                    tap = yield call(getPasmoTap, code, pasmoFiles);
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
