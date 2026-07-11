@@ -1,11 +1,13 @@
 import reducer from "./reducers";
 import {
     toggleBreakpoint,
+    toggleAddrBreakpoint,
+    clearBreakpoints,
     sourceMapLoaded,
     sourceMapCleared,
     closeDebugger,
 } from "./actions";
-import {setCode} from "../project/actions";
+import {setCode, receiveLoadedProject} from "../project/actions";
 import {parseSld} from "../../lib/debugger/sld";
 
 // Minimal real-shaped map: code on lines 4 and 15, nothing after 15.
@@ -147,5 +149,103 @@ describe("multi-file breakpoints", () => {
             {file: null, line: 4},
             {file: "part.asm", line: 2},
         ]);
+    });
+});
+
+// (id, title, lang, code) is all the debugger slice looks at.
+const loadedProject = (id) => receiveLoadedProject(id, "Title", "asm", "");
+
+describe("breakpoint persistence (#104)", () => {
+    beforeEach(() => localStorage.clear());
+
+    test("dots survive a refresh of the same project", () => {
+        let state = reducer(undefined, loadedProject("p1"));
+        state = reducer(state, toggleBreakpoint(4));
+        state = reducer(state, toggleBreakpoint(2, "part.asm"));
+        state = reducer(state, toggleAddrBreakpoint(0x8000));
+        // A refresh is a fresh store meeting the same project load.
+        const restored = reducer(undefined, loadedProject("p1"));
+        expect(restored.breakpoints).toEqual([
+            {file: null, line: 4},
+            {file: "part.asm", line: 2},
+        ]);
+        expect(restored.addrBreakpoints).toEqual([0x8000]);
+    });
+
+    test("toggling a dot off and clearing both persist", () => {
+        let state = reducer(undefined, loadedProject("p1"));
+        state = reducer(state, toggleBreakpoint(4));
+        state = reducer(state, toggleBreakpoint(4));
+        expect(reducer(undefined, loadedProject("p1")).breakpoints).toEqual([]);
+        state = reducer(state, toggleBreakpoint(7));
+        state = reducer(state, toggleAddrBreakpoint(0x9000));
+        reducer(state, clearBreakpoints());
+        const restored = reducer(undefined, loadedProject("p1"));
+        expect(restored.breakpoints).toEqual([]);
+        expect(restored.addrBreakpoints).toEqual([]);
+        // A project with no breakpoints left holds no storage entry at all.
+        expect(localStorage.getItem("projectBreakpoints")).toBe("{}");
+    });
+
+    test("projects keep separate dots and switching restores each set", () => {
+        let state = reducer(undefined, loadedProject("p1"));
+        state = reducer(state, toggleBreakpoint(4));
+        state = reducer(state, loadedProject("p2"));
+        // The switch starts p2 clean rather than leaking p1's dot.
+        expect(state.breakpoints).toEqual([]);
+        state = reducer(state, toggleBreakpoint(9));
+        state = reducer(state, loadedProject("p1"));
+        expect(state.breakpoints).toEqual([{file: null, line: 4}]);
+        state = reducer(state, loadedProject("p2"));
+        expect(state.breakpoints).toEqual([{file: null, line: 9}]);
+    });
+
+    test("revisiting the loaded project keeps live state untouched", () => {
+        let state = reducer(undefined, loadedProject("p1"));
+        state = reducer(state, sourceMapLoaded(parseSld(SLD)));
+        state = reducer(state, toggleBreakpoint(4));
+        const revisited = reducer(state, loadedProject("p1"));
+        expect(revisited).toBe(state);
+    });
+
+    test("switching projects drops the old project's source map", () => {
+        let state = reducer(undefined, loadedProject("p1"));
+        state = reducer(state, sourceMapLoaded(parseSld(SLD)));
+        state = reducer(state, loadedProject("p2"));
+        expect(state.sourceMap).toBeNull();
+    });
+
+    test("re-anchored dots are what a refresh restores", () => {
+        let state = reducer(undefined, loadedProject("p1"));
+        state = reducer(state, toggleBreakpoint(3));   // label line
+        state = reducer(state, toggleBreakpoint(16));  // past all code
+        reducer(state, sourceMapLoaded(parseSld(SLD)));
+        expect(reducer(undefined, loadedProject("p1")).breakpoints)
+            .toEqual([{file: null, line: 4}]);
+    });
+
+    test("dots set with no project loaded are not saved", () => {
+        reducer(undefined, toggleBreakpoint(4));
+        expect(localStorage.getItem("projectBreakpoints")).toBeNull();
+    });
+
+    test("garbage in storage restores as no breakpoints", () => {
+        localStorage.setItem("projectBreakpoints", "not json");
+        expect(reducer(undefined, loadedProject("p1")).breakpoints).toEqual([]);
+        localStorage.setItem("projectBreakpoints", JSON.stringify({
+            p1: {breakpoints: [{file: 7, line: "x"}, {file: null, line: 4}, null],
+                addrBreakpoints: [0x8000, "no", -1]},
+        }));
+        const restored = reducer(undefined, loadedProject("p1"));
+        expect(restored.breakpoints).toEqual([{file: null, line: 4}]);
+        expect(restored.addrBreakpoints).toEqual([0x8000]);
+    });
+
+    test("projectId survives closeDebugger so later toggles still save", () => {
+        let state = reducer(undefined, loadedProject("p1"));
+        state = reducer(state, closeDebugger());
+        reducer(state, toggleBreakpoint(4));
+        expect(reducer(undefined, loadedProject("p1")).breakpoints)
+            .toEqual([{file: null, line: 4}]);
     });
 });

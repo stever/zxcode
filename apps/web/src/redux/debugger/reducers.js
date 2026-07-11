@@ -1,6 +1,10 @@
 import {actionTypes} from "./actions";
 import {actionTypes as projectActionTypes} from "../project/actions";
 import {snapLine} from "../../lib/debugger/sld";
+import {
+    loadProjectBreakpoints,
+    saveProjectBreakpoints,
+} from "../../lib/debugger/breakpointStorage";
 
 // -----------------------------------------------------------------------------
 // Initial state
@@ -34,10 +38,14 @@ const initialState = {
     // highlight follows the right editor tab in multi-file projects.
     pausedLine: null,
     pausedFile: null,
+    // The loaded project's id — the key breakpoints persist under (#104).
+    // Null until a project loads; dots set with no project are not saved.
+    projectId: null,
     // Source-line breakpoints ({file, line}); `file` is null for the main
     // source or an additional project file's name (#79). On the real backend
     // they arm through sourceMap; without one (or with a stale one) they are
-    // stored but inert.
+    // stored but inert. Persisted per project (#104) so they survive a page
+    // refresh: every change below rewrites the project's localStorage entry.
     breakpoints: [],
     // Parsed SLD map from the last successful sjasmplus compile
     // (lib/debugger/sld.js shape plus `stale`). Belongs to the loaded
@@ -87,6 +95,7 @@ export default function debuggerReducer(state = initialState, action) {
             // else resets.
             return {
                 ...initialState,
+                projectId: state.projectId,
                 breakpoints: state.breakpoints,
                 addrBreakpoints: state.addrBreakpoints,
                 sourceMap: state.sourceMap,
@@ -156,6 +165,7 @@ export default function debuggerReducer(state = initialState, action) {
                     (bp) => !(bp.line === line && bp.file === file))
                 : [...state.breakpoints, {file, line}].sort(
                     (a, b) => (a.file ?? '').localeCompare(b.file ?? '') || a.line - b.line);
+            saveProjectBreakpoints(state.projectId, breakpoints, state.addrBreakpoints);
             return {...state, breakpoints};
         }
         case actionTypes.toggleAddrBreakpoint: {
@@ -163,9 +173,11 @@ export default function debuggerReducer(state = initialState, action) {
             const addrBreakpoints = exists
                 ? state.addrBreakpoints.filter((a) => a !== action.address)
                 : [...state.addrBreakpoints, action.address].sort((a, b) => a - b);
+            saveProjectBreakpoints(state.projectId, state.breakpoints, addrBreakpoints);
             return {...state, addrBreakpoints};
         }
         case actionTypes.clearBreakpoints:
+            saveProjectBreakpoints(state.projectId, [], []);
             return {...state, breakpoints: [], addrBreakpoints: []};
         case actionTypes.setDebugTab:
             return {...state, selectedTab: action.tab};
@@ -204,11 +216,30 @@ export default function debuggerReducer(state = initialState, action) {
                 }
                 breakpoints = [...locs.values()].sort(
                     (a, b) => (a.file ?? '').localeCompare(b.file ?? '') || a.line - b.line);
+                saveProjectBreakpoints(state.projectId, breakpoints, state.addrBreakpoints);
             }
             return {...state, sourceMap, breakpoints};
         }
         case actionTypes.sourceMapCleared:
             return state.sourceMap ? {...state, sourceMap: null} : state;
+        case projectActionTypes.receiveLoadedProject: {
+            // A project arrived from the server. Revisiting the one already
+            // loaded (e.g. back from the About page) keeps the live dots and
+            // map untouched; a genuinely different project restores its own
+            // saved breakpoints (#104) — empty when it has none, which also
+            // stops dots leaking between projects — and drops the old
+            // project's source map, which describes a program this one never
+            // compiled.
+            if (action.id === state.projectId) return state;
+            const saved = loadProjectBreakpoints(action.id);
+            return {
+                ...state,
+                projectId: action.id,
+                breakpoints: saved.breakpoints,
+                addrBreakpoints: saved.addrBreakpoints,
+                sourceMap: null,
+            };
+        }
         case projectActionTypes.setCode:
         case projectActionTypes.setFileContent:
             // Any edit after the compile — main source or an additional

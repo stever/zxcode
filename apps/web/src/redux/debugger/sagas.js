@@ -94,6 +94,9 @@ function* handlePausedFileFollow(action) {
     }
 }
 
+// receiveLoadedProject is here because loading a different project replaces
+// the breakpoint set (restored from the new project's saved dots, #104); a
+// session left open across the switch must re-arm from the new set.
 // noinspection JSUnusedGlobalSymbols
 export function* watchForBreakpointChanges() {
     yield takeEvery(
@@ -101,6 +104,7 @@ export function* watchForBreakpointChanges() {
             actionTypes.toggleBreakpoint,
             actionTypes.toggleAddrBreakpoint,
             actionTypes.clearBreakpoints,
+            projectActionTypes.receiveLoadedProject,
         ],
         handleBreakpointChanges);
 }
@@ -125,6 +129,8 @@ export function* watchForPanelRefresh() {
 // case), which reaches the session as null so its line breakpoints disarm.
 // The edit actions fire per keystroke but only the first one changes
 // anything; the rest fall through the no-change guard in the handler.
+// Loading a different project drops the map (the reducer's
+// receiveLoadedProject case), which must reach the session the same way.
 // noinspection JSUnusedGlobalSymbols
 export function* watchForSourceMapChanges() {
     yield takeEvery(
@@ -133,6 +139,7 @@ export function* watchForSourceMapChanges() {
             actionTypes.sourceMapCleared,
             projectActionTypes.setCode,
             projectActionTypes.setFileContent,
+            projectActionTypes.receiveLoadedProject,
         ],
         handleSourceMapChanges);
 }
