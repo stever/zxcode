@@ -196,7 +196,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r35-sd-zip';
+        const ENGINE_REV = 'r36-nex-game-zip';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -648,6 +648,33 @@ export class GoEmulator extends EventEmitter {
         this.emit('setMachine', 'next');
     }
 
+    // Open a folder-distributed Next game: a zip holding one .nex plus its
+    // data files — the layout a player unzips onto a real card and runs from
+    // the game's own folder. Stage every non-.nex entry onto the SD card at
+    // its path relative to the .nex's folder: the imported game runs from the
+    // card root (importAndRunNex copies it to /zx.nex), so its relative LOADs
+    // resolve against the same layout. Staging happens before zxRunNex — its
+    // reboot re-reads the card. The card's FAT writer takes 8.3 names only;
+    // entries that don't fit are skipped with a warning rather than failing
+    // the load (a skipped file only matters if the game LOADs it, which then
+    // fails visibly in-game; the .nex's own name is irrelevant — the import
+    // renames it).
+    async openNexGameZip(entries, nexEntry) {
+        await this.whenMachineReady();
+        if (this.machineType !== 'next') await this.bootNext();
+        const nexDir = nexEntry.path.slice(0, nexEntry.path.lastIndexOf('/') + 1);
+        for (const { path, file } of entries) {
+            if (path === nexEntry.path) continue;
+            const rel = path.startsWith(nexDir) ? path.slice(nexDir.length) : path;
+            const err = globalThis.zxPutFile(rel, await file.async('uint8array'));
+            if (err) console.warn(`zxplay: SD stage skipped "${rel}": ${err}`);
+        }
+        const err = globalThis.zxRunNex(
+            nexEntry.path.split('/').pop(), await nexEntry.file.async('uint8array'));
+        if (err) throw new Error(err);
+        return { mediaType: 'nex' };
+    }
+
     // Open a .nex: needs the Next, so switch to it first if required, then
     // hand the file to the core — it copies it onto the SD card and drives
     // NextZXOS's own .nexload command to run it (expect a short reboot).
@@ -791,14 +818,26 @@ export class GoEmulator extends EventEmitter {
         } else if (cleanName.endsWith('.zip')) {
             return async arrayBuffer => {
                 const zip = await JSZip.loadAsync(arrayBuffer);
-                const openers = [];
+                const entries = [];
                 zip.forEach((path, file) => {
-                    if (path.startsWith('__MACOSX/')) return;
+                    if (file.dir || path.startsWith('__MACOSX/')) return;
+                    entries.push({ path, file });
+                });
+                // A zip holding exactly one .nex is a folder-distributed Next
+                // game: its other entries are the game's data files, staged
+                // onto the SD card before the .nex runs. Anything else keeps
+                // the single-program behaviour (e.g. a .tap inside a zip).
+                const nexes = entries.filter((e) => e.path.toLowerCase().endsWith('.nex'));
+                if (nexes.length === 1) {
+                    return this.openNexGameZip(entries, nexes[0]);
+                }
+                const openers = [];
+                for (const { path, file } of entries) {
                     const opener = this.getFileOpener(path);
                     if (opener) {
                         openers.push(async () => opener(await file.async('arraybuffer')));
                     }
-                });
+                }
                 if (openers.length == 1) {
                     return openers[0]();
                 } else if (openers.length == 0) {
