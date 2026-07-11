@@ -82,7 +82,8 @@
     "starredProjects": "Oblíbené projekty ({{count}})",
     "noStarred": "Zatím žádné oblíbené projekty",
     "noStarredOwn": "Projekty, které označíte hvězdičkou, se zobrazí zde",
-    "allProjects": "Vše"
+    "allProjects": "Vše",
+    "notInFolder": "Bez složky"
   },
   "about": {
     "createProjects": "Vytváření projektů",
@@ -197,7 +198,6 @@
     "noneHint": "Vytvořte svůj první projekt z nabídky Nový projekt.",
     "noMatches": "Hledání neodpovídá žádný projekt.",
     "actions": "Akce projektu",
-    "folder": "Složka",
     "allFolders": "Všechny složky",
     "noFolder": "Bez složky",
     "moveToFolder": "Přesunout do složky",
@@ -209,7 +209,10 @@
     "folderPublic": "Veřejná složka (zobrazuje se na vašem profilu)",
     "folderPrivate": "Soukromá složka",
     "deleteFolderConfirm": "Smazat tuto složku? Projekty v ní zůstanou zachovány.",
-    "noFoldersYet": "Zatím žádné složky."
+    "noFoldersYet": "Zatím žádné složky.",
+    "allVisibility": "Veškerá viditelnost",
+    "visibilityPublic": "Veřejné",
+    "visibilityPrivate": "Soukromé"
   },
   "feed": {
     "none": "Zatím žádná aktivita",

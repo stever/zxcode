@@ -82,7 +82,8 @@
     "starredProjects": "Proyectos destacados ({{count}})",
     "noStarred": "Aún no hay proyectos destacados",
     "noStarredOwn": "Los proyectos que destaques aparecerán aquí",
-    "allProjects": "Todos"
+    "allProjects": "Todos",
+    "notInFolder": "Sin carpeta"
   },
   "about": {
     "createProjects": "Crear proyectos",
@@ -197,7 +198,6 @@
     "noneHint": "Crea tu primer proyecto desde el menú Nuevo proyecto.",
     "noMatches": "Ningún proyecto coincide con tu búsqueda.",
     "actions": "Acciones del proyecto",
-    "folder": "Carpeta",
     "allFolders": "Todas las carpetas",
     "noFolder": "Sin carpeta",
     "moveToFolder": "Mover a carpeta",
@@ -209,7 +209,10 @@
     "folderPublic": "Carpeta pública (visible en tu perfil)",
     "folderPrivate": "Carpeta privada",
     "deleteFolderConfirm": "¿Eliminar esta carpeta? Los proyectos que contiene se conservan.",
-    "noFoldersYet": "Aún no hay carpetas."
+    "noFoldersYet": "Aún no hay carpetas.",
+    "allVisibility": "Toda la visibilidad",
+    "visibilityPublic": "Público",
+    "visibilityPrivate": "Privado"
   },
   "feed": {
     "none": "Aún no hay actividad",

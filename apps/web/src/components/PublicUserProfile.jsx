@@ -196,6 +196,34 @@ const GET_PUBLIC_PROJECTS_IN_FOLDER = gql`
   }
 `;
 
+// The same page narrowed to projects not filed under any folder.
+const GET_PUBLIC_PROJECTS_NO_FOLDER = gql`
+  query GetUserPublicProjectsNoFolder($user_id: uuid!, $limit: Int!, $offset: Int!) {
+    project_aggregate(
+      where: { owner_user_id: { _eq: $user_id }, is_public: { _eq: true }, folder_id: { _is_null: true } }
+    ) {
+      aggregate {
+        count
+      }
+    }
+    project(
+      where: { owner_user_id: { _eq: $user_id }, is_public: { _eq: true }, folder_id: { _is_null: true } }
+      order_by: [{ display_order: asc }, { updated_at: desc }]
+      limit: $limit
+      offset: $offset
+    ) {
+      project_id
+      title
+      slug
+      lang
+      machine
+      updated_at
+      created_at
+      display_order
+    }
+  }
+`;
+
 // The owner's public folders, shown as filter chips over the projects tab.
 // RLS hides private folders from everyone but the owner; the explicit
 // is_public filter keeps the owner's own view identical to their visitors'.
@@ -277,7 +305,7 @@ function SortableProjectCard({ project, projectUrl, isDragging, onStarToggle }) 
   return (
     <div ref={setNodeRef} style={style}>
       <Card
-        className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer card-bg-dark"
+        className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer card-bg-dark project-card"
         style={{
           border: "none",
           position: "relative",
@@ -341,14 +369,17 @@ export default function PublicUserProfile() {
   const [publicPage, setPublicPage] = useState(0);
   const [publicLoading, setPublicLoading] = useState(true);
   // The owner's public folders; ?folder=<id> narrows the projects tab so a
-  // folder view is linkable. An id not in the list (private, deleted) falls
-  // back to the unfiltered view.
+  // folder view is linkable, and ?folder=none shows only unfiled projects. An
+  // id that isn't a known public folder (private, deleted) falls back to the
+  // unfiltered view.
   const [publicFolders, setPublicFolders] = useState([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const folderParam = searchParams.get("folder");
-  const folderFilter = publicFolders.some((f) => f.folder_id === folderParam)
-    ? folderParam
-    : null;
+  const folderFilter =
+    folderParam === "none" ||
+    publicFolders.some((f) => f.folder_id === folderParam)
+      ? folderParam
+      : null;
   const [starredProjects, setStarredProjects] = useState([]);
   const [starredTotal, setStarredTotal] = useState(0);
   const [starredPage, setStarredPage] = useState(0);
@@ -489,18 +520,27 @@ export default function PublicUserProfile() {
     (async () => {
       try {
         setPublicLoading(true);
-        const response = folderFilter
-          ? await gqlFetch(null, GET_PUBLIC_PROJECTS_IN_FOLDER, {
-              user_id: user.user_id,
-              folder_id: folderFilter,
-              limit: PAGE_SIZE,
-              offset: publicPage * PAGE_SIZE,
-            })
-          : await gqlFetch(null, GET_PUBLIC_PROJECTS, {
-              user_id: user.user_id,
-              limit: PAGE_SIZE,
-              offset: publicPage * PAGE_SIZE,
-            });
+        let response;
+        if (folderFilter === "none") {
+          response = await gqlFetch(null, GET_PUBLIC_PROJECTS_NO_FOLDER, {
+            user_id: user.user_id,
+            limit: PAGE_SIZE,
+            offset: publicPage * PAGE_SIZE,
+          });
+        } else if (folderFilter) {
+          response = await gqlFetch(null, GET_PUBLIC_PROJECTS_IN_FOLDER, {
+            user_id: user.user_id,
+            folder_id: folderFilter,
+            limit: PAGE_SIZE,
+            offset: publicPage * PAGE_SIZE,
+          });
+        } else {
+          response = await gqlFetch(null, GET_PUBLIC_PROJECTS, {
+            user_id: user.user_id,
+            limit: PAGE_SIZE,
+            offset: publicPage * PAGE_SIZE,
+          });
+        }
         if (cancelled) return;
         setPublicProjects(response?.data?.project || []);
         setPublicTotal(
@@ -522,6 +562,11 @@ export default function PublicUserProfile() {
     setSearchParams(folderId ? { folder: folderId } : {}, { replace: true });
     setPublicPage(0);
   };
+
+  // The base theme's secondary button is pink, which reads as a warning next
+  // to the cyan selected chip. Force the muted grey the follow button uses.
+  const folderChipStyle = (selected) =>
+    selected ? {} : { color: "#6c757d", borderColor: "#6c757d" };
 
   // Fetch a page of the projects the owner has starred. Re-runs when the starred
   // tab is opened or after a star/unstar (via starredRefresh).
@@ -881,7 +926,7 @@ export default function PublicUserProfile() {
         </div>
 
         <div className="col-12 lg:col-9 pt-2">
-          <Card>
+          <Card className="compact-card">
             <TabView activeIndex={activeTab} onTabChange={handleTabChange}>
               <TabPanel
                 header={t("profile.publicProjects", { count: publicTotal })}
@@ -898,10 +943,10 @@ export default function PublicUserProfile() {
                   <div className="flex flex-wrap gap-2 mb-3">
                     <Button
                       label={t("profile.allProjects")}
-                      className={
-                        "p-button-sm p-button-rounded" +
-                        (folderFilter ? " p-button-outlined p-button-secondary" : "")
-                      }
+                      className="p-button-sm p-button-rounded"
+                      outlined={folderFilter !== null}
+                      severity={folderFilter !== null ? "secondary" : undefined}
+                      style={folderChipStyle(folderFilter === null)}
                       onClick={() => selectFolder(null)}
                     />
                     {publicFolders.map((folder) => (
@@ -909,15 +954,24 @@ export default function PublicUserProfile() {
                         key={folder.folder_id}
                         label={folder.name}
                         icon="pi pi-folder"
-                        className={
-                          "p-button-sm p-button-rounded" +
-                          (folderFilter === folder.folder_id
-                            ? ""
-                            : " p-button-outlined p-button-secondary")
+                        className="p-button-sm p-button-rounded"
+                        outlined={folderFilter !== folder.folder_id}
+                        severity={
+                          folderFilter !== folder.folder_id ? "secondary" : undefined
                         }
+                        style={folderChipStyle(folderFilter === folder.folder_id)}
                         onClick={() => selectFolder(folder.folder_id)}
                       />
                     ))}
+                    <Button
+                      label={t("profile.notInFolder")}
+                      icon="pi pi-folder-open"
+                      className="p-button-sm p-button-rounded"
+                      outlined={folderFilter !== "none"}
+                      severity={folderFilter !== "none" ? "secondary" : undefined}
+                      style={folderChipStyle(folderFilter === "none")}
+                      onClick={() => selectFolder("none")}
+                    />
                   </div>
                 )}
                 {publicLoading && publicProjects.length === 0 ? (
@@ -982,7 +1036,7 @@ export default function PublicUserProfile() {
                     rows={PAGE_SIZE}
                     totalRecords={publicTotal}
                     onPageChange={(e) => setPublicPage(e.page)}
-                    className="mt-3"
+                    className="mt-2"
                   />
                 )}
               </TabPanel>
@@ -1028,7 +1082,7 @@ export default function PublicUserProfile() {
                     rows={PAGE_SIZE}
                     totalRecords={starredTotal}
                     onPageChange={(e) => setStarredPage(e.page)}
-                    className="mt-3"
+                    className="mt-2"
                   />
                 )}
               </TabPanel>

@@ -89,7 +89,8 @@
     "starredProjects": "Starred Projects ({{count}})",
     "noStarred": "No starred projects yet",
     "noStarredOwn": "Projects you star will appear here",
-    "allProjects": "All"
+    "allProjects": "All",
+    "notInFolder": "Not in a folder"
   },
   "about": {
     "createProjects": "Create Projects",
@@ -226,7 +227,6 @@
     "noneHint": "Create your first project from the New Project menu.",
     "noMatches": "No projects match your search.",
     "actions": "Project actions",
-    "folder": "Folder",
     "allFolders": "All folders",
     "noFolder": "Not in a folder",
     "moveToFolder": "Move to folder",
@@ -238,7 +238,10 @@
     "folderPublic": "Public folder (shown on your profile)",
     "folderPrivate": "Private folder",
     "deleteFolderConfirm": "Delete this folder? The projects inside are kept.",
-    "noFoldersYet": "No folders yet."
+    "noFoldersYet": "No folders yet.",
+    "allVisibility": "All visibility",
+    "visibilityPublic": "Public",
+    "visibilityPrivate": "Private"
   },
   "feed": {
     "none": "No activity yet",

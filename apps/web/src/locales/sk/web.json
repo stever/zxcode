@@ -82,7 +82,8 @@
     "starredProjects": "Obľúbené projekty ({{count}})",
     "noStarred": "Zatiaľ žiadne obľúbené projekty",
     "noStarredOwn": "Projekty, ktoré označíte hviezdičkou, sa zobrazia tu",
-    "allProjects": "Všetko"
+    "allProjects": "Všetko",
+    "notInFolder": "Bez priečinka"
   },
   "about": {
     "createProjects": "Vytvárať projekty",
@@ -197,7 +198,6 @@
     "noneHint": "Vytvorte svoj prvý projekt z ponuky Nový projekt.",
     "noMatches": "Vyhľadávaniu nezodpovedá žiadny projekt.",
     "actions": "Akcie projektu",
-    "folder": "Priečinok",
     "allFolders": "Všetky priečinky",
     "noFolder": "Bez priečinka",
     "moveToFolder": "Presunúť do priečinka",
@@ -209,7 +209,10 @@
     "folderPublic": "Verejný priečinok (zobrazuje sa na vašom profile)",
     "folderPrivate": "Súkromný priečinok",
     "deleteFolderConfirm": "Odstrániť tento priečinok? Projekty v ňom zostanú zachované.",
-    "noFoldersYet": "Zatiaľ žiadne priečinky."
+    "noFoldersYet": "Zatiaľ žiadne priečinky.",
+    "allVisibility": "Všetka viditeľnosť",
+    "visibilityPublic": "Verejné",
+    "visibilityPrivate": "Súkromné"
   },
   "feed": {
     "none": "Zatiaľ žiadna aktivita",

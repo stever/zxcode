@@ -81,6 +81,8 @@ export default function ProjectList() {
   const [langFilter, setLangFilter] = useState(null);
   // null = all projects, "none" = unfiled only, otherwise a folder_id.
   const [folderFilter, setFolderFilter] = useState(null);
+  // null = all, true = public only, false = private only.
+  const [visibilityFilter, setVisibilityFilter] = useState(null);
   const [showFolders, setShowFolders] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
 
@@ -115,7 +117,7 @@ export default function ProjectList() {
   // jump back to the first page whenever the filters change.
   useEffect(() => {
     setFirst(0);
-  }, [query, langFilter, folderFilter]);
+  }, [query, langFilter, folderFilter, visibilityFilter]);
 
   // Deleting the selected folder (live push) must not leave a dangling filter.
   useEffect(() => {
@@ -151,11 +153,6 @@ export default function ProjectList() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [projects]);
 
-  const folderNames = useMemo(
-    () => new Map(folders.map((f) => [f.folder_id, f.name])),
-    [folders]
-  );
-
   const folderOptions = useMemo(
     () => [
       { label: t("projectList.noFolder"), value: "none" },
@@ -164,25 +161,30 @@ export default function ProjectList() {
     [folders, t]
   );
 
+  const visibilityOptions = useMemo(
+    () => [
+      { label: t("projectList.visibilityPublic"), value: true },
+      { label: t("projectList.visibilityPrivate"), value: false },
+    ],
+    [t]
+  );
+
   const filtered = useMemo(() => {
     if (!projects) return [];
     const q = query.trim().toLowerCase();
     return projects
-      .map((p) => ({
-        ...p,
-        lang_title: getLanguageLabel(p.lang),
-        folder_name: folderNames.get(p.folder_id) || "",
-      }))
+      .map((p) => ({ ...p, lang_title: getLanguageLabel(p.lang) }))
       .filter(
         (p) =>
           (!q || p.title.toLowerCase().includes(q)) &&
           (!langFilter || p.lang === langFilter) &&
+          (visibilityFilter === null || p.is_public === visibilityFilter) &&
           (!folderFilter ||
             (folderFilter === "none"
               ? !p.folder_id
               : p.folder_id === folderFilter))
       );
-  }, [projects, query, langFilter, folderFilter, folderNames]);
+  }, [projects, query, langFilter, visibilityFilter, folderFilter]);
 
   const gridSorted = useMemo(
     () => sortProjects(filtered, gridSortKey),
@@ -445,6 +447,13 @@ export default function ProjectList() {
           placeholder={t("projectList.allCompilers")}
           showClear
         />
+        <Dropdown
+          value={visibilityFilter}
+          options={visibilityOptions}
+          onChange={(e) => setVisibilityFilter(e.value ?? null)}
+          placeholder={t("projectList.allVisibility")}
+          showClear
+        />
         {folders.length > 0 && (
           <Dropdown
             value={folderFilter}
@@ -500,7 +509,6 @@ export default function ProjectList() {
                 project={project}
                 projectUrl={projectUrl(project)}
                 showPublic
-                folderName={folderFilter ? undefined : project.folder_name}
                 onMenuClick={openMenu}
               />
             ))}
@@ -542,14 +550,6 @@ export default function ProjectList() {
             <Column
               field="lang_title"
               header={t("projectList.compiler")}
-              className="col-width-22"
-              sortable
-            />
-          )}
-          {!isMobile && folders.length > 0 && (
-            <Column
-              field="folder_name"
-              header={t("projectList.folder")}
               className="col-width-22"
               sortable
             />

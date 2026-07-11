@@ -82,7 +82,8 @@
     "starredProjects": "Proiecte favorite ({{count}})",
     "noStarred": "Încă nu există proiecte favorite",
     "noStarredOwn": "Proiectele pe care le marcați vor apărea aici",
-    "allProjects": "Toate"
+    "allProjects": "Toate",
+    "notInFolder": "Fără dosar"
   },
   "about": {
     "createProjects": "Creează proiecte",
@@ -197,7 +198,6 @@
     "noneHint": "Creează primul tău proiect din meniul Proiect nou.",
     "noMatches": "Niciun proiect nu corespunde căutării.",
     "actions": "Acțiuni proiect",
-    "folder": "Dosar",
     "allFolders": "Toate dosarele",
     "noFolder": "Fără dosar",
     "moveToFolder": "Mută în dosar",
@@ -209,7 +209,10 @@
     "folderPublic": "Dosar public (afișat pe profilul tău)",
     "folderPrivate": "Dosar privat",
     "deleteFolderConfirm": "Ștergi acest dosar? Proiectele din el se păstrează.",
-    "noFoldersYet": "Încă nu există dosare."
+    "noFoldersYet": "Încă nu există dosare.",
+    "allVisibility": "Toată vizibilitatea",
+    "visibilityPublic": "Public",
+    "visibilityPrivate": "Privat"
   },
   "feed": {
     "none": "Încă nu există activitate",

@@ -150,6 +150,30 @@
     font-weight: 600;
 }
 
+// Compact card: trim the generous default body/content padding so panels like
+// the profile projects tab don't waste vertical space above the tabs and below
+// the paginator. The `>` combinators keep this to the card's own body/content
+// so it never cascades into project cards nested inside the panel.
+.p-card.compact-card {
+    > .p-card-body { padding: 0.75rem 1rem; }
+    > .p-card-body > .p-card-content { padding: 0.25rem 0 0; }
+
+    // Pull the tab strip up to the card's top edge.
+    .p-tabview .p-tabview-nav { padding-top: 0; }
+    .p-tabview .p-tabview-panels { padding-bottom: 0; }
+}
+
+// Project cards: give the tag row (pulled up by its own negative margin) a
+// little more breathing room at the top, and drop the redundant bottom padding
+// below the "updated" line. Direct children so it only touches the card's own
+// content box.
+.p-card.project-card > .p-card-body > .p-card-content {
+    // 0.5rem here + the body's 1rem padding - the tag row's -0.5rem margin
+    // leaves the tags the same 1rem from the top as from the left.
+    padding-top: 0.5rem;
+    padding-bottom: 0;
+}
+
 // Dropdown panels: match the header tone (the base theme uses a cooler grey)
 // and round the corners to fit the rest of the UI. Items shrink slightly to
 // relate to the menu bar.

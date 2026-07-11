@@ -82,7 +82,8 @@
     "starredProjects": "Любими проекти ({{count}})",
     "noStarred": "Все още няма любими проекти",
     "noStarredOwn": "Проектите, които отбележите, ще се показват тук",
-    "allProjects": "Всички"
+    "allProjects": "Всички",
+    "notInFolder": "Без папка"
   },
   "about": {
     "createProjects": "Създаване на проекти",
@@ -197,7 +198,6 @@
     "noneHint": "Създайте първия си проект от менюто Нов проект.",
     "noMatches": "Няма проекти, отговарящи на търсенето.",
     "actions": "Действия по проекта",
-    "folder": "Папка",
     "allFolders": "Всички папки",
     "noFolder": "Без папка",
     "moveToFolder": "Премести в папка",
@@ -209,7 +209,10 @@
     "folderPublic": "Публична папка (показва се в профила ви)",
     "folderPrivate": "Лична папка",
     "deleteFolderConfirm": "Да се изтрие ли тази папка? Проектите в нея се запазват.",
-    "noFoldersYet": "Все още няма папки."
+    "noFoldersYet": "Все още няма папки.",
+    "allVisibility": "Всякаква видимост",
+    "visibilityPublic": "Публични",
+    "visibilityPrivate": "Лични"
   },
   "feed": {
     "none": "Все още няма активност",

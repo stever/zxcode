@@ -46,9 +46,7 @@ function getMachineBadge(machine) {
 // owner's own project browser, where public is the exception; feed/profile
 // cards are all public so they don't pass it. onMenuClick, when given, adds a
 // "..." button to the tag row (the browser's rename/copy/delete menu).
-// folderName, when given, adds a folder badge (the owner's project browser in
-// its unfiltered view).
-export function ProjectCardBody({ project, author, onStarToggle, showPublic, onMenuClick, folderName }) {
+export function ProjectCardBody({ project, author, onStarToggle, showPublic, onMenuClick }) {
   const { t } = useTranslation();
   const locale = useDateFnsLocale();
   const machineBadge = getMachineBadge(project.machine);
@@ -76,9 +74,6 @@ export function ProjectCardBody({ project, author, onStarToggle, showPublic, onM
             icon="pi pi-globe"
             className="machine-tag"
           />
-        )}
-        {folderName && (
-          <Tag value={folderName} icon="pi pi-folder" className="machine-tag" />
         )}
         <StarButton projectId={project.project_id} onToggle={onStarToggle} />
         {onMenuClick && (
@@ -138,12 +133,12 @@ export function ProjectCardBody({ project, author, onStarToggle, showPublic, onM
 // Read-only project card shared by the activity feed, the public profile
 // (other users' public projects and starred projects) and the owner's own
 // project browser (which passes showPublic).
-export default function ProjectCard({ project, projectUrl, author, onStarToggle, showPublic, onMenuClick, folderName }) {
+export default function ProjectCard({ project, projectUrl, author, onStarToggle, showPublic, onMenuClick }) {
   return (
     <div style={{ flexBasis: "400px", flexGrow: 0, flexShrink: 0 }}>
       <Link to={projectUrl} className="no-underline">
         <Card
-          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark"
+          className="h-full hover:shadow-5 transition-all transition-duration-200 cursor-pointer overflow-hidden card-bg-dark project-card"
           style={{ border: "none" }}
         >
           <ProjectCardBody
@@ -152,7 +147,6 @@ export default function ProjectCard({ project, projectUrl, author, onStarToggle,
             onStarToggle={onStarToggle}
             showPublic={showPublic}
             onMenuClick={onMenuClick}
-            folderName={folderName}
           />
         </Card>
       </Link>
