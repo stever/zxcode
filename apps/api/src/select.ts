@@ -127,7 +127,18 @@ export function buildSelection(
                 throw new GraphQLError(`field '${name}' not found in type: '${table}'`);
             }
             addColumn(name);
-            shapers.push({ out: name, apply: (row) => row[name] });
+            // Own-row-only columns (PII) read as null on any row that is not
+            // the caller's own; the columns needed to decide that ride along.
+            if (rule.ownOnlyColumns?.includes(name)) {
+                for (const column of rule.ownRowColumns ?? []) addColumn(column);
+                const isOwnRow = rule.ownRow ?? (() => false);
+                shapers.push({
+                    out: name,
+                    apply: (row) => (isOwnRow(row, ctx.session) ? row[name] : null),
+                });
+            } else {
+                shapers.push({ out: name, apply: (row) => row[name] });
+            }
             continue;
         }
 
@@ -144,7 +155,7 @@ export function buildSelection(
             const args = fieldArgs(field, ctx.variables);
             const where = andWhere(
                 targetRule.filter(ctx.session),
-                translateBoolExp(relation.table, args.where as Row | undefined),
+                translateBoolExp(relation.table, args.where as Row | undefined, ctx.session),
             );
             const countSelect = ((select._count as Row | undefined)?.select ?? {}) as Row;
             countSelect[relation.prismaField] =
@@ -193,7 +204,7 @@ export function buildSelection(
                 const args = fieldArgs(field, ctx.variables);
                 const where = andWhere(
                     targetRule.filter(ctx.session),
-                    translateBoolExp(relation.table, args.where as Row | undefined),
+                    translateBoolExp(relation.table, args.where as Row | undefined, ctx.session),
                 );
                 const { native, aggregateMax } = translateOrderBy(
                     relation.table,

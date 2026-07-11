@@ -320,6 +320,33 @@ describe("public role reads (apps/web anonymous + gif-service)", () => {
         expect(forbidden.errors?.[0]?.message).toMatch(/email_address/);
     });
 
+    it("cannot filter on unreadable columns or reach private rows via relations", async () => {
+        // Filtering on email_address (not a public-readable column) must be
+        // rejected, so it cannot be used as an email-existence oracle.
+        const emailOracle = await gql(
+            `query ($email: String!) { user(where: {email_address: {_eq: $email}}) { slug } }`,
+            { email: "alice@example.com" },
+        );
+        expect(emailOracle.errors?.[0]?.message).toMatch(/email_address/);
+
+        // Filtering a visible user through projects must be constrained to
+        // public projects: alice owns a private project "secret", but probing
+        // for it must not single her out.
+        const relationOracle = await data(
+            `query { user(where: {profile_is_public: {_eq: true}, projects: {slug: {_eq: "secret"}}}) { slug } }`,
+        );
+        expect((relationOracle.user as unknown[]).length).toBe(0);
+
+        // The same probe for her *public* project's slug still works (proving
+        // the traversal itself is intact, only the private row is hidden).
+        const publicProbe = await data(
+            `query { user(where: {profile_is_public: {_eq: true}, projects: {slug: {_eq: "public-demo"}}}) { slug } }`,
+        );
+        expect((publicProbe.user as Array<{ slug: string }>).map((u) => u.slug)).toEqual([
+            "alice",
+        ]);
+    });
+
     it("GetText filters by name and langs", async () => {
         const result = await data(
             `query GetText($name: String!, $langs: [String!]!) {
@@ -437,6 +464,39 @@ describe("zxplay-user reads", () => {
         const user = result.user_by_pk as Record<string, unknown>;
         expect(user.email_address).toBe("bob@example.com");
         expect(user.profile_is_public).toBe(false);
+    });
+
+    it("masks other users' email/full_name to null and blocks filtering on them", async () => {
+        // bob reads alice's public profile: PII columns come back null even
+        // though bob's role nominally lists them.
+        const list = await data(
+            `query { user(where: {slug: {_eq: "alice"}}) { slug email_address full_name greeting_name } }`,
+            {},
+            { token: bob.token },
+        );
+        const alice = (list.user as Array<Record<string, unknown>>)[0];
+        expect(alice?.slug).toBe("alice");
+        expect(alice?.greeting_name).toBe("Alice"); // non-PII still visible
+        expect(alice?.email_address).toBeNull();
+        expect(alice?.full_name).toBeNull();
+
+        // bob's own row still exposes his PII.
+        const own = await data(
+            `query { user(where: {slug: {_eq: "bob"}}) { email_address } }`,
+            {},
+            { token: bob.token },
+        );
+        expect((own.user as Array<{ email_address: string }>)[0]?.email_address).toBe(
+            "bob@example.com",
+        );
+
+        // And a zxplay-user cannot filter on email_address (no cross-row oracle).
+        const oracle = await gql(
+            `query { user(where: {email_address: {_eq: "alice@example.com"}}) { slug } }`,
+            {},
+            { token: bob.token },
+        );
+        expect(oracle.errors?.[0]?.message).toMatch(/email_address/);
     });
 
     it("activity feed with _in, owner object and aggregate", async () => {

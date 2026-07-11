@@ -163,7 +163,7 @@ export function makeListResolver(table: string) {
         const { select, shape } = buildSelection(table, selectionOf(info), walkContext(ctx, info));
         const where = andWhere(
             rule.filter(ctx.session),
-            translateBoolExp(table, args.where),
+            translateBoolExp(table, args.where, ctx.session),
         );
         const { native, aggregateMax } = translateOrderBy(table, args.order_by);
         const d = delegate(config.prismaModel);
@@ -215,7 +215,7 @@ export function makeAggregateResolver(table: string) {
         const rule = selectRule(table, ctx.session);
         const count = await delegate(config.prismaModel).count({
             where: emptyToUndefined(
-                andWhere(rule.filter(ctx.session), translateBoolExp(table, args.where)),
+                andWhere(rule.filter(ctx.session), translateBoolExp(table, args.where, ctx.session)),
             ),
         });
         return { aggregate: { count } };
@@ -427,7 +427,7 @@ export function makeUpdateManyResolver(table: string) {
         const data = mapSetData(table, config, rule.columns, args._set);
         const result = await delegate(config.prismaModel).updateMany({
             where: andWhere(
-                translateBoolExp(table, args.where),
+                translateBoolExp(table, args.where, ctx.session),
                 rule.filter(ctx.session),
             ),
             data,
@@ -485,7 +485,7 @@ export function makeDeleteManyResolver(table: string) {
         const config = tableConfig(table);
         const filter = deleteFilterFor(table, config, ctx.session);
         const result = await delegate(config.prismaModel).deleteMany({
-            where: andWhere(translateBoolExp(table, args.where), filter),
+            where: andWhere(translateBoolExp(table, args.where, ctx.session), filter),
         });
         return { affected_rows: result.count };
     };

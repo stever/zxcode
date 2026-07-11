@@ -21,6 +21,14 @@ export interface SelectRule {
     // filter to-one includes) using the columns listed in predicateColumns.
     predicate: (row: Record<string, unknown>, s: Session) => boolean;
     predicateColumns: readonly string[];
+    // Columns visible only on the caller's own row (e.g. a user's own email):
+    // readable in the output but masked to null on any other row, and not
+    // permitted in a `where` (so they cannot become an equality oracle over
+    // other rows). `ownRow` decides which rows count as the caller's own,
+    // using `ownRowColumns`.
+    ownOnlyColumns?: readonly string[];
+    ownRow?: (row: Record<string, unknown>, s: Session) => boolean;
+    ownRowColumns?: readonly string[];
 }
 
 export interface InsertRule {
@@ -102,6 +110,11 @@ const userSelectOwn: SelectRule = {
     predicate: (row, s) =>
         row.profile_is_public === true || row.user_id === s.userId,
     predicateColumns: ["profile_is_public", "user_id"],
+    // full_name/email_address are PII: readable on the caller's own row only,
+    // null on everyone else's, and never usable as a `where` oracle.
+    ownOnlyColumns: ["full_name", "email_address"],
+    ownRow: (row, s) => row.user_id === s.userId,
+    ownRowColumns: ["user_id"],
 };
 
 const PROJECT_COLUMNS = [
