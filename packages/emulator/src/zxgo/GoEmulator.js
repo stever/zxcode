@@ -196,7 +196,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r34-linecall-bps';
+        const ENGINE_REV = 'r35-sd-zip';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -617,8 +617,22 @@ export class GoEmulator extends EventEmitter {
                 if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
                 return new Uint8Array(await r.arrayBuffer());
             };
+            // The SD image is 64MB but mostly empty space — the staged zip is a
+            // ~2.3MB download. Deployments staged before the zip existed only
+            // have the raw image, so fall back to it when the zip is absent.
+            const fetchSd = async () => {
+                const zipped = await fetchBin('tbblue.mmc.zip');
+                if (zipped) {
+                    const zip = await JSZip.loadAsync(zipped);
+                    const entry = zip.file('tbblue.mmc') ||
+                        zip.filter((path) => path.toLowerCase().endsWith('.mmc'))[0];
+                    if (!entry) throw new Error('tbblue.mmc.zip: no .mmc image inside');
+                    return entry.async('uint8array');
+                }
+                return fetchBin('tbblue.mmc');
+            };
             const [zx, mmc, sd] = await Promise.all(
-                ['enNextZX.rom', 'enNxtmmc.rom', 'tbblue.mmc'].map(fetchBin));
+                [fetchBin('enNextZX.rom'), fetchBin('enNxtmmc.rom'), fetchSd()]);
             if (!zx || !mmc || !sd) {
                 throw new Error('Next system assets missing from /next/ — stage them (packages/emulator-core/scripts/stage-zxnext-assets.sh)');
             }
@@ -681,8 +695,8 @@ export class GoEmulator extends EventEmitter {
     }
 
     async openTapeBytes(arrayBuffer, sdFiles) {
-        // A Next boot from setMachine('next') may still be in flight (its 64MB
-        // SD fetch takes seconds over the network). Wait for it so machineType
+        // A Next boot from setMachine('next') may still be in flight (its SD
+        // image fetch takes a moment over the network). Wait for it so machineType
         // has settled to 'next' and the core is constructed before we branch or
         // call in — otherwise the Next path is missed and the classic branch
         // loads a tape into a not-yet-booted core ("not booted").

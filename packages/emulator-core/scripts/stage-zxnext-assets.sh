@@ -38,4 +38,11 @@ fetch tbblue.mmc     # FAT32 SD image with NextZXOS (64M)
 # Trim the image to the bare bootable system (no-op without mtools).
 "$SCRIPTS/bare-sd-image.sh" "$DIR/tbblue.mmc"
 
+# Zip the trimmed image next to it: the browser fetches tbblue.mmc.zip (a few
+# MB — the 64MB image is mostly empty space) and inflates it client-side,
+# falling back to the raw image only on deployments staged before the zip
+# existed. Keep the raw image too: desktop/Go tests point ZX_GO_NEXT_SD_IMG
+# at it, and previously-deployed bundles still fetch it.
+"$SCRIPTS/zip-sd-image.sh" "$DIR/tbblue.mmc"
+
 echo "Done. Build zx.wasm (see ../../wasm/), then: python3 -m http.server 8080"

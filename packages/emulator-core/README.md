@@ -13,7 +13,10 @@ stever/zxnext-inbrowser-poc repository.
                zx_go/cmd/zx_go/wasm_js.go
     wasm/      design notes for the wasm port (read STATUS.md before touching)
     scripts/   stage-zxnext-assets.sh (fetch NextZXOS ROMs + SD image),
-               bare-sd-image.sh (trim the image to the bare bootable system)
+               bare-sd-image.sh (trim the image to the bare bootable system),
+               zip-sd-image.sh (zip the image for the browser: it fetches
+               tbblue.mmc.zip, a few MB instead of the raw 64MB, and falls
+               back to the raw image when the zip is absent)
     nex.js     makeNEX — wraps a raw $8000 binary into a .NEX container
     dist/      build output: zx.wasm + wasm_exec.js (gitignored)
 
