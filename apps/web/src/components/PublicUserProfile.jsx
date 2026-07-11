@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { Titled } from "react-titled";
 import { Card } from "primereact/card";
@@ -168,6 +168,49 @@ const GET_PUBLIC_PROJECTS = gql`
   }
 `;
 
+// The same page narrowed to one folder (the ?folder= chip selection).
+const GET_PUBLIC_PROJECTS_IN_FOLDER = gql`
+  query GetUserPublicProjectsInFolder($user_id: uuid!, $folder_id: uuid!, $limit: Int!, $offset: Int!) {
+    project_aggregate(
+      where: { owner_user_id: { _eq: $user_id }, is_public: { _eq: true }, folder_id: { _eq: $folder_id } }
+    ) {
+      aggregate {
+        count
+      }
+    }
+    project(
+      where: { owner_user_id: { _eq: $user_id }, is_public: { _eq: true }, folder_id: { _eq: $folder_id } }
+      order_by: [{ display_order: asc }, { updated_at: desc }]
+      limit: $limit
+      offset: $offset
+    ) {
+      project_id
+      title
+      slug
+      lang
+      machine
+      updated_at
+      created_at
+      display_order
+    }
+  }
+`;
+
+// The owner's public folders, shown as filter chips over the projects tab.
+// RLS hides private folders from everyone but the owner; the explicit
+// is_public filter keeps the owner's own view identical to their visitors'.
+const GET_PUBLIC_FOLDERS = gql`
+  query GetUserPublicFolders($user_id: uuid!) {
+    project_folder(
+      where: { owner_user_id: { _eq: $user_id }, is_public: { _eq: true } }
+      order_by: [{ display_order: asc }, { name: asc }]
+    ) {
+      folder_id
+      name
+    }
+  }
+`;
+
 // A page of the projects the profile owner has starred. RLS hides stars on
 // private projects, so this only returns currently-public projects.
 const GET_STARRED_PROJECTS = gql`
@@ -297,6 +340,15 @@ export default function PublicUserProfile() {
   const [publicTotal, setPublicTotal] = useState(0);
   const [publicPage, setPublicPage] = useState(0);
   const [publicLoading, setPublicLoading] = useState(true);
+  // The owner's public folders; ?folder=<id> narrows the projects tab so a
+  // folder view is linkable. An id not in the list (private, deleted) falls
+  // back to the unfiltered view.
+  const [publicFolders, setPublicFolders] = useState([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const folderParam = searchParams.get("folder");
+  const folderFilter = publicFolders.some((f) => f.folder_id === folderParam)
+    ? folderParam
+    : null;
   const [starredProjects, setStarredProjects] = useState([]);
   const [starredTotal, setStarredTotal] = useState(0);
   const [starredPage, setStarredPage] = useState(0);
@@ -408,7 +460,28 @@ export default function PublicUserProfile() {
     }
   }, [user]);
 
-  // Fetch a page of the owner's public projects.
+  // Fetch the owner's public folders once per profile.
+  useEffect(() => {
+    if (!user?.user_id) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await gqlFetch(null, GET_PUBLIC_FOLDERS, {
+          user_id: user.user_id,
+        });
+        if (!cancelled) setPublicFolders(response?.data?.project_folder || []);
+      } catch (err) {
+        if (!cancelled) setPublicFolders([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.user_id]);
+
+  // Fetch a page of the owner's public projects (optionally one folder's).
   useEffect(() => {
     if (!user?.user_id) return;
     let cancelled = false;
@@ -416,11 +489,18 @@ export default function PublicUserProfile() {
     (async () => {
       try {
         setPublicLoading(true);
-        const response = await gqlFetch(null, GET_PUBLIC_PROJECTS, {
-          user_id: user.user_id,
-          limit: PAGE_SIZE,
-          offset: publicPage * PAGE_SIZE,
-        });
+        const response = folderFilter
+          ? await gqlFetch(null, GET_PUBLIC_PROJECTS_IN_FOLDER, {
+              user_id: user.user_id,
+              folder_id: folderFilter,
+              limit: PAGE_SIZE,
+              offset: publicPage * PAGE_SIZE,
+            })
+          : await gqlFetch(null, GET_PUBLIC_PROJECTS, {
+              user_id: user.user_id,
+              limit: PAGE_SIZE,
+              offset: publicPage * PAGE_SIZE,
+            });
         if (cancelled) return;
         setPublicProjects(response?.data?.project || []);
         setPublicTotal(
@@ -436,7 +516,12 @@ export default function PublicUserProfile() {
     return () => {
       cancelled = true;
     };
-  }, [user?.user_id, publicPage]);
+  }, [user?.user_id, publicPage, folderFilter]);
+
+  const selectFolder = (folderId) => {
+    setSearchParams(folderId ? { folder: folderId } : {}, { replace: true });
+    setPublicPage(0);
+  };
 
   // Fetch a page of the projects the owner has starred. Re-runs when the starred
   // tab is opened or after a star/unstar (via starredRefresh).
@@ -808,6 +893,32 @@ export default function PublicUserProfile() {
                     icon="pi pi-spin pi-spinner"
                     className="mb-3"
                   />
+                )}
+                {publicFolders.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <Button
+                      label={t("profile.allProjects")}
+                      className={
+                        "p-button-sm p-button-rounded" +
+                        (folderFilter ? " p-button-outlined p-button-secondary" : "")
+                      }
+                      onClick={() => selectFolder(null)}
+                    />
+                    {publicFolders.map((folder) => (
+                      <Button
+                        key={folder.folder_id}
+                        label={folder.name}
+                        icon="pi pi-folder"
+                        className={
+                          "p-button-sm p-button-rounded" +
+                          (folderFilter === folder.folder_id
+                            ? ""
+                            : " p-button-outlined p-button-secondary")
+                        }
+                        onClick={() => selectFolder(folder.folder_id)}
+                      />
+                    ))}
+                  </div>
                 )}
                 {publicLoading && publicProjects.length === 0 ? (
                   <div className="flex justify-content-center py-4">

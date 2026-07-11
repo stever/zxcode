@@ -129,6 +129,7 @@ const PROJECT_COLUMNS = [
     "slug",
     "display_order",
     "machine",
+    "folder_id",
 ] as const;
 
 const projectSelectPublic: SelectRule = {
@@ -140,6 +141,33 @@ const projectSelectPublic: SelectRule = {
 
 const projectSelectOwn: SelectRule = {
     columns: PROJECT_COLUMNS,
+    filter: (s) => ({ OR: [{ owner_user_id: me(s) }, { is_public: true }] }),
+    predicate: (row, s) =>
+        row.is_public === true || row.owner_user_id === s.userId,
+    predicateColumns: ["is_public", "owner_user_id"],
+};
+
+const FOLDER_COLUMNS = [
+    "folder_id",
+    "owner_user_id",
+    "name",
+    "is_public",
+    "display_order",
+    "created_at",
+    "updated_at",
+] as const;
+
+// A folder's is_public governs only the visibility of the grouping itself;
+// the projects inside are still filtered by their own project rules.
+const folderSelectPublic: SelectRule = {
+    columns: FOLDER_COLUMNS,
+    filter: () => ({ is_public: true }),
+    predicate: (row) => row.is_public === true,
+    predicateColumns: ["is_public"],
+};
+
+const folderSelectOwn: SelectRule = {
+    columns: FOLDER_COLUMNS,
     filter: (s) => ({ OR: [{ owner_user_id: me(s) }, { is_public: true }] }),
     predicate: (row, s) =>
         row.is_public === true || row.owner_user_id === s.userId,
@@ -201,6 +229,12 @@ export const tables: Record<string, TableConfig> = {
                 kind: "many",
                 fk: "owner_user_id",
             },
+            folders: {
+                table: "project_folder",
+                prismaField: "folders",
+                kind: "many",
+                fk: "owner_user_id",
+            },
             starred_projects: {
                 table: "project_star",
                 prismaField: "starred_projects",
@@ -254,6 +288,7 @@ export const tables: Record<string, TableConfig> = {
             "updated_at",
             "created_at",
             "display_order",
+            "folder_id",
         ],
         relations: {
             // Hasura exposed the owner FK twice; both names map onto the one
@@ -272,17 +307,58 @@ export const tables: Record<string, TableConfig> = {
                 kind: "many",
                 fk: "project_id",
             },
+            folder: {
+                table: "project_folder",
+                prismaField: "folder",
+                kind: "one",
+            },
         },
         select: { public: projectSelectPublic, "zxplay-user": projectSelectOwn },
         insert: {
             "zxplay-user": {
-                columns: ["code", "lang", "machine", "title", "slug", "is_public", "files"],
+                // folder_id is safe to accept: the composite FK
+                // (folder_id, owner_user_id) only matches the caller's own
+                // folders once the owner preset is applied.
+                columns: ["code", "lang", "machine", "title", "slug", "is_public", "folder_id", "files"],
                 presets: (s) => ({ owner_user_id: me(s) }),
             },
         },
         update: {
             "zxplay-user": {
-                columns: ["code", "display_order", "machine", "title", "is_public", "slug"],
+                columns: ["code", "display_order", "machine", "title", "is_public", "slug", "folder_id"],
+                filter: (s) => ({ owner_user_id: me(s) }),
+            },
+        },
+        delete: {
+            "zxplay-user": { filter: (s) => ({ owner_user_id: me(s) }) },
+        },
+    },
+
+    project_folder: {
+        prismaModel: "project_folder",
+        pk: ["folder_id"],
+        columns: FOLDER_COLUMNS,
+        jsonColumns: [],
+        nullableColumns: ["display_order"],
+        relations: {
+            owner: { table: "user", prismaField: "owner", kind: "one" },
+            projects: {
+                table: "project",
+                prismaField: "projects",
+                kind: "many",
+                fk: "folder_id",
+            },
+        },
+        select: { public: folderSelectPublic, "zxplay-user": folderSelectOwn },
+        insert: {
+            "zxplay-user": {
+                columns: ["name", "is_public", "display_order"],
+                presets: (s) => ({ owner_user_id: me(s) }),
+            },
+        },
+        update: {
+            "zxplay-user": {
+                columns: ["name", "is_public", "display_order"],
                 filter: (s) => ({ owner_user_id: me(s) }),
             },
         },

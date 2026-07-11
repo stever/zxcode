@@ -174,8 +174,10 @@ type project {
   slug: String!
   display_order: Int
   machine: String!
+  folder_id: uuid
   owner: user
   user: user
+  folder: project_folder
   files(where: project_file_bool_exp, order_by: [project_file_order_by!], limit: Int, offset: Int): [project_file!]!
   files_aggregate(where: project_file_bool_exp): project_file_aggregate!
   stars(where: project_star_bool_exp, order_by: [project_star_order_by!], limit: Int, offset: Int): [project_star!]!
@@ -197,8 +199,10 @@ input project_bool_exp {
   slug: String_comparison_exp
   display_order: Int_comparison_exp
   machine: String_comparison_exp
+  folder_id: uuid_comparison_exp
   owner: user_bool_exp
   user: user_bool_exp
+  folder: project_folder_bool_exp
   files: project_file_bool_exp
   stars: project_star_bool_exp
 }
@@ -242,6 +246,7 @@ input project_set_input {
   title: String
   is_public: Boolean
   slug: String
+  folder_id: uuid
 }
 
 input project_insert_input {
@@ -251,11 +256,67 @@ input project_insert_input {
   slug: String
   machine: String
   is_public: Boolean
+  folder_id: uuid
   files: project_file_arr_rel_insert_input
 }
 
 input project_pk_columns_input {
   project_id: uuid!
+}
+
+# ---------------------------------------------------------------- project_folder
+
+type project_folder {
+  folder_id: uuid!
+  owner_user_id: uuid!
+  name: String!
+  is_public: Boolean!
+  display_order: Int
+  created_at: timestamptz!
+  updated_at: timestamptz!
+  owner: user
+  projects(where: project_bool_exp, order_by: [project_order_by!], limit: Int, offset: Int): [project!]!
+  projects_aggregate(where: project_bool_exp): project_aggregate!
+}
+
+input project_folder_bool_exp {
+  _and: [project_folder_bool_exp!]
+  _or: [project_folder_bool_exp!]
+  _not: project_folder_bool_exp
+  folder_id: uuid_comparison_exp
+  owner_user_id: uuid_comparison_exp
+  name: String_comparison_exp
+  is_public: Boolean_comparison_exp
+  display_order: Int_comparison_exp
+  created_at: timestamptz_comparison_exp
+  updated_at: timestamptz_comparison_exp
+  owner: user_bool_exp
+  projects: project_bool_exp
+}
+
+input project_folder_order_by {
+  folder_id: order_by
+  name: order_by
+  is_public: order_by
+  display_order: order_by
+  created_at: order_by
+  updated_at: order_by
+}
+
+input project_folder_set_input {
+  name: String
+  is_public: Boolean
+  display_order: Int
+}
+
+input project_folder_insert_input {
+  name: String
+  is_public: Boolean
+  display_order: Int
+}
+
+input project_folder_pk_columns_input {
+  folder_id: uuid!
 }
 
 # ---------------------------------------------------------------- project_file
@@ -524,6 +585,8 @@ type Query {
   project(where: project_bool_exp, order_by: [project_order_by!], limit: Int, offset: Int): [project!]!
   project_by_pk(project_id: uuid!): project
   project_aggregate(where: project_bool_exp): project_aggregate!
+  project_folder(where: project_folder_bool_exp, order_by: [project_folder_order_by!], limit: Int, offset: Int): [project_folder!]!
+  project_folder_by_pk(folder_id: uuid!): project_folder
   project_file(where: project_file_bool_exp, order_by: [project_file_order_by!], limit: Int, offset: Int): [project_file!]!
   project_file_by_pk(file_id: uuid!): project_file
   project_star(where: project_star_bool_exp, order_by: [project_star_order_by!], limit: Int, offset: Int): [project_star!]!
@@ -542,6 +605,10 @@ type Mutation {
   insert_project_one(object: project_insert_input!): project
   update_project_by_pk(pk_columns: project_pk_columns_input!, _set: project_set_input): project
   delete_project_by_pk(project_id: uuid!): project
+
+  insert_project_folder_one(object: project_folder_insert_input!): project_folder
+  update_project_folder_by_pk(pk_columns: project_folder_pk_columns_input!, _set: project_folder_set_input): project_folder
+  delete_project_folder_by_pk(folder_id: uuid!): project_folder
 
   insert_project_file_one(object: project_file_insert_input!): project_file
   update_project_file_by_pk(pk_columns: project_file_pk_columns_input!, _set: project_file_set_input): project_file
@@ -564,5 +631,6 @@ type Mutation {
 
 type Subscription {
   project(where: project_bool_exp, order_by: [project_order_by!], limit: Int, offset: Int): [project!]!
+  project_folder(where: project_folder_bool_exp, order_by: [project_folder_order_by!], limit: Int, offset: Int): [project_folder!]!
 }
 `;

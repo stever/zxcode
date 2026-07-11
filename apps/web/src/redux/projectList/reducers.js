@@ -31,6 +31,7 @@ const savedPreferences = loadPreferences();
 
 const initialState = {
     projectList: undefined,
+    folderList: undefined,
     // Pagination preferences
     rowsPerPage: savedPreferences.rowsPerPage,
     currentPage: savedPreferences.currentPage,
@@ -53,6 +54,13 @@ function receiveprojectListQueryResult(state, action) {
     return {
         ...state,
         projectList: action.result.project
+    }
+}
+
+function receiveFolderListQueryResult(state, action) {
+    return {
+        ...state,
+        folderList: action.result.project_folder
     }
 }
 
@@ -86,6 +94,7 @@ function setProjectListPreferences(state, action) {
 const actionsMap = {
     [actionTypes.reset]: reset,
     [actionTypes.receiveprojectListQueryResult]: receiveprojectListQueryResult,
+    [actionTypes.receiveFolderListQueryResult]: receiveFolderListQueryResult,
     [actionTypes.setProjectListPreferences]: setProjectListPreferences,
 };
 

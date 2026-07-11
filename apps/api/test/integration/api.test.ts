@@ -822,6 +822,177 @@ describe("zxplay-user mutations", () => {
     });
 });
 
+describe("project folders", () => {
+    let examplesFolderId = ""; // alice, public
+    let wipFolderId = ""; // alice, private
+
+    const CREATE_FOLDER = `mutation CreateFolder($name: String!, $is_public: Boolean!) {
+        insert_project_folder_one(object: {name: $name, is_public: $is_public}) {
+            folder_id owner_user_id name is_public
+        }
+    }`;
+    const SET_PROJECT_FOLDER = `mutation MoveProjectToFolder($project_id: uuid!, $folder_id: uuid) {
+        update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {folder_id: $folder_id}) {
+            project_id folder_id folder { name }
+        }
+    }`;
+
+    it("creates folders with the owner preset and per-owner unique names", async () => {
+        const pub = await data(
+            CREATE_FOLDER,
+            { name: "Examples", is_public: true },
+            { token: alice.token },
+        );
+        const created = pub.insert_project_folder_one as {
+            folder_id: string; owner_user_id: string; is_public: boolean;
+        };
+        examplesFolderId = created.folder_id;
+        expect(created.owner_user_id).toBe(alice.id); // preset, not client-supplied
+        expect(created.is_public).toBe(true);
+
+        const priv = await data(
+            CREATE_FOLDER,
+            { name: "WIP", is_public: false },
+            { token: alice.token },
+        );
+        wipFolderId = (priv.insert_project_folder_one as { folder_id: string }).folder_id;
+
+        const dup = await gql(
+            CREATE_FOLDER,
+            { name: "Examples", is_public: false },
+            { token: alice.token },
+        );
+        expect(dup.errors?.[0]?.message).toMatch(/Uniqueness violation/);
+
+        // The name is only unique per owner: bob may reuse it.
+        const bobs = await data(
+            CREATE_FOLDER,
+            { name: "Examples", is_public: false },
+            { token: bob.token },
+        );
+        const bobsId = (bobs.insert_project_folder_one as { folder_id: string }).folder_id;
+        await data(
+            `mutation ($folder_id: uuid!) { delete_project_folder_by_pk(folder_id: $folder_id) { folder_id } }`,
+            { folder_id: bobsId },
+            { token: bob.token },
+        );
+    });
+
+    it("shows only public folders to other users and anonymous", async () => {
+        const doc = `query GetUserFolders($user_id: uuid!) {
+            project_folder(where: {owner_user_id: {_eq: $user_id}}, order_by: [{display_order: asc}, {name: asc}]) {
+                folder_id name is_public
+            }
+        }`;
+        const anon = await data(doc, { user_id: alice.id });
+        expect((anon.project_folder as Array<{ name: string }>).map((f) => f.name)).toEqual(["Examples"]);
+        const asBob = await data(doc, { user_id: alice.id }, { token: bob.token });
+        expect((asBob.project_folder as Array<{ name: string }>).map((f) => f.name)).toEqual(["Examples"]);
+        const asAlice = await data(doc, { user_id: alice.id }, { token: alice.token });
+        expect((asAlice.project_folder as unknown[]).length).toBe(2);
+    });
+
+    it("cannot rename or delete someone else's folder", async () => {
+        const rename = await data(
+            `mutation ($folder_id: uuid!, $name: String!) {
+                update_project_folder_by_pk(pk_columns: {folder_id: $folder_id}, _set: {name: $name}) { folder_id }
+            }`,
+            { folder_id: examplesFolderId, name: "hax" },
+            { token: bob.token },
+        );
+        expect(rename.update_project_folder_by_pk).toBeNull();
+        const del = await data(
+            `mutation ($folder_id: uuid!) { delete_project_folder_by_pk(folder_id: $folder_id) { folder_id } }`,
+            { folder_id: examplesFolderId },
+            { token: bob.token },
+        );
+        expect(del.delete_project_folder_by_pk).toBeNull();
+    });
+
+    it("files projects only into the owner's folders", async () => {
+        const moved = await data(
+            SET_PROJECT_FOLDER,
+            { project_id: alicePublicProjectId, folder_id: examplesFolderId },
+            { token: alice.token },
+        );
+        const project = moved.update_project_by_pk as {
+            folder_id: string; folder: { name: string };
+        };
+        expect(project.folder_id).toBe(examplesFolderId);
+        expect(project.folder.name).toBe("Examples");
+
+        // The composite FK rejects another user's folder on insert...
+        const foreign = await gql(
+            `mutation ($title: String!, $lang: String!, $slug: String!, $machine: String!, $folder_id: uuid) {
+                insert_project_one(object: {title: $title, lang: $lang, slug: $slug, machine: $machine, folder_id: $folder_id}) { project_id }
+            }`,
+            { title: "Sneak", lang: "zxbasic", slug: "sneak", machine: "48", folder_id: examplesFolderId },
+            { token: bob.token },
+        );
+        expect(foreign.errors?.[0]?.message).toMatch(/Foreign key violation/);
+
+        // ...and a dangling folder_id on update.
+        const dangling = await gql(
+            SET_PROJECT_FOLDER,
+            { project_id: alicePublicProjectId, folder_id: "00000000-0000-0000-0000-000000000000" },
+            { token: alice.token },
+        );
+        expect(dangling.errors?.[0]?.message).toMatch(/Foreign key violation/);
+    });
+
+    it("keeps a public project visible when its private folder is hidden", async () => {
+        await data(
+            SET_PROJECT_FOLDER,
+            { project_id: alicePublicProjectId, folder_id: wipFolderId },
+            { token: alice.token },
+        );
+        const anon = await data(
+            `query ($project_id: uuid!) {
+                project_by_pk(project_id: $project_id) { project_id folder_id folder { name is_public } }
+            }`,
+            { project_id: alicePublicProjectId },
+        );
+        const row = anon.project_by_pk as { folder_id: string; folder: unknown };
+        expect(row.folder_id).toBe(wipFolderId);
+        expect(row.folder).toBeNull(); // private folder masked from the public role
+        // Unfile again so later tests see the original shape.
+        await data(
+            SET_PROJECT_FOLDER,
+            { project_id: alicePublicProjectId, folder_id: null },
+            { token: alice.token },
+        );
+    });
+
+    it("unfiles projects when their folder is deleted", async () => {
+        const temp = await data(
+            CREATE_FOLDER,
+            { name: "Temp", is_public: false },
+            { token: alice.token },
+        );
+        const tempId = (temp.insert_project_folder_one as { folder_id: string }).folder_id;
+        await data(
+            SET_PROJECT_FOLDER,
+            { project_id: alicePrivateProjectId, folder_id: tempId },
+            { token: alice.token },
+        );
+        await data(
+            `mutation ($folder_id: uuid!) { delete_project_folder_by_pk(folder_id: $folder_id) { folder_id name } }`,
+            { folder_id: tempId },
+            { token: alice.token },
+        );
+        const after = await data(
+            `query ($project_id: uuid!) {
+                project_by_pk(project_id: $project_id) { project_id owner_user_id folder_id }
+            }`,
+            { project_id: alicePrivateProjectId },
+            { token: alice.token },
+        );
+        const row = after.project_by_pk as { owner_user_id: string; folder_id: string | null };
+        expect(row.folder_id).toBeNull();
+        expect(row.owner_user_id).toBe(alice.id); // SET NULL must not touch the owner
+    });
+});
+
 describe("admin role (apps/auth documents)", () => {
     let sessionId = "";
 
@@ -1039,6 +1210,78 @@ describe("live project list subscription", () => {
                 (f) =>
                     f.type === "data" &&
                     JSON.stringify(f).includes("Public Demo v2"),
+            ),
+        );
+
+        ws.send(JSON.stringify({ type: "stop", id: "1" }));
+        await waitFor(() => frames.some((f) => f.type === "complete"));
+        ws.close(1000);
+    });
+
+    it("pushes the folder list on folder changes", async () => {
+        const FOLDER_SUBSCRIPTION = `subscription($user_id: uuid!) {
+            project_folder(
+                where: {owner_user_id: {_eq: $user_id}},
+                order_by: [{display_order: asc}, {name: asc}]
+            ) {
+                folder_id name is_public display_order
+            }
+        }`;
+        const ws = new WebSocket(wsUrl, "graphql-ws");
+        const frames: Array<Record<string, unknown>> = [];
+        const waitFor = (predicate: () => boolean, timeout = 10_000) =>
+            new Promise<void>((resolve, reject) => {
+                const start = Date.now();
+                const poll = setInterval(() => {
+                    if (predicate()) {
+                        clearInterval(poll);
+                        resolve();
+                    } else if (Date.now() - start > timeout) {
+                        clearInterval(poll);
+                        reject(new Error(`timed out; frames: ${JSON.stringify(frames)}`));
+                    }
+                }, 25);
+            });
+
+        ws.on("message", (raw) => {
+            frames.push(JSON.parse(String(raw)) as Record<string, unknown>);
+        });
+        await new Promise<void>((resolve) => ws.on("open", () => resolve()));
+        ws.send(JSON.stringify({
+            type: "connection_init",
+            payload: { headers: { Authorization: `Bearer ${alice.token}` } },
+        }));
+        await waitFor(() => frames.some((f) => f.type === "connection_ack"));
+
+        ws.send(JSON.stringify({
+            type: "start",
+            id: "1",
+            payload: { query: FOLDER_SUBSCRIPTION, variables: { user_id: alice.id }, operationName: null },
+        }));
+        await waitFor(() => frames.some((f) => f.type === "data"));
+
+        // Folder mutations publish the same owner-scoped event as projects,
+        // so a rename must push a fresh folder list.
+        const folders = await data(
+            `query ($user_id: uuid!) {
+                project_folder(where: {owner_user_id: {_eq: $user_id}, name: {_eq: "Examples"}}) { folder_id }
+            }`,
+            { user_id: alice.id },
+            { token: alice.token },
+        );
+        const folderRows = folders.project_folder as Array<{ folder_id: string }>;
+        expect(folderRows.length).toBe(1);
+        const folderId = folderRows[0]!.folder_id;
+        await data(
+            `mutation ($folder_id: uuid!, $name: String!) {
+                update_project_folder_by_pk(pk_columns: {folder_id: $folder_id}, _set: {name: $name}) { folder_id name }
+            }`,
+            { folder_id: folderId, name: "Examples v2" },
+            { token: alice.token },
+        );
+        await waitFor(() =>
+            frames.some(
+                (f) => f.type === "data" && JSON.stringify(f).includes("Examples v2"),
             ),
         );
 

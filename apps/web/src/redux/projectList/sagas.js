@@ -3,8 +3,11 @@ import gql from "graphql-tag";
 import {
     actionTypes,
     receiveprojectListQueryResult,
+    receiveFolderListQueryResult,
     subscribeToProjectList,
     subscribeToProjectListCallback,
+    subscribeToFolderList,
+    subscribeToFolderListCallback,
 } from "./actions";
 import {
     subscribe,
@@ -32,6 +35,41 @@ export function* watchSubscribeToProjectListCallbackActions() {
 // noinspection JSUnusedGlobalSymbols
 export function* watchUnsubscribeFromProjectListActions() {
     yield takeLatest(actionTypes.unsubscribeFromProjectList, handleUnsubscribeFromProjectList);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchSubscribeToFolderListActions() {
+    yield takeLatest(actionTypes.subscribeToFolderList, handleSubscribeToFolderList);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchSubscribeToFolderListCallbackActions() {
+    yield takeLatest(actionTypes.subscribeToFolderListCallback, handleSubscribeToFolderListCallback);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchUnsubscribeFromFolderListActions() {
+    yield takeLatest(actionTypes.unsubscribeFromFolderList, handleUnsubscribeFromFolderList);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchCreateFolderActions() {
+    yield takeLatest(actionTypes.createFolder, handleCreateFolderActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchUpdateFolderActions() {
+    yield takeLatest(actionTypes.updateFolder, handleUpdateFolderActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchDeleteFolderActions() {
+    yield takeLatest(actionTypes.deleteFolder, handleDeleteFolderActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchMoveProjectToFolderActions() {
+    yield takeLatest(actionTypes.moveProjectToFolder, handleMoveProjectToFolderActions);
 }
 
 // noinspection JSUnusedGlobalSymbols
@@ -71,6 +109,7 @@ function* handleSubscribeToProjectList(action) {
                     created_at
                     updated_at
                     slug
+                    folder_id
                 }
             }
         `;
@@ -107,6 +146,58 @@ function* handleSubscribeToProjectListCallback(action) {
 
 function* handleUnsubscribeFromProjectList() {
     yield put(unsubscribeAction(subscribeToProjectList()));
+}
+
+function* handleSubscribeToFolderList(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+
+        const query = gql`
+            subscription($user_id: uuid!) {
+                project_folder(
+                    where: {owner_user_id: {_eq: $user_id}},
+                    order_by: [{display_order: asc}, {name: asc}]
+                ) {
+                    folder_id
+                    name
+                    is_public
+                    display_order
+                }
+            }
+        `;
+
+        const variables = {
+            user_id: userId
+        };
+
+        yield put(subscribe(action, query, variables, subscribeToFolderListCallback));
+        yield put(subscribeAction(action));
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleSubscribeToFolderListCallback(action) {
+    try {
+        const {error, data} = action;
+
+        if (!error && !data) {
+            return; // Normal exit.
+        }
+
+        if (error) {
+            handleError('Websocket Callback Error', error);
+            return;
+        }
+
+        yield put(receiveFolderListQueryResult(data));
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleUnsubscribeFromFolderList() {
+    yield put(unsubscribeAction(subscribeToFolderList()));
 }
 
 // The handlers below mutate projects directly from the browser list. Unlike
@@ -247,6 +338,109 @@ function* handleCopyListProjectActions(action) {
         });
 
         console.assert(response?.data?.insert_project_one?.project_id, response);
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+// Folder mutations, like the project ones above, never touch local state:
+// the live folder/project subscriptions deliver the updated rows.
+
+function* handleCreateFolderActions(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+
+        const query = gql`
+            mutation ($name: String!, $is_public: Boolean!) {
+                insert_project_folder_one(object: {name: $name, is_public: $is_public}) {
+                    folder_id
+                }
+            }
+        `;
+
+        const response = yield call(gqlFetch, userId, query, {
+            'name': action.name.trim(),
+            'is_public': !!action.isPublic
+        });
+
+        console.assert(response?.data?.insert_project_folder_one?.folder_id, response);
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleUpdateFolderActions(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+
+        // Unprovided nullable variables leave their _set field out entirely,
+        // so one document covers rename, visibility toggle or both.
+        const query = gql`
+            mutation ($folder_id: uuid!, $name: String, $is_public: Boolean) {
+                update_project_folder_by_pk(pk_columns: {folder_id: $folder_id}, _set: {name: $name, is_public: $is_public}) {
+                    folder_id
+                }
+            }
+        `;
+
+        const variables = {'folder_id': action.folderId};
+        if (action.changes.name !== undefined) {
+            variables['name'] = action.changes.name.trim();
+        }
+        if (action.changes.is_public !== undefined) {
+            variables['is_public'] = action.changes.is_public;
+        }
+
+        const response = yield call(gqlFetch, userId, query, variables);
+
+        console.assert(response?.data?.update_project_folder_by_pk?.folder_id, response);
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleDeleteFolderActions(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+
+        // Projects inside the folder are kept; the database clears their
+        // folder_id.
+        const query = gql`
+            mutation ($folder_id: uuid!) {
+                delete_project_folder_by_pk(folder_id: $folder_id) {
+                    folder_id
+                }
+            }
+        `;
+
+        const response = yield call(gqlFetch, userId, query, {
+            'folder_id': action.folderId
+        });
+
+        console.assert(response?.data?.delete_project_folder_by_pk?.folder_id, response);
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleMoveProjectToFolderActions(action) {
+    try {
+        const userId = yield select((state) => state.identity.userId);
+
+        const query = gql`
+            mutation ($project_id: uuid!, $folder_id: uuid) {
+                update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {folder_id: $folder_id}) {
+                    project_id
+                }
+            }
+        `;
+
+        const response = yield call(gqlFetch, userId, query, {
+            'project_id': action.projectId,
+            'folder_id': action.folderId
+        });
+
+        console.assert(response?.data?.update_project_by_pk?.project_id, response);
     } catch (e) {
         handleException(e);
     }

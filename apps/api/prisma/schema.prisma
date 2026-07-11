@@ -29,6 +29,7 @@ model user {
   custom_avatar_data Json?
 
   projects         project[]      @relation("project_owner")
+  folders          project_folder[] @relation("folder_owner")
   starred_projects project_star[] @relation("star_user")
   followers        user_follows[] @relation("follows_following")
   following        user_follows[] @relation("follows_follower")
@@ -48,15 +49,37 @@ model project {
   slug          String
   display_order Int?      @default(0)
   machine       String    @default("48")
+  folder_id     String?   @db.Uuid
 
   // Hasura exposed this relationship twice ("owner" and "user"); Prisma
   // allows one relation per FK, so the engine aliases both GraphQL names here.
   owner user?          @relation("project_owner", fields: [owner_user_id], references: [user_id], onUpdate: Restrict, onDelete: Restrict, map: "project_owner_user_id_fkey")
   files project_file[]
   stars project_star[]
+  // In the database this is half of a composite FK (folder_id, owner_user_id)
+  // that pins a project to a folder of the same owner; see the migration.
+  folder project_folder? @relation(fields: [folder_id], references: [folder_id], onUpdate: Restrict, onDelete: SetNull, map: "project_folder_owner_fkey")
 
   @@unique([owner_user_id, slug], map: "project_owner_slug_key")
   @@index([owner_user_id, display_order], map: "idx_project_display_order")
+  @@index([folder_id], map: "idx_project_folder")
+}
+
+model project_folder {
+  folder_id     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id String   @db.Uuid
+  name          String
+  is_public     Boolean  @default(false)
+  display_order Int?     @default(0)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  owner    user      @relation("folder_owner", fields: [owner_user_id], references: [user_id], onUpdate: Restrict, onDelete: Cascade, map: "project_folder_owner_user_id_fkey")
+  projects project[]
+
+  @@unique([owner_user_id, name], map: "project_folder_owner_name_key")
+  @@unique([folder_id, owner_user_id], map: "project_folder_id_owner_key")
+  @@index([owner_user_id, display_order], map: "idx_project_folder_display_order")
 }
 
 model project_file {

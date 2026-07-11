@@ -96,6 +96,8 @@ attach("Query", {
     project: makeListResolver("project") as Resolver,
     project_by_pk: makeByPkResolver("project") as Resolver,
     project_aggregate: makeAggregateResolver("project") as Resolver,
+    project_folder: makeListResolver("project_folder") as Resolver,
+    project_folder_by_pk: makeByPkResolver("project_folder") as Resolver,
     project_file: makeListResolver("project_file") as Resolver,
     project_file_by_pk: makeByPkResolver("project_file") as Resolver,
     project_star: makeListResolver("project_star") as Resolver,
@@ -114,6 +116,10 @@ attach("Mutation", {
     insert_project_one: makeInsertOneResolver("project") as Resolver,
     update_project_by_pk: makeUpdateByPkResolver("project") as Resolver,
     delete_project_by_pk: makeDeleteByPkResolver("project") as Resolver,
+
+    insert_project_folder_one: makeInsertOneResolver("project_folder") as Resolver,
+    update_project_folder_by_pk: makeUpdateByPkResolver("project_folder") as Resolver,
+    delete_project_folder_by_pk: makeDeleteByPkResolver("project_folder") as Resolver,
 
     insert_project_file_one: makeInsertOneResolver("project_file") as Resolver,
     update_project_file_by_pk: makeUpdateByPkResolver("project_file") as Resolver,
@@ -138,4 +144,5 @@ attach("Subscription", {
     // Executed like a query on every matching pubsub event (see
     // subscription.ts); the resolver itself is the plain list resolver.
     project: makeListResolver("project") as Resolver,
+    project_folder: makeListResolver("project_folder") as Resolver,
 });

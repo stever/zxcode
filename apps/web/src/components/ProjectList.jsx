@@ -9,17 +9,23 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { InputText } from "primereact/inputtext";
-import { Menu } from "primereact/menu";
+import { TieredMenu } from "primereact/tieredmenu";
 import { Paginator } from "primereact/paginator";
 import { ProgressSpinner } from "primereact/progressspinner";
 import ProjectCard from "./ProjectCard";
 import {
   subscribeToProjectList,
   unsubscribeFromProjectList,
+  subscribeToFolderList,
+  unsubscribeFromFolderList,
   setProjectListPreferences,
   renameListProject,
   copyListProject,
   deleteListProject,
+  createFolder,
+  updateFolder,
+  deleteFolder,
+  moveProjectToFolder,
 } from "../redux/projectList/actions";
 import { getLanguageLabel } from "../lib/lang";
 import { useTranslation, useDateFnsLocale } from "@zxplay/i18n";
@@ -53,6 +59,7 @@ export default function ProjectList() {
   const dispatch = useDispatch();
 
   const projects = useSelector((state) => state?.projectList.projectList);
+  const folders = useSelector((state) => state?.projectList.folderList) || [];
   const isMobile = useSelector((state) => state?.window.isMobile);
   const userSlug = useSelector((state) => state?.identity.userSlug);
 
@@ -72,6 +79,10 @@ export default function ProjectList() {
   const [sortOrder, setSortOrder] = useState(storedSortOrder);
   const [query, setQuery] = useState("");
   const [langFilter, setLangFilter] = useState(null);
+  // null = all projects, "none" = unfiled only, otherwise a folder_id.
+  const [folderFilter, setFolderFilter] = useState(null);
+  const [showFolders, setShowFolders] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
   // One popup menu shared by every card/row; menuProject is the project it
   // was opened for. The dialogs likewise hold their target project.
@@ -93,8 +104,10 @@ export default function ProjectList() {
 
   useEffect(() => {
     dispatch(subscribeToProjectList());
+    dispatch(subscribeToFolderList());
     return () => {
       dispatch(unsubscribeFromProjectList());
+      dispatch(unsubscribeFromFolderList());
     };
   }, [dispatch]);
 
@@ -102,7 +115,18 @@ export default function ProjectList() {
   // jump back to the first page whenever the filters change.
   useEffect(() => {
     setFirst(0);
-  }, [query, langFilter]);
+  }, [query, langFilter, folderFilter]);
+
+  // Deleting the selected folder (live push) must not leave a dangling filter.
+  useEffect(() => {
+    if (
+      folderFilter &&
+      folderFilter !== "none" &&
+      !folders.some((f) => f.folder_id === folderFilter)
+    ) {
+      setFolderFilter(null);
+    }
+  }, [folders, folderFilter]);
 
   const sortOptions = [
     { label: t("projectList.sortUpdated"), value: "updated_at:-1" },
@@ -127,17 +151,38 @@ export default function ProjectList() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [projects]);
 
+  const folderNames = useMemo(
+    () => new Map(folders.map((f) => [f.folder_id, f.name])),
+    [folders]
+  );
+
+  const folderOptions = useMemo(
+    () => [
+      { label: t("projectList.noFolder"), value: "none" },
+      ...folders.map((f) => ({ label: f.name, value: f.folder_id })),
+    ],
+    [folders, t]
+  );
+
   const filtered = useMemo(() => {
     if (!projects) return [];
     const q = query.trim().toLowerCase();
     return projects
-      .map((p) => ({ ...p, lang_title: getLanguageLabel(p.lang) }))
+      .map((p) => ({
+        ...p,
+        lang_title: getLanguageLabel(p.lang),
+        folder_name: folderNames.get(p.folder_id) || "",
+      }))
       .filter(
         (p) =>
           (!q || p.title.toLowerCase().includes(q)) &&
-          (!langFilter || p.lang === langFilter)
+          (!langFilter || p.lang === langFilter) &&
+          (!folderFilter ||
+            (folderFilter === "none"
+              ? !p.folder_id
+              : p.folder_id === folderFilter))
       );
-  }, [projects, query, langFilter]);
+  }, [projects, query, langFilter, folderFilter, folderNames]);
 
   const gridSorted = useMemo(
     () => sortProjects(filtered, gridSortKey),
@@ -215,6 +260,35 @@ export default function ProjectList() {
     });
   };
 
+  // "Move to folder" fans out to the target folders, skipping the one the
+  // project is already in; the live subscriptions reflect the move in place.
+  const moveTargets = [
+    ...(menuProject?.folder_id
+      ? [
+          {
+            label: t("projectList.noFolder"),
+            icon: "pi pi-folder-open",
+            command: () =>
+              dispatch(moveProjectToFolder(menuProject.project_id, null)),
+          },
+        ]
+      : []),
+    ...folders
+      .filter((f) => f.folder_id !== menuProject?.folder_id)
+      .map((f) => ({
+        label: f.name,
+        icon: f.is_public ? "pi pi-globe" : "pi pi-folder",
+        command: () =>
+          dispatch(moveProjectToFolder(menuProject.project_id, f.folder_id)),
+      })),
+    ...(folders.length > 0 ? [{ separator: true }] : []),
+    {
+      label: t("projectList.newFolder"),
+      icon: "pi pi-plus",
+      command: () => setShowFolders(true),
+    },
+  ];
+
   const menuItems = [
     {
       label: t("actions.rename"),
@@ -233,6 +307,11 @@ export default function ProjectList() {
         setCopyTarget(menuProject);
       },
     },
+    {
+      label: t("projectList.moveToFolder"),
+      icon: "pi pi-folder",
+      items: moveTargets,
+    },
     { separator: true },
     {
       label: t("actions.delete"),
@@ -240,6 +319,30 @@ export default function ProjectList() {
       command: () => confirmDelete(menuProject),
     },
   ];
+
+  const submitNewFolder = () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    dispatch(createFolder(name, false));
+    setNewFolderName("");
+  };
+
+  const confirmDeleteFolder = (folder) => {
+    confirmDialog({
+      message: t("projectList.deleteFolderConfirm"),
+      header: t("actions.delete"),
+      icon: "pi pi-exclamation-triangle",
+      acceptClassName: "p-button-danger",
+      accept: () => dispatch(deleteFolder(folder.folder_id)),
+    });
+  };
+
+  const submitFolderRename = (folder, value) => {
+    const name = value.trim();
+    if (name && name !== folder.name) {
+      dispatch(updateFolder(folder.folder_id, { name }));
+    }
+  };
 
   const submitRename = () => {
     dispatch(
@@ -342,6 +445,15 @@ export default function ProjectList() {
           placeholder={t("projectList.allCompilers")}
           showClear
         />
+        {folders.length > 0 && (
+          <Dropdown
+            value={folderFilter}
+            options={folderOptions}
+            onChange={(e) => setFolderFilter(e.value ?? null)}
+            placeholder={t("projectList.allFolders")}
+            showClear
+          />
+        )}
         {viewMode === "grid" && (
           <Dropdown
             value={gridSortKey}
@@ -351,6 +463,12 @@ export default function ProjectList() {
           />
         )}
         <div className="flex gap-1 ml-auto">
+          <Button
+            icon="pi pi-folder"
+            label={t("projectList.manageFolders")}
+            className="p-button-text mr-2 align-self-stretch"
+            onClick={() => setShowFolders(true)}
+          />
           <Button
             icon="pi pi-th-large"
             className={viewMode === "grid" ? "" : "p-button-text"}
@@ -382,6 +500,7 @@ export default function ProjectList() {
                 project={project}
                 projectUrl={projectUrl(project)}
                 showPublic
+                folderName={folderFilter ? undefined : project.folder_name}
                 onMenuClick={openMenu}
               />
             ))}
@@ -427,6 +546,14 @@ export default function ProjectList() {
               sortable
             />
           )}
+          {!isMobile && folders.length > 0 && (
+            <Column
+              field="folder_name"
+              header={t("projectList.folder")}
+              className="col-width-22"
+              sortable
+            />
+          )}
           {!isMobile && (
             <Column
               field="created_at"
@@ -447,8 +574,96 @@ export default function ProjectList() {
         </DataTable>
       )}
 
-      <Menu model={menuItems} popup ref={menuRef} />
+      <TieredMenu model={menuItems} popup ref={menuRef} />
       <ConfirmDialog />
+
+      <Dialog
+        header={t("projectList.manageFolders")}
+        visible={showFolders}
+        style={{ width: "28rem", maxWidth: "95vw" }}
+        onHide={() => setShowFolders(false)}
+      >
+        {/* Every row ends in a fixed-width control block so the name inputs
+            line up regardless of whether the row carries the two folder
+            buttons or the Add button. */}
+        <div className="flex flex-column gap-3">
+          {folders.map((folder) => (
+            <div key={folder.folder_id} className="flex align-items-center gap-2">
+              <InputText
+                // Keyed on the live name so a rename pushed over the
+                // subscription refreshes the uncontrolled input.
+                key={`${folder.folder_id}:${folder.name}`}
+                defaultValue={folder.name}
+                className="flex-auto w-full"
+                aria-label={t("projectList.folderName")}
+                onBlur={(e) => submitFolderRename(folder, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.target.blur();
+                }}
+              />
+              <div
+                className="flex flex-none justify-content-end"
+                style={{ width: "6rem" }}
+              >
+                <Button
+                  icon={folder.is_public ? "pi pi-globe" : "pi pi-lock"}
+                  className={
+                    folder.is_public
+                      ? "p-button-text"
+                      : "p-button-text p-button-secondary"
+                  }
+                  onClick={() =>
+                    dispatch(
+                      updateFolder(folder.folder_id, {
+                        is_public: !folder.is_public,
+                      })
+                    )
+                  }
+                  aria-label={
+                    folder.is_public
+                      ? t("projectList.folderPublic")
+                      : t("projectList.folderPrivate")
+                  }
+                  title={
+                    folder.is_public
+                      ? t("projectList.folderPublic")
+                      : t("projectList.folderPrivate")
+                  }
+                />
+                <Button
+                  icon="pi pi-trash"
+                  className="p-button-text p-button-danger"
+                  onClick={() => confirmDeleteFolder(folder)}
+                  aria-label={t("actions.delete")}
+                  title={t("actions.delete")}
+                />
+              </div>
+            </div>
+          ))}
+          {folders.length === 0 && (
+            <p className="text-500 m-0">{t("projectList.noFoldersYet")}</p>
+          )}
+          <div className="flex align-items-center gap-2">
+            <InputText
+              value={newFolderName}
+              className="flex-auto w-full"
+              placeholder={t("projectList.newFolderName")}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitNewFolder();
+              }}
+            />
+            <Button
+              icon="pi pi-plus"
+              label={t("projectList.addFolder")}
+              className="flex-none justify-content-center"
+              style={{ width: "6rem" }}
+              onClick={submitNewFolder}
+              disabled={!newFolderName.trim()}
+            />
+          </div>
+        </div>
+      </Dialog>
 
       <Dialog
         header={t("editor.renameTitle")}

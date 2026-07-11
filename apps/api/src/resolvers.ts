@@ -298,9 +298,14 @@ async function projectOwnerOfFile(fileId: string): Promise<string | null> {
 }
 
 async function publishFor(table: string, ownerUserId: string | null): Promise<void> {
-    if (table === "project" || table === "project_file") {
+    if (table === "project" || table === "project_file" || table === "project_folder") {
         publishProjectChange(ownerUserId);
     }
+}
+
+// Tables whose rows carry the owning user directly.
+function ownsRows(table: string): boolean {
+    return table === "project" || table === "project_folder";
 }
 
 const PROJECT_FILE_NESTED_COLUMNS = ["name", "folder", "content", "is_binary"] as const;
@@ -365,7 +370,7 @@ export function makeInsertOneResolver(table: string) {
             select: ensureSelect(config, select),
         });
 
-        if (table === "project") {
+        if (ownsRows(table)) {
             await publishFor(table, (data.owner_user_id as string | undefined) ?? null);
         } else if (table === "project_file") {
             await publishFor(table, await dbCheck.projectOwner(String(data.project_id)));
@@ -390,8 +395,8 @@ export function makeUpdateByPkResolver(table: string) {
 
         // Publish needs the owner; resolve it before the row could vanish.
         let ownerUserId: string | null = null;
-        if (table === "project") {
-            const row = await delegate("project").findFirst({
+        if (ownsRows(table)) {
+            const row = await delegate(config.prismaModel).findFirst({
                 where: pkWhere,
                 select: { owner_user_id: true },
             });
@@ -450,8 +455,8 @@ export function makeDeleteByPkResolver(table: string) {
         const where = andWhere(pkWhere, filter);
 
         let ownerUserId: string | null = null;
-        if (table === "project") {
-            const row = await delegate("project").findFirst({
+        if (ownsRows(table)) {
+            const row = await delegate(config.prismaModel).findFirst({
                 where: pkWhere,
                 select: { owner_user_id: true },
             });

@@ -24,6 +24,7 @@ const asDelegate = (delegate: unknown): Delegate => delegate as Delegate;
 export const delegates: Record<string, Delegate> = {
     user: asDelegate(prisma.user),
     project: asDelegate(prisma.project),
+    project_folder: asDelegate(prisma.project_folder),
     project_file: asDelegate(prisma.project_file),
     project_star: asDelegate(prisma.project_star),
     user_follows: asDelegate(prisma.user_follows),

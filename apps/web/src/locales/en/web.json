@@ -88,7 +88,8 @@
     "makePublicHint": "Make your projects public to display them here",
     "starredProjects": "Starred Projects ({{count}})",
     "noStarred": "No starred projects yet",
-    "noStarredOwn": "Projects you star will appear here"
+    "noStarredOwn": "Projects you star will appear here",
+    "allProjects": "All"
   },
   "about": {
     "createProjects": "Create Projects",
@@ -224,7 +225,20 @@
     "none": "No projects yet",
     "noneHint": "Create your first project from the New Project menu.",
     "noMatches": "No projects match your search.",
-    "actions": "Project actions"
+    "actions": "Project actions",
+    "folder": "Folder",
+    "allFolders": "All folders",
+    "noFolder": "Not in a folder",
+    "moveToFolder": "Move to folder",
+    "manageFolders": "Folders",
+    "folderName": "Folder name",
+    "newFolder": "New folder...",
+    "newFolderName": "New folder name",
+    "addFolder": "Add",
+    "folderPublic": "Public folder (shown on your profile)",
+    "folderPrivate": "Private folder",
+    "deleteFolderConfirm": "Delete this folder? The projects inside are kept.",
+    "noFoldersYet": "No folders yet."
   },
   "feed": {
     "none": "No activity yet",
