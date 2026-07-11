@@ -172,13 +172,15 @@ export function isTextFileName(name) {
 // --enable-break per-line runtime call (lib/debugger/lineCallMap.js),
 // armed through the engine's linecall breakpoints; pascal (Pasta80) and c
 // (z88dk) map file lines to addresses via listings their services parse
-// (lib/debugger/pasta80Map.js, z88dkMap.js), and the in-browser worker
+// (lib/debugger/pasta80Map.js, z88dkMap.js), the in-browser worker
 // toolchains sdcc and zmac via the worker's own listings
-// (lib/debugger/workerListingMap.js) — all armed as plain address
-// breakpoints. Other toolchains would need a listing/map parser first.
+// (lib/debugger/workerListingMap.js), and asm (pasmo) via a label-injected
+// debug build's -d echo (lib/debugger/pasmoMap.js) — all armed as plain
+// address breakpoints. Other toolchains would need a listing/map parser
+// first.
 const SOURCE_DEBUG_LANGS = new Set(
-    ["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal", "c",
-     "sdcc", "zmac"]);
+    ["asm", "sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal",
+     "c", "sdcc", "zmac"]);
 
 export function languageSupportsSourceDebug(lang) {
   return SOURCE_DEBUG_LANGS.has(lang);

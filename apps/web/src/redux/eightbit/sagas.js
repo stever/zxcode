@@ -10,6 +10,7 @@ import {getZXBasicTap} from "./zxbasicCompile";
 import {getZ88dkTap} from "./z88dkCompile";
 import {getSjasmplusTap} from "./sjasmplusCompile";
 import {getPascalTap} from "./pascalCompile";
+import {harvestPasmoSourceMap} from "./pasmoDebugCompile";
 import {toActionFiles, toWorkerUpdates, toSdFiles, sdFileNameErrors} from "./compileFiles";
 import {store} from "../store";
 import {
@@ -38,11 +39,12 @@ import {dashboardUnlock} from "../../dashboard_lock";
 // Languages whose compile branch publishes a debugger source map itself:
 // sjasmplus reloads its SLD, the interpreted BASICs their line maps,
 // zxbasic its linecall map and pascal its listing-derived address map from
-// their compile services. Every other toolchain clears the map when it
+// their compile services; asm (pasmo) harvests its map from a second
+// label-injected debug build. Every other toolchain clears the map when it
 // replaces the program.
 const SOURCE_MAP_LANGS = new Set(
-    ["sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal", "c",
-     "sdcc", "zmac"]);
+    ["asm", "sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal",
+     "c", "sdcc", "zmac"]);
 
 // The main-source text the last sdcc/zmac worker build was posted with, so
 // the async result can flag its map stale when the editor moved on while
@@ -236,12 +238,32 @@ function* handleGetProjectTapActions(_) {
                 // module's virtual FS at their folder/name paths (pasmo
                 // 0.0.1-alpha.7's files map), so INCLUDE/INCBIN resolve
                 // natively and diagnostics carry each file's own name and
-                // line numbers.
+                // line numbers. The debugger's line→address map comes from
+                // a second, best-effort debug build of the same sources
+                // (pasmoDebugCompile.js) — the map may be absent, the TAP
+                // the user runs is always this untouched compile's. A
+                // failed compile keeps the previous map, like the other
+                // map-publishing branches.
                 try {
                     const projectFiles = yield select((state) => state.project.files);
                     const pasmoFiles = Object.fromEntries(
                         toWorkerUpdates(projectFiles).map((u) => [u.path, u.data]));
                     tap = yield call(getPasmoTap, code, pasmoFiles);
+                    const asmMap = yield call(harvestPasmoSourceMap, code, pasmoFiles, tap);
+                    if (asmMap) {
+                        // Stale on arrival when the editor moved on while
+                        // the compile was in flight — in the main source or
+                        // in any additional file the assembly consumed.
+                        const codeNow = yield select((state) => state.project.code);
+                        const filesNow = toActionFiles(
+                            yield select((state) => state.project.files));
+                        const filesMoved = filesNow.length !== files.length
+                            || filesNow.some((f, i) =>
+                                f.name !== files[i].name || f.content !== files[i].content);
+                        yield put(sourceMapLoaded(asmMap, codeNow !== code || filesMoved));
+                    } else {
+                        yield put(sourceMapCleared());
+                    }
                     yield put(followTapAction(tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
