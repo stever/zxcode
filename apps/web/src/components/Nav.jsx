@@ -11,7 +11,7 @@ import { downloadProjectTap } from "../redux/eightbit/actions";
 import { getUserInfo } from "../redux/identity/actions";
 import { login, logout } from "../auth";
 import { resetEmulator, setMachine } from "../redux/app/actions";
-import { getLanguageLabel, languageAllowedOnMachine } from "../lib/lang";
+import { getLanguageLabel, isBasicLang } from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
 import Constants from "../constants";
 
@@ -97,19 +97,14 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
+  // One consolidated BASIC (#110): "Sinclair/Next BASIC" compiles per
+  // machine (zmakebas on 48/128, txt2bas on the Next), so there is a single
+  // entry instead of the old machine-dependent zmakebas/NextBASIC pair.
   const newBasic = {
     label: getLanguageLabel("basic"),
     command: () => {
       dispatch(pause());
       navigate("/new/basic");
-    },
-  };
-
-  const newNextBasic = {
-    label: getLanguageLabel("nextbas"),
-    command: () => {
-      dispatch(pause());
-      navigate("/new/nextbas");
     },
   };
 
@@ -145,18 +140,13 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
-  // BASIC options depend on the selected machine (#68/#69): Sinclair BASIC
-  // (zmakebas/bas2tap) targets 48/128; NextBASIC targets the Next. Only offer
-  // the flavour that matches, so a project can't be created for a machine its
-  // language can't run on. Assembly/C/Boriel are machine-agnostic — always on.
   const otherMenu = { label: t("nav.other"), items: [] };
-  if (languageAllowedOnMachine("bas2tap", machine)) otherMenu.items.push(newBas2Tap);
+  otherMenu.items.push(newBas2Tap);
   otherMenu.items.push(newZmac);
   otherMenu.items.push(newSdcc);
 
   const newProjectItems = [];
-  if (languageAllowedOnMachine("basic", machine)) newProjectItems.push(newBasic);
-  if (languageAllowedOnMachine("nextbas", machine)) newProjectItems.push(newNextBasic);
+  newProjectItems.push(newBasic);
   if (Constants.enableBoriel) newProjectItems.push(newBoriel);
   newProjectItems.push(newPasmo);
   newProjectItems.push(newSjasmplus);
@@ -188,9 +178,10 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
       },
       {
         // On the Next the download is the translated artifact, not a tape:
-        // a .nex (or a PLUS3DOS .bas for NextBASIC) — see the download saga.
+        // a .nex, or a PLUS3DOS .bas for any BASIC dialect (native NextBASIC
+        // or a translated Sinclair BASIC TAP) — see the download saga.
         label: t("nav.download", {
-          ext: machine === "next" ? (lang === "nextbas" ? "BAS" : "NEX") : "TAP",
+          ext: machine === "next" ? (isBasicLang(lang) ? "BAS" : "NEX") : "TAP",
         }),
         icon: "pi pi-fw pi-download",
         disabled: typeof lang === "undefined",
@@ -294,9 +285,9 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     ],
   };
 
-  // A project's language pins the machines it can run on (#68): NextBASIC is
-  // Next-only, Sinclair BASIC is 48/128-only, everything else is free. Disable
-  // machines the current language can't target (in addition to machineLocked).
+  // Every language runs on every machine (#110): compiled TAPs translate onto
+  // the Next, and the BASIC dialects compile per machine — so only a "?m="
+  // URL lock disables switching.
   const machineMenu = {
     label: t("nav.machine"),
     icon: "pi pi-fw pi-desktop",
@@ -304,7 +295,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
       {
         label: t("nav.machine48"),
         icon: machine === 48 ? "pi pi-fw pi-check" : "pi pi-fw",
-        disabled: machineLocked || !languageAllowedOnMachine(lang, 48),
+        disabled: machineLocked,
         command: () => {
           dispatch(setMachine(48));
         },
@@ -312,7 +303,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
       {
         label: t("nav.machine128"),
         icon: machine === 128 ? "pi pi-fw pi-check" : "pi pi-fw",
-        disabled: machineLocked || !languageAllowedOnMachine(lang, 128),
+        disabled: machineLocked,
         command: () => {
           dispatch(setMachine(128));
         },
@@ -321,7 +312,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
         // zxgo engine only: the JSSpeccy3 engine has no Next.
         label: "ZX Spectrum Next",
         icon: machine === "next" ? "pi pi-fw pi-check" : "pi pi-fw",
-        disabled: machineLocked || !languageAllowedOnMachine(lang, "next"),
+        disabled: machineLocked,
         command: () => {
           dispatch(setMachine("next"));
         },

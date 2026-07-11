@@ -4,7 +4,6 @@ import { SelectButton } from "primereact/selectbutton";
 import gql from "graphql-tag";
 import { gqlFetch } from "../graphql_fetch";
 import { setMachine } from "../redux/app/actions";
-import { languageAllowedOnMachine } from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
 
 const UPDATE_PROJECT_MACHINE = gql`
@@ -38,7 +37,6 @@ const toDb = (m) => (m === "next" ? "next" : String(m));
 export default function ProjectMachineToggle({ project, userId }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const lang = useSelector((state) => state?.project.lang);
   const appMachine = useSelector((state) => state?.app.machine);
   const machineLocked = useSelector((state) => state?.app.machineLocked);
   const machine = toDb(appMachine);
@@ -49,17 +47,15 @@ export default function ProjectMachineToggle({ project, userId }) {
   // app.machine to project.machine after this mounts), not user intent.
   const syncedRef = useRef(false);
 
-  // A project's language pins its machines (#68): NextBASIC is Next-only,
-  // Sinclair BASIC is 48/128-only, everything else is free. Only offer machines
-  // the language can target (the current value always qualifies for a valid
-  // project, so it stays selectable).
+  // Every language can target every machine (#110): compiled TAPs translate
+  // onto the Next, and the BASIC dialects compile per machine.
   // Short labels — the "Target machine" caption already gives the context
   // and the toolbar has to fit on one line (the nav menu keeps full names).
   const options = [
     { label: t("machine.short48"), value: "48" },
     { label: t("machine.short128"), value: "128" },
     { label: t("machine.shortNext"), value: "next" },
-  ].filter((o) => languageAllowedOnMachine(lang, o.value));
+  ];
 
   // Route changes reuse this mounted component: re-seed against the new
   // project before the persist effect below can compare against it.
@@ -69,16 +65,13 @@ export default function ProjectMachineToggle({ project, userId }) {
   }, [project?.project_id]);
 
   // Persist whatever machine the owner lands on, however they got there.
-  // Machines the language cannot target are never written (the nav menu
-  // allows a session-only excursion; the target keeps its last valid value),
-  // and a "?m=" URL lock is a viewing preference, not a retargeting.
+  // A "?m=" URL lock is a viewing preference, not a retargeting.
   useEffect(() => {
     if (machine === savedRef.current) {
       syncedRef.current = true;
       return;
     }
     if (!syncedRef.current || machineLocked) return;
-    if (!languageAllowedOnMachine(lang, machine)) return;
     let cancelled = false;
     setUpdating(true);
     (async () => {
@@ -97,7 +90,7 @@ export default function ProjectMachineToggle({ project, userId }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [machine, lang, userId, project?.project_id, machineLocked]);
+  }, [machine, userId, project?.project_id, machineLocked]);
 
   const handleChange = (value) => {
     // SelectButton fires null when the active button is re-clicked; ignore it

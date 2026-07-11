@@ -250,19 +250,6 @@ function* handleGetProjectTapActions(_) {
                     dashboardUnlock();
                 }
                 break;
-            case 'basic':
-                // Sinclair BASIC (zmakebas)
-                try {
-                    tap = yield call(getZmakebasTap, code);
-                    yield* publishBasicSourceMap(code);
-                    yield put(followTapAction(tap));
-                    yield put(setFollowTapAction(undefined));
-                } catch (errorItems) {
-                    yield put(setErrorItems(errorItems));
-                } finally {
-                    dashboardUnlock();
-                }
-                break;
             case 'bas2tap':
                 // Sinclair BASIC (bas2tap)
                 try {
@@ -276,8 +263,18 @@ function* handleGetProjectTapActions(_) {
                     dashboardUnlock();
                 }
                 break;
+            case 'basic':
             case 'nextbas':
-                // NextBASIC (txt2bas) — tokenised to a PLUS3DOS program rather
+                // Consolidated Sinclair/Next BASIC (#110) — the same source
+                // compiles for the machine it will run on, the split the demo
+                // editor has always used. 'basic' and 'nextbas' are aliases
+                // ('nextbas' survives on pre-consolidation projects).
+                //
+                // On 48/128: zmakebas → a plain tape. Next-only keywords
+                // surface as a normal compile error, and there is no SD card,
+                // so extra project files can't ride along.
+                //
+                // On the Next: txt2bas tokenises to a PLUS3DOS program rather
                 // than a TAP. The Next delivery (GoEmulator.openTapeBytes)
                 // detects the PLUS3DOS magic and runs it via zxRunBas, so it
                 // rides the same followTapAction path as the TAP compilers.
@@ -288,6 +285,14 @@ function* handleGetProjectTapActions(_) {
                 // why every path segment must fit FAT 8.3 (a ~ alias would
                 // never match the LOADed path).
                 try {
+                    const targetMachine = yield select((state) => state.app.machine);
+                    if (targetMachine !== 'next') {
+                        tap = yield call(getZmakebasTap, code);
+                        yield* publishBasicSourceMap(code);
+                        yield put(followTapAction(tap));
+                        yield put(setFollowTapAction(undefined));
+                        break;
+                    }
                     const projectFiles = yield select((state) => state.project.files);
                     const badNames = sdFileNameErrors(projectFiles);
                     if (badNames.length > 0) {
@@ -302,7 +307,7 @@ function* handleGetProjectTapActions(_) {
                     yield put(followTapAction(tap, toSdFiles(projectFiles)));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
-                    console.error('[nextbas] dispatching setErrorItems', errorItems);
+                    console.error('[basic] dispatching setErrorItems', errorItems);
                     yield put(setErrorItems(errorItems));
                 } finally {
                     dashboardUnlock();

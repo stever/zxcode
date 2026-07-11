@@ -1,9 +1,13 @@
 export function getLanguageLabel(lang) {
   const labels = {
     asm: "Pasmo",
-    basic: "zmakebas",
+    // 'basic' and 'nextbas' are one consolidated language (#110): the same
+    // source compiles per machine — zmakebas on 48/128, txt2bas on the Next
+    // — so both codes present under one name. 'nextbas' survives only as a
+    // legacy code on existing projects; new projects get 'basic'.
+    basic: "Sinclair/Next BASIC",
+    nextbas: "Sinclair/Next BASIC",
     bas2tap: "bas2tap",
-    nextbas: "Next BASIC",
     c: "z88dk C",
     pascal: "Pasta80 Pascal",
     sdcc: "SDCC",
@@ -14,23 +18,14 @@ export function getLanguageLabel(lang) {
   return labels[lang] || lang;
 }
 
-// Which machines a language can target. Sinclair BASIC (zmakebas/bas2tap) is
-// 48/128 only; NextBASIC is a Next-only dialect (tokenised by txt2bas); every
-// other language is machine-agnostic. Values are strings; the app's machine
-// state uses 48/128 as numbers and 'next' as a string, so callers normalise via
-// String(machine).
-const MACHINE_RULES = {
-  basic: ["48", "128"],
-  bas2tap: ["48", "128"],
-  nextbas: ["next"],
-};
+// The BASIC dialects: on the Next their compiled program is a PLUS3DOS .bas
+// NextZXOS LOADs (tokenised by txt2bas, or a translated bas2tap TAP), not a
+// generated .nex like the machine-code languages. No language pins the
+// machine (#110) — every project can switch freely.
+const BASIC_LANGS = new Set(["basic", "bas2tap", "nextbas"]);
 
-export function allowedMachines(lang) {
-  return MACHINE_RULES[lang] || ["48", "128", "next"];
-}
-
-export function languageAllowedOnMachine(lang, machine) {
-  return allowedMachines(lang).includes(String(machine));
+export function isBasicLang(lang) {
+  return BASIC_LANGS.has(lang);
 }
 
 // Display name for a project's main source file. It mirrors the fixed name
@@ -55,10 +50,12 @@ export function mainFileName(lang) {
 
 // Languages whose toolchain can consume additional project files (compile
 // includes / INCBIN assets, or SD-card files LOADed at runtime on the Next).
-// zmakebas and bas2tap have no include mechanism and their TAPs carry only
-// the tokenised program, so extra files would be dead weight — the add-file
-// UI is hidden for them.
-const NO_PROJECT_FILE_LANGS = new Set(["basic", "bas2tap"]);
+// The consolidated BASIC ('basic'/'nextbas') stages files onto the Next's SD
+// card, so it keeps the add-file UI (on 48/128 there is nowhere to deliver
+// them — they only matter when the project runs on the Next). bas2tap has no
+// include mechanism and its TAP carries only the tokenised program, so extra
+// files would be dead weight — the add-file UI is hidden for it.
+const NO_PROJECT_FILE_LANGS = new Set(["bas2tap"]);
 
 export function languageSupportsProjectFiles(lang) {
   return !NO_PROJECT_FILE_LANGS.has(lang);
