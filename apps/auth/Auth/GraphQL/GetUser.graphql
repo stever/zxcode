@@ -1,6 +1,0 @@
-query GetUser($username: String!) {
-    user(where: {username: {_eq: $username}}) {
-        user_id
-        username
-    }
-}

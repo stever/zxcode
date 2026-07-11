@@ -10,7 +10,6 @@ Minimum pre-requisites:
 
 - Docker with Docker Compose (https://docs.docker.com/get-docker/)
 - Caddy web server (https://caddyserver.com/) caddy command installed and in PATH
-- Microsoft .NET 8 SDK (https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
 
 ```bash
 # Create .env files from example .env-dist files

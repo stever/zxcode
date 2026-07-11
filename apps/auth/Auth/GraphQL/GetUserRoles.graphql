@@ -1,9 +1,0 @@
-﻿query GetUserRoles($user_id: uuid!) {
-    user(where: {user_id: {_eq: $user_id}}) {
-        user_roles {
-            role {
-                name
-            }
-        }
-    }
-}

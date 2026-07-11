@@ -1,20 +1,15 @@
-﻿FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-WORKDIR /app
-EXPOSE 80
-EXPOSE 443
+# Build context is apps/auth (see .github/workflows/publish-containers.yml).
+FROM node:22-slim
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
-COPY ["Auth/Auth.csproj", "Auth/"]
-RUN dotnet restore "Auth/Auth.csproj"
+WORKDIR /app
+
+# Install this service's own dependencies (not workspace-hoisted).
+COPY package.json ./
+RUN npm install --no-audit --no-fund
+
 COPY . .
-WORKDIR "/src/Auth"
-RUN dotnet build "Auth.csproj" -c Release -o /app/build
 
-FROM build AS publish
-RUN dotnet publish "Auth.csproj" -c Release -o /app/publish
+ENV PORT=8080
+EXPOSE 8080
 
-FROM base AS final
-WORKDIR /app
-COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "Auth.dll"]
+CMD ["npx", "tsx", "src/index.ts"]

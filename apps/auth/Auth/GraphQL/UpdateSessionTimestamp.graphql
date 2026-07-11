@@ -1,5 +1,0 @@
-mutation UpdateSessionTimestamp($session_id: uuid!, $updated: timestamptz!) {
-    update_session_by_pk(pk_columns: {session_id: $session_id}, _set: {updated: $updated}) {
-        updated
-    }
-}
