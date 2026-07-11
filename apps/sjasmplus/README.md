@@ -1,7 +1,7 @@
 # ZX Play API for sjasmplus
 
 Assembles Z80 code with [sjasmplus](https://github.com/z00m128/sjasmplus) and
-returns a base64-encoded TAP or NEX file, as a Hasura Action webhook.
+returns a base64-encoded TAP or NEX file, as a compile-action webhook behind apps/api.
 
 Output is driven by directives in the source, which must produce exactly one
 TAP or NEX file:
@@ -65,26 +65,11 @@ docker build -t sjasmplus-api .
 docker run --rm -v "$PWD/test:/app/test:ro" sjasmplus-api python -m pytest /app/test
 ```
 
-## Hasura Deployment Configuration
+## API Integration
 
-### Compile Action Service
-
-Tick option to "Forward client headers to webhook".
-
-#### Action definition
-
-```graphql
-type Mutation {
-  compileSjasmplus (
-    code: String!
-  ): CompileResult
-}
-```
-
-The `CompileResult` type (`base64_encoded: String!`) is shared with the other
-compile actions.
-
-#### Handler
+Reached through the `compileSjasmplus` mutation on apps/api, which forwards the
+Hasura-style action-webhook envelope (`input` + `session_variables` +
+forwarded client headers for rate limiting) to this service's handler at:
 
 ```
 http://sjasmplus/compile/

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { fetchProjectMetaBySlug, fetchProjectMetaById, ProjectMeta } from '../hasura.js';
+import { fetchProjectMetaBySlug, fetchProjectMetaById, ProjectMeta } from '../api.js';
 
 // OpenGraph cards for shared project links. Caddy routes only social-crawler
 // requests for /u/* and /projects/* here; real users fall through to the SPA.

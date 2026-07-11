@@ -17,13 +17,10 @@ Minimum pre-requisites:
 cp .env-dist .env
 cp apps/proxy/.env-dist apps/proxy/.env
 
-# Set env vars before starting containers
-export HASURA_GRAPHQL_ADMIN_SECRET=hasurapassword
-
 # Start up containers
 docker compose up --build -d
 
-# Wait for Hasura to start
+# Wait for the GraphQL api to start
 bash -c 'while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:4000/healthz)" != "200" ]]; do sleep 5; done'
 ```
 
@@ -54,7 +51,7 @@ docker compose up --build -d
 
 | Port | Purpose        | Protocol |
 | ---- | -------------- | -------- |
-| 4000 | Hasura GraphQL | HTTP     |
+| 4000 | GraphQL api    | HTTP     |
 | 5000 | Auth           | HTTP     |
 | 8000 | React          | HTTP     |
 | 8080 | Proxy          | HTTP     |

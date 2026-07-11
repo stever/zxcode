@@ -1,7 +1,7 @@
 # ZX Play API for Z88DK
 
 Compiles C for the ZX Spectrum with [z88dk](https://z88dk.org/) and returns a
-base64-encoded TAP, as a Hasura Action webhook.
+base64-encoded TAP, as a compile-action webhook behind apps/api.
 
 Sources build against the newlib (`-clib=sdcc_iy`, `<arch/zx.h>`) by default.
 A source that includes `<spectrum.h>` is detected as classic-library code and
@@ -43,31 +43,11 @@ docker build -t z88dk-api .
 docker run --rm -v "$PWD/test:/app/test:ro" z88dk-api python -m pytest /app/test
 ```
 
-## Hasura Deployment Configuration
+## API Integration
 
-### Compile Action Service
-
-Tick option to "Forward client headers to webhook".
-
-#### Action definition
-
-```graphql
-type Mutation {
-  compileC (
-    code: String!
-  ): CompileResult
-}
-```
-
-#### New types definition
-
-```graphql
-type CompileResult {
-  base64_encoded: String!
-}
-```
-
-#### Handler
+Reached through the `compileC` mutation on apps/api, which forwards the
+Hasura-style action-webhook envelope (`input` + `session_variables` +
+forwarded client headers for rate limiting) to this service's handler at:
 
 ```
 http://z88dk/compile/

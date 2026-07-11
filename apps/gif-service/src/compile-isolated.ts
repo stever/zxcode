@@ -1,7 +1,7 @@
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CompileError } from './errors.js';
-import { ProjectFileRecord } from './hasura.js';
+import { ProjectFileRecord } from './api.js';
 
 // Run the worker under tsx (the service itself runs via tsx, so it's installed).
 const WORKER_PATH = fileURLToPath(new URL('./compile-worker.ts', import.meta.url));

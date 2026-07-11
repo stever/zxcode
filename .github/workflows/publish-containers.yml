@@ -27,6 +27,12 @@ jobs:
           - context: ./apps/auth/
             dockerfile: ./apps/auth/Dockerfile
             image: ghcr.io/stever/zxcode-auth
+          # GraphQL backend (Node + Prisma, replaced Hasura). The same image
+          # runs the api and the one-shot api-migrate service in the deploy
+          # compose. New package; GHCR links it to this repo on first push.
+          - context: ./
+            dockerfile: ./apps/api/Dockerfile
+            image: ghcr.io/stever/zxcode-api
           # Boriel ZX Basic compile API (migrated from the standalone
           # zxcode-api-zxbasic repo). Keeps the original image name so the
           # deploy is unchanged; needs this repo's Actions write access to the

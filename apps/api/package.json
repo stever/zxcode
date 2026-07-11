@@ -1,0 +1,29 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit && prisma validate",
+    "start": "tsx src/index.ts",
+    "migrate": "tsx src/migrate.ts",
+    "generate": "prisma generate",
+    "test": "vitest run",
+    "test:integration": "RUN_INTEGRATION=1 vitest run test/integration"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.10.1",
+    "graphql": "^16.11.0",
+    "jose": "^6.0.11",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.18.1",
+    "prisma": "^6.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
+  }
+}

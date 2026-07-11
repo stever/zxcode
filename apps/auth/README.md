@@ -1,4 +1,4 @@
-# SAML Authentication Service using Hasura GraphQL API
+# SAML Authentication Service
 
 ## Configuration
 

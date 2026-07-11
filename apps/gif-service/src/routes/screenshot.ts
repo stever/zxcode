@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { mkdir, readFile, writeFile, access } from 'fs/promises';
 import { join } from 'path';
 import { GIFGenerator, MachineType } from '../gif-generator.js';
-import { fetchProjectById } from '../hasura.js';
+import { fetchProjectById } from '../api.js';
 import { compileProjectIsolated } from '../compile-isolated.js';
 import { withRenderSlot } from '../concurrency.js';
 import { CompileError } from '../errors.js';

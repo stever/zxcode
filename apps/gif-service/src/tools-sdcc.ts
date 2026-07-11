@@ -1,5 +1,5 @@
 import { CompileError } from './errors.js';
-import { ProjectFileRecord } from './hasura.js';
+import { ProjectFileRecord } from './api.js';
 import { loadTool, mountShare, readCrt0 } from './wasm-tools.js';
 
 // Mirrors the web app's 8bitworker C pipeline (Builder.ts PLATFORM_PARAMS).

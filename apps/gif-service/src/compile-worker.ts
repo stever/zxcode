@@ -1,6 +1,6 @@
 import { compileProject } from './compile.js';
 import { CompileError } from './errors.js';
-import { ProjectFileRecord } from './hasura.js';
+import { ProjectFileRecord } from './api.js';
 
 // Child process for one compile. The parent (compile-isolated.ts) forks this per
 // request and SIGKILLs it on timeout, so a synchronous hang in a WASM compiler

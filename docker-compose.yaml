@@ -17,30 +17,57 @@ services:
       retries: 5
       start_period: 80s
 
-  hasura:
-    image: hasura/graphql-engine:latest.cli-migrations-v3
+  # One-shot migration runner: applies the Prisma migrations (baselining a
+  # database created by the old Hasura migrations on first contact) and exits.
+  # The api only starts after it succeeds, so every `up` on an updated image
+  # migrates the schema before serving traffic.
+  api-migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    command: ["npx", "tsx", "src/migrate.ts"]
+
+  # GraphQL backend (Node + Prisma), serving the same endpoint and dialect the
+  # Hasura engine did: /v1/graphql behind the proxy's /api route, roles
+  # public / zxplay-user (JWT) / admin (X-Hasura-Admin-Secret header, used by
+  # the auth service), the four compile actions, and the project-list
+  # subscription over websocket.
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
     restart: always
     depends_on:
       postgres:
         condition: service_healthy
+      api-migrate:
+        condition: service_completed_successfully
     ports:
       - 4000:8080
-    volumes:
-      - ./hasura/metadata:/hasura-metadata
-      - ./hasura/migrations:/hasura-migrations
     environment:
-      HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
-      HASURA_GRAPHQL_MIGRATIONS_DIR: /hasura-migrations
-      HASURA_GRAPHQL_DATABASE_URL: ${HASURA_DATABASE_URL}
-      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
-      HASURA_GRAPHQL_JWT_SECRET: '{"type": "HS256", "key": "${HASURA_JWT_SECRET}", "audience": "${HASURA_JWT_AUDIENCE}", "issuer": "${HASURA_JWT_ISSUER}"}'
-      HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_ENABLE_CONSOLE}
-      HASURA_GRAPHQL_DEV_MODE: ${HASURA_GRAPHQL_DEV_MODE}
-      HASURA_GRAPHQL_PG_CONNECTIONS: 4
-      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: public
-    command:
-      - graphql-engine
-      - serve
+      DATABASE_URL: ${DATABASE_URL}
+      ADMIN_SECRET: ${ADMIN_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      JWT_ISSUER: ${JWT_ISSUER}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   # Untrusted-input compilers. Defence in depth against a hostile source
   # exhausting the host: the root FS is read-only with only a size-capped
@@ -168,10 +195,10 @@ services:
       start_period: 20s
 
   # Headless emulator: compiles a program to .tap and renders it running to
-  # GIF/MP4. Renders inline BASIC, or a public project looked up from Hasura
-  # (compiling asm/bas2tap in-process; zxbasic/c/sjasmplus/pascal via Hasura
-  # actions).
-  # Talks to Hasura as the unauthenticated `public` role, so it holds no
+  # GIF/MP4. Renders inline BASIC, or a public project looked up from the api
+  # (compiling asm/bas2tap in-process; zxbasic/c/sjasmplus/pascal via the
+  # api's compile mutations).
+  # Talks to the api as the unauthenticated `public` role, so it holds no
   # secrets. Does untrusted execution; not exposed publicly.
   gif-service:
     build:
@@ -179,14 +206,14 @@ services:
       dockerfile: apps/gif-service/Dockerfile
     restart: always
     depends_on:
-      - hasura
+      - api
     # Local dev: publish on host :5001 so the host Caddy's `/screenshots/*`
     # reverse_proxy (localhost:5001) can reach it. Prod fronts this differently
     # and should not expose the port.
     ports:
       - "5001:5001"
     environment:
-      HASURA_URL: http://hasura:8080/v1/graphql
+      GRAPHQL_URL: http://api:8080/v1/graphql
       # The zx_go core is ONE global machine per process: every render drives
       # the same wasm emulator. Classic renders only serialize by accident
       # (their frame loop never yields); the Next path awaits during its boot
@@ -233,9 +260,9 @@ services:
       retries: 3
       start_period: 20s
     # NETWORK ISOLATION (prod): gif-service + zxbasic + z88dk + sjasmplus need no inbound
-    # internet, only intra-stack traffic (gif-service -> hasura; hasura ->
+    # internet, only intra-stack traffic (gif-service -> api; api ->
     # zxbasic/z88dk/sjasmplus). In the prod compose put them on an `internal: true`
-    # network that also carries hasura. The gif-service network must ALSO carry
+    # network that also carries the api. The gif-service network must ALSO carry
     # the proxy (prod.Caddyfile serves /screenshots/* and the OG-crawler routes
     # from gif-service:5001) and mastodon-bot — omitting the proxy leg 502s
     # every screenshot. Not wired here to avoid breaking dev connectivity that

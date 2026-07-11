@@ -1,0 +1,145 @@
+// Prisma schema mirroring the database the Hasura migrations built. Model and
+// field names deliberately use the snake_case database names: the GraphQL
+// layer exposes the same names, so the engine maps selections straight onto
+// Prisma queries without a translation table.
+//
+// Postgres details Prisma cannot express (CHECK constraints, partial indexes,
+// trigger functions) live in the SQL migrations under prisma/migrations/.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model user {
+  user_id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username          String    @unique(map: "user_username_key")
+  greeting_name     String?
+  full_name         String?
+  email_address     String?   @unique(map: "user_email_address_key")
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+  slug              String    @unique(map: "user_slug_key")
+  profile_is_public Boolean   @default(true)
+  bio               String?
+  avatar_variant    Int?      @default(0)
+  custom_avatar_data Json?
+
+  projects         project[]      @relation("project_owner")
+  starred_projects project_star[] @relation("star_user")
+  followers        user_follows[] @relation("follows_following")
+  following        user_follows[] @relation("follows_follower")
+  sessions         session[]
+  user_roles       user_role[]
+}
+
+model project {
+  project_id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title         String
+  code          String    @default("")
+  owner_user_id String?   @db.Uuid
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  lang          String    @default("zxbasic")
+  is_public     Boolean   @default(false)
+  slug          String
+  display_order Int?      @default(0)
+  machine       String    @default("48")
+
+  // Hasura exposed this relationship twice ("owner" and "user"); Prisma
+  // allows one relation per FK, so the engine aliases both GraphQL names here.
+  owner user?          @relation("project_owner", fields: [owner_user_id], references: [user_id], onUpdate: Restrict, onDelete: Restrict, map: "project_owner_user_id_fkey")
+  files project_file[]
+  stars project_star[]
+
+  @@unique([owner_user_id, slug], map: "project_owner_slug_key")
+  @@index([owner_user_id, display_order], map: "idx_project_display_order")
+}
+
+model project_file {
+  file_id    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id String   @db.Uuid
+  name       String
+  folder     String   @default("")
+  content    String   @default("")
+  is_binary  Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  project project @relation(fields: [project_id], references: [project_id], onDelete: Cascade, map: "project_file_project_id_fkey")
+
+  @@unique([project_id, folder, name], map: "project_file_path_unique")
+  @@index([project_id], map: "idx_project_file_project")
+}
+
+model project_star {
+  user_id    String    @db.Uuid
+  project_id String    @db.Uuid
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  user    user    @relation("star_user", fields: [user_id], references: [user_id], onDelete: Cascade, map: "project_star_user_id_fkey")
+  project project @relation(fields: [project_id], references: [project_id], onDelete: Cascade, map: "project_star_project_id_fkey")
+
+  @@id([user_id, project_id])
+  @@index([user_id], map: "idx_project_star_user")
+  @@index([project_id], map: "idx_project_star_project")
+  @@index([created_at(sort: Desc)], map: "idx_project_star_created_at")
+}
+
+model user_follows {
+  follower_id  String    @db.Uuid
+  following_id String    @db.Uuid
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+
+  follower  user @relation("follows_follower", fields: [follower_id], references: [user_id], onDelete: Cascade, map: "user_follows_follower_id_fkey")
+  following user @relation("follows_following", fields: [following_id], references: [user_id], onDelete: Cascade, map: "user_follows_following_id_fkey")
+
+  @@id([follower_id, following_id])
+  @@index([follower_id], map: "idx_user_follows_follower")
+  @@index([following_id], map: "idx_user_follows_following")
+  @@index([created_at(sort: Desc)], map: "idx_user_follows_created_at")
+}
+
+model session {
+  session_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  auth_token String    @unique(map: "session_auth_token_key") @db.VarChar(255)
+  created    DateTime  @db.Timestamptz(6)
+  updated    DateTime? @db.Timestamptz(6)
+  expires    DateTime  @db.Timestamptz(6)
+
+  user user @relation(fields: [user_id], references: [user_id], onUpdate: Cascade, onDelete: Cascade, map: "session_user_id_fkey")
+}
+
+model role {
+  role_id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String    @unique(map: "role_name_key")
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  user_roles user_role[]
+}
+
+model user_role {
+  user_id    String    @db.Uuid
+  role_id    String    @db.Uuid
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  user user @relation(fields: [user_id], references: [user_id], onUpdate: Cascade, onDelete: Cascade, map: "user_role_user_id_fkey")
+  role role @relation(fields: [role_id], references: [role_id], onUpdate: Cascade, onDelete: Cascade, map: "user_role_role_id_fkey")
+
+  @@id([user_id, role_id])
+}
+
+model text {
+  text_id    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  lang       String
+  text       String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([name, lang], map: "text_name_lang_key")
+}

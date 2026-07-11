@@ -1,5 +1,5 @@
 import { CompileError } from './errors.js';
-import { compileViaAction, ProjectFileRecord } from './hasura.js';
+import { compileViaAction, ProjectFileRecord } from './api.js';
 
 interface ToolMessage {
     type: string;
@@ -45,7 +45,7 @@ function toToolInputs(files: ProjectFileRecord[]): Record<string, Uint8Array | s
  *
  * In-process WASM: basic (zmakebas), bas2tap, asm (pasmo --tapbas loader).
  * In-process JS: nextbas (txt2bas — the consolidated Sinclair/Next BASIC).
- * Via Hasura actions: zxbasic (Boriel), c (z88dk), sjasmplus, pascal.
+ * Via the api compile mutations: zxbasic (Boriel), c (z88dk), sjasmplus, pascal.
  *
  * `machine` ('48' | '128' | 'next') is only consulted by languages whose
  * codegen depends on the target — currently pascal (Pasta80). `files` are the

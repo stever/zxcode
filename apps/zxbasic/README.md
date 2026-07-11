@@ -42,31 +42,11 @@ docker run \
   ghcr.io/stever/zxcode-api-zxbasic
 ```
 
-## Hasura Deployment Configuration
+## API Integration
 
-### Compile Action Service
-
-Tick option to "Forward client headers to webhook".
-
-#### Action definition
-
-```graphql
-type Mutation {
-  compile (
-    basic: String!
-  ): CompileResult
-}
-```
-
-#### New types definition
-
-```graphql
-type CompileResult {
-  base64Encoded: String!
-}
-```
-
-#### Handler
+Reached through the `compile` mutation on apps/api, which forwards the
+Hasura-style action-webhook envelope (`input` + `session_variables` +
+forwarded client headers for rate limiting) to this service's handler at:
 
 ```
 http://zxbasic/compile/

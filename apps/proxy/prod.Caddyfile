@@ -32,7 +32,7 @@
             max_size 16MB
         }
         uri strip_prefix /api
-        reverse_proxy hasura:8080
+        reverse_proxy api:8080
     }
 
     # Read-only project screenshots (PNG). Only this gif-service path is exposed;

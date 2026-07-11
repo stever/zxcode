@@ -2,7 +2,7 @@
 
 Compiles Turbo Pascal 3.0-compatible Pascal with
 [Pasta80](https://github.com/pleumann/pasta80) and returns a base64-encoded
-TAP file with a BASIC loader, as a Hasura Action webhook.
+TAP file with a BASIC loader, as a compile-action webhook behind apps/api.
 
 The optional `machine` argument selects the codegen target (`48`, `128` or
 `next`; default `48`) — each links a different runtime, so features like the
@@ -68,27 +68,11 @@ docker build -t pasta80-api .
 docker run --rm -v "$PWD/test:/app/test:ro" pasta80-api python -m pytest /app/test
 ```
 
-## Hasura Deployment Configuration
+## API Integration
 
-### Compile Action Service
-
-Tick option to "Forward client headers to webhook".
-
-#### Action definition
-
-```graphql
-type Mutation {
-  compilePascal (
-    code: String!
-    machine: String
-  ): CompileResult
-}
-```
-
-The `CompileResult` type (`base64_encoded: String!`) is shared with the other
-compile actions.
-
-#### Handler
+Reached through the `compilePascal` mutation on apps/api, which forwards the
+Hasura-style action-webhook envelope (`input` + `session_variables` +
+forwarded client headers for rate limiting) to this service's handler at:
 
 ```
 http://pasta80/compile/

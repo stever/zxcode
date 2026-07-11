@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { GIFGenerator } from '../gif-generator.js';
-import { fetchProject } from '../hasura.js';
+import { fetchProject } from '../api.js';
 import { compileProjectIsolated } from '../compile-isolated.js';
 import { withRenderSlot } from '../concurrency.js';
 import { CompileError } from '../errors.js';
@@ -32,7 +32,7 @@ function readProjectRef(req: Request): ProjectRef | null {
 
 /**
  * Look up a public code.zxplay.org project, compile it for its language, and
- * render it. Mirrors the BASIC route but resolves the source from Hasura and
+ * render it. Mirrors the BASIC route but resolves the source from the api and
  * picks a compiler by `lang`. A compile failure responds 400 with the detail;
  * a missing or private project responds 404.
  */
