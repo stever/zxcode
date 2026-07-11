@@ -129,8 +129,11 @@ func TestPutSDFileRuntimeLoad(t *testing.T) {
 		t.Skip("no SD image mounted (set ZX_GO_NEXT_SD_IMG); the load path needs one")
 	}
 
-	if err := emu.putSDFile("bad name that cannot fit 8.3.spr", []byte{1}); err == nil {
-		t.Fatal("putSDFile accepted a name that does not fit 8.3")
+	// A name beyond 8.3 is stored as a VFAT LFN entry (like a real card)
+	// and stays loadable by its long name — see the folder variant below,
+	// which proves the runtime LOAD; here it must simply be accepted.
+	if err := emu.putSDFile("long name well past 8.3.spr", []byte{1}); err != nil {
+		t.Fatalf("putSDFile rejected a long name (LFN staging): %v", err)
 	}
 
 	asset := []byte{123, 45, 67}
@@ -182,9 +185,10 @@ func TestPutSDFileRuntimeLoad(t *testing.T) {
 // runtime-asset test: putSDFile stages a file under a subdirectory (creating
 // it on the card) and the delivered program LOADs it by the same relative
 // path — the layout a project's download ZIP produces when unzipped onto a
-// real card. Also checks that a directory segment that cannot fit 8.3 is
-// rejected up front (directory lookup is by 8.3 short name, so a ~ alias
-// would silently never match the program's literal path).
+// real card. The directory name deliberately exceeds 8.3: it lands on the
+// card as a VFAT LFN entry (the way a real card stores it), and NextZXOS's
+// own FS code resolving the program's literal long path at runtime is the
+// guarantee folder-game zips (and long-named project folders) depend on.
 func TestPutSDFileFolderRuntimeLoad(t *testing.T) {
 	prev := cliFlagsActive
 	nf := cliFlags{}
@@ -203,24 +207,22 @@ func TestPutSDFileFolderRuntimeLoad(t *testing.T) {
 		t.Skip("no SD image mounted (set ZX_GO_NEXT_SD_IMG); the load path needs one")
 	}
 
-	if err := emu.putSDFile("toolongdirname99/spr.bin", []byte{1}); err == nil {
-		t.Fatal("putSDFile accepted a directory that does not fit 8.3")
-	}
 	if err := emu.putSDFile("gfx//spr.bin", []byte{1}); err == nil {
 		t.Fatal("putSDFile accepted an empty path segment")
 	}
 
 	asset := []byte{123, 45, 67}
-	if err := emu.putSDFile("gfx/spr.bin", asset); err != nil {
+	if err := emu.putSDFile("assetsfolder99/spr.bin", asset); err != nil {
 		t.Fatalf("putSDFile: %v", err)
 	}
 
-	// 10 LOAD "gfx/spr.bin" CODE 32768 — tokenised +3 BASIC.
+	// 10 LOAD "assetsfolder99/spr.bin" CODE 32768 — tokenised +3 BASIC.
 	prog := []byte{
 		0x00, 0x0A, // line 10 (big-endian)
-		0x1B, 0x00, // line length 27 (little-endian)
+		0x26, 0x00, // line length 38 (little-endian)
 		0xEF, // LOAD
-		'"', 'g', 'f', 'x', '/', 's', 'p', 'r', '.', 'b', 'i', 'n', '"',
+		'"', 'a', 's', 's', 'e', 't', 's', 'f', 'o', 'l', 'd', 'e', 'r', '9', '9',
+		'/', 's', 'p', 'r', '.', 'b', 'i', 'n', '"',
 		0xAF,                    // CODE
 		'3', '2', '7', '6', '8', // 32768
 		0x0E, 0x00, 0x00, 0x00, 0x80, 0x00,

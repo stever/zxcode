@@ -196,7 +196,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r36-nex-game-zip';
+        const ENGINE_REV = 'r37-sd-lfn';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -654,11 +654,11 @@ export class GoEmulator extends EventEmitter {
     // its path relative to the .nex's folder: the imported game runs from the
     // card root (importAndRunNex copies it to /zx.nex), so its relative LOADs
     // resolve against the same layout. Staging happens before zxRunNex — its
-    // reboot re-reads the card. The card's FAT writer takes 8.3 names only;
-    // entries that don't fit are skipped with a warning rather than failing
-    // the load (a skipped file only matters if the game LOADs it, which then
-    // fails visibly in-game; the .nex's own name is irrelevant — the import
-    // renames it).
+    // reboot re-reads the card. Long names land as VFAT LFN entries (like a
+    // real card), so games load them literally; a rejected file (FAT-illegal
+    // path, full card) is skipped with a warning rather than failing the
+    // whole load — it only matters if the game LOADs it, which then fails
+    // visibly in-game.
     async openNexGameZip(entries, nexEntry) {
         await this.whenMachineReady();
         if (this.machineType !== 'next') await this.bootNext();

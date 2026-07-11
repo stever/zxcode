@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -120,6 +121,116 @@ func TestAddFileToFAT32_RoundTrips(t *testing.T) {
 	gotOrig := readPath(t, img, "games", "ORIG.BIN")
 	if !bytes.Equal(gotOrig, orig) {
 		t.Errorf("pre-existing file corrupted by the insert")
+	}
+}
+
+// readLongPath resolves /dir/.../name by long name (the way NextZXOS would)
+// and returns the file bytes.
+func readLongPath(t *testing.T, img []byte, dirPath, name string) []byte {
+	t.Helper()
+	b, err := openFAT32(img)
+	if err != nil {
+		t.Fatalf("openFAT32: %v", err)
+	}
+	dirClus := uint32(2)
+	for _, part := range splitNonEmpty(dirPath) {
+		dirClus = b.findSubdir(dirClus, part)
+		if dirClus == 0 {
+			t.Fatalf("dir %q not found", part)
+		}
+	}
+	off := b.findDirent(dirClus, name, false)
+	if off < 0 {
+		t.Fatalf("file %q not found in %q", name, dirPath)
+	}
+	e := b.img[off : off+32]
+	size := int(binary.LittleEndian.Uint32(e[28:32]))
+	first := uint32(binary.LittleEndian.Uint16(e[20:22]))<<16 |
+		uint32(binary.LittleEndian.Uint16(e[26:28]))
+	return b.readChain(first, size)
+}
+
+func TestWriteFileToFAT32_LongNames(t *testing.T) {
+	img, err := BuildFAT32(t.TempDir(), FAT32Opts{SizeMB: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A long-named file in a long-named directory round-trips by long name.
+	want := bytes.Repeat([]byte{0x5A}, 20000)
+	if _, err := WriteFileToFAT32(img, "spr/really long dir", "sprites_enemigos_a0.spr", want); err != nil {
+		t.Fatalf("WriteFileToFAT32: %v", err)
+	}
+	got := readLongPath(t, img, "spr/really long dir", "sprites_enemigos_a0.spr")
+	if !bytes.Equal(got, want) {
+		t.Errorf("long-named file mismatch: got %d bytes, want %d", len(got), len(want))
+	}
+	// The alias carries the standard numeric tail.
+	if data := readPath(t, img, "spr/really long dir", "SPRITE~1.SPR"); !bytes.Equal(data, want) {
+		t.Errorf("8.3 alias SPRITE~1.SPR mismatch")
+	}
+
+	// Overwriting by the same long name (any case) replaces in place, not
+	// duplicates — VFAT matches long names case-insensitively.
+	want2 := []byte("replacement")
+	if _, err := WriteFileToFAT32(img, "spr/really long dir", "Sprites_Enemigos_A0.SPR", want2); err != nil {
+		t.Fatalf("overwrite: %v", err)
+	}
+	if got := readLongPath(t, img, "spr/really long dir", "sprites_enemigos_a0.spr"); !bytes.Equal(got, want2) {
+		t.Errorf("overwrite readback = %q, want %q", got, want2)
+	}
+	b, _ := openFAT32(img)
+	dirClus := b.findSubdir(2, "spr")
+	dirClus = b.findSubdir(dirClus, "really long dir")
+	count := 0
+	b.forEachDirent(dirClus, func(off int, long string) bool {
+		if strings.EqualFold(long, "sprites_enemigos_a0.spr") {
+			count++
+		}
+		return false
+	})
+	if count != 1 {
+		t.Errorf("after overwrite, %d entries named sprites_enemigos_a0.spr; want 1", count)
+	}
+
+	// A second distinct long name in the same directory gets its own alias.
+	if _, err := WriteFileToFAT32(img, "spr/really long dir", "sprites_enemigos_b0.spr", []byte("b")); err != nil {
+		t.Fatal(err)
+	}
+	if got := readLongPath(t, img, "spr/really long dir", "sprites_enemigos_b0.spr"); string(got) != "b" {
+		t.Errorf("second long name = %q, want b", got)
+	}
+	if data := readPath(t, img, "spr/really long dir", "SPRITE~2.SPR"); string(data) != "b" {
+		t.Errorf("8.3 alias SPRITE~2.SPR mismatch")
+	}
+}
+
+func TestWriteFileToFAT32_ShortNameStillReplaces(t *testing.T) {
+	img, err := BuildFAT32(t.TempDir(), FAT32Opts{SizeMB: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteFileToFAT32(img, "nextzxos", "autoexec.bas", []byte("one")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteFileToFAT32(img, "nextzxos", "autoexec.bas", []byte("two!")); err != nil {
+		t.Fatal(err)
+	}
+	if got := readPath(t, img, "nextzxos", "AUTOEXEC.BAS"); string(got) != "two!" {
+		t.Errorf("overwrite = %q, want two!", got)
+	}
+}
+
+func TestAddFileToFAT32_LongNameReadableByLongName(t *testing.T) {
+	img, err := BuildFAT32(t.TempDir(), FAT32Opts{SizeMB: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AddFileToFAT32(img, "imported", "RevivalSurvival.nex", []byte("payload")); err != nil {
+		t.Fatal(err)
+	}
+	if got := readLongPath(t, img, "imported", "RevivalSurvival.nex"); string(got) != "payload" {
+		t.Errorf("long-name lookup = %q, want payload", got)
 	}
 }
 

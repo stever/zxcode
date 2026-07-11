@@ -48,6 +48,10 @@ const (
 	ModeLSU PriorityMode = 1 // Layer 2 over Sprites over ULA
 	ModeSUL PriorityMode = 2 // Sprites over ULA over Layer 2
 	ModeLUS PriorityMode = 3 // Layer 2 over ULA over Sprites
+	ModeUSL PriorityMode = 4 // ULA over Sprites over Layer 2
+	ModeULS PriorityMode = 5 // ULA over Layer 2 over Sprites
+	// 6 and 7 are the additive blend modes (see mixer.go Mix); the
+	// scanline compositor approximates them below.
 )
 
 // PrioritySource is the contract for reading the active priority
@@ -664,6 +668,32 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 			paintULAStencil(off)
 			paintTilemapOnULA(off, x)
 			paintL2(off, x)
+		case ModeUSL: // ULA+TM over Sprites over Layer 2
+			// (zxnext.vhd priority 100). Layer 2 at the bottom, sprites
+			// above it, ULA+TM on top — Layer 2 shows only through
+			// transparent ULA pixels (games set NR$14 = ULA black for
+			// this; e.g. Shovel Adventure's image screens), and a
+			// priority-bit L2 pixel is promoted above everything.
+			paintL2(off, x)
+			paintSprites(off, x)
+			paintULAStencil(off)
+			paintTilemapOnULA(off, x)
+			paintL2Priority(off, x)
+		case ModeULS: // ULA+TM over Layer 2 over Sprites
+			// (zxnext.vhd priority 101). Same as USL with sprites and
+			// Layer 2 swapped in the underlay.
+			paintSprites(off, x)
+			paintL2(off, x)
+			paintULAStencil(off)
+			paintTilemapOnULA(off, x)
+			paintL2Priority(off, x)
+		default: // 6/7: additive blend modes — approximate as SLU so
+			// content stays visible rather than dropping the layers the
+			// way an unhandled case would (mixer.go Mix has the faithful
+			// implementation; migrating this painter onto it is the
+			// long-term fix).
+			paintL2(off, x)
+			paintSprites(off, x)
 		}
 	}
 }

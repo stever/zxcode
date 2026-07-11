@@ -338,18 +338,18 @@ func (e *emulator) importAndRunBas(data []byte) error {
 // project files (sprite sheets etc.) from the card, so they are staged where
 // the program (at root, /zx.bas) resolves the same relative path the source
 // spells out, mirroring the layout of the project's download ZIP unzipped
-// onto a real card. Every path segment must fit FAT 8.3: the program
-// references the path literally, and both files and directories are matched
-// by their 8.3 short names, so a ~ alias would never be found. Pauses the
-// emulator around the write like the importers.
+// onto a real card. Path segments that don't fit FAT 8.3 are written as VFAT
+// LFN entries (a real card stores them the same way), so NextZXOS's own FS
+// code resolves the program's literal path either way. Pauses the emulator
+// around the write like the importers.
 func (e *emulator) putSDFile(filePath string, data []byte) error {
 	if e.sdImageSrc == nil {
 		return fmt.Errorf("no SD image mounted")
 	}
 	segments := strings.Split(filePath, "/")
 	for _, seg := range segments[:len(segments)-1] {
-		if seg == "" || !sdcard.Fits83(seg) {
-			return fmt.Errorf("directory %q does not fit an 8.3 name", seg)
+		if seg == "" {
+			return fmt.Errorf("empty directory segment in %q", filePath)
 		}
 	}
 	dirPath := strings.Join(segments[:len(segments)-1], "/")
