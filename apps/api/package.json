@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc --noEmit && prisma validate",
+    "build": "prisma generate && tsc --noEmit",
     "start": "tsx src/index.ts",
     "migrate": "tsx src/migrate.ts",
     "generate": "prisma generate",
