@@ -273,4 +273,25 @@ describe("realSession Boriel linecall breakpoints", () => {
         expect(session.stepOver()).toEqual({running: true});
         expect(cmds).toEqual(["linecall-step"]);
     });
+
+    test("include-file lines arm with their virtual numbers and HL resolves back", () => {
+        const multi = buildLineCallMap({
+            kind: "zxbasic", anchor: 0x9333,
+            files: {"": [[2, 2]], "lib/util.bas": [[3, 10003]]},
+        });
+        const {handle, cmds} = fakeHandle(0x9333, 0, 10003);
+        const session = createRealSession(handle);
+        session.setSourceMap(multi);
+        cmds.length = 0;
+        session.setBreakpoints({
+            lines: [{file: null, line: 2}, {file: "lib/util.bas", line: 3}],
+            addrs: [],
+        });
+        expect(cmds).toEqual(["set-linecall-bp 2", "set-linecall-bp 10003"]);
+        // Paused at the anchor with HL = the virtual number: the highlight
+        // lands in the include at its real line.
+        const snap = session.snapshot("breakpoint");
+        expect(snap.pausedLine).toBe(3);
+        expect(snap.pausedFile).toBe("lib/util.bas");
+    });
 });

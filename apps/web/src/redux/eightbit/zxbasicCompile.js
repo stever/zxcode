@@ -49,7 +49,9 @@ export async function getZXBasicTap(code, userId, files = []) {
         const result = await compile(code, userId, files);
         console.log("[zxbasic] compile succeeded", {
             tapBytes: result.tap.length,
-            debugLines: result.debug?.lines?.length || 0,
+            debugFiles: result.debug?.files
+                ? Object.keys(result.debug.files).length
+                : (result.debug?.lines ? 1 : 0),
         });
         return result;
     } catch (e) {
@@ -105,9 +107,13 @@ async function compile(code, userId, files) {
     if (sld) {
         try {
             const parsed = JSON.parse(sld);
+            // Current services send per-file `files` (virtual-line
+            // entries); older ones the single-file `lines` shape. Both
+            // are accepted downstream.
             if (parsed?.kind === "zxbasic"
                 && Number.isInteger(parsed.anchor)
-                && Array.isArray(parsed.lines)) {
+                && (Array.isArray(parsed.lines)
+                    || (parsed.files && typeof parsed.files === "object"))) {
                 debug = parsed;
             }
         } catch (e) {

@@ -328,21 +328,53 @@ def zxbc_args(source: str) -> list[str]:
     return args
 
 
-# The zxbc -M label map is `HEX: label` per line; the linecall anchor is the
-# runtime's per-line break-check routine.
+# The zxbc/zxbasm -M label map is `HEX: label` per line; the linecall
+# anchor is the runtime's per-line break-check routine.
 CHECK_BREAK_LABEL = '.core.CHECK_BREAK'
 MMAP_LINE_RE = re.compile(r'^([0-9A-Fa-f]{4}):\s+(\S+)\s*$')
 
 # In `-f asm` output, each --enable-break check is the adjacent pair
 #   ld hl, <LINE>
 #   call .core.CHECK_BREAK
-# and `#line N "path"` directives track which source file the following
-# region came from (runtime includes carry their own paths; the region
-# before any directive — and regions returning to program.bas — are the
-# main source).
+# where LINE is the statement's line number WITHIN ITS OWN FILE — includes
+# overlap the main source's numbering, so a bare HL value cannot say which
+# file it belongs to. The generated asm is organised as the main flow
+# (`.core.__MAIN_PROGRAM__:` …) followed by one `_name:` block per
+# SUB/FUNCTION, and the preprocessor (zxbpp) reports which file defined
+# each function — so every check pair attributes to a file by its
+# enclosing block. Include-file pairs are then REWRITTEN to disjoint
+# virtual line ranges (base 10000·k per include; `ld hl, N` assembles to
+# 3 bytes for any N, so the binary layout is untouched) and the asm is
+# assembled with zxbasm — the same assembler zxbc drives internally. The
+# emulator's linecall breakpoints arm the virtual numbers unchanged.
+#
+# Pairs attributable to neither the main source nor a staged include
+# (stdlib functions) are rewritten to the UNMAPPED sentinel so they can
+# never alias a real line's breakpoint or highlight.
 ASM_LD_HL_RE = re.compile(r'^\s*ld hl, (\d+)\s*$')
 ASM_CHECK_BREAK_RE = re.compile(r'^\s*call \.core\.CHECK_BREAK\s*$')
-ASM_LINE_DIRECTIVE_RE = re.compile(r'^#line \d+ "([^"]*)"')
+ASM_MAIN_LABEL = '.core.__MAIN_PROGRAM__:'
+ASM_FUNC_LABEL_RE = re.compile(r'^(_\w+):\s*$')
+
+VIRTUAL_BASE_STEP = 10000
+UNMAPPED_SENTINEL = 0xFFFF
+
+# zxbpp's flattened output: `#line N "path"` directives mark file context;
+# SUB/FUNCTION statements under an include's context tell us which file
+# each generated `_name:` block came from. Any other executable-looking
+# top-level statement inside an include makes attribution unsafe (its
+# check would sit in the MAIN flow with include-file numbering), so the
+# pipeline bails to the main-only map.
+PP_LINE_DIRECTIVE_RE = re.compile(r'^#line \d+ "([^"]*)"')
+PP_FUNC_RE = re.compile(
+    r'(?i)^(?:SUB|FUNCTION)\s+(?:FASTCALL\s+|STDCALL\s+)*([A-Za-z_]\w*)')
+PP_END_FUNC_RE = re.compile(r'(?i)^END\s+(?:SUB|FUNCTION)\b')
+PP_HARMLESS_RE = re.compile(r"(?i)^(?:REM\b|'|#|DECLARE\s+(?:SUB|FUNCTION)\b)")
+
+
+class UnsafeIncludeError(Exception):
+    """An include holds top-level executable statements — per-file
+    attribution would be wrong, so the caller falls back to main-only."""
 
 
 def parse_check_break_anchor(mmap_path: str) -> Optional[int]:
@@ -355,41 +387,197 @@ def parse_check_break_anchor(mmap_path: str) -> Optional[int]:
     return None
 
 
-def parse_checked_lines(asm_path: str) -> list[int]:
-    """The main-source line numbers that received an --enable-break check,
-    sorted and deduplicated. Lines from #include'd files are excluded: the
-    check's HL value cannot say which file it belongs to, so only main-file
-    breakpoints are offered."""
-    lines = set()
-    in_main = True
-    pending = None
-    with open(asm_path) as f:
-        for row in f:
-            m = ASM_LINE_DIRECTIVE_RE.match(row)
-            if m:
-                in_main = m.group(1).endswith('program.bas')
-                pending = None
-                continue
-            if not in_main:
-                continue
-            m = ASM_LD_HL_RE.match(row)
-            if m:
-                pending = int(m.group(1))
-                continue
-            if pending is not None and ASM_CHECK_BREAK_RE.match(row):
-                if 1 <= pending <= 0xFFFF:
-                    lines.add(pending)
+def parse_function_files(pp_output: str, staged: set) -> dict:
+    """{'_name' (lowercased): file_key} from zxbpp's flattened output.
+
+    file_key is '' for the main source, the staged relative path for a
+    project include, and the raw path otherwise (stdlib — attributable but
+    never mapped). Raises UnsafeIncludeError when a staged include carries
+    top-level statements other than SUB/FUNCTION definitions, comments and
+    directives.
+    """
+    func_to_file = {}
+    cur = ''
+    depth = 0
+    for raw in pp_output.split('\n'):
+        m = PP_LINE_DIRECTIVE_RE.match(raw)
+        if m:
+            name = m.group(1)
+            if name == 'program.bas' or name.endswith('/program.bas'):
+                cur = ''
+            elif name in staged or name.lstrip('./') in staged:
+                cur = name.lstrip('./') if name.lstrip('./') in staged else name
+            else:
+                cur = name
+            continue
+        s = raw.strip()
+        if not s or PP_HARMLESS_RE.match(s):
+            continue
+        m = PP_FUNC_RE.match(s)
+        if m:
+            func_to_file['_' + m.group(1).lower()] = cur
+            depth += 1
+            continue
+        if PP_END_FUNC_RE.match(s):
+            depth = max(0, depth - 1)
+            continue
+        if cur != '' and cur in staged and depth == 0:
+            raise UnsafeIncludeError(
+                f'top-level statement in include {cur!r}: {s[:60]!r}')
+    return func_to_file
+
+
+def attribute_and_rewrite_asm(asm_path: str, func_to_file: dict,
+                              staged: set) -> dict:
+    """Attribute every check pair to its file, rewrite include pairs to
+    virtual line numbers in place, and return {file_key: [[line, virt]]}.
+
+    Bases are assigned per staged include in sorted-name order so the
+    mapping is deterministic. Pairs beyond the 16-bit virtual space and
+    pairs from non-project files rewrite to the unmapped sentinel.
+    """
+    bases = {name: VIRTUAL_BASE_STEP * (i + 1)
+             for i, name in enumerate(sorted(staged))}
+    rows = open(asm_path, errors='replace').read().split('\n')
+    entries = {}
+    region = None  # None until the main label; '' = main; else a file/path
+    pending = None  # (row index, line) of an ld hl awaiting its check call
+    for i, row in enumerate(rows):
+        if row.strip() == ASM_MAIN_LABEL.strip():
+            region = ''
             pending = None
-    return sorted(lines)
+            continue
+        m = ASM_FUNC_LABEL_RE.match(row)
+        if m and m.group(1).lower() in func_to_file:
+            region = func_to_file[m.group(1).lower()]
+            pending = None
+            continue
+        m = ASM_LD_HL_RE.match(row)
+        if m:
+            pending = (i, int(m.group(1)))
+            continue
+        if pending is not None and ASM_CHECK_BREAK_RE.match(row):
+            idx, line = pending
+            pending = None
+            if region == '' and 1 <= line <= 0xFFFE:
+                entries.setdefault('', {}).setdefault(line, line)
+                continue
+            if region in bases:
+                virt = bases[region] + line
+                if 1 <= line and virt < UNMAPPED_SENTINEL:
+                    rows[idx] = f'\tld hl, {virt}'
+                    entries.setdefault(region, {}).setdefault(line, virt)
+                    continue
+            # Stdlib / out-of-range / pre-main: neutralise so the value can
+            # never alias a mappable line.
+            rows[idx] = f'\tld hl, {UNMAPPED_SENTINEL}'
+            continue
+        pending = None
+    with open(asm_path, 'w') as f:
+        f.write('\n'.join(rows))
+    return {
+        key: [[line, virt] for line, virt in sorted(per_file.items())]
+        for key, per_file in entries.items()
+    }
+
+
+def run_tool(argv: list, workdir: str, extra_env: dict = None) -> tuple:
+    """Run a toolchain executable (zxbpp/zxbasm) under the same rlimits,
+    process-group kill and monitor discipline as the compiler. Returns
+    (returncode, stdout, stderr); raises TimeoutException on timeout."""
+    env = None
+    if extra_env:
+        env = {**os.environ, **extra_env}
+    proc = subprocess.Popen(
+        argv,
+        cwd=workdir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+        preexec_fn=_apply_rlimits,
+        env=env,
+    )
+    process_monitor.register_process(proc.pid)
+    try:
+        stdout, stderr = proc.communicate(timeout=COMPILATION_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        raise TimeoutException(
+            f"Tool timeout after {COMPILATION_TIMEOUT} seconds: {argv[0]}")
+    return proc.returncode, stdout, stderr
+
+
+def build_multifile_tap(workdir: str, bas_filename: str, tap_filename: str,
+                        mmap_filename: str, source: str,
+                        staged: set) -> Optional[str]:
+    """The per-file-breakpoints pipeline: preprocess for attribution,
+    compile to asm, rewrite include check pairs to virtual lines, assemble
+    with zxbasm. On success program.tap and the mmap exist and the return
+    value is the sld JSON; any bail returns None with no tap produced (the
+    caller then runs the plain zxbc pipeline).
+
+    Known cosmetic trade-off of the rewrite: pressing the BREAK key inside
+    include code reports the virtual line number in the ROM error message.
+    """
+    bindir = os.path.dirname(sys.executable)
+    asm_filename = os.path.join(workdir, 'program.asm')
+    zxnext = bool(ZXNEXT_DIRECTIVE_RE.search(source)
+                  or ZXNEXT_INCLUDE_RE.search(source))
+    try:
+        rc, pp_out, pp_err = run_tool(
+            [os.path.join(bindir, 'zxbpp'), bas_filename], workdir)
+        if rc != 0:
+            return None
+        func_to_file = parse_function_files(pp_out, staged)
+
+        args = ['-f', 'asm', '--enable-break']
+        if zxnext:
+            args += ['--arch', 'zxnext']
+        if not compile_with_subprocess(bas_filename, asm_filename, args):
+            return None
+
+        files = attribute_and_rewrite_asm(asm_filename, func_to_file, staged)
+        files = {k: v for k, v in files.items() if v}
+        if not files:
+            return None
+
+        # zxbasm's CLI cannot express "tap with BASIC loader" in the pinned
+        # release (see app/zxbasm_tap.py); drive it through the workaround
+        # module in its own process.
+        app_root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        basm = [sys.executable, '-m', 'app.zxbasm_tap', '-t', '-a', '-B',
+                '-M', mmap_filename, '-o', tap_filename, asm_filename]
+        if zxnext:
+            basm.insert(3, '-N')
+        rc, _, basm_err = run_tool(basm, workdir, extra_env={
+            'PYTHONPATH': app_root + os.pathsep + os.environ.get('PYTHONPATH', '')})
+        if rc != 0 or not os.path.exists(tap_filename):
+            print(f"zxbasm assembly failed (falling back): {basm_err[:400]}")
+            return None
+
+        anchor = parse_check_break_anchor(mmap_filename)
+        if not anchor:
+            return None
+        return json.dumps({'kind': 'zxbasic', 'anchor': anchor, 'files': files})
+    except UnsafeIncludeError as e:
+        print(f"multi-file map unavailable ({e}); falling back to main-only")
+        return None
+    except TimeoutException:
+        raise
+    except Exception as e:
+        print(f"multi-file pipeline failed (falling back): {e}")
+        return None
 
 
 def build_debug_info(workdir: str, bas_filename: str, source: str) -> Optional[str]:
-    """The debugger line-map JSON for a program that just compiled, or None.
+    """The main-only debugger line map (fallback pipeline), or None.
 
-    Best-effort by design: the anchor comes from a -M label map emitted by a
-    dedicated (cheap, codegen-free consistent) compile pass to asm, which
-    also yields the exact set of lines carrying a break check. Any failure
-    here only costs the debug map, never the compile.
+    Best-effort by design: the anchor comes from a -M label map emitted by
+    the tap compile, and the breakable-line set from a dedicated asm pass.
+    Any failure here only costs the debug map, never the compile.
     """
     asm_filename = os.path.join(workdir, 'program.asm')
     mmap_filename = os.path.join(workdir, 'program.mmap')
@@ -399,14 +587,40 @@ def build_debug_info(workdir: str, bas_filename: str, source: str) -> Optional[s
             args += ['--arch', 'zxnext']
         if not compile_with_subprocess(bas_filename, asm_filename, args):
             return None
-        # The label map must come from the real binary build (the asm pass
-        # assigns no addresses), so it is requested on the tap compile — see
-        # the caller, which passes mmap_filename through zxbc's -M.
+        # Attribute in main-only mode: no function map, so every function
+        # block is unknown (region None) and only main-flow pairs map.
+        # The rewrite is skipped by pointing at a copy? No — main-only mode
+        # must not modify the asm it does not assemble; parse without
+        # rewriting by working on a throwaway copy.
         anchor = parse_check_break_anchor(mmap_filename)
-        lines = parse_checked_lines(asm_filename)
+        lines = set()
+        pending = None
+        region = None
+        for row in open(asm_filename, errors='replace'):
+            if row.strip() == ASM_MAIN_LABEL.strip():
+                region = ''
+                continue
+            if ASM_FUNC_LABEL_RE.match(row):
+                # Function blocks are unattributable without the
+                # preprocessor map; their pairs stay unmapped (they may be
+                # main-file functions, a loss the multi-file pipeline
+                # avoids).
+                region = None
+                continue
+            m = ASM_LD_HL_RE.match(row)
+            if m:
+                pending = int(m.group(1))
+                continue
+            if pending is not None and ASM_CHECK_BREAK_RE.match(row) \
+                    and region == '' and 1 <= pending <= 0xFFFE:
+                lines.add(pending)
+            pending = None
         if not anchor or not lines:
             return None
-        return json.dumps({'kind': 'zxbasic', 'anchor': anchor, 'lines': lines})
+        return json.dumps({
+            'kind': 'zxbasic', 'anchor': anchor,
+            'files': {'': [[line, line] for line in sorted(lines)]},
+        })
     except Exception as e:
         print(f"debug-info generation failed (compile unaffected): {e}")
         return None
@@ -549,6 +763,26 @@ def handle_compile_request(
         with open(bas_filename, 'w') as f:
             f.write(args.input.basic)
         stage_project_files(workdir, args.input.files)
+
+        # Per-file breakpoints pipeline first (preprocess → asm → virtual
+        # line rewrite → zxbasm). Any bail returns None and the plain zxbc
+        # build below runs instead with a main-only map.
+        staged_names = {pf.name for pf in args.input.files or []
+                        if not pf.is_binary}
+        try:
+            multifile_sld = build_multifile_tap(
+                workdir, bas_filename, tap_filename, mmap_filename,
+                args.input.basic, staged_names)
+        except TimeoutException:
+            raise HTTPException(
+                status_code=status.HTTP_408_REQUEST_TIMEOUT,
+                detail=f"Compilation timeout exceeded ({COMPILATION_TIMEOUT} seconds). Code may contain infinite loops or be too complex."
+            )
+        if multifile_sld and os.path.exists(tap_filename):
+            with open(tap_filename, 'rb') as f:
+                return CompileResult(
+                    base64_encoded=base64.b64encode(f.read()).decode(),
+                    sld=multifile_sld)
 
         # Compile the tape file from basic source with timeout. -M emits the
         # label memory map the debugger's linecall anchor is read from.
