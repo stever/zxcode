@@ -475,6 +475,52 @@ code {
     border-color: #ffffff;
 }
 
+/* Palette (.pal) editor, sharing the sprite editor's swatch styling. */
+.palette-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #3f3f3f;
+    border-radius: 4px;
+    background-color: #1a1a1a;
+    color: #cccccc;
+    font-family: var(--font-family);
+}
+
+.palette-editor-info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 16px;
+    row-gap: 8px;
+    font-size: 0.9rem;
+}
+
+.palette-editor-priority {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.palette-editor-entries {
+    grid-template-columns: repeat(16, 22px);
+    grid-auto-rows: 22px;
+}
+
+.palette-editor-picker {
+    display: grid;
+    grid-template-columns: repeat(32, 14px);
+    grid-auto-rows: 14px;
+    gap: 1px;
+    margin-top: 6px;
+}
+
+.sprite-editor-palette-pick {
+    max-width: 288px;
+}
+
 .editor-toolbar {
     display: flex;
     flex-wrap: wrap;

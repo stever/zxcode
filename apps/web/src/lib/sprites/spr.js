@@ -63,16 +63,21 @@ function bytesHavePlus3DosHeader(bytes) {
   return bytes.length >= PLUS3DOS_HEADER_SIZE && bytesHaveSignature(bytes);
 }
 
-// Cheap +3DOS sniff on the stored base64: only files sized header + whole
-// patterns are candidates (their size mod 256 is exactly 128), and the
-// signature fits in the first 18 bytes, so decoding a 24-char prefix
-// suffices. This runs per render, so it must not decode the whole file.
+// Cheap +3DOS sniff on stored base64: the signature fits in the first 18
+// bytes, so decoding a 24-char prefix suffices. Runs per render, so it
+// must not decode the whole file. Callers gate on file size first.
+export function base64HasPlus3DosSignature(content) {
+  return bytesHaveSignature(base64ToBytes((content || "").slice(0, 24)));
+}
+
+// Only files sized header + whole patterns are candidates (their size mod
+// 256 is exactly 128).
 function contentHasPlus3DosHeader(content) {
   const size = base64ByteLength(content);
   if (size <= PLUS3DOS_HEADER_SIZE || size % SPRITE_BYTES !== PLUS3DOS_HEADER_SIZE) {
     return false;
   }
-  return bytesHaveSignature(base64ToBytes((content || "").slice(0, 24)));
+  return base64HasPlus3DosSignature(content);
 }
 
 // The editor opens a .spr only when it holds a whole number of 8-bit

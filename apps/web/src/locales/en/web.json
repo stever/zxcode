@@ -224,7 +224,15 @@
       "importImage": "Import image as sprites (colours quantised to the Next palette)",
       "patternLabel": "Sprite {{index}} of {{count}}",
       "transparent": "Transparent",
-      "pickHint": "Right-click the canvas to pick up a colour."
+      "pickHint": "Right-click the canvas to pick up a colour.",
+      "paletteDefault": "Default palette",
+      "palettePick": "Render through a project .pal file"
+    },
+    "palette": {
+      "index": "Index",
+      "value": "Value",
+      "priority": "Layer 2 priority",
+      "pickerHint": "Click a colour below to assign it to the selected entry."
     }
   },
   "projectList": {

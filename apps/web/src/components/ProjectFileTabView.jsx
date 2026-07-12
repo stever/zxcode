@@ -26,6 +26,7 @@ import {
   MAX_PROJECT_FILES,
 } from "../lib/lang";
 import { blankSpriteBase64, isSpriteFileName } from "../lib/sprites/spr";
+import { defaultPaletteBase64, isPaletteFileName } from "../lib/sprites/pal";
 import { useTranslation } from "@zxplay/i18n";
 
 // The editor TabView: the language-named tab is the project's main source,
@@ -113,10 +114,13 @@ export function ProjectFileTabView() {
     }
     const { folder, name } = splitProjectFilePath(path);
     if (nameDialogFileId === null) {
-      // A new .spr is born binary with one blank pattern, landing straight
-      // in the sprite editor rather than a text buffer.
+      // A new .spr/.pal is born binary with ready-to-edit content (a blank
+      // pattern / the hardware default palette), landing straight in its
+      // editor rather than a text buffer.
       if (isSpriteFileName(name)) {
         dispatch(addFile(name, blankSpriteBase64(), true, folder));
+      } else if (isPaletteFileName(name)) {
+        dispatch(addFile(name, defaultPaletteBase64(), true, folder));
       } else {
         dispatch(addFile(name, "", false, folder));
       }

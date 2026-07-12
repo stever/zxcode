@@ -3,10 +3,15 @@ import { useDispatch, useSelector } from "react-redux";
 import CodeMirror from "./CodeMirror";
 import "codemirror/mode/z80/z80";
 import { SpriteEditor } from "./SpriteEditor";
+import { PaletteEditor } from "./PaletteEditor";
 import {
   isEditableSpriteContent,
   isSpriteFileName,
 } from "../lib/sprites/spr";
+import {
+  isEditablePaletteContent,
+  isPaletteFileName,
+} from "../lib/sprites/pal";
 import { setCode, setFileContent } from "../redux/project/actions";
 import { selectActiveFile } from "../redux/project/selectors";
 import { toggleBreakpoint } from "../redux/debugger/actions";
@@ -208,6 +213,12 @@ export function ProjectEditor() {
     activeIsBinary &&
     isSpriteFileName(activeFile.name) &&
     isEditableSpriteContent(activeFile.content);
+  // .pal files of exactly 256 entries open in the palette editor the same way.
+  const activeIsPalette =
+    activeIsBinary &&
+    !activeIsSprite &&
+    isPaletteFileName(activeFile.name) &&
+    isEditablePaletteContent(activeFile.content);
 
   return (
     <>
@@ -218,7 +229,14 @@ export function ProjectEditor() {
           content={activeFile.content}
         />
       )}
-      {activeIsBinary && !activeIsSprite && (
+      {activeIsPalette && (
+        <PaletteEditor
+          key={activeFileId}
+          fileId={activeFileId}
+          content={activeFile.content}
+        />
+      )}
+      {activeIsBinary && !activeIsSprite && !activeIsPalette && (
         <div className="binary-asset-panel">
           <i className="pi pi-box" style={{ fontSize: "2rem" }} />
           <div className="binary-asset-name">{activeFileName}</div>

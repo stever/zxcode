@@ -1,8 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { Button } from "primereact/button";
+import { Dropdown } from "primereact/dropdown";
 import { setFileContent } from "../redux/project/actions";
-import { MAX_FILE_CONTENT_SIZE } from "../lib/lang";
+import { selectFiles } from "../redux/project/selectors";
+import { MAX_FILE_CONTENT_SIZE, joinProjectFilePath } from "../lib/lang";
+import {
+  isEditablePaletteContent,
+  isPaletteFileName,
+  paletteCssFromBytes,
+} from "../lib/sprites/pal";
 import {
   SPRITE_BYTES,
   SPRITE_SIZE,
@@ -80,7 +87,28 @@ export function SpriteEditor({ fileId, content }) {
   const dragIndexRef = useRef(null);
   const [hasClipboard, setHasClipboard] = useState(false);
 
-  const palette = useMemo(defaultSpritePalette, []);
+  // Sprites can render through a project .pal instead of the hardware
+  // default palette; the choice is per-session display state (the pattern
+  // bytes are palette-agnostic indices either way). Edits to the .pal in
+  // its own tab re-render here live via its content string.
+  const projectFiles = useSelector(selectFiles);
+  const palFiles = projectFiles.filter(
+    (f) =>
+      f.isBinary &&
+      isPaletteFileName(f.name) &&
+      isEditablePaletteContent(f.content)
+  );
+  const [palFileId, setPalFileId] = useState(null);
+  const palFile = palFiles.find((f) => f.id === palFileId) || null;
+  const palette = useMemo(() => {
+    if (palFile) {
+      const css = paletteCssFromBytes(
+        splitSpriteFile(base64ToBytes(palFile.content)).data
+      );
+      if (css) return css;
+    }
+    return defaultSpritePalette();
+  }, [palFile ? palFile.content : null]);
   const rgb = useMemo(
     () =>
       palette.map((c) => {
@@ -153,7 +181,13 @@ export function SpriteEditor({ fileId, content }) {
     }
   };
 
-  useEffect(drawCanvas, [pattern, version]);
+  useEffect(drawCanvas, [pattern, version, palette]);
+
+  // A palette change recolours every thumbnail too.
+  useEffect(() => {
+    allThumbsDirtyRef.current = true;
+    setVersion((v) => v + 1);
+  }, [palette]);
 
   // A strip thumbnail: the 16x16 pattern rendered 1:1, scaled up by CSS.
   const drawThumb = (index) => {
@@ -721,6 +755,21 @@ export function SpriteEditor({ fileId, content }) {
           onContextMenu={(e) => e.preventDefault()}
         />
         <div className="sprite-editor-side">
+          {palFiles.length > 0 && (
+            <Dropdown
+              className="sprite-editor-palette-pick p-inputtext-sm"
+              value={palFileId}
+              options={[
+                { label: t("editor.sprites.paletteDefault"), value: null },
+                ...palFiles.map((f) => ({
+                  label: joinProjectFilePath(f.folder, f.name),
+                  value: f.id,
+                })),
+              ]}
+              onChange={(e) => setPalFileId(e.value)}
+              title={t("editor.sprites.palettePick")}
+            />
+          )}
           <div className="sprite-editor-colour">
             <span
               className={
