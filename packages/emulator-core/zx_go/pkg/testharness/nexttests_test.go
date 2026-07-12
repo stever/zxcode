@@ -374,6 +374,16 @@ func TestNexttestsCopper(t *testing.T) {
 	check("paper background", 200, 40, copperWhite)
 	check("left border", -20, 40, copperWhite)
 	check("right border", 280, 96, copperWhite)
+
+	// Border uniformity: the rows ABOVE and BELOW the paper resolve
+	// through the same palette SRAM as everything else — one palette,
+	// one DAC, so their white is the identical 9-bit projection, not
+	// the classic-renderer value. (A mismatch here is exactly the
+	// banded-border regression the live-palette render shipped with.)
+	check("top border", 100, -10, copperWhite)
+	check("top border first row", 100, -24, copperWhite)
+	check("bottom border", 100, 200, copperWhite)
+	check("bottom border last row", 100, 215, copperWhite)
 }
 
 // --- base/DMA: zxnDMA transfer-mode matrix ------------------------------

@@ -853,8 +853,14 @@ func (u *ULA) renderNextFullHeight() *image.RGBA {
 	// Middle band: copy the 240-line render into rows extra..extra+TotalHeight-1.
 	copy(dst.Pix[extra*dst.Stride:(extra+TotalHeight)*dst.Stride], u.img.Pix[:TotalHeight*u.img.Stride])
 	// Over-border strips: border fill + the sprite border pass (whole row is
-	// border in these strips). frameY == dst row here (bias 0).
+	// border in these strips). frameY == dst row here (bias 0). The fill
+	// resolves through the live ULA palette when the live render is active,
+	// so the strips match the in-frame border (one palette, one DAC).
 	bc := u.palette[u.BorderColour&0x0F]
+	if res, ok := u.liveULAResolver(); ok {
+		c := u.nextBorderColourRGBA(u.BorderColour, res)
+		bc = color.RGBA{R: c[0], G: c[1], B: c[2], A: c[3]}
+	}
 	rowFull := make([]byte, TotalWidth*4)
 	allBorder := func(int) bool { return true }
 	paintStrip := func(rowStart, rowEnd int) {
@@ -1680,12 +1686,7 @@ func (u *ULA) applyNextCompositor() {
 	}
 	ulaScan := u.compositorScan
 	composed := u.compositorComposed
-	resolver, liveULA := u.nextCompositor.(nextULAPaletteResolver)
-	if u.ulaOutputDisabled || u.timexHiResActive() {
-		// The disabled-fill and Timex hi-res contents don't come from the
-		// standard attribute decode; keep the pre-rendered u.img rows.
-		liveULA = false
-	}
+	resolver, liveULA := u.liveULAResolver()
 	var paced nextCopperCyclePaced
 	if u.nextCopper != nil {
 		paced, _ = u.nextCopper.(nextCopperCyclePaced)
@@ -1725,14 +1726,14 @@ func (u *ULA) applyNextCompositor() {
 				if leftCarryValid {
 					u.paintImagePixel(y, bx, leftCarry[bx])
 				} else {
-					u.paintImagePixel(y, bx, u.nextBorderRGBA(y, resolver))
+					u.paintImagePixel(y, bx, u.nextBorderRGBA(BorderTop+y, resolver))
 				}
 			}
 			for bx := leftTailPx; bx < BorderLeft; bx++ {
 				if paced != nil {
 					paced.RunToCycle(uint16(y), (bx-leftTailPx)*cyclesPerHcount+2)
 				}
-				u.paintImagePixel(y, bx, u.nextBorderRGBA(y, resolver))
+				u.paintImagePixel(y, bx, u.nextBorderRGBA(BorderTop+y, resolver))
 			}
 			u.renderNextULARow(y, ulaScan, resolver, paced, pixelCycle)
 		} else {
@@ -1746,7 +1747,7 @@ func (u *ULA) applyNextCompositor() {
 				if paced != nil {
 					paced.RunToCycle(uint16(y), (268+bx)*cyclesPerHcount+2)
 				}
-				u.paintImagePixel(y, BorderLeft+w+bx, u.nextBorderRGBA(y, resolver))
+				u.paintImagePixel(y, BorderLeft+w+bx, u.nextBorderRGBA(BorderTop+y, resolver))
 			}
 			// Line tail: resolve the next row's carried left-border pixels
 			// live at their hcount, then finish the copper's line.
@@ -1755,7 +1756,7 @@ func (u *ULA) applyNextCompositor() {
 					if paced != nil {
 						paced.RunToCycle(uint16(y), (428+bx)*cyclesPerHcount+2)
 					}
-					leftCarry[bx] = u.nextBorderRGBA(y+1, resolver)
+					leftCarry[bx] = u.nextBorderRGBA(BorderTop+y+1, resolver)
 				}
 				leftCarryValid = true
 			}
@@ -1766,10 +1767,40 @@ func (u *ULA) applyNextCompositor() {
 	}
 	// Sweep the copper through the vertical blank / border lines so WAITs
 	// targeting lines 192..311 release on their line and the raster wrap
-	// to line 0 restarts a StartOnVBL list next frame.
-	if paced != nil && liveULA {
+	// to line 0 restarts a StartOnVBL list next frame — and repaint the
+	// top/bottom border rows through the live palette at their raster
+	// lines. The FPGA resolves EVERY border pixel through the same
+	// palette SRAM as the paper, so these rows must match the paper-row
+	// borders (one palette, one DAC — a redefined white is redefined
+	// everywhere). Raster mapping: the bottom border rows scan on lines
+	// h..h+BorderTop-1 right after the paper; the displayed frame's top
+	// border rows scan on the last BorderTop lines of the sweep, just
+	// before the wrap to line 0. Each row takes its line's END-of-line
+	// palette state (line granularity — the per-pixel copper interleave
+	// covers only the paper rows; see known-gaps.md).
+	if liveULA {
 		for v := h; v < frameLines; v++ {
-			paced.RunToCycle(uint16(v), lineEndCycle)
+			if paced != nil {
+				paced.RunToCycle(uint16(v), lineEndCycle)
+			}
+			imgRow := -1
+			switch {
+			case v < h+BorderTop:
+				imgRow = BorderTop + v // bottom border, right after the paper
+			case v >= frameLines-BorderTop:
+				imgRow = v - (frameLines - BorderTop) // top border, end of sweep
+			}
+			if imgRow >= 0 {
+				c := u.nextBorderRGBA(imgRow, resolver)
+				off := imgRow * u.img.Stride
+				for x := 0; x < TotalWidth; x++ {
+					o := off + x*4
+					u.img.Pix[o+0] = c[0]
+					u.img.Pix[o+1] = c[1]
+					u.img.Pix[o+2] = c[2]
+					u.img.Pix[o+3] = c[3]
+				}
+			}
 		}
 	}
 
@@ -1859,14 +1890,20 @@ func ulaNextPaperShift(format byte) int {
 	return 0
 }
 
-// nextBorderRGBA resolves display row y's border colour through the LIVE
+// nextBorderRGBA resolves image row imgRow's (0..TotalHeight-1) border
+// colour through the LIVE Next ULA palette via nextBorderColourRGBA.
+func (u *ULA) nextBorderRGBA(imgRow int, res nextULAPaletteResolver) [4]byte {
+	return u.nextBorderColourRGBA(u.borderLineColours[imgRow], res)
+}
+
+// nextBorderColourRGBA resolves a port-$FE border colour through the LIVE
 // Next ULA palette: entry 128+border in ULANext mode (video/zxula.vhd:
 // 496-504 — paper_base & border), entry 16+border otherwise (zxula.vhd:547
 // — border pixels take the standard paper path, bright 0). A transparent
 // entry (== NR$14) and the ULANext all-ink format $FF show the NR$4A
 // fallback.
-func (u *ULA) nextBorderRGBA(y int, res nextULAPaletteResolver) [4]byte {
-	border := u.borderLineColours[BorderTop+y] & 7
+func (u *ULA) nextBorderColourRGBA(borderColour byte, res nextULAPaletteResolver) [4]byte {
+	border := borderColour & 7
 	var r, g, b byte
 	var transparent bool
 	if u.ulaNextEnabled {
@@ -1883,6 +1920,19 @@ func (u *ULA) nextBorderRGBA(y int, res nextULAPaletteResolver) [4]byte {
 		r, g, b = f.R, f.G, f.B
 	}
 	return [4]byte{r, g, b, 0xFF}
+}
+
+// liveULAResolver returns the compositor's live ULA palette resolver when
+// the live-palette render applies: a resolver is wired and the frame's ULA
+// content comes from the standard attribute decode (the disabled-fill and
+// Timex hi-res paths keep the classic pre-render, where the palette does
+// not apply).
+func (u *ULA) liveULAResolver() (nextULAPaletteResolver, bool) {
+	res, ok := u.nextCompositor.(nextULAPaletteResolver)
+	if !ok || u.ulaOutputDisabled || u.timexHiResActive() {
+		return nil, false
+	}
+	return res, true
 }
 
 // paintImagePixel writes one RGBA pixel at image column x of display row y.

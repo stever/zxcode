@@ -218,8 +218,12 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   ink/16+paper (+8 bright, flash swap), ULANext decode (NR$42 ink mask,
   paper 128|attr>>n, non-canonical masks and format $FF show the NR$4A
   background), border via the paper entry. Transparency (entry ==
-  NR$14) travels to the compositor as alpha 0. Timex hi-res and the
-  ULA-disabled fill keep the classic pre-render.
+  NR$14) travels to the compositor as alpha 0. Coverage: paper rows
+  (and their L/R borders) per pixel; the top/bottom border rows once
+  per raster line during the vblank sweep, and the sprite over-border
+  strips per frame — everything on screen resolves through the same
+  palette (one palette, one DAC; border white == paper white). Timex
+  hi-res and the ULA-disabled fill keep the classic pre-render.
 
 Raster feedback: `ULA.BeamPosition()` derives (line, hpos) from the
 shared T-state counter, wired to NR$1E/$1F, so DI'd raster-polling code
