@@ -9,6 +9,8 @@ import {
     base64ToBytes,
     bytesToBase64,
     blankSpriteBase64,
+    blankTileBase64,
+    isTileFileName,
     defaultSpritePalette,
     isEditableSpriteContent,
     isSpriteFileName,
@@ -99,6 +101,28 @@ describe("sprite content shape", () => {
         const bytes = base64ToBytes(blankSpriteBase64());
         expect(bytes.length).toBe(SPRITE_BYTES);
         expect(bytes.every((b) => b === TRANSPARENT_INDEX)).toBe(true);
+    });
+});
+
+describe("tile files", () => {
+    test("isTileFileName matches .til and .tile", () => {
+        expect(isTileFileName("bank.til")).toBe(true);
+        expect(isTileFileName("BANK.TILE")).toBe(true);
+        expect(isTileFileName("bank.spr")).toBe(false);
+    });
+
+    test("tile content counts in 32-byte units", () => {
+        expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(32)), true)).toBe(true);
+        expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(96)), true)).toBe(true);
+        expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(48)), true)).toBe(false);
+        // .spr keeps the coarser 128-byte rule.
+        expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(96)), false)).toBe(false);
+    });
+
+    test("a new tile file is one blank 4-bit tile", () => {
+        const bytes = base64ToBytes(blankTileBase64());
+        expect(bytes.length).toBe(32);
+        expect(bytes.every((b) => b === 0x33)).toBe(true);
     });
 });
 

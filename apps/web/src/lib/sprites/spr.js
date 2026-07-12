@@ -9,6 +9,10 @@
 
 export const SPRITE_SIZE = 16;
 export const SPRITE_BYTES = SPRITE_SIZE * SPRITE_SIZE;
+// The tilemap hardware's 8x8 tiles: 64 pixels, so 64 bytes at 8-bit and 32
+// at 4-bit (the hardware's native tile depth).
+export const TILE_SIZE = 8;
+export const TILE_PIXELS = TILE_SIZE * TILE_SIZE;
 export const TRANSPARENT_INDEX = 0xe3;
 // 4-bit patterns pack two pixels per byte (128 bytes each); the hardware
 // takes the transparency nibble from the low 4 bits of the global
@@ -28,6 +32,12 @@ const PLUS3DOS_SIGNATURE = "PLUS3DOS\x1a";
 
 export function isSpriteFileName(name) {
   return /\.spr$/i.test(name || "");
+}
+
+// Tile banks for the tilemap hardware; they open in the sprite editor's
+// 8x8 4-bit mode by default.
+export function isTileFileName(name) {
+  return /\.(til|tile)$/i.test(name || "");
 }
 
 // Project files store binary content base64-encoded (see project_file's
@@ -98,10 +108,22 @@ export function packFourBit(pixels) {
 // (256 bytes each) or 4-bit (128), bare or behind a +3DOS header; anything
 // else (empty or truncated) keeps the plain binary-asset panel. Any
 // header + whole patterns is also a multiple of 128, so one rule covers
-// all four shapes.
-export function isEditableSpriteContent(content) {
+// all four shapes. Tile files (.til) count in 8x8 tiles instead, down to
+// 32 bytes for a lone 4-bit tile.
+export function isEditableSpriteContent(content, tile = false) {
   const size = base64ByteLength(content);
-  return size > 0 && size % FOUR_BIT_PATTERN_BYTES === 0;
+  const unit = tile ? TILE_PIXELS / 2 : FOUR_BIT_PATTERN_BYTES;
+  return size > 0 && size % unit === 0;
+}
+
+// Content for a newly created .til file: one blank (all-transparent-nibble)
+// 4-bit 8x8 tile.
+export function blankTileBase64() {
+  return bytesToBase64(
+    new Uint8Array(TILE_PIXELS / 2).fill(
+      (FOUR_BIT_TRANSPARENT << 4) | FOUR_BIT_TRANSPARENT
+    )
+  );
 }
 
 // Splits a sprite file into its optional +3DOS header and the pattern data.

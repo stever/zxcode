@@ -25,7 +25,12 @@ import {
   MAX_FILE_CONTENT_SIZE,
   MAX_PROJECT_FILES,
 } from "../lib/lang";
-import { blankSpriteBase64, isSpriteFileName } from "../lib/sprites/spr";
+import {
+  blankSpriteBase64,
+  blankTileBase64,
+  isSpriteFileName,
+  isTileFileName,
+} from "../lib/sprites/spr";
 import { defaultPaletteBase64, isPaletteFileName } from "../lib/sprites/pal";
 import { useTranslation } from "@zxplay/i18n";
 
@@ -119,6 +124,8 @@ export function ProjectFileTabView() {
       // editor rather than a text buffer.
       if (isSpriteFileName(name)) {
         dispatch(addFile(name, blankSpriteBase64(), true, folder));
+      } else if (isTileFileName(name)) {
+        dispatch(addFile(name, blankTileBase64(), true, folder));
       } else if (isPaletteFileName(name)) {
         dispatch(addFile(name, defaultPaletteBase64(), true, folder));
       } else {

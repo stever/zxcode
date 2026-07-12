@@ -7,6 +7,7 @@ import { PaletteEditor } from "./PaletteEditor";
 import {
   isEditableSpriteContent,
   isSpriteFileName,
+  isTileFileName,
 } from "../lib/sprites/spr";
 import {
   isEditablePaletteContent,
@@ -209,10 +210,11 @@ export function ProjectEditor() {
   // .spr assets holding whole 16x16 8-bit patterns open in the sprite
   // editor instead of the info panel; its edits flow through the same
   // setFileContent path as text, so save/staging/ZIP are unchanged.
+  const activeIsTile = activeIsBinary && isTileFileName(activeFile.name);
   const activeIsSprite =
     activeIsBinary &&
-    isSpriteFileName(activeFile.name) &&
-    isEditableSpriteContent(activeFile.content);
+    (isSpriteFileName(activeFile.name) || activeIsTile) &&
+    isEditableSpriteContent(activeFile.content, activeIsTile);
   // .pal files of exactly 256 entries open in the palette editor the same way.
   const activeIsPalette =
     activeIsBinary &&
@@ -227,6 +229,7 @@ export function ProjectEditor() {
           key={activeFileId}
           fileId={activeFileId}
           content={activeFile.content}
+          tile={activeIsTile}
         />
       )}
       {activeIsPalette && (

@@ -11,10 +11,11 @@ import {
   paletteCssFromBytes,
 } from "../lib/sprites/pal";
 import {
-  FOUR_BIT_PATTERN_BYTES,
   FOUR_BIT_TRANSPARENT,
   SPRITE_BYTES,
   SPRITE_SIZE,
+  TILE_PIXELS,
+  TILE_SIZE,
   TRANSPARENT_INDEX,
   base64ToBytes,
   bytesToBase64,
@@ -23,16 +24,15 @@ import {
   joinSpriteFile,
   packFourBit,
   splitSpriteFile,
-  spritePatternCount,
 } from "../lib/sprites/spr";
 import { imageDataToPatterns } from "../lib/sprites/imageImport";
 import { useTranslation } from "@zxplay/i18n";
 
-// Editor pixels per sprite pixel on the drawing canvas.
-const ZOOM = 24;
 // Undo history depth (snapshots of the whole file, one per committed edit).
 const MAX_HISTORY = 100;
-const CANVAS_SIZE = SPRITE_SIZE * ZOOM;
+// Fixed drawing surface; the per-pixel zoom follows the grid size (24 for
+// 16x16 sprites, 48 for 8x8 tiles).
+const CANVAS_SIZE = 384;
 // Checkerboard shades marking transparent ($E3) pixels.
 const CHECKER_DARK = "#2e2e2e";
 const CHECKER_LIGHT = "#3a3a3a";
@@ -55,7 +55,7 @@ function base64Length(byteLength) {
 // operation) writes the file back to the store as base64 through the
 // ordinary setFileContent path, so dirty tracking, Save, SD staging and the
 // ZIP all carry sprite edits like any other file change.
-export function SpriteEditor({ fileId, content }) {
+export function SpriteEditor({ fileId, content, tile = false }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const canvasRef = useRef(null);
@@ -122,26 +122,44 @@ export function SpriteEditor({ fileId, content }) {
     [palette]
   );
 
-  // 8-bit (256 bytes per pattern) or 4-bit (128, two pixels per byte).
-  // The bytes carry no marker, so the mode is a user toggle remembered per
-  // file; a file that is not a whole number of 8-bit patterns can only be
-  // 4-bit and the toggle locks. In 4-bit mode bytesRef holds UNPACKED
-  // pixels (one nibble value per byte) so every tool works unchanged;
-  // pack/unpack happen at the load/emit boundary.
+  // Two per-file display modes, both remembered in localStorage: bit depth
+  // (8-bit = one byte per pixel on disk, 4-bit = two pixels per byte) and
+  // grid size (16x16 sprites or 8x8 tiles). The bytes carry no marker, so
+  // these are user toggles; combinations that do not divide the file are
+  // unavailable, and .til files default to the tilemap hardware's 8x8
+  // 4-bit. In 4-bit mode bytesRef holds UNPACKED pixels (one nibble value
+  // per byte) so every tool works unchanged; pack/unpack happen at the
+  // load/emit boundary.
   const fourBitRef = useRef(false);
+  const gridRef = useRef(SPRITE_SIZE);
   const [palOffset, setPalOffset] = useState(0);
   const modeKey = `zxcoder-sprite-4bit-${fileId}`;
+  const gridKey = `zxcoder-sprite-grid8-${fileId}`;
 
   const loadFile = () => {
     const file = splitSpriteFile(base64ToBytes(content || ""));
     headerRef.current = file.header;
-    const forced =
-      file.data.length % SPRITE_BYTES !== 0 &&
-      file.data.length % FOUR_BIT_PATTERN_BYTES === 0;
-    fourBitRef.current = forced || localStorage.getItem(modeKey) === "1";
-    bytesRef.current = fourBitRef.current
-      ? expandFourBit(file.data)
-      : file.data;
+    const raw = file.data.length;
+    const fits = (four, grid8) =>
+      (four ? raw * 2 : raw) % (grid8 ? TILE_PIXELS : SPRITE_BYTES) === 0;
+    const stored4 = localStorage.getItem(modeKey);
+    const storedG = localStorage.getItem(gridKey);
+    let four = stored4 !== null ? stored4 === "1" : tile;
+    let grid8 = storedG !== null ? storedG === "1" : tile;
+    if (!fits(four, grid8)) {
+      if (fits(!four, grid8)) {
+        four = !four;
+      } else if (fits(four, true)) {
+        grid8 = true;
+      } else {
+        // The editable-content gate guarantees 4-bit 8x8 always divides.
+        four = true;
+        grid8 = true;
+      }
+    }
+    fourBitRef.current = four;
+    gridRef.current = grid8 ? TILE_SIZE : SPRITE_SIZE;
+    bytesRef.current = four ? expandFourBit(file.data) : file.data;
   };
 
   if (bytesRef.current === null) {
@@ -159,7 +177,10 @@ export function SpriteEditor({ fileId, content }) {
     lastEmittedRef.current = content || "";
     const clamped = Math.max(
       0,
-      Math.min(pattern, spritePatternCount(bytesRef.current.length) - 1)
+      Math.min(
+        pattern,
+        bytesRef.current.length / (gridRef.current * gridRef.current) - 1
+      )
     );
     historyRef.current = {
       stack: [{ bytes: bytesRef.current.slice(), pattern: clamped }],
@@ -170,8 +191,13 @@ export function SpriteEditor({ fileId, content }) {
     setVersion((v) => v + 1);
   }, [content]);
 
-  const count = spritePatternCount(bytesRef.current.length);
   const fourBit = fourBitRef.current;
+  // Pattern geometry for the current grid mode; all pattern maths below
+  // works in unpacked pixels.
+  const size = gridRef.current;
+  const pixels = size * size;
+  const zoom = CANVAS_SIZE / size;
+  const count = bytesRef.current.length / pixels;
   // The value painted for "transparent" and the palette entry a stored
   // pixel value displays through (4-bit nibbles address a 16-colour row).
   const transparentIndex = fourBit ? FOUR_BIT_TRANSPARENT : TRANSPARENT_INDEX;
@@ -183,29 +209,29 @@ export function SpriteEditor({ fileId, content }) {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     const bytes = bytesRef.current;
-    const base = pattern * SPRITE_BYTES;
-    const half = ZOOM / 2;
-    for (let y = 0; y < SPRITE_SIZE; y++) {
-      for (let x = 0; x < SPRITE_SIZE; x++) {
-        const colour = bytes[base + y * SPRITE_SIZE + x];
-        const px = x * ZOOM;
-        const py = y * ZOOM;
+    const base = pattern * pixels;
+    const half = zoom / 2;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const colour = bytes[base + y * size + x];
+        const px = x * zoom;
+        const py = y * zoom;
         if (colour === transparentIndex) {
           ctx.fillStyle = CHECKER_DARK;
-          ctx.fillRect(px, py, ZOOM, ZOOM);
+          ctx.fillRect(px, py, zoom, zoom);
           ctx.fillStyle = CHECKER_LIGHT;
           ctx.fillRect(px, py, half, half);
           ctx.fillRect(px + half, py + half, half, half);
         } else {
           ctx.fillStyle = palette[displayIndex(colour)];
-          ctx.fillRect(px, py, ZOOM, ZOOM);
+          ctx.fillRect(px, py, zoom, zoom);
         }
       }
     }
     ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-    for (let i = 1; i < SPRITE_SIZE; i++) {
-      ctx.fillRect(i * ZOOM, 0, 1, CANVAS_SIZE);
-      ctx.fillRect(0, i * ZOOM, CANVAS_SIZE, 1);
+    for (let i = 1; i < size; i++) {
+      ctx.fillRect(i * zoom, 0, 1, CANVAS_SIZE);
+      ctx.fillRect(0, i * zoom, CANVAS_SIZE, 1);
     }
   };
 
@@ -222,10 +248,10 @@ export function SpriteEditor({ fileId, content }) {
     const canvas = thumbCanvasesRef.current.get(index);
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    const image = ctx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
+    const image = ctx.createImageData(size, size);
     const bytes = bytesRef.current;
-    const base = index * SPRITE_BYTES;
-    for (let i = 0; i < SPRITE_BYTES; i++) {
+    const base = index * pixels;
+    for (let i = 0; i < pixels; i++) {
       const colour = bytes[base + i];
       const o = i * 4;
       if (colour === transparentIndex) {
@@ -290,7 +316,7 @@ export function SpriteEditor({ fileId, content }) {
     setPattern(
       Math.max(
         0,
-        Math.min(entry.pattern, spritePatternCount(entry.bytes.length) - 1)
+        Math.min(entry.pattern, entry.bytes.length / pixels - 1)
       )
     );
     emit();
@@ -313,9 +339,9 @@ export function SpriteEditor({ fileId, content }) {
   // Canvas-relative event position -> sprite pixel, or null outside.
   const pixelAt = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = Math.floor(((e.clientX - rect.left) / rect.width) * SPRITE_SIZE);
-    const y = Math.floor(((e.clientY - rect.top) / rect.height) * SPRITE_SIZE);
-    if (x < 0 || x >= SPRITE_SIZE || y < 0 || y >= SPRITE_SIZE) return null;
+    const x = Math.floor(((e.clientX - rect.left) / rect.width) * size);
+    const y = Math.floor(((e.clientY - rect.top) / rect.height) * size);
+    if (x < 0 || x >= size || y < 0 || y >= size) return null;
     return { x, y };
   };
 
@@ -325,7 +351,7 @@ export function SpriteEditor({ fileId, content }) {
     // Holding Shift erases regardless of the active tool (zx-tools habit).
     const value =
       tool === "erase" || e.shiftKey ? transparentIndex : selectedColour;
-    const i = pattern * SPRITE_BYTES + p.y * SPRITE_SIZE + p.x;
+    const i = pattern * pixels + p.y * size + p.x;
     if (bytesRef.current[i] !== value) {
       bytesRef.current[i] = value;
       dirtyThumbsRef.current.add(pattern);
@@ -338,15 +364,15 @@ export function SpriteEditor({ fileId, content }) {
     const p = pixelAt(e);
     if (!p) return;
     const bytes = bytesRef.current;
-    const base = pattern * SPRITE_BYTES;
-    const from = bytes[base + p.y * SPRITE_SIZE + p.x];
+    const base = pattern * pixels;
+    const from = bytes[base + p.y * size + p.x];
     const to = e.shiftKey ? transparentIndex : selectedColour;
     if (from === to) return;
     const stack = [[p.x, p.y]];
     while (stack.length) {
       const [x, y] = stack.pop();
-      if (x < 0 || x >= SPRITE_SIZE || y < 0 || y >= SPRITE_SIZE) continue;
-      const i = base + y * SPRITE_SIZE + x;
+      if (x < 0 || x >= size || y < 0 || y >= size) continue;
+      const i = base + y * size + x;
       if (bytes[i] !== from) continue;
       bytes[i] = to;
       stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
@@ -362,7 +388,7 @@ export function SpriteEditor({ fileId, content }) {
       const p = pixelAt(e);
       if (p) {
         const colour =
-          bytesRef.current[pattern * SPRITE_BYTES + p.y * SPRITE_SIZE + p.x];
+          bytesRef.current[pattern * pixels + p.y * size + p.x];
         if (colour === transparentIndex) {
           setTool("erase");
         } else {
@@ -395,8 +421,8 @@ export function SpriteEditor({ fileId, content }) {
   // Whole-pattern operations mutate the current pattern in place.
   const transformPattern = (fn) => {
     const view = bytesRef.current.subarray(
-      pattern * SPRITE_BYTES,
-      (pattern + 1) * SPRITE_BYTES
+      pattern * pixels,
+      (pattern + 1) * pixels
     );
     fn(view);
     dirtyThumbsRef.current.add(pattern);
@@ -405,18 +431,18 @@ export function SpriteEditor({ fileId, content }) {
 
   const flipHorizontal = () =>
     transformPattern((view) => {
-      for (let y = 0; y < SPRITE_SIZE; y++) {
-        view.subarray(y * SPRITE_SIZE, (y + 1) * SPRITE_SIZE).reverse();
+      for (let y = 0; y < size; y++) {
+        view.subarray(y * size, (y + 1) * size).reverse();
       }
     });
 
   const flipVertical = () =>
     transformPattern((view) => {
-      for (let y = 0; y < SPRITE_SIZE / 2; y++) {
-        const top = view.slice(y * SPRITE_SIZE, (y + 1) * SPRITE_SIZE);
-        const opposite = SPRITE_SIZE - 1 - y;
-        view.copyWithin(y * SPRITE_SIZE, opposite * SPRITE_SIZE, (opposite + 1) * SPRITE_SIZE);
-        view.set(top, opposite * SPRITE_SIZE);
+      for (let y = 0; y < size / 2; y++) {
+        const top = view.slice(y * size, (y + 1) * size);
+        const opposite = size - 1 - y;
+        view.copyWithin(y * size, opposite * size, (opposite + 1) * size);
+        view.set(top, opposite * size);
       }
     });
 
@@ -427,10 +453,10 @@ export function SpriteEditor({ fileId, content }) {
   const rotatePattern = () =>
     transformPattern((view) => {
       const src = view.slice();
-      for (let y = 0; y < SPRITE_SIZE; y++) {
-        for (let x = 0; x < SPRITE_SIZE; x++) {
-          view[y * SPRITE_SIZE + x] =
-            src[(SPRITE_SIZE - 1 - x) * SPRITE_SIZE + y];
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          view[y * size + x] =
+            src[(size - 1 - x) * size + y];
         }
       }
     });
@@ -439,18 +465,18 @@ export function SpriteEditor({ fileId, content }) {
   const shiftPattern = (dx, dy) =>
     transformPattern((view) => {
       const src = view.slice();
-      for (let y = 0; y < SPRITE_SIZE; y++) {
-        for (let x = 0; x < SPRITE_SIZE; x++) {
-          const sx = (x - dx + SPRITE_SIZE) % SPRITE_SIZE;
-          const sy = (y - dy + SPRITE_SIZE) % SPRITE_SIZE;
-          view[y * SPRITE_SIZE + x] = src[sy * SPRITE_SIZE + sx];
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const sx = (x - dx + size) % size;
+          const sy = (y - dy + size) % size;
+          view[y * size + x] = src[sy * size + sx];
         }
       }
     });
 
   // File bytes on disk per pattern (in-memory patterns are always 256
   // unpacked pixels).
-  const filePatternBytes = fourBit ? FOUR_BIT_PATTERN_BYTES : SPRITE_BYTES;
+  const filePatternBytes = fourBit ? pixels / 2 : pixels;
   const fileDataLength = fourBit
     ? bytesRef.current.length / 2
     : bytesRef.current.length;
@@ -463,7 +489,7 @@ export function SpriteEditor({ fileId, content }) {
     ) <= MAX_FILE_CONTENT_SIZE;
 
   const addPattern = () => {
-    const grown = new Uint8Array(bytesRef.current.length + SPRITE_BYTES);
+    const grown = new Uint8Array(bytesRef.current.length + pixels);
     grown.set(bytesRef.current);
     grown.fill(transparentIndex, bytesRef.current.length);
     bytesRef.current = grown;
@@ -474,8 +500,8 @@ export function SpriteEditor({ fileId, content }) {
 
   const copyPattern = () => {
     clipboardRef.current = bytesRef.current.slice(
-      pattern * SPRITE_BYTES,
-      (pattern + 1) * SPRITE_BYTES
+      pattern * pixels,
+      (pattern + 1) * pixels
     );
     setHasClipboard(true);
   };
@@ -486,7 +512,7 @@ export function SpriteEditor({ fileId, content }) {
     const clip = clipboardRef.current;
     if (!clip) return;
     transformPattern((view) => {
-      for (let i = 0; i < SPRITE_BYTES; i++) {
+      for (let i = 0; i < pixels; i++) {
         // Clipboard values from the other bit mode mask down to nibbles.
         const value = fourBit ? clip[i] & 0x0f : clip[i];
         if (!over || value !== transparentIndex) {
@@ -499,11 +525,11 @@ export function SpriteEditor({ fileId, content }) {
   const duplicatePattern = () => {
     if (!canAddPattern) return;
     const src = bytesRef.current;
-    const end = (pattern + 1) * SPRITE_BYTES;
-    const grown = new Uint8Array(src.length + SPRITE_BYTES);
+    const end = (pattern + 1) * pixels;
+    const grown = new Uint8Array(src.length + pixels);
     grown.set(src.subarray(0, end));
-    grown.set(src.subarray(pattern * SPRITE_BYTES, end), end);
-    grown.set(src.subarray(end), end + SPRITE_BYTES);
+    grown.set(src.subarray(pattern * pixels, end), end);
+    grown.set(src.subarray(end), end + pixels);
     bytesRef.current = grown;
     allThumbsDirtyRef.current = true;
     setPattern(pattern + 1);
@@ -514,21 +540,21 @@ export function SpriteEditor({ fileId, content }) {
   const movePattern = (from, to) => {
     if (from === to || from == null || to == null) return;
     const bytes = bytesRef.current;
-    const chunk = bytes.slice(from * SPRITE_BYTES, (from + 1) * SPRITE_BYTES);
+    const chunk = bytes.slice(from * pixels, (from + 1) * pixels);
     if (from < to) {
       bytes.copyWithin(
-        from * SPRITE_BYTES,
-        (from + 1) * SPRITE_BYTES,
-        (to + 1) * SPRITE_BYTES
+        from * pixels,
+        (from + 1) * pixels,
+        (to + 1) * pixels
       );
     } else {
       bytes.copyWithin(
-        (to + 1) * SPRITE_BYTES,
-        to * SPRITE_BYTES,
-        from * SPRITE_BYTES
+        (to + 1) * pixels,
+        to * pixels,
+        from * pixels
       );
     }
-    bytes.set(chunk, to * SPRITE_BYTES);
+    bytes.set(chunk, to * pixels);
     allThumbsDirtyRef.current = true;
     setPattern(to);
     commit(to);
@@ -539,8 +565,31 @@ export function SpriteEditor({ fileId, content }) {
   };
 
   // Whether the current data could also read as whole 8-bit patterns (a
-  // 4-bit file with an odd pattern count cannot).
-  const canBeEightBit = fileDataLength % SPRITE_BYTES === 0;
+  // 4-bit file with an odd pattern count cannot), and whether the other
+  // grid size divides the pixel buffer.
+  const canBeEightBit = fileDataLength % pixels === 0;
+  const otherGridPixels =
+    size === SPRITE_SIZE ? TILE_PIXELS : SPRITE_BYTES;
+  const canToggleGrid = bytesRef.current.length % otherGridPixels === 0;
+
+  // Reinterpret the same pixels on the other grid: content and depth stay,
+  // only the pattern slicing changes. History and clipboard reset (their
+  // pattern boundaries no longer apply).
+  const toggleGrid = () => {
+    if (!canToggleGrid) return;
+    const grid8 = size === SPRITE_SIZE;
+    gridRef.current = grid8 ? TILE_SIZE : SPRITE_SIZE;
+    localStorage.setItem(gridKey, grid8 ? "1" : "0");
+    clipboardRef.current = null;
+    setHasClipboard(false);
+    historyRef.current = {
+      stack: [{ bytes: bytesRef.current.slice(), pattern: 0 }],
+      index: 0,
+    };
+    allThumbsDirtyRef.current = true;
+    setPattern(0);
+    setVersion((v) => v + 1);
+  };
 
   // Reinterpret the same file bytes in the other depth: the content does
   // not change (so nothing dirties), only the unpacked working copy and
@@ -550,7 +599,7 @@ export function SpriteEditor({ fileId, content }) {
       ? packFourBit(bytesRef.current)
       : bytesRef.current;
     const next = !fourBitRef.current;
-    if (next === false && fileData.length % SPRITE_BYTES !== 0) return;
+    if (next === false && fileData.length % pixels !== 0) return;
     fourBitRef.current = next;
     localStorage.setItem(modeKey, next ? "1" : "0");
     bytesRef.current = next ? expandFourBit(fileData) : fileData;
@@ -583,26 +632,27 @@ export function SpriteEditor({ fileId, content }) {
         const ctx = scratch.getContext("2d");
         ctx.drawImage(img, 0, 0);
         const patterns = imageDataToPatterns(
-          ctx.getImageData(0, 0, scratch.width, scratch.height)
+          ctx.getImageData(0, 0, scratch.width, scratch.height),
+          size
         );
         const headerLength = headerRef.current ? headerRef.current.length : 0;
         const room = Math.floor(
           ((MAX_FILE_CONTENT_SIZE * 3) / 4 -
             headerLength -
             bytesRef.current.length) /
-            SPRITE_BYTES
+            pixels
         );
-        const take = Math.min(spritePatternCount(patterns.length), room);
+        const take = Math.min(patterns.length / pixels, room);
         if (take <= 0) return;
         const grown = new Uint8Array(
-          bytesRef.current.length + take * SPRITE_BYTES
+          bytesRef.current.length + take * pixels
         );
         grown.set(bytesRef.current);
         grown.set(
-          patterns.subarray(0, take * SPRITE_BYTES),
+          patterns.subarray(0, take * pixels),
           bytesRef.current.length
         );
-        const firstNew = spritePatternCount(bytesRef.current.length);
+        const firstNew = bytesRef.current.length / pixels;
         bytesRef.current = grown;
         allThumbsDirtyRef.current = true;
         setPattern(firstNew);
@@ -615,11 +665,11 @@ export function SpriteEditor({ fileId, content }) {
 
   const deletePattern = () => {
     if (count <= 1) return;
-    const shrunk = new Uint8Array(bytesRef.current.length - SPRITE_BYTES);
-    shrunk.set(bytesRef.current.subarray(0, pattern * SPRITE_BYTES));
+    const shrunk = new Uint8Array(bytesRef.current.length - pixels);
+    shrunk.set(bytesRef.current.subarray(0, pattern * pixels));
     shrunk.set(
-      bytesRef.current.subarray((pattern + 1) * SPRITE_BYTES),
-      pattern * SPRITE_BYTES
+      bytesRef.current.subarray((pattern + 1) * pixels),
+      pattern * pixels
     );
     bytesRef.current = shrunk;
     allThumbsDirtyRef.current = true;
@@ -810,6 +860,13 @@ export function SpriteEditor({ fileId, content }) {
         </div>
         <div className="sprite-editor-toolbar-group">
           <Button
+            label={size === SPRITE_SIZE ? "16×16" : "8×8"}
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.gridMode")}
+            disabled={!canToggleGrid}
+            onClick={toggleGrid}
+          />
+          <Button
             label={fourBit ? "4-bit" : "8-bit"}
             className="p-button-sm p-button-outlined"
             title={t("editor.sprites.bitMode")}
@@ -908,8 +965,8 @@ export function SpriteEditor({ fileId, content }) {
         {Array.from({ length: count }, (_, index) => (
           <canvas
             key={index}
-            width={SPRITE_SIZE}
-            height={SPRITE_SIZE}
+            width={size}
+            height={size}
             className={
               index === pattern
                 ? "sprite-pattern-thumb selected"

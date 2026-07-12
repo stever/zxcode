@@ -5,7 +5,7 @@
 // alpha; opaque pixels that happen to land on the transparency index are
 // nudged one blue step so they stay visible on hardware.
 
-import { SPRITE_BYTES, SPRITE_SIZE, TRANSPARENT_INDEX } from "./spr";
+import { SPRITE_SIZE, TRANSPARENT_INDEX } from "./spr";
 
 const ALPHA_THRESHOLD = 128;
 
@@ -21,23 +21,23 @@ export function quantiseRGB(r, g, b) {
 }
 
 // Converts RGBA pixels ({width, height, data} as from getImageData) into
-// whole 16x16 patterns, left to right then top to bottom, padding partial
-// edge cells with transparency. Returns a Uint8Array of N*256 bytes.
-export function imageDataToPatterns(image) {
-  const cols = Math.ceil(image.width / SPRITE_SIZE);
-  const rows = Math.ceil(image.height / SPRITE_SIZE);
-  const out = new Uint8Array(cols * rows * SPRITE_BYTES).fill(
+// whole cellSize x cellSize patterns (16 for sprites, 8 for tiles), left to
+// right then top to bottom, padding partial edge cells with transparency.
+// Returns a Uint8Array of N*cellSize² bytes.
+export function imageDataToPatterns(image, cellSize = SPRITE_SIZE) {
+  const cellPixels = cellSize * cellSize;
+  const cols = Math.ceil(image.width / cellSize);
+  const rows = Math.ceil(image.height / cellSize);
+  const out = new Uint8Array(cols * rows * cellPixels).fill(
     TRANSPARENT_INDEX
   );
   for (let y = 0; y < image.height; y++) {
     for (let x = 0; x < image.width; x++) {
       const o = (y * image.width + x) * 4;
       if (image.data[o + 3] < ALPHA_THRESHOLD) continue;
-      const cell = Math.floor(y / SPRITE_SIZE) * cols + Math.floor(x / SPRITE_SIZE);
+      const cell = Math.floor(y / cellSize) * cols + Math.floor(x / cellSize);
       const index =
-        cell * SPRITE_BYTES +
-        (y % SPRITE_SIZE) * SPRITE_SIZE +
-        (x % SPRITE_SIZE);
+        cell * cellPixels + (y % cellSize) * cellSize + (x % cellSize);
       out[index] = quantiseRGB(
         image.data[o],
         image.data[o + 1],

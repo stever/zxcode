@@ -224,6 +224,7 @@
       "importImage": "Import image as sprites (colours quantised to the Next palette)",
       "importImage4bit": "Image import needs 8-bit mode",
       "bitMode": "Toggle 8-bit / 4-bit patterns (reinterprets the same bytes)",
+      "gridMode": "Toggle 16×16 sprites / 8×8 tiles (reinterprets the same bytes)",
       "palOffset": "Palette row",
       "palOffsetHint": "4-bit palette offset: colours display from this row of 16",
       "patternLabel": "Sprite {{index}} of {{count}}",
