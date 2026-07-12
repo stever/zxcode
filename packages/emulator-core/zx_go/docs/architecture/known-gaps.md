@@ -73,6 +73,8 @@ This is a body of work, not a single gap.
 | Floating bus returns $FF on +2A/+3/Next (correct) — noted here because it surprises people | correct behaviour | `pkg/ula/ula.go` |
 | Multiface paging readback models $7F3F/$1F3F only | deferred | `pkg/ula/ula.go` |
 | MEMPTR implemented to the depth zexall observes; some exotic update sites may be missing (only visible via F3/F5) | documented depth | `pkg/z80/z80.go` |
+| Interrupted-block-instruction undocumented flags (YF/XF from PC.13/PC.11, plus INxR/OTxR PF/HF effects — David Banks 2018) not implemented | deferred (ZX Play #141) | ZXSpectrumNextTests z80bltst vs real hardware; `pkg/testharness/nexttests_test.go` |
+| Interrupt acceptance not inhibited after DD/FD prefix bytes or after EI chains; a held /INT pulse re-enters the ISR once, not 2+ times | deferred (ZX Play #141) | ZXSpectrumNextTests int_skip; `pkg/testharness/nexttests_test.go` |
 | Per-access memory contention (`MemContend`) off machine-wide; lump T-state totals are the shipping model | deferred, gated on turbo contention work | `pkg/z80/z80.go` |
 | SAM: MIDI, clock port, SD/IDE ports ignored | out of scope | `pkg/sam/io.go` |
 | SAA1099 is datasheet-modelled (no hardware-verified reference core exists) | best available | `pkg/saa1099/saa1099.go` |

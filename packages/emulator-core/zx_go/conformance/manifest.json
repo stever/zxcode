@@ -194,11 +194,11 @@
       "title": "MrKWatkins/ZXSpectrumNextTests — Z80N, sprites, Layer 2, mixing, Copper, DMA, ULA, interrupts, timing",
       "area": "Next acceptance",
       "kind": "external",
-      "status": "planned",
-      "roadmap": "ZX Play #137",
+      "status": "partial",
+      "roadmap": "ZX Play #139",
       "link": "https://github.com/MrKWatkins/ZXSpectrumNextTests",
       "detail": "nexttests.html",
-      "notes": "Community acceptance suite with real-hardware reference screenshots. 35 tests in 8 groups — see the breakdown page. To run via the headless harness with OCR / screenshot comparison."
+      "notes": "Community acceptance suite with real-hardware reference screenshots. 35 tests in 8 groups — see the breakdown page. Classic (.sna) tests are live; the Next-side tests ship as .snx snapshots zx_go cannot load yet."
     },
     {
       "id": "ext-327tests",
@@ -268,7 +268,7 @@
         {
           "name": "Interrupts",
           "tests": [
-            { "name": "HaltAfterDisable", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Interrupts/HaltAfterDisable", "notes": "HALT with interrupts disabled" }
+            { "name": "HaltAfterDisable", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Interrupts/HaltAfterDisable", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsDIHalt"] }, "notes": "DI + HALT must hang forever; asserted via the border-colour signature" }
           ]
         },
         {
@@ -289,9 +289,10 @@
         {
           "name": "ZX48 / ZX128 classic tests",
           "tests": [
-            { "name": "Z80BlockInstructionFlags", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80BlockInstructionFlags", "notes": "Undocumented flags of the block instructions" },
-            { "name": "Z80CcfScfOutcomeStability", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80CcfScfOutcomeStability", "notes": "SCF/CCF X/Y flag stability" },
-            { "name": "Z80IntSkip", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip", "notes": "Interrupt acceptance edge cases" },
+            { "name": "Z80BlockInstructionFlags", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80BlockInstructionFlags", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsZ80BlockFlags"] }, "notes": "SKIP = documented gap: interrupted-block-instruction flags (David Banks) not implemented — known-gaps.md, ZX Play #141" },
+            { "name": "Z80CcfScfOutcomeStability", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80CcfScfOutcomeStability", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsCcfScfStability"] }, "notes": "SCF/CCF outcomes must be deterministic frame over frame" },
+            { "name": "Z80IntSkip (basics)", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsZ80IntSkipBasics"] }, "notes": "NOP benchmark, DI inhibition, SCF/CCF chains, IFF2 reads during int-ack" },
+            { "name": "Z80IntSkip (prefix/EI inhibition)", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsZ80IntSkipInhibition"] }, "notes": "SKIP = documented gap: INT acceptance not inhibited after DD/FD prefixes or EI; /INT pulse re-entry once not 2+ — known-gaps.md, ZX Play #141" },
             { "name": "ULAvsSJS", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/ULAvsSJS", "notes": "ULA timing comparison" }
           ]
         }
