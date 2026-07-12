@@ -198,6 +198,18 @@ the active one. Line refs are approximate (re-grep before starting).
 - [x] ~~Sprite auto-increment register aliases $75-$79~~ DONE — NR$75-$79
   apply attribute bytes 0-4 (shared with $35-$39) and auto-increment the
   sprite index, TDD `TestSpriteAttrAutoIncrement` (wire.go).
+- [x] ~~Sprite engine conformance pass (MrKWatkins Sprites group)~~ DONE —
+  faithful NR$4B transparency (raw pattern value vs the colour, 8bpp full
+  byte / 4bpp low nibble, sprites.vhd:971 — the engine owns it, not the
+  compositor), the dual NR$34/port-$303B sprite indexes with the NR$09
+  bit-4 lockstep tie (sprites.vhd:591-655), the per-line render budget
+  (448×4 28MHz cycles; overtime latches $303B bit 1, sprites.vhd:977) and
+  the 9-bit X wrap onto the left edge (sprites.vhd:855). The "8 rows
+  lower" gap row was disproven paper-relative (sprite fill exactly inside
+  its ULA outline, TestNexttestsSpritesRelative). TDD:
+  `TestRenderScanlineTransparencyMatchesNR4B`, `TestTwoSpriteIndexes`,
+  `TestPerLineRenderBudget`, `TestNineBitXWrap` + the five
+  `TestNexttestsSprites*` scenes.
 
 ### Copper
 - [x] ~~Per-T-state raster-precise Copper execution~~ DONE — added the

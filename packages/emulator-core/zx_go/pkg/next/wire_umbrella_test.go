@@ -163,8 +163,8 @@ func TestWireUmbrellaInstallsAllHandlers(t *testing.T) {
 	// 0x34: sprite-select
 	disp.Select(0x34)
 	disp.WriteData(0x05)
-	if sprites.SelectedSprite() != 0x05 {
-		t.Errorf("after NextReg 0x34=5: SelectedSprite = %d, want 5", sprites.SelectedSprite())
+	if sprites.MirrorSprite() != 0x05 {
+		t.Errorf("after NextReg 0x34=5: MirrorSprite = %d, want 5", sprites.MirrorSprite())
 	}
 
 	// 0x35 / 0x36 / 0x37 / 0x38: attribute path on the currently

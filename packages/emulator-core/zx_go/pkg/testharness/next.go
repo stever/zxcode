@@ -116,6 +116,9 @@ func newNext() (*Harness, error) {
 	// Same as the production wiring (cmd/zx_go/next.go): the classic
 	// ULA palette lets the compositor resolve ULA transparency.
 	comp.SetULAPalette(u.Palette())
+	// Compositor-facing transparency registers (NR$14/$4A/$4C), the same
+	// shared helper production calls — harness wiring parity.
+	next.WireCompositor(disp, comp)
 	u.SetNextCompositor(comp)
 	u.SetNextSpritePort(sprites) // port $303B select (write) / status (read); $5B/$57 upload
 	u.SetNextDMA(dmaEngine)

@@ -83,9 +83,12 @@ drift. Highlights:
 - CPU: `WireCPUSpeed` (NR$07 turbo), `WireContentionDisable` (NR$08).
 - Interrupts: `WireInterruptControl` (NR$C0 incl. stackless NMI),
   `WireInterruptEnable0/2` (NR$C4/$C6), `WireLineInterrupt` (NR$22/$23).
-- Video: `WireLayer2`, `WireSprites`, `WireLayerPriority` (NR$15),
-  `WirePalette` (NR$40-$44), `WireTilemap`, `WireClipWindows`
-  (NR$18-$1C), `WireCopper` (NR$60-$63).
+- Video: `WireLayer2`, `WireSprites` (NR$34-$39/$75-$79 + NR$4B),
+  `WireLayerPriority` (NR$15), `WirePalette` (NR$40-$44), `WireTilemap`,
+  `WireClipWindows` (NR$18-$1C), `WireCopper` (NR$60-$63), and
+  `WireCompositor` (NR$14/$4A/$4C — called by both the production
+  machine and the test harness so their compositor wiring cannot
+  drift).
 - Peripherals: `WirePeripheral1/2/3` (NR$0A/$06/$09), `WireJoystickMode`,
   `WireRTC`, `WireUART`, `WireKeymap`, plus reserved-bit masks.
 - Deliberately not wired here: the zxnDMA (port $6B, wired via
@@ -177,9 +180,20 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
 - Sprites (`pkg/next/sprite`): 128 slots, 16×16 in 4bpp or 8bpp over a
   16K shared pattern RAM, mirror/rotate/scale 1-8×, relative sprites in
   composite and unified anchor groups, the $303B status port (collision
-  bit, clear-on-read), attribute streaming via ports $57/$5B and the
-  auto-increment NextRegs $75-$79. The per-line bandwidth limit is not
-  modelled (status bit 1 reads 0).
+  + max-per-line bits, clear-on-read), attribute streaming via ports
+  $57/$5B and the auto-increment NextRegs $75-$79. The engine keeps the
+  FPGA's TWO sprite indexes (sprites.vhd:591-655): the NR$34 mirror
+  (target of NextReg attribute writes; NR$34 reads it live) and the
+  IO-port cursor (ports $303B/$57), tied together by NR$09 bit 4
+  ("lockstep"). Transparency compares each pixel's RAW pattern value
+  against the NR$4B colour (full byte in 8bpp, low nibble in 4bpp,
+  sprites.vhd:971) — palette index 0 is drawable, so the compositor
+  reads per-pixel coverage (`LineCoverage`) rather than sentinel
+  values. Rendering models the FPGA's per-line budget (one 448-count
+  raster line of 28MHz FSM cycles: 1 per sprite qualified + 1 per pixel
+  column) — sprites past the budget drop off the line and $303B bit 1
+  latches — and the 9-bit X wrap that shows high-X sprites on the left
+  edge (sprites.vhd:855).
 - LoRes/Radastan (`pkg/next/lores`): 128×96 in 8-bit or 4-bit, a
   line-by-line transcription of lores.vhd.
 - Palettes (`pkg/next/palette`): 9-bit RGB333 entries, 256 × 8 banks
@@ -187,7 +201,8 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   Layer 2 priority bit, ULANext format (NR$42).
 - Compositor (`pkg/next/compositor`): per-scanline composition in the
   NR$15 priority order (SLU/LSU/SUL/LUS/USL/ULS plus two additive blend
-  modes), global transparency NR$14, sprite transparency NR$4B, tilemap
+  modes), global transparency NR$14 (sprite transparency NR$4B lives in
+  the sprite ENGINE — see above), tilemap
   transparency nibble NR$4C, the SUL per-pixel stencil, Layer 2
   priority-bit promotion, ULA+tilemap combine, and the NR$4A fallback
   colour where every layer is transparent. `mixer.go` is a fully

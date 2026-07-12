@@ -75,7 +75,6 @@ type Compositor struct {
 	tilemap        *tilemap.Tilemap
 	prioritySource PrioritySource
 	transparency   byte
-	spriteTrans    byte    // sprite transparency index (NextReg 0x4B)
 	tilemapTrans   byte    // tilemap transparency nibble (NextReg 0x4C, low 4 bits)
 	fallback       [4]byte // NR$4A fallback RGBA, shown when every layer is transparent
 
@@ -307,15 +306,12 @@ func (c *Compositor) ComposeSpriteBorderRow(frameY int, dst []byte, isInBorderAr
 	}
 	var scan [FullWidth]byte
 	c.sprites.RenderScanline(frameY, scan[:], FullWidth)
+	cover := c.sprites.LineCoverage()
 	for x := 0; x < FullWidth; x++ {
-		if !isInBorderArea(x) {
-			continue
+		if !isInBorderArea(x) || !cover[x] {
+			continue // outside this pass, or no opaque sprite pixel here
 		}
-		idx := scan[x]
-		if idx == 0 || idx == c.spriteTrans {
-			continue // uncovered sentinel or transparency index
-		}
-		r, g, b := spritePal.RGB(idx)
+		r, g, b := spritePal.RGB(scan[x])
 		off := x * 4
 		dst[off+0], dst[off+1], dst[off+2], dst[off+3] = r, g, b, 0xFF
 	}
@@ -328,7 +324,7 @@ func (c *Compositor) ComposeSpriteBorderRow(frameY int, dst []byte, isInBorderAr
 // is wired separately via SetSprites so existing callers don't
 // have to update on the Sprint-6 -> Sprint-7 transition.
 func New(pal *palette.Bank, l2 *layer2.Layer2) *Compositor {
-	return &Compositor{pal: pal, l2: l2, transparency: DefaultTransparency, tilemapTrans: 0x0F, spriteTrans: DefaultTransparency}
+	return &Compositor{pal: pal, l2: l2, transparency: DefaultTransparency, tilemapTrans: 0x0F}
 }
 
 // SetSprites attaches the sprite engine. nil unhooks (compositor
@@ -338,11 +334,6 @@ func (c *Compositor) SetSprites(s *sprite.Engine) { c.sprites = s }
 // SetPrioritySource installs the LayerPriority reader. Without one
 // the compositor defaults to ModeSLU (Sprites over Layer 2 over ULA).
 func (c *Compositor) SetPrioritySource(p PrioritySource) { c.prioritySource = p }
-
-// SetSpriteTransparency installs the palette index treated as
-// transparent for the sprite layer (NextReg 0x4B). Defaults to
-// DefaultTransparency ($E3, the FPGA reset value).
-func (c *Compositor) SetSpriteTransparency(idx byte) { c.spriteTrans = idx }
 
 // SetTilemapTransparency installs the tilemap transparency nibble
 // (NextReg 0x4C, low 4 bits). A tilemap pixel is transparent when the
@@ -547,6 +538,7 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 		}
 	}
 	var spriteScan []byte
+	var spriteCover []bool
 	var spritePal *palette.Palette
 	if doSprites {
 		spritePal = c.pal.PaletteForLayer(palette.LayerSprites)
@@ -554,16 +546,14 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 			doSprites = false
 		} else {
 			spriteScan = c.spriteScratch[:]
-			// Zero the buffer; the sprite engine only OVERWRITES
-			// pixels it covers, leaving previous content otherwise.
-			for i := range spriteScan {
-				spriteScan[i] = 0
-			}
 			// Sprites live in FRAME coordinates (320x256, paper at 32,32).
 			// Compose the paper: paper row y is frame row y+SpriteFrameYTop,
 			// rendered full-width so frame X (incl. the 32px paper offset) is
-			// available; paintSprites reads [paperX+BorderOffsetX].
+			// available; paintSprites reads [paperX+BorderOffsetX]. Covered
+			// pixels are flagged by LineCoverage — dst values can't signal
+			// presence because palette index 0 is a drawable colour.
 			c.sprites.RenderScanline(y+SpriteFrameYTop, spriteScan, FullWidth)
+			spriteCover = c.sprites.LineCoverage()
 		}
 	}
 
@@ -661,12 +651,11 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 			return
 		}
 		// x is the paper pixel (0..255); the sprite buffer is in frame
-		// coordinates, so the paper's left edge is at BorderOffsetX. A pixel
-		// is transparent when it is the 0 "uncovered" sentinel OR equals the
-		// sprite transparency index (NR$4B, default $E3) — the latter is how
-		// 8bpp sprites (e.g. Nextoid's bat/HUD) mark their see-through cells.
-		if idx := spriteScan[x+BorderOffsetX]; idx != 0 && idx != c.spriteTrans {
-			r, g, b := spritePal.RGB(idx)
+		// coordinates, so the paper's left edge is at BorderOffsetX.
+		// Transparency (raw pattern value vs NR$4B) was already resolved
+		// inside the sprite engine; LineCoverage flags the opaque pixels.
+		if spriteCover[x+BorderOffsetX] {
+			r, g, b := spritePal.RGB(spriteScan[x+BorderOffsetX])
 			dst[off+0] = r
 			dst[off+1] = g
 			dst[off+2] = b

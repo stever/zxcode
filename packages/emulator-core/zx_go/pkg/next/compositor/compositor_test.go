@@ -289,9 +289,10 @@ type fakedPrio struct{ m PriorityMode }
 
 func (f fakedPrio) Mode() PriorityMode { return f.m }
 
-// Tilemap + sprite-transparency setter coverage (iter 258).
-// SetTilemap, HasActiveTilemap, SetSpriteTransparency, and the
-// ComposeBorderRow early-exit guard were 0%-cov.
+// Tilemap setter coverage (iter 258). SetTilemap, HasActiveTilemap and
+// the ComposeBorderRow early-exit guard were 0%-cov. (Sprite
+// transparency moved into the sprite engine — NR$4B is the engine's
+// raw-pattern comparison, tested in pkg/next/sprite.)
 
 func TestSetTilemapNilDetachable(t *testing.T) {
 	c := New(nil, nil)
@@ -303,15 +304,6 @@ func TestSetTilemapNilDetachable(t *testing.T) {
 	if c.HasActiveTilemap() {
 		t.Errorf("HasActiveTilemap after SetTilemap(nil) = true")
 	}
-}
-
-func TestSetSpriteTransparency(t *testing.T) {
-	c := New(nil, nil)
-	c.SetSpriteTransparency(0x77)
-	// No public getter — exercise it via ComposeScanline indirectly,
-	// or simply prove the call doesn't panic. Either suffices for
-	// coverage; the behavioural effect is covered by sprite tests
-	// when the value matters.
 }
 
 func TestComposeBorderRow_NoTilemapNoOp(t *testing.T) {

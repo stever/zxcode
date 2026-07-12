@@ -155,6 +155,24 @@ Pinned since (base/Copper + base/DMA conformance work):
   scaled prescaler timer (:250-255/424) — `pkg/next/dma` unit tests +
   the GHDL golden + TestNexttestsDMA.
 
+Pinned since (Sprites group conformance work):
+- ✅ Sprite transparency = raw pattern value vs NR$4B (8bpp full byte,
+  4bpp low nibble) per sprites.vhd:971; reset $E3 (zxnext.vhd:5016) —
+  `TestRenderScanlineTransparencyMatchesNR4B` + TestNexttestsSprites*.
+- ✅ Dual sprite indexes: NR$34 mirror vs the $303B/$57 IO cursor, tied
+  by NR$09 bit 4 per sprites.vhd:591-655 + zxnext.vhd:5187; NR$34 reads
+  the live mirror (zxnext.vhd:6033) — `TestTwoSpriteIndexes` +
+  TestNexttestsSpritesScanlineDelay's lockstep exercise.
+- ✅ Per-line sprite render budget (one 448-count line of 28MHz FSM
+  cycles; overtime latches $303B bit 1, clear-on-read) per
+  sprites.vhd:831-864/977 + zxula_timing.vhd's whc window —
+  `TestPerLineRenderBudget`.
+- ✅ 9-bit sprite X wrap onto the left edge (the FSM's x-wrap exit term,
+  sprites.vhd:855) — `TestNineBitXWrap`.
+- ✅ NR$4A fallback colour projects onto the 9-bit bus with low blue =
+  OR of the two blue bits (zxnext.vhd:7214) — `next.WireCompositor`
+  expandRGB332, pinned by the sprite scenes' fallback-white paper.
+
 ---
 
 ## Method to complete the matrix

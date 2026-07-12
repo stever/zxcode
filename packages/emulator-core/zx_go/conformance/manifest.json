@@ -544,26 +544,58 @@
           "tests": [
             {
               "name": "Transparency",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Transparency"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Transparency",
+              "notes": "White transparent squares + green opaque squares pixel-pinned (board core 2.00.26). Drove the faithful NR$4B transparency: the ENGINE compares the raw pattern value (8bpp byte / 4bpp nibble, sprites.vhd:971), replacing the compositor's index-based approximation",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesTransparency"
+                ]
+              }
             },
             {
               "name": "Relative",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Relative",
-              "notes": "Anchor/relative sprite groups"
+              "notes": "Composite relatives: positions, palette-offset relativity + wrap, relative pattern names, scales, invisibility, over-border dot — all pixel-pinned; whole image scanned for forbidden red/violet/stray-green. Also DISPROVED the catalogued '8 rows lower' sprite offset (sprite fill exactly inside its ULA-drawn outline, same relation as the MAME capture) — gap row deleted",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesRelative"
+                ]
+              }
             },
             {
               "name": "BigSprite",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite",
+              "notes": "Eight anchor mirror/rotate combinations transform the 10-sprite body rigidly: every arm's colour bounding box asserted per group; invisible ninth big sprite + red sub-sprite absent; violet over-border sprite present (board core 2.00.27)",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesBigSprite"
+                ]
+              }
             },
             {
               "name": "BigSprite4b",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite4b",
-              "notes": "4bpp variant"
+              "notes": "4bpp big sprites: relative patterns crossing the N6 half boundary, palette-offset saturation. Per-group pixel count / bbox / 32-colour set / orientation samples asserted; border pattern sprites + red square (board core 3.1.5)",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesBigSprite4b"
+                ]
+              }
             },
             {
               "name": "ScanlineDelay",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/ScanlineDelay",
-              "notes": "Exercises the catalogued known gap: per-line sprite bandwidth limit not modelled"
+              "notes": "Copper-timed one-scanline sprite effects (visibility, rotate+move, NR$4B, palette — core 3.0.7+ WAIT_H=48 build) land on exactly the target line; 4/5-byte records 'ooo1'/'o1' and the NR$09 lockstep exercise '11' asserted. Drove the dual NR$34/IO sprite indexes + lockstep tie, and the per-line render budget now models the bandwidth limit ($303B bit 1) — gap row closed",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesScanlineDelay"
+                ]
+              }
             }
           ]
         },

@@ -19,7 +19,7 @@
         <mxCell id="l-tm" value="Tilemap (Layer 3)&#10;40/80 col, textmode,&#10;mirror/rotate, scroll, clip" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="410" y="250" width="170" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="l-spr" value="Sprites (128)&#10;4/8bpp, scale, mirror,&#10;rotate, anchor groups,&#10;collision $303B" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+        <mxCell id="l-spr" value="Sprites (128)&#10;4/8bpp, scale, mirror,&#10;rotate, anchor groups,&#10;NR$4B transparency (raw pattern),&#10;dual NR$34/IO indexes (NR$09 tie),&#10;per-line budget + collision $303B" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="600" y="250" width="170" height="70" as="geometry" />
         </mxCell>
         <mxCell id="l-lores" value="LoRes / Radastan&#10;128×96 (lores.vhd&#10;transcription)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
@@ -31,7 +31,7 @@
         <mxCell id="l-clip" value="Clip windows NR$18-$1B&#10;(4-coordinate + 2-bit index protocol)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
           <mxGeometry x="530" y="350" width="410" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="v2" value="Compositor.ComposeScanline(y)&#10;priority order from NR$15 bits 4:2 (SLU/LSU/SUL/LUS/USL/ULS + additive blends)&#10;transparency: global NR$14 · sprite NR$4B · tilemap nibble NR$4C&#10;SUL per-pixel stencil · Layer 2 priority-bit promotion · ULA+tilemap combine&#10;fallback colour NR$4A where every layer is transparent&#10;(mixer.go = fully faithful zxnext.vhd:7100-7355 port; scanline painter is the fast path)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+        <mxCell id="v2" value="Compositor.ComposeScanline(y)&#10;priority order from NR$15 bits 4:2 (SLU/LSU/SUL/LUS/USL/ULS + additive blends)&#10;transparency: global NR$14 · sprite coverage from the engine (NR$4B) · tilemap nibble NR$4C&#10;SUL per-pixel stencil · Layer 2 priority-bit promotion · ULA+tilemap combine&#10;fallback colour NR$4A where every layer is transparent&#10;(mixer.go = fully faithful zxnext.vhd:7100-7355 port; scanline painter is the fast path)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
           <mxGeometry x="200" y="450" width="600" height="120" as="geometry" />
         </mxCell>
         <mxCell id="v3" value="Wide display paths (skip the 256-wide pass)&#10;hi-res Layer 2: renderHiResLayer2 (320/640×256, pixel-doubling for 640)&#10;80-col tilemap: renderWide (640px, pixel-doubled base + native tilemap)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">

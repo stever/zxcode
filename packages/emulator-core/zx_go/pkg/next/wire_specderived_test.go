@@ -254,7 +254,7 @@ func (f *fakeMAPRAMClearer) ClearMAPRAM() { f.calls++ }
 func TestSpec_NR09_Bit3ClearsMAPRAM(t *testing.T) {
 	disp := nextregs.New()
 	mc := &fakeMAPRAMClearer{}
-	WirePeripheral3(disp, mc)
+	WirePeripheral3(disp, mc, nil)
 
 	// Bit 3 NOT set — must not fire.
 	disp.WriteReg(0x09, 0x00)
@@ -284,7 +284,7 @@ func TestSpec_NR09_Bit3ClearsMAPRAM(t *testing.T) {
 // pager doesn't panic — useful for tests/classic-model setups.
 func TestSpec_NR09_NilPagerSafe(t *testing.T) {
 	disp := nextregs.New()
-	WirePeripheral3(disp, nil)
+	WirePeripheral3(disp, nil, nil)
 	// Must not panic
 	disp.WriteReg(0x09, 0x08)
 	disp.WriteReg(0x09, 0xFF)

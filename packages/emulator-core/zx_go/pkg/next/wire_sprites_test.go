@@ -15,8 +15,8 @@ func TestWireSpritesAttributePath(t *testing.T) {
 	// Select sprite 7
 	disp.Select(0x34)
 	disp.WriteData(7)
-	if e.SelectedSprite() != 7 {
-		t.Errorf("after 0x34=7: SelectedSprite=%d", e.SelectedSprite())
+	if e.MirrorSprite() != 7 {
+		t.Errorf("after 0x34=7: MirrorSprite=%d", e.MirrorSprite())
 	}
 
 	// X low = 0x42
@@ -61,7 +61,7 @@ func TestWireSpritesIgnoresOutOfRangeSelection(t *testing.T) {
 	// SelectSprite masks to 0x7F, so 0xFF -> 0x7F (still in range).
 	disp.Select(0x34)
 	disp.WriteData(0xFF)
-	if e.SelectedSprite() != 0x7F {
-		t.Errorf("after 0x34=0xFF: SelectedSprite=%d, want 0x7F", e.SelectedSprite())
+	if e.MirrorSprite() != 0x7F {
+		t.Errorf("after 0x34=0xFF: MirrorSprite=%d, want 0x7F", e.MirrorSprite())
 	}
 }

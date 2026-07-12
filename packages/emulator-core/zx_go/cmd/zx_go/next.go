@@ -1148,17 +1148,10 @@ func wireNextSubsystems(e *emulator) error {
 	// the ULA transparency colour for the SUL per-pixel stencil + the
 	// NR$4A fallback (a transparent ULA pixel carries u.palette[NR$14]).
 	comp.SetULAPalette(u.Palette())
-	// Wire the live NR$4C (tilemap transparency nibble) into the
-	// compositor: a tilemap pixel is transparent when its palette
-	// index's low nibble == NR$4C(3:0) (FPGA tilemap.vhd:427). NextZXOS
-	// dot commands set this (NextGuide uses $08); this replaces the plain
-	// store from the general wiring so the compositor tracks the value —
-	// without it the $0F default makes their text transparent and the ULA
-	// bleeds through.
-	disp.SetOnWrite(0x4C, func(d *nextregs.Dispatcher, val byte) {
-		d.Store(0x4C, val&0x0F)
-		comp.SetTilemapTransparency(val & 0x0F)
-	})
+	// Compositor-facing transparency registers (NR$14 global, NR$4A
+	// fallback, NR$4C tilemap nibble) — shared with the test harness via
+	// next.WireCompositor so the two wirings cannot drift.
+	next.WireCompositor(disp, comp)
 	// NextReg $1E/$1F (active video line MSB/LSB) — a LIVE raster-line
 	// counter derived from the CPU T-state position. NextZXOS dot
 	// commands (NextGuide) disable interrupts and poll it to wait for the
@@ -1179,31 +1172,9 @@ func wireNextSubsystems(e *emulator) error {
 		d.Store(0x31, val)
 		tilemapLayer.SetScrollY(int(val))
 	})
-	// NR$14 global transparency index (Layer 2 see-through; default $E3).
-	disp.SetOnWrite(0x14, func(d *nextregs.Dispatcher, val byte) {
-		d.Store(0x14, val)
-		comp.SetTransparency(val)
-	})
-	// NR$4A fallback colour (RGB332, FPGA nr_4a_fallback_rgb, default $E3)
-	// — shown where every layer is transparent at a pixel. Expand RGB332
-	// to RGB888 for the compositor.
-	expandRGB332 := func(val byte) (byte, byte, byte) {
-		r3, g3, b2 := (val>>5)&7, (val>>2)&7, val&3
-		return r3<<5 | r3<<2 | r3>>1, g3<<5 | g3<<2 | g3>>1, b2<<6 | b2<<4 | b2<<2 | b2
-	}
-	disp.SetOnWrite(0x4A, func(d *nextregs.Dispatcher, val byte) {
-		d.Store(0x4A, val)
-		comp.SetFallbackColour(expandRGB332(val))
-	})
-	comp.SetFallbackColour(expandRGB332(0xE3)) // power-on default
-	// NR$4B sprite transparency index (default $E3). A sprite pixel equal to
-	// this index is see-through — how 8bpp sprites (e.g. Nextoid's bat/HUD)
-	// mark their transparent cells. The compositor defaults to $E3 too, so a
-	// game that never writes NR$4B still gets the correct reset behaviour.
-	disp.SetOnWrite(0x4B, func(d *nextregs.Dispatcher, val byte) {
-		d.Store(0x4B, val)
-		comp.SetSpriteTransparency(val)
-	})
+	// NR$4B (sprite transparency colour) is wired inside next.WireSprites:
+	// the sprite ENGINE owns the comparison (raw pattern value vs NR$4B,
+	// sprites.vhd:971), not the compositor.
 	// NR$68 ("ULA Control") bit 7 = Disable ULA output. When set, the ULA
 	// layer paints nothing (lower layers / NR$4A fallback show). Sonic
 	// disables the ULA for its Layer-2/tilemap title; without this its stale

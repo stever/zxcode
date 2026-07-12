@@ -4,10 +4,11 @@
 // 16×16 patterns in 4bpp or 8bpp, X / Y (9-bit) / palette-offset /
 // visible attributes, X/Y mirror, 90° rotate, scale (1/2/4/8×), and the
 // pattern N6 high bit, all via the 5-byte attribute record. Per-scanline
-// render emits sprite pixels with transparency against palette index 0.
-// Collision detection (the $303B status bit) and anchor groups (composite
-// + unified relative sprites) are modelled. Still deferred: the per-line
-// bandwidth / max-per-line flag.
+// render emits sprite pixels with transparency against the NR$4B
+// transparency colour (raw pattern value, pre-palette-offset).
+// Collision detection and the per-line bandwidth limit (the two $303B
+// status bits) and anchor groups (composite + unified relative
+// sprites) are modelled.
 package sprite
 
 // MaxSprites is the count of independently-positioned sprite slots
@@ -42,18 +43,45 @@ type Attr struct {
 }
 
 // Engine holds the sprite-bank state: 128 attribute slots, a
-// 16 KB pattern RAM, plus the two AY-style write indexes
-// (NextReg 0x303B / 0x5B port-select).
+// 16 KB pattern RAM, plus the sprite-index cursors and the
+// pattern-RAM write cursor.
 type Engine struct {
-	attrs       [MaxSprites]Attr
-	pattern     [PatternRAMSize]byte
-	selSprite   byte   // 0..127 — currently-selected sprite for attribute writes
-	selPattAddr uint16 // pattern-RAM write cursor
-	enabled     bool
+	attrs   [MaxSprites]Attr
+	pattern [PatternRAMSize]byte
+	// The FPGA keeps TWO sprite indexes (sprites.vhd:591-655):
+	// attr_index — the IO-port cursor driving the port-$57 attribute
+	// stream (sprite number + byte 0..4), set by a port-$303B write —
+	// and mirror_sprite_q — the NR$34 "NextReg mirror" targeted by the
+	// NR$35-$39/$75-$79 attribute registers. NR$09 bit 4 ("lockstep",
+	// reset 0) ties them: a sprite-number change on either side copies
+	// to the other (zxnext.vhd:5187, sprites.vhd:60).
+	ioSprite   byte // port cursor: sprite 0..127
+	ioByte     int  // port cursor: attribute byte 0..4
+	ioExtended bool // latched byte-3 bit 6 of the in-flight port record
+	// mirrorSprite keeps all 8 bits: bits 6:0 are the NR$34 sprite
+	// number; bit 7 tracks the pattern half ("wear helmet",
+	// sprites.vhd:609) and seeds the pattern cursor's half bit when a
+	// tied NR$34 selection rewrites it.
+	mirrorSprite byte
+	tie          bool   // NR$09 bit 4
+	selPattAddr  uint16 // pattern-RAM write cursor
+	enabled      bool
+	// transpColour is the sprite transparency colour (NextReg $4B, reset
+	// $E3 per zxnext.vhd:5016). A pixel is transparent when its RAW
+	// pattern value — before the palette offset is applied — equals this
+	// byte (8bpp) or its low nibble (4bpp): sprites.vhd:971 compares
+	// spr_pat_data against transp_colour_i, spr_nibble_data against
+	// transp_colour_i(3:0).
+	transpColour byte
 	// collided latches the sprite-collision flag (two opaque sprite
 	// pixels coincide). Sticky across the frame; cleared when the $303B
 	// status port is read (FPGA sprites.vhd:975 bit 0).
 	collided bool
+	// overtime latches the "max sprites per line" flag ($303B bit 1):
+	// the render state machine ran out of line budget before finishing
+	// the sprite list (sprites.vhd:977 — state /= S_IDLE at line reset).
+	// Sticky until the status port reads it, like collided.
+	overtime bool
 	// lineCovered tracks which display pixels an opaque sprite has
 	// already painted in the current RenderScanline pass, to detect
 	// collisions. Reused across scanlines.
@@ -80,13 +108,6 @@ type Engine struct {
 	// (in 2-px X units) only when borderClip is set, else there is no clip.
 	overBorder bool
 	borderClip bool
-
-	// attrCursor is the byte index (0..4) for the port-$57 "Sprite Attribute
-	// Upload" stream, and attrExtended records whether the current sprite needs
-	// a 5th byte (latched when byte 3 bit 6 is written). Selecting a sprite
-	// (SelectSprite / SelectSlot, i.e. port $303B) resets the cursor.
-	attrCursor   int
-	attrExtended bool
 }
 
 // SetOverBorder sets NextReg $15 bit 1 ("sprites over border").
@@ -125,9 +146,24 @@ func (e *Engine) Clip() (x1, x2, y1, y2 byte, set bool) {
 	return e.clipX1, e.clipX2, e.clipY1, e.clipY2, e.clipSet
 }
 
-// New returns a fresh Engine with all sprites invisible and the
-// pattern RAM zero.
-func New() *Engine { return &Engine{} }
+// New returns a fresh Engine with all sprites invisible, the
+// pattern RAM zero and the transparency colour at its $E3 reset value.
+func New() *Engine { return &Engine{transpColour: 0xE3} }
+
+// SetTransparencyColour installs the sprite transparency colour
+// (NextReg $4B). See the transpColour field for the comparison rule.
+func (e *Engine) SetTransparencyColour(v byte) { e.transpColour = v }
+
+// TransparencyColour returns the current NR$4B transparency colour.
+func (e *Engine) TransparencyColour() byte { return e.transpColour }
+
+// LineCoverage returns the per-pixel coverage of the most recent
+// RenderScanline call: true where an opaque sprite pixel was rendered.
+// The compositor uses this to decide sprite-pixel presence — dst values
+// alone cannot, since palette index 0 is a legitimately drawable colour
+// (transparency is the raw pattern value vs NR$4B, not index 0). The
+// slice is reused by the next RenderScanline call.
+func (e *Engine) LineCoverage() []bool { return e.lineCovered }
 
 // SetEnabled toggles the sprite layer.
 func (e *Engine) SetEnabled(on bool) { e.enabled = on }
@@ -142,19 +178,70 @@ func (e *Engine) ZeroOnTop() bool { return e.zeroOnTop }
 // Enabled reports whether sprites render at all.
 func (e *Engine) Enabled() bool { return e.enabled }
 
-// SelectSprite installs the sprite index that subsequent
-// attribute writes (NextRegs 0x35–0x39) will target. Bit 7 is
-// masked off (real hardware uses 7 bits, slot range 0..127).
-// Selecting also restarts the port-$57 attribute-byte cursor.
-func (e *Engine) SelectSprite(v byte) {
-	e.selSprite = v & 0x7F
-	e.attrCursor = 0
-	e.attrExtended = false
+// SetIndexTie sets NR$09 bit 4 ("sprite id lockstep", zxnext.vhd:5187,
+// reset 0): when tied, a sprite-number change on either the NR$34 mirror
+// or the IO-port cursor copies to the other side (sprites.vhd:607/653).
+func (e *Engine) SetIndexTie(on bool) { e.tie = on }
+
+// MirrorSprite returns the NR$34 mirror sprite number (bits 6:0 — the
+// value NR$34 reads back as '0' & sprite_mirror_id, zxnext.vhd:6033).
+func (e *Engine) MirrorSprite() byte { return e.mirrorSprite & 0x7F }
+
+// mirrorPatternAddr is the pattern-cursor value a tied mirror change
+// installs: mirror[5:0] selects the 256-byte slot, mirror bit 7 the
+// 128-byte half (sprites.vhd:733-734).
+func (e *Engine) mirrorPatternAddr() uint16 {
+	addr := uint16(e.mirrorSprite&0x3F) * 256
+	if e.mirrorSprite&0x80 != 0 {
+		addr += 128
+	}
+	return addr
 }
 
-// ApplyAttrByte decodes attribute byte idx (0..4) into the currently-selected
-// sprite. Shared by the NextReg $35-$39/$75-$79 path and the port-$57 stream so
-// the byte layout lives in one place (see WriteAttr).
+// mirrorChanged propagates a mirror sprite-number change to the tied IO
+// cursor + pattern cursor (sprites.vhd:653-654/733-734).
+func (e *Engine) mirrorChanged() {
+	if !e.tie {
+		return
+	}
+	e.ioSprite = e.mirrorSprite & 0x7F
+	e.ioByte = 0
+	e.ioExtended = false
+	e.selPattAddr = e.mirrorPatternAddr()
+}
+
+// ioSpriteChanged propagates an IO-cursor sprite-number change to the
+// tied mirror (sprites.vhd:607-609: sprite bits from the cursor, bit 7
+// from the pattern cursor's half bit).
+func (e *Engine) ioSpriteChanged() {
+	if !e.tie {
+		return
+	}
+	e.mirrorSprite = e.ioSprite&0x7F | byte(e.selPattAddr>>7)&1<<7
+}
+
+// SelectSprite installs the NR$34 mirror sprite index that subsequent
+// NextReg attribute writes (NR$35-$39 / $75-$79) target. All 8 bits are
+// stored (sprites.vhd:601 keeps bit 7 as the pattern-half tracker);
+// the sprite number is bits 6:0. When the NR$09 lockstep tie is on the
+// IO-port cursor and pattern cursor follow the selection.
+func (e *Engine) SelectSprite(v byte) {
+	e.mirrorSprite = v
+	e.mirrorChanged()
+}
+
+// IncMirrorSprite advances the NR$34 mirror sprite number by one — the
+// auto-increment the NR$75-$79 attribute aliases perform (zxnext.vhd:4916).
+// Bit 7 refreshes from the pattern cursor's half bit (sprites.vhd:604-605).
+func (e *Engine) IncMirrorSprite() {
+	e.mirrorSprite = (e.mirrorSprite+1)&0x7F | byte(e.selPattAddr>>7)&1<<7
+	e.mirrorChanged()
+}
+
+// ApplyAttrByte decodes attribute byte idx (0..4) into the NR$34 mirror
+// sprite — the NR$35-$39/$75-$79 write path (sprites.vhd:704-715, the
+// mirror_served mux). The port-$57 stream shares the byte layout via
+// applyAttr.
 //
 //	byte 0: X LSB
 //	byte 1: Y LSB
@@ -162,7 +249,11 @@ func (e *Engine) SelectSprite(v byte) {
 //	byte 3: visible (7) + extended-5th-byte (6) + pattern[5:0]
 //	byte 4: scale / N6 / 8bpp / Y-MSB (decoded in RenderScanline when Extended)
 func (e *Engine) ApplyAttrByte(idx int, val byte) {
-	s := e.Sprite(int(e.selSprite))
+	e.applyAttr(int(e.mirrorSprite&0x7F), idx, val)
+}
+
+func (e *Engine) applyAttr(sprite, idx int, val byte) {
+	s := e.Sprite(sprite)
 	if s == nil {
 		return
 	}
@@ -190,47 +281,52 @@ func (e *Engine) ApplyAttrByte(idx int, val byte) {
 	}
 }
 
-// WriteAttr streams one attribute byte to the current sprite (port $57, "Sprite
-// Attribute Upload", ports.txt 0x57). Each sprite takes 4 bytes, or 5 when its
-// byte 3 bit 6 (the "5th byte present" flag) is set; once the sprite's bytes
-// are all written the current-sprite pointer auto-advances, wrapping 127->0,
-// and the byte cursor resets, so guest code can upload every sprite each
-// frame without re-selecting between them.
+// WriteAttr streams one attribute byte to the IO cursor's sprite (port
+// $57, "Sprite Attribute Upload", ports.txt 0x57). Each sprite takes 4
+// bytes, or 5 when its byte 3 bit 6 (the "5th byte present" flag) is
+// set; once the sprite's bytes are all written the cursor auto-advances
+// to the next sprite, wrapping 127->0 (sprites.vhd:639 —
+// index_inc_attr_by_8), so guest code can upload every sprite each
+// frame without re-selecting between them. A sprite advance follows the
+// NR$09 lockstep tie into the NR$34 mirror.
 func (e *Engine) WriteAttr(val byte) {
-	e.ApplyAttrByte(e.attrCursor, val)
-	if e.attrCursor == 3 {
-		e.attrExtended = val&0x40 != 0
+	e.applyAttr(int(e.ioSprite), e.ioByte, val)
+	if e.ioByte == 3 {
+		e.ioExtended = val&0x40 != 0
 	}
-	e.attrCursor++
+	e.ioByte++
 	count := 4
-	if e.attrExtended {
+	if e.ioExtended {
 		count = 5
 	}
-	if e.attrCursor >= count {
-		e.selSprite = (e.selSprite + 1) & 0x7F
-		e.attrCursor = 0
-		e.attrExtended = false
+	if e.ioByte >= count {
+		e.ioSprite = (e.ioSprite + 1) & 0x7F
+		e.ioByte = 0
+		e.ioExtended = false
+		e.ioSpriteChanged()
 	}
 }
 
-// SelectedSprite returns the current attribute-write cursor.
-func (e *Engine) SelectedSprite() byte { return e.selSprite }
+// SelectedSprite returns the IO-port cursor's sprite number.
+func (e *Engine) SelectedSprite() byte { return e.ioSprite }
 
 // SelectSlot applies a port $303B write (ports.txt 0x303B): bits 6:0 select
-// the current sprite (attribute-write target), while bits 5:0 select the
+// the IO cursor's sprite (the port-$57 target), while bits 5:0 select the
 // pattern index — each pattern is 256 bytes, so the pattern-RAM upload cursor
 // is set to (index*256). Bit 7 adds a 128-byte half-offset, addressing the
 // second 4bpp pattern packed in the same 256-byte slot. The $5B pattern-write
-// port (WritePatternByte) streams from this cursor.
+// port (WritePatternByte) streams from this cursor. With the NR$09 lockstep
+// tie on, the NR$34 mirror follows (sprites.vhd:607-609).
 func (e *Engine) SelectSlot(v byte) {
-	e.selSprite = v & 0x7F
-	e.attrCursor = 0
-	e.attrExtended = false
+	e.ioSprite = v & 0x7F
+	e.ioByte = 0
+	e.ioExtended = false
 	addr := uint16(v&0x3F) * 256
 	if v&0x80 != 0 {
 		addr += 128
 	}
 	e.selPattAddr = addr
+	e.ioSpriteChanged()
 }
 
 // cover marks display pixel sx as painted by an opaque sprite in the
@@ -246,15 +342,19 @@ func (e *Engine) cover(sx int) {
 
 // ReadStatus returns the sprite status byte (port $303B read, FPGA
 // sprites.vhd:975): bit 0 = collision (two opaque sprites overlapped
-// since the last read), bit 1 = max-sprites-per-line. Reading CLEARS the
-// latched collision flag. (max-per-line, the per-line bandwidth model,
-// is not yet implemented and reads 0.)
+// since the last read), bit 1 = max-sprites-per-line (the per-line
+// render budget ran out — see renderCyclesPerLine). Reading CLEARS
+// both latched flags (sprites.vhd:987-988).
 func (e *Engine) ReadStatus() byte {
 	var s byte
 	if e.collided {
 		s |= 0x01
 	}
+	if e.overtime {
+		s |= 0x02
+	}
 	e.collided = false
+	e.overtime = false
 	return s
 }
 
@@ -430,14 +530,15 @@ func (e *Engine) PatternByte(addr uint16) byte {
 // RenderScanline writes the sprite layer's contribution to one
 // row of the active display region. dst is Width bytes of
 // palette indices; the function overwrites pixels that any
-// visible sprite covers (excluding transparency, which is
-// palette index 0). dst must already hold the
-// "below-sprite" content (or palette index 0 / transparent if
-// the caller wants pure sprite output).
+// visible sprite covers (excluding transparency: raw pattern
+// value == the NR$4B transparency colour). dst must already hold
+// the "below-sprite" content; callers distinguish covered pixels
+// via LineCoverage, since palette index 0 is a drawable colour.
 //
 // Supports 4bpp/8bpp patterns, scale, mirror, rotate, collision
-// detection and anchor/relative sprites; the per-line bandwidth
-// (max-per-line) limit is not yet modelled.
+// detection, anchor/relative sprites, the 9-bit X wrap onto the left
+// edge and the per-line render budget (sprites past the budget drop
+// off the line and the $303B bit-1 flag latches).
 //
 // y is the display-scanline-index (0..191 for the active region).
 // Width is exposed as a parameter to avoid coupling to the
@@ -445,6 +546,18 @@ func (e *Engine) PatternByte(addr uint16) byte {
 func (e *Engine) RenderScanline(y int, dst []byte, width int) {
 	if !e.enabled {
 		return
+	}
+	// Reset the per-line coverage map (collision detection + the
+	// compositor's LineCoverage view) BEFORE any early return, so a
+	// clipped-out row reports no coverage rather than the previous
+	// line's. The collided flag itself is sticky across the frame until
+	// the status port reads it.
+	if cap(e.lineCovered) < width {
+		e.lineCovered = make([]bool, width)
+	}
+	e.lineCovered = e.lineCovered[:width]
+	for i := range e.lineCovered {
+		e.lineCovered[i] = false
 	}
 	// Sprite clip window (NextReg $19), resolved through the over-border /
 	// border-clip mode (NR$15 bits 1/5; sprites.vhd:1043-1066). With
@@ -459,17 +572,27 @@ func (e *Engine) RenderScanline(y int, dst []byte, width int) {
 		}
 		clipXs, clipXe = xs, xe
 	}
-	// Reset the per-line coverage map (collision detection); the collided
-	// flag itself is sticky across the frame until the status port reads it.
-	if cap(e.lineCovered) < width {
-		e.lineCovered = make([]bool, width)
-	}
-	e.lineCovered = e.lineCovered[:width]
-	for i := range e.lineCovered {
-		e.lineCovered[i] = false
-	}
+	// Per-line render budget (the "max sprites per line" bandwidth
+	// limit). The FPGA renders a line's sprites during exactly one
+	// raster line: the FSM restarts at line reset (whc wrap,
+	// sprites.vhd:518/831) and one line is 448 7MHz counts
+	// (zxula_timing.vhd whc: -16..431) = 1792 cycles of the 28MHz
+	// clock_master the FSM steps on. Costs: 1 cycle per sprite
+	// qualified (S_QUALIFY), 1 per rendered pixel column (S_PROCESS)
+	// — matching the upstream ScanlineDelay ReadMe's "about 1600+
+	// pixels per line available" (1792 - 128 qualifies). When the
+	// budget runs out mid-list, rendering stops (later sprites drop
+	// off that line) and the $303B bit-1 flag latches
+	// (sprites.vhd:977 sprites_overtime).
+	const renderCyclesPerLine = 448 * 4
+	cycles := 1 // S_START
 	var anchor anchorState
 	for i := 0; i < MaxSprites; i++ {
+		if cycles >= renderCyclesPerLine {
+			e.overtime = true
+			return
+		}
+		cycles++ // S_QUALIFY
 		raw := &e.attrs[i]
 		a := raw
 		// Anchor / relative sprites (FPGA sprites.vhd:756-944): a sprite
@@ -533,10 +656,27 @@ func (e *Engine) RenderScanline(y int, dst []byte, width int) {
 		// the X mirror), per FPGA sprites.vhd:813.
 		xMirrorEff := a.XMirror != a.Rotate
 		sizeX := SpriteSize * scaleX
+		// The FSM's off-right-edge exit term (sprites.vhd:855): hcount is
+		// 9-bit, so a sprite whose X sits in the top of the range wraps
+		// through 511 onto the left edge — the mask admits the last
+		// sizeX-aligned block (496+ at 1x, 480+ at 2x, ...). Outside that
+		// block an invalid hcount ends the sprite.
+		wrapMask := 0x1F &^ (scaleX - 1)
 		for dx := 0; dx < sizeX; dx++ {
-			sx := int(a.X) + dx
-			if sx < 0 || sx >= width {
-				continue
+			if cycles >= renderCyclesPerLine {
+				e.overtime = true
+				return
+			}
+			cycles++ // S_PROCESS: one cycle per pixel column
+			sx := (int(a.X) + dx) & 0x1FF
+			if sx >= 320 {
+				if (sx>>4)&wrapMask != wrapMask {
+					break // off the right edge, no wrap possible: FSM exits
+				}
+				continue // wrap-through region: cycles spent, nothing shown
+			}
+			if sx >= width {
+				continue // caller's buffer is narrower than the 320 frame
 			}
 			// Sprite clip window X bounds, resolved through the over-border
 			// mode (clipXs..clipXe computed once above).
@@ -559,9 +699,12 @@ func (e *Engine) RenderScanline(y int, dst []byte, width int) {
 			// Palette index per FPGA sprites.vhd:968. 4bpp: the 4-bit
 			// palette offset is the high nibble (offset<<4 | pixel).
 			// 8bpp: the offset is added to the byte's high nibble.
+			// Transparency compares the RAW pattern value (pre-offset)
+			// against NR$4B — full byte for 8bpp, low nibble for 4bpp
+			// (sprites.vhd:971).
 			if eightBit {
 				idx := e.pattern[base+tr*16+tc]
-				if idx == 0 {
+				if idx == e.transpColour {
 					continue // transparent
 				}
 				// zero-on-top (NR$15 bit 6): a pixel already painted by a
@@ -578,7 +721,7 @@ func (e *Engine) RenderScanline(y int, dst []byte, width int) {
 				} else {
 					idx = pix & 0x0F
 				}
-				if idx == 0 {
+				if idx == e.transpColour&0x0F {
 					continue // transparent
 				}
 				if !e.zeroOnTop || !e.lineCovered[sx] {

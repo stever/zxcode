@@ -232,10 +232,15 @@ func WireInterruptEnable2(d *nextregs.Dispatcher) {
 // The other bits (7-4, 2-0) are status / mode flags that we don't
 // currently surface — they're stored verbatim. Bit 3 is sticky:
 // it's NOT stored as a flag, it's a one-shot trigger.
-func WirePeripheral3(d *nextregs.Dispatcher, pager MAPRAMClearer) {
+func WirePeripheral3(d *nextregs.Dispatcher, pager MAPRAMClearer, sprites *sprite.Engine) {
 	d.SetOnWrite(0x09, func(disp *nextregs.Dispatcher, val byte) {
 		if pager != nil && val&0x08 != 0 {
 			pager.ClearMAPRAM()
+		}
+		// bit 4 = sprite id lockstep (zxnext.vhd:5187) — ties the
+		// NR$34 mirror and the port $303B/$57 cursor together.
+		if sprites != nil {
+			sprites.SetIndexTie(val&0x10 != 0)
 		}
 		// bit 3 is a one-shot — store the value but mask it off so
 		// reads don't see a "MAPRAM is being cleared" stuck bit.
@@ -692,10 +697,11 @@ func setSpriteAttrByte(e *sprite.Engine, idx int, val byte) {
 func WireSprites(d *nextregs.Dispatcher, e *sprite.Engine) {
 	d.SetOnWrite(0x34, func(disp *nextregs.Dispatcher, val byte) {
 		e.SelectSprite(val)
-		// Per zxnext.vhd read NR$34 = '0' || sprite_mirror_id(6:0).
-		// Bit 7 is reserved (always 0 on read).
-		disp.Store(0x34, val&0x7F)
 	})
+	// NR$34 reads the LIVE mirror sprite number ('0' & sprite_mirror_id,
+	// zxnext.vhd:6033) — the $75-$79 aliases auto-increment it, so a
+	// stored write value would go stale.
+	d.SetOnRead(0x34, func(*nextregs.Dispatcher) byte { return e.MirrorSprite() })
 	for i := 0; i < 5; i++ {
 		idx := i
 		base := byte(0x35 + i)
@@ -706,10 +712,17 @@ func WireSprites(d *nextregs.Dispatcher, e *sprite.Engine) {
 		})
 		d.SetOnWrite(alias, func(disp *nextregs.Dispatcher, val byte) {
 			setSpriteAttrByte(e, idx, val)
-			e.SelectSprite(e.SelectedSprite() + 1)
+			e.IncMirrorSprite()
 			disp.Store(base, val) // shares the base register's read-back
 		})
 	}
+	// NR$4B sprite transparency colour (reset $E3, zxnext.vhd:5016/5410).
+	// The engine compares each pixel's RAW pattern value against it —
+	// full byte in 8bpp, low nibble in 4bpp (sprites.vhd:971).
+	d.SetOnWrite(0x4B, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x4B, val)
+		e.SetTransparencyColour(val)
+	})
 }
 
 // WireLayerPriority installs the NextReg 0x15 OnWrite/OnRead
@@ -738,6 +751,46 @@ func WireLayerPriority(d *nextregs.Dispatcher, p *LayerPriority, sprites *sprite
 			sprites.SetBorderClip(val&0x20 != 0)
 		}
 		disp.Store(0x15, val)
+	})
+}
+
+// expandRGB332 widens an 8-bit RRRGGGBB colour to RGB888 the way the
+// FPGA projects it onto the 9-bit video bus: the low blue bit is the OR
+// of the two blue bits (zxnext.vhd:7214 — `fallback_rgb_2 &
+// (fallback_rgb_2(1) or fallback_rgb_2(0))`), then each 3-bit channel
+// scales like a palette entry. $B6 therefore lands on the identical
+// (182,182,182) white the palette produces — one DAC, one projection.
+func expandRGB332(val byte) (byte, byte, byte) {
+	scale3 := func(v byte) byte { return v<<5 | v<<2 | v>>1 }
+	b2 := val & 3
+	b3 := b2<<1 | (b2>>1 | b2&1)
+	return scale3((val >> 5) & 7), scale3((val >> 2) & 7), scale3(b3)
+}
+
+// WireCompositor installs the compositor-facing transparency registers,
+// shared by the production machine (cmd/zx_go) and the test harness so
+// the two cannot drift:
+//
+//   - NR$14 global transparency colour (reset $E3, zxnext.vhd:4946/5226)
+//   - NR$4A fallback colour, shown where every layer is transparent
+//     (reset $E3, zxnext.vhd:5014/5407)
+//   - NR$4C tilemap transparency nibble (tilemap.vhd:427; bits 3:0)
+//
+// Call AFTER Wire — the NR$4C handler here replaces WirePeripheralMasks'
+// plain store with one that also pushes the value into the compositor.
+func WireCompositor(d *nextregs.Dispatcher, comp *compositor.Compositor) {
+	d.SetOnWrite(0x14, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x14, val)
+		comp.SetTransparency(val)
+	})
+	d.SetOnWrite(0x4A, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x4A, val)
+		comp.SetFallbackColour(expandRGB332(val))
+	})
+	comp.SetFallbackColour(expandRGB332(0xE3)) // power-on default
+	d.SetOnWrite(0x4C, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x4C, val&0x0F)
+		comp.SetTilemapTransparency(val & 0x0F)
 	})
 }
 
@@ -912,9 +965,9 @@ func Wire(opts WireOpts) {
 	WireInterruptEnable0(opts.Dispatcher)
 	WireInterruptEnable2(opts.Dispatcher)
 	if mc, ok := opts.DivMMCPager.(MAPRAMClearer); ok {
-		WirePeripheral3(opts.Dispatcher, mc)
+		WirePeripheral3(opts.Dispatcher, mc, opts.Sprites)
 	} else {
-		WirePeripheral3(opts.Dispatcher, nil)
+		WirePeripheral3(opts.Dispatcher, nil, opts.Sprites)
 	}
 	if eps, ok := opts.DivMMCPager.(EntryPointsSetter); ok {
 		WireDivMMCEntryPoints(opts.Dispatcher, eps)
