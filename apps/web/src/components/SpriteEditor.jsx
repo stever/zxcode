@@ -73,6 +73,11 @@ export function SpriteEditor({ fileId, content }) {
   const [tool, setTool] = useState("pen");
   // Bumped when the bytes change outside a stroke; re-renders thumbnails.
   const [version, setVersion] = useState(0);
+  // Editor-internal pattern clipboard (a 256-byte copy) and the thumb being
+  // dragged for reordering. hasClipboard mirrors the ref for button state.
+  const clipboardRef = useRef(null);
+  const dragIndexRef = useRef(null);
+  const [hasClipboard, setHasClipboard] = useState(false);
 
   const palette = useMemo(defaultSpritePalette, []);
   const rgb = useMemo(
@@ -375,57 +380,6 @@ export function SpriteEditor({ fileId, content }) {
       }
     });
 
-  // Keyboard: Ctrl/Cmd+Z / Shift+Ctrl+Z / Ctrl+Y undo/redo, Shift+arrows
-  // shift the pattern 8px, Ctrl+Shift+arrows 1px (zx-tools' bindings) —
-  // while the editor is open, unless the keystroke belongs to a focused
-  // text field elsewhere on the page. The handlers go through refs so the
-  // listener binds once; the assignments must sit BELOW the handlers they
-  // capture (these are vars after transpilation, so a forward reference
-  // silently reads undefined).
-  const undoRef = useRef(null);
-  const redoRef = useRef(null);
-  const shiftRef = useRef(null);
-  undoRef.current = undo;
-  redoRef.current = redo;
-  shiftRef.current = shiftPattern;
-  useEffect(() => {
-    const ARROWS = {
-      arrowleft: [-1, 0],
-      arrowright: [1, 0],
-      arrowup: [0, -1],
-      arrowdown: [0, 1],
-    };
-    const onKeyDown = (e) => {
-      const target = e.target;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      const key = e.key.toLowerCase();
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && (key === "z" || key === "y")) {
-        e.preventDefault();
-        if (key === "y" || e.shiftKey) {
-          redoRef.current();
-        } else {
-          undoRef.current();
-        }
-        return;
-      }
-      if (e.shiftKey && !e.altKey && ARROWS[key]) {
-        e.preventDefault();
-        const [dx, dy] = ARROWS[key];
-        const step = e.ctrlKey || e.metaKey ? 1 : 8;
-        shiftRef.current(dx * step, dy * step);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
   const canAddPattern =
     base64Length(
       (headerRef.current ? headerRef.current.length : 0) +
@@ -443,6 +397,70 @@ export function SpriteEditor({ fileId, content }) {
     commit(count);
   };
 
+  const copyPattern = () => {
+    clipboardRef.current = bytesRef.current.slice(
+      pattern * SPRITE_BYTES,
+      (pattern + 1) * SPRITE_BYTES
+    );
+    setHasClipboard(true);
+  };
+
+  // Paste replaces the pattern; paste-over keeps pixels where the clipboard
+  // is transparent, so sprites can be composited (zx-tools' shift-paste).
+  const pastePattern = (over) => {
+    const clip = clipboardRef.current;
+    if (!clip) return;
+    transformPattern((view) => {
+      for (let i = 0; i < SPRITE_BYTES; i++) {
+        if (!over || clip[i] !== TRANSPARENT_INDEX) {
+          view[i] = clip[i];
+        }
+      }
+    });
+  };
+
+  const duplicatePattern = () => {
+    if (!canAddPattern) return;
+    const src = bytesRef.current;
+    const end = (pattern + 1) * SPRITE_BYTES;
+    const grown = new Uint8Array(src.length + SPRITE_BYTES);
+    grown.set(src.subarray(0, end));
+    grown.set(src.subarray(pattern * SPRITE_BYTES, end), end);
+    grown.set(src.subarray(end), end + SPRITE_BYTES);
+    bytesRef.current = grown;
+    allThumbsDirtyRef.current = true;
+    setPattern(pattern + 1);
+    commit(pattern + 1);
+  };
+
+  // Reorder: lift the pattern out and reinsert it at the drop position.
+  const movePattern = (from, to) => {
+    if (from === to || from == null || to == null) return;
+    const bytes = bytesRef.current;
+    const chunk = bytes.slice(from * SPRITE_BYTES, (from + 1) * SPRITE_BYTES);
+    if (from < to) {
+      bytes.copyWithin(
+        from * SPRITE_BYTES,
+        (from + 1) * SPRITE_BYTES,
+        (to + 1) * SPRITE_BYTES
+      );
+    } else {
+      bytes.copyWithin(
+        (to + 1) * SPRITE_BYTES,
+        to * SPRITE_BYTES,
+        from * SPRITE_BYTES
+      );
+    }
+    bytes.set(chunk, to * SPRITE_BYTES);
+    allThumbsDirtyRef.current = true;
+    setPattern(to);
+    commit(to);
+  };
+
+  const selectPattern = (delta) => {
+    setPattern((p) => Math.max(0, Math.min(count - 1, p + delta)));
+  };
+
   const deletePattern = () => {
     if (count <= 1) return;
     const shrunk = new Uint8Array(bytesRef.current.length - SPRITE_BYTES);
@@ -457,6 +475,90 @@ export function SpriteEditor({ fileId, content }) {
     setPattern(next);
     commit(next);
   };
+
+  // Keyboard: Ctrl/Cmd+Z / Shift+Ctrl+Z / Ctrl+Y undo/redo, Ctrl/Cmd+C/V
+  // copy/paste (Shift+V pastes over), plain Left/Right select the previous/
+  // next pattern, Shift+arrows shift the pattern 8px, Ctrl+Shift+arrows 1px
+  // (zx-tools' bindings) — while the editor is open, unless the keystroke
+  // belongs to a focused text field, a canvas (the emulator swallows keys
+  // when focused) or the tab strip. The handlers go through refs so the
+  // listener binds once; the assignments must sit BELOW the handlers they
+  // capture (these are vars after transpilation, so a forward reference
+  // silently reads undefined).
+  const undoRef = useRef(null);
+  const redoRef = useRef(null);
+  const shiftRef = useRef(null);
+  const copyRef = useRef(null);
+  const pasteRef = useRef(null);
+  const selectRef = useRef(null);
+  undoRef.current = undo;
+  redoRef.current = redo;
+  shiftRef.current = shiftPattern;
+  copyRef.current = copyPattern;
+  pasteRef.current = pastePattern;
+  selectRef.current = selectPattern;
+  useEffect(() => {
+    const ARROWS = {
+      arrowleft: [-1, 0],
+      arrowright: [1, 0],
+      arrowup: [0, -1],
+      arrowdown: [0, 1],
+    };
+    const onKeyDown = (e) => {
+      const target = e.target;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "CANVAS" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        if (key === "z" || key === "y") {
+          e.preventDefault();
+          if (key === "y" || e.shiftKey) {
+            redoRef.current();
+          } else {
+            undoRef.current();
+          }
+          return;
+        }
+        if (key === "c" && !e.shiftKey) {
+          e.preventDefault();
+          copyRef.current();
+          return;
+        }
+        if (key === "v") {
+          e.preventDefault();
+          pasteRef.current(e.shiftKey);
+          return;
+        }
+      }
+      if (!ARROWS[key] || e.altKey) return;
+      if (e.shiftKey) {
+        e.preventDefault();
+        const [dx, dy] = ARROWS[key];
+        const step = e.ctrlKey || e.metaKey ? 1 : 8;
+        shiftRef.current(dx * step, dy * step);
+        return;
+      }
+      // Plain Left/Right: pattern navigation — but never while the focus is
+      // on the tab strip, where the same keys drive PrimeReact's tabs.
+      if (
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (key === "arrowleft" || key === "arrowright") &&
+        !(target.closest && target.closest(".p-tabview-nav"))
+      ) {
+        selectRef.current(key === "arrowright" ? 1 : -1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   if (count === 0) return null;
 
@@ -633,6 +735,17 @@ export function SpriteEditor({ fileId, content }) {
               }
             }}
             onClick={() => setPattern(index)}
+            draggable
+            onDragStart={(e) => {
+              dragIndexRef.current = index;
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              movePattern(dragIndexRef.current, index);
+              dragIndexRef.current = null;
+            }}
           />
         ))}
         <Button
@@ -648,6 +761,26 @@ export function SpriteEditor({ fileId, content }) {
           title={t("editor.sprites.deletePattern")}
           disabled={count <= 1}
           onClick={deletePattern}
+        />
+        <Button
+          icon="pi pi-clone"
+          className="p-button-sm p-button-outlined"
+          title={t("editor.sprites.duplicatePattern")}
+          disabled={!canAddPattern}
+          onClick={duplicatePattern}
+        />
+        <Button
+          icon="pi pi-copy"
+          className="p-button-sm p-button-outlined"
+          title={t("editor.sprites.copyPattern")}
+          onClick={copyPattern}
+        />
+        <Button
+          icon="pi pi-clipboard"
+          className="p-button-sm p-button-outlined"
+          title={t("editor.sprites.pastePattern")}
+          disabled={!hasClipboard}
+          onClick={(e) => pastePattern(e.shiftKey)}
         />
         <span className="sprite-editor-hint">
           {t("editor.sprites.patternLabel", {
