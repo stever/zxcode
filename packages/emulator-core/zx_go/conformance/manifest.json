@@ -181,13 +181,14 @@
     },
     {
       "id": "ext-z80test",
-      "title": "raxoft/z80test — z80full / z80doc / z80flags / z80ccf / z80memptr",
+      "title": "raxoft/z80test v1.2a — z80doc / z80docflags / z80flags / z80full / z80ccf / z80memptr",
       "area": "CPU (Z80)",
       "kind": "external",
-      "status": "planned",
+      "status": "partial",
       "roadmap": "ZX Play #137",
       "link": "https://github.com/raxoft/z80test",
-      "notes": "Stricter than zexall (SCF/CCF X/Y flags, MEMPTR). To run headlessly on the 48K via tape load."
+      "detail": "z80test.html",
+      "notes": "Stricter than zexall. doc, docflags and memptr pass; flags/full fail 12/160 and ccf 67/160 (documented gaps, ZX Play #141) — see the breakdown page."
     },
     {
       "id": "ext-nexttests",
@@ -213,6 +214,27 @@
     }
   ],
   "suites": [
+    {
+      "id": "z80test",
+      "title": "raxoft/z80test v1.2a — test inventory",
+      "page": "z80test.html",
+      "link": "https://github.com/raxoft/z80test",
+      "description": "Patrik Rak's Z80 instruction exerciser: exhaustive per-instruction CRCs compared against captures from a real Zilog Z80 in a 48K Spectrum. Vendored release taps (pkg/testharness/testdata/z80test) run on the 48K harness via direct CODE-block injection; SKIP rows are documented gaps (known-gaps.md, ZX Play #141).",
+      "groups": [
+        {
+          "name": "Variants",
+          "tests": [
+            { "name": "z80doc", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestDoc"] }, "notes": "All registers, documented flags — 160/160 pass" },
+            { "name": "z80docflags", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestDocFlags"] }, "notes": "Documented flags only — 160/160 pass" },
+            { "name": "z80flags", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestFlags"] }, "notes": "SKIP = documented gap: 12/160 fail — SCF/CCF (Q register) ×4 + block/OUTx undocumented flags ×8" },
+            { "name": "z80full", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestFull"] }, "notes": "SKIP = documented gap: same 12/160 as z80flags" },
+            { "name": "z80ccf", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestCcf"] }, "notes": "SKIP = documented gap: 67/160 fail — SCF/CCF flags depend on the previous instruction (Q register)" },
+            { "name": "z80memptr", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestMemptr"] }, "notes": "BIT n,(HL) after every instruction — 160/160 pass (MEMPTR emulation is deeper than its in-source caveat suggests)" },
+            { "name": "z80ccfscr", "path": "https://github.com/raxoft/z80test", "notes": "Visualises random CCF behaviour; emulators produce a stable pattern by construction — manual/visual only, not wired into CI" }
+          ]
+        }
+      ]
+    },
     {
       "id": "nexttests",
       "title": "MrKWatkins/ZXSpectrumNextTests — test inventory",
