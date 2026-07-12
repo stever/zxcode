@@ -26,6 +26,7 @@ import {
   splitSpriteFile,
 } from "../lib/sprites/spr";
 import { imageDataToPatterns } from "../lib/sprites/imageImport";
+import { toAsmSource, toBasicData } from "../lib/sprites/sourceExport";
 import { useTranslation } from "@zxplay/i18n";
 
 // Undo history depth (snapshots of the whole file, one per committed edit).
@@ -572,6 +573,25 @@ export function SpriteEditor({ fileId, content, tile = false }) {
     size === SPRITE_SIZE ? TILE_PIXELS : SPRITE_BYTES;
   const canToggleGrid = bytesRef.current.length % otherGridPixels === 0;
 
+  // Copy the packed pattern data (never the +3DOS header) to the system
+  // clipboard as assembly db rows or BASIC DATA lines.
+  const [sourceCopied, setSourceCopied] = useState(false);
+  const copySource = (asm) => {
+    const data = fourBitRef.current
+      ? packFourBit(bytesRef.current)
+      : bytesRef.current;
+    const description = `${count} x ${size}x${size} ${
+      fourBit ? "4" : "8"
+    }-bit pattern${count === 1 ? "" : "s"}`;
+    const text = asm
+      ? toAsmSource(data, filePatternBytes, description)
+      : toBasicData(data);
+    navigator.clipboard?.writeText(text).then(() => {
+      setSourceCopied(true);
+      setTimeout(() => setSourceCopied(false), 2000);
+    });
+  };
+
   // Reinterpret the same pixels on the other grid: content and depth stay,
   // only the pattern slicing changes. History and clipboard reset (their
   // pattern boundaries no longer apply).
@@ -886,7 +906,25 @@ export function SpriteEditor({ fileId, content, tile = false }) {
             />
           )}
         </div>
-        <span className="sprite-editor-hint">{t("editor.sprites.pickHint")}</span>
+        <div className="sprite-editor-toolbar-group">
+          <Button
+            icon="pi pi-code"
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.copyAsm")}
+            onClick={() => copySource(true)}
+          />
+          <Button
+            icon="pi pi-database"
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.copyData")}
+            onClick={() => copySource(false)}
+          />
+        </div>
+        <span className="sprite-editor-hint">
+          {sourceCopied
+            ? t("editor.sprites.sourceCopied")
+            : t("editor.sprites.pickHint")}
+        </span>
       </div>
       <div className="sprite-editor-main">
         <canvas
