@@ -142,12 +142,14 @@ func applyResetDefaults(regs *[256]byte) {
 	regs[0x08] = 0x10 // Peripheral 3: bit 4 = AY3-8910 enabled
 	regs[0x12] = 0x08 // Layer 2 RAM base bank
 	regs[0x13] = 0x0B // Layer 2 shadow RAM base bank
-	// NR$10 = Core ID (read-only). Per zxnext.vhd `nr_10_coreid` the
-	// FPGA default is "00001" = $01 (Issue 2 board); we use $00
-	// (generic/unspecified). The FPGA bootrom ANDs this with $03 at
-	// $017E to derive its core-class decision; boot proceeds correctly
-	// on either value.
-	regs[0x10] = 0x00
+	// NR$10 read = '0' & nr_10_coreid & i_SPKEY_BUTTONS(1:0)
+	// (zxnext.vhd:5923-5924). coreid defaults to "00001"
+	// (zxnext.vhd:1133) and the DRIVE/M1 buttons idle at 0, so a
+	// fresh read returns $04. The FPGA bootrom ANDs the read with
+	// $03 at $017E (the button bits) to decide whether to enter the
+	// config menu — unaffected by the coreid bits. MAME 0.282
+	// (core 3.2.1) reads $04 here too; core 3.1.5 boards read $00.
+	regs[0x10] = 0x04
 	regs[0x14] = 0xE3 // Global transparent colour
 	regs[0x42] = 0x07 // ULANext attribute byte format (zxnext.vhd:5002 = X"07")
 	regs[0x4A] = 0xE3 // Transparency fallback colour (zxnext.vhd:5014 = X"E3")
@@ -169,6 +171,21 @@ func applyResetDefaults(regs *[256]byte) {
 	regs[0x55] = 0x05 // MMU slot 5 = RAM 2 low
 	regs[0x56] = 0x00 // MMU slot 6 = RAM 0 high
 	regs[0x57] = 0x01 // MMU slot 7 = RAM 0 low
+	// NR$7F (user register 0) resets to $FF (zxnext.vhd:1216).
+	regs[0x7F] = 0xFF
+	// NR$82-$89 internal/expansion-bus port-decode enables all reset
+	// to every-bit-on (zxnext.vhd:1226-1235 / reset block :5052-5066).
+	// $85 and $89 hold only 4 enable bits plus a reset-type flag
+	// (default '1') that reads back in bit 7 with bits 6:4 hard-zero
+	// (read mux :6138 / :6150), so their power-on read is $8F.
+	regs[0x82] = 0xFF
+	regs[0x83] = 0xFF
+	regs[0x84] = 0xFF
+	regs[0x85] = 0x8F
+	regs[0x86] = 0xFF
+	regs[0x87] = 0xFF
+	regs[0x88] = 0xFF
+	regs[0x89] = 0x8F
 	regs[0xB8] = 0x83 // divMMC stack-trap enables: RST 0/8/38
 	regs[0xBB] = 0xCD // divMMC stack-trap enables: NMI + 04C6/0562
 	// Raspberry Pi GPIO output registers. zxnext.vhd:5070-5071 reset

@@ -247,10 +247,14 @@ func (m *Memory) SetROMBankExtended(val byte) {
 	new1FFD |= (val >> 1) & 0x01 << 2 // bit 1 of val → port_1FFD[2]
 	new1FFD |= (val & 0x01) << 1      // bit 0 of val → port_1FFD[1]
 	new1FFD |= (val >> 2) & 0x01      // bit 2 of val → port_1FFD[0]
-	// Preserve any bits we don't model in port_1FFD.
+	// Preserve any bits we don't model in port_1FFD. Applied through
+	// the lock-free path: the VHDL's port_7ffd_locked guard covers
+	// only the port_1ffd_wr branch, NOT nr_8e_we (zxnext.vhd
+	// port_1ffd_reg process at :3715-3740) — NR$8E must re-page even
+	// when the classic paging ports are locked (ZX48 personality).
 	merged := (m.port1FFD &^ 0x07) | new1FFD
 	if merged != m.port1FFD {
-		m.PageMemoryPlus3(merged)
+		m.pageMemoryPlus3Apply(merged)
 	}
 }
 

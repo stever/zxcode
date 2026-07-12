@@ -1224,15 +1224,17 @@ func WireKeymap(d *nextregs.Dispatcher, m *keymap.Map) {
 	})
 }
 
-// WireCopper installs the NextReg 0x60 / 0x61 / 0x62 OnWrite
-// handlers that drive the Copper coprocessor: 0x60 is the data
-// port (two consecutive writes form one 16-bit instruction),
-// 0x61 is the low 8 bits of the write cursor, 0x62 is the high
-// 2 bits + 2-bit start mode.
+// WireCopper installs the NextReg 0x60 / 0x61 / 0x62 / 0x63 OnWrite
+// handlers that drive the Copper coprocessor: 0x60 and 0x63 are the
+// 8-bit and 16-bit data ports (each byte write advances the shared
+// 11-bit byte address; 0x63 commits an instruction atomically on the
+// odd byte), 0x61 is the address's low 8 bits, 0x62 its bits 10:8
+// plus the 2-bit start mode.
 //
-// OnRead handlers return the live cursor / mode rather than the
-// last value written, so software polling for "where is the
-// Copper now?" sees real state.
+// OnRead handlers return the live byte address / mode
+// (zxnext.vhd:6083-6087: NR$61 = addr(7:0), NR$62 = mode & "000" &
+// addr(10:8)) rather than the last value written, so software
+// polling for "where is the Copper now?" sees real state.
 func WireCopper(d *nextregs.Dispatcher, c *copper.Copper) {
 	d.SetOnWrite(0x60, func(disp *nextregs.Dispatcher, val byte) {
 		c.WriteData(val)
@@ -1246,12 +1248,20 @@ func WireCopper(d *nextregs.Dispatcher, c *copper.Copper) {
 		c.SetWritePtrHighAndMode(val)
 		disp.Store(0x62, val)
 	})
+	d.SetOnWrite(0x63, func(disp *nextregs.Dispatcher, val byte) {
+		c.WriteData16(val)
+		disp.Store(0x63, val)
+	})
 	d.SetOnRead(0x61, func(_ *nextregs.Dispatcher) byte {
 		return byte(c.Cursor() & 0xFF)
 	})
 	d.SetOnRead(0x62, func(_ *nextregs.Dispatcher) byte {
-		return byte((c.Cursor()>>8)&0x03) | (byte(c.Mode()) << 6)
+		return byte((c.Cursor()>>8)&0x07) | (byte(c.Mode()) << 6)
 	})
+	// The dispatcher's byte-oriented Reset churns NR$60-$63 (each
+	// data write bumps the byte address), so restore the FPGA reset
+	// state (zxnext.vhd:5019-5022) after the generic passes.
+	d.SetOnReset(c.ResetCursor)
 }
 
 // WireRTC installs NextReg 0x10 / 0x11 storage handlers for the

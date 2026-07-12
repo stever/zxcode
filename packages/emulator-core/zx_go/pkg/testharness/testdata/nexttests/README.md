@@ -21,7 +21,8 @@ The Next-side tests ship as `.snx` snapshots — in practice standard
 | --- | --- | --- |
 | Z80N.snx | base/Z80N | All 23 Z80N instructions; interactive (turbo key 2, Go key 5); pass = every row OK + green border, per the real-hardware photo. First run caught the LDDX/LDDRX direction and LDWS flag bugs |
 | Z80Nc2.snx | base/Z80Nc2 | The core-2 additions (barrel shifts, JP (C)); caught the JP (C) I/O-jump bug |
-| NextReg.snx, Copper.snx, dma.snx | base group | Vendored, wiring pending (#139): NextReg draws a colour-coded 16x16 grid, Copper and DMA need reference comparisons |
+| NextReg.snx | base/NextReg_defaults | Per-register availability + default-value audit of all 256 NextRegs, painted as a colour-coded 16x16 attribute grid. TestNexttestsNextRegDefaults decodes every cell and asserts the full verdict map (deviations from the core-3.1.5 board photo documented in the test). Audit fixed the copper byte-granular cursor, NR$8E lock bypass, NR$7F/$82-$89 defaults and the ULA-first classic palette default |
+| Copper.snx, dma.snx | base group | Vendored, wiring pending (#139): Copper and DMA need reference comparisons |
 
 The classic `ULAvsSJS.sna` (visual ULA timing) is also not yet wired;
 it needs screenshot comparison rather than screen-text OCR.

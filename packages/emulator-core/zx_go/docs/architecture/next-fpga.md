@@ -85,7 +85,7 @@ drift. Highlights:
   `WireInterruptEnable0/2` (NR$C4/$C6), `WireLineInterrupt` (NR$22/$23).
 - Video: `WireLayer2`, `WireSprites`, `WireLayerPriority` (NR$15),
   `WirePalette` (NR$40-$44), `WireTilemap`, `WireClipWindows`
-  (NR$18-$1C), `WireCopper` (NR$60-$62).
+  (NR$18-$1C), `WireCopper` (NR$60-$63).
 - Peripherals: `WirePeripheral1/2/3` (NR$0A/$06/$09), `WireJoystickMode`,
   `WireRTC`, `WireUART`, `WireKeymap`, plus reserved-bit masks.
 - Deliberately not wired here: the zxnDMA (port $6B, wired via
@@ -196,8 +196,10 @@ scanline steps the Copper and calls the compositor. The pieces:
   wide render paths (640px), and border passes composite tilemap and
   sprites over the border area.
 - Copper (`pkg/next/copper`): 1024 × 16-bit instruction store, MOVE /
-  WAIT / NOOP / HALT, four start modes (NR$62), write cursor with the
-  hi/lo pairing rules. Execution is scanline-quantised: the ULA steps it
+  WAIT / NOOP / HALT, four start modes (NR$62), and the FPGA's 11-bit
+  byte-granular write address (every NR$60/$63 byte advances it; NR$63
+  stages the even byte and commits the pair atomically, NR$61/$62 read
+  it back live). Execution is scanline-quantised: the ULA steps it
   before each row with an end-of-line hpos so WAITs release on the
   correct scanline and threshold. StartOnVBL restarts at the frame wrap.
 

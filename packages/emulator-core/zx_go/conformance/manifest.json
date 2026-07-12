@@ -464,7 +464,13 @@
             {
               "name": "NextReg_defaults",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/NextReg_defaults",
-              "notes": "Reset/default NextReg values — overlaps our dispatcher default tests"
+              "notes": "Full 256-cell verdict grid asserted (attribute decode). Matches the core-3.1.5 board photo except: 7 cells the board shows yellow from NextZXOS boot side-effects (OS-less harness earns strict green) and NR$0A/NR$10 red on core 3.2.x semantics (we follow master zxnext.vhd + MAME 0.282; test targets 3.1.5). Audit fixed: copper NR$61-$63 byte-granular cursor, NR$8E paging-lock bypass, NR$7F/$82-$89 reset defaults, ULA-first classic palette default",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsNextRegDefaults"
+                ]
+              }
             },
             {
               "name": "Copper",

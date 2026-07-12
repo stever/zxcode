@@ -5,10 +5,10 @@
 // Implemented:
 //
 //   - Instruction storage (2 KB = 1024 × 16-bit)
-//   - NextReg 0x60 byte-by-byte data write with auto-increment
-//     into a current instruction-memory cursor
-//   - NextReg 0x61 / 0x62 control: 10-bit cursor index + 2-bit
-//     start mode
+//   - NextReg 0x60 / 0x63 byte-by-byte data writes with
+//     auto-increment of an 11-bit byte address (nr_copper_addr)
+//   - NextReg 0x61 / 0x62 control: byte-address low 8 / high 3
+//     bits + 2-bit start mode
 //   - Decoded MOVE / WAIT / NOOP / HALT opcodes
 //   - Step(scanline, hpos) that walks the program against the
 //     supplied raster position, executing MOVE writes through a
@@ -63,14 +63,21 @@ type RegWriter interface {
 
 // Copper holds the instruction memory + cursor + start mode.
 type Copper struct {
-	program  [MaxInstructions]uint16
-	writePtr uint16 // pattern-RAM write head, byte-granular
-	hi       byte   // staged high byte for the two-byte write
-	hiSet    bool
-	mode     StartMode
-	pc       uint16 // execution pointer
-	stopped  bool
-	regs     RegWriter
+	program [MaxInstructions]uint16
+	// addr is the FPGA's nr_copper_addr: an 11-bit BYTE address into
+	// the 2 KB instruction memory (zxnext.vhd:1194). Every NR$60/$63
+	// data write increments it by one byte (zxnext.vhd:5417-5437);
+	// NR$61 sets bits 7:0 and NR$62 bits 2:0 set bits 10:8. Even
+	// addresses hold an instruction's high byte, odd its low byte.
+	addr uint16
+	// stored is nr_copper_data_stored (zxnext.vhd:1195): the staged
+	// even-address byte a 16-bit-port write (NR$63) commits together
+	// with the following odd-address byte.
+	stored  byte
+	mode    StartMode
+	pc      uint16 // execution pointer
+	stopped bool
+	regs    RegWriter
 	// lastScanline tracks the previous Step's raster line so a wrap back
 	// to the top of the frame can trigger the StartOnVBL program restart.
 	lastScanline uint16
@@ -83,47 +90,59 @@ func New() *Copper { return &Copper{stopped: true} }
 // instructions to take effect; otherwise they are silent no-ops.
 func (c *Copper) SetRegWriter(rw RegWriter) { c.regs = rw }
 
-// WriteData stores one byte into the copper instruction memory at
-// the current write cursor. Copper instructions are 16 bits wide
-// and arrive over NextReg 0x60 in two consecutive byte writes
-// (high byte first); WriteData latches the first byte, then
-// commits the pair on the second.
+// WriteData is the NextReg $60 (Copper Data) write: one byte lands
+// at the current byte address and the address advances. Per
+// zxnext.vhd:5417-5423 + copper_msb_we/:3977 (the write_8 path), an
+// even-address byte writes an instruction's HIGH half immediately
+// and an odd-address byte its LOW half — a cursor moved onto an odd
+// address patches just the low byte of that instruction, unlike the
+// NR$63 staged pair.
 func (c *Copper) WriteData(b byte) {
-	if !c.hiSet {
-		c.hi = b
-		c.hiSet = true
-		return
+	i := (c.addr >> 1) & (MaxInstructions - 1)
+	if c.addr&1 == 0 {
+		c.stored = b // nr_copper_data_stored latches even bytes too (:5419)
+		c.program[i] = uint16(b)<<8 | c.program[i]&0x00FF
+	} else {
+		c.program[i] = c.program[i]&0xFF00 | uint16(b)
 	}
-	c.hiSet = false
-	if c.writePtr < MaxInstructions {
-		c.program[c.writePtr] = (uint16(c.hi) << 8) | uint16(b)
+	c.addr = (c.addr + 1) & 0x07FF
+}
+
+// WriteData16 is the NextReg $63 (Copper Data 16-bit) write. Same
+// byte cursor as NR$60, but the even byte is only STAGED
+// (nr_copper_data_stored) and both halves commit atomically on the
+// odd-address write (zxnext.vhd:5432-5437, copper_msb_we at :3977
+// with write_8 = '0'), so the copper never executes a half-updated
+// instruction.
+func (c *Copper) WriteData16(b byte) {
+	i := (c.addr >> 1) & (MaxInstructions - 1)
+	if c.addr&1 == 0 {
+		c.stored = b
+	} else {
+		c.program[i] = uint16(c.stored)<<8 | uint16(b)
 	}
-	c.writePtr++
-	if c.writePtr >= MaxInstructions {
-		c.writePtr = 0
-	}
+	c.addr = (c.addr + 1) & 0x07FF
 }
 
 // SetWritePtrLow / SetWritePtrHighAndMode are the NextReg 0x61 /
-// 0x62 writes. 0x61 is the low 8 bits of the 10-bit cursor;
-// 0x62 carries the high 2 bits + 2-bit start mode + 4 reserved
-// bits.
+// 0x62 writes. 0x61 is bits 7:0 of the 11-bit BYTE address; 0x62
+// carries the address's bits 10:8 (in bits 2:0) + the 2-bit start
+// mode (bits 7:6). zxnext.vhd:5426-5430.
+//
+// Because the address is byte-granular, moving the cursor to an even
+// address naturally starts a fresh instruction pair — this is what
+// protects a program stream from a stray odd NR$60 byte written
+// earlier (e.g. the dispatcher reset writing NR$60=$00, the Nextoid
+// reset-to-Welcome bug): the FPGA needs no separate pairing latch
+// for NR$60 and neither do we.
 func (c *Copper) SetWritePtrLow(b byte) {
-	c.writePtr = (c.writePtr & 0x300) | uint16(b)
-	// Setting the write cursor starts a fresh 16-bit instruction write, so the
-	// two-byte (hi/lo) pairing phase resets. Without this a stray odd NR$60
-	// byte left staged before the cursor move — e.g. the dispatcher reset
-	// writing NR$60=$00 — pairs off-by-one with the following program stream,
-	// turning a real "WAIT y; MOVE r,v" list into garbage "MOVE NR$01..,$16"
-	// MOVEs that clobber the whole NextReg config (Nextoid reset-to-Welcome bug).
-	c.hiSet = false
+	c.addr = (c.addr & 0x0700) | uint16(b)
 }
 
-// SetWritePtrHighAndMode sets the high 2 cursor bits (val bits 0-1)
-// AND the start-mode (val bits 6-7).
+// SetWritePtrHighAndMode sets byte-address bits 10:8 (val bits 2:0)
+// AND the start-mode (val bits 7:6).
 func (c *Copper) SetWritePtrHighAndMode(b byte) {
-	c.writePtr = (c.writePtr & 0xFF) | (uint16(b&0x03) << 8)
-	c.hiSet = false // cursor move resets the two-byte write phase (see SetWritePtrLow)
+	c.addr = (c.addr & 0x00FF) | (uint16(b&0x07) << 8)
 	c.mode = StartMode((b >> 6) & 0x03)
 	switch c.mode {
 	case StartStop:
@@ -136,8 +155,20 @@ func (c *Copper) SetWritePtrHighAndMode(b byte) {
 	}
 }
 
-// Cursor returns the current write cursor (for debugging / tests).
-func (c *Copper) Cursor() uint16 { return c.writePtr }
+// Cursor returns the current write BYTE address (11-bit, as read
+// back through NR$61/$62).
+func (c *Copper) Cursor() uint16 { return c.addr }
+
+// ResetCursor restores the NR$60-$63 write-side state to the FPGA
+// reset values (zxnext.vhd:5019-5022): byte address 0, staged data
+// byte 0, mode "00" (stop). The instruction BRAM itself is NOT
+// cleared on reset, matching the hardware.
+func (c *Copper) ResetCursor() {
+	c.addr = 0
+	c.stored = 0
+	c.mode = StartStop
+	c.stopped = true
+}
 
 // Mode returns the current start mode.
 func (c *Copper) Mode() StartMode { return c.mode }

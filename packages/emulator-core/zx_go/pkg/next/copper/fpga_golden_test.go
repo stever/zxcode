@@ -95,8 +95,11 @@ func TestCopperMatchesFPGAGolden(t *testing.T) {
 		case "LOAD":
 			idx := uint16(atoi(fld[1]))
 			word := hx(fld[2])
-			c.SetWritePtrLow(byte(idx & 0xFF))
-			c.SetWritePtrHighAndMode(byte((idx >> 8) & 0x03))
+			// The golden trace addresses instructions; the NR$61/$62
+			// cursor is byte-granular (zxnext.vhd:5426-5430).
+			addr := idx * 2
+			c.SetWritePtrLow(byte(addr & 0xFF))
+			c.SetWritePtrHighAndMode(byte((addr >> 8) & 0x07))
 			c.WriteData(byte(word >> 8))
 			c.WriteData(byte(word & 0xFF))
 		case "MODE":

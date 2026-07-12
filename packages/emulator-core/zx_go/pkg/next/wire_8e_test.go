@@ -62,3 +62,39 @@ func TestWireROMBank_NR8E_7A(t *testing.T) {
 		t.Errorf("NR$8E=$7A: port_1FFD[0] = %d, want 0", got)
 	}
 }
+
+// TestWireROMBank_NR8E_BypassesPagingLock pins the lock exemption:
+// per zxnext.vhd's port_1ffd_reg process (:3715-3740) the
+// port_7ffd_locked guard applies only to the port_1ffd_wr branch —
+// the nr_8e_we branch updates the paging registers unconditionally.
+// The MrKWatkins NextReg_defaults test exercises exactly this on a
+// ZX48-personality machine (7FFD locked): writing NR$8E=$03 must
+// still select ROM 3 and read back $0B.
+func TestWireROMBank_NR8E_BypassesPagingLock(t *testing.T) {
+	mem, err := memory.New(wireTestROMs(t), roms.ModelNext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disp := nextregs.New()
+	WireROMBank(disp, mem)
+
+	// Lock classic paging the way the ZX48 personality does (port
+	// 7FFD bit 5).
+	mem.PageMemory(0x20)
+	if mem.PagingEnabled {
+		t.Fatal("precondition: 7FFD bit 5 write should lock paging")
+	}
+
+	disp.Select(0x8E)
+	if got := disp.ReadData(); got != 0x08 {
+		t.Fatalf("default NR$8E read = %#x, want $08", got)
+	}
+	disp.WriteData(0x03) // ROM select %11, no RAM change (bit 3 = 0)
+	if got := disp.ReadData(); got != 0x0B {
+		t.Errorf("NR$8E read after $03 under lock = %#x, want $0B", got)
+	}
+	_, port1FFD, _ := mem.GetPortState()
+	if got := (port1FFD >> 2) & 0x01; got != 1 {
+		t.Errorf("port_1FFD[2] = %d, want 1 (NR$8E bit 1 despite lock)", got)
+	}
+}

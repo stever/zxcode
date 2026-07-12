@@ -41,11 +41,49 @@ func TestDecodeNOOP(t *testing.T) {
 
 func TestWriteDataLatchesPair(t *testing.T) {
 	c := New()
+	// The NR$61 cursor is a BYTE address (zxnext.vhd:5426): byte $10
+	// is the high half of instruction $10>>1 = 8.
 	c.SetWritePtrLow(0x10)
-	c.WriteData(0x42) // high byte staged
-	c.WriteData(0x55) // commits
-	if got := c.Instruction(0x10); got.Op != OpMOVE || got.Reg != 0x42 || got.Val != 0x55 {
-		t.Errorf("instruction[0x10] = %+v, want MOVE 0x42/0x55", got)
+	c.WriteData(0x42) // high byte (even address)
+	c.WriteData(0x55) // low byte (odd address)
+	if got := c.Instruction(0x08); got.Op != OpMOVE || got.Reg != 0x42 || got.Val != 0x55 {
+		t.Errorf("instruction[0x08] = %+v, want MOVE 0x42/0x55", got)
+	}
+	if c.Cursor() != 0x12 {
+		t.Errorf("Cursor = %#x, want 0x12 (one byte per NR$60 write)", c.Cursor())
+	}
+}
+
+// TestWriteDataOddAddressPatchesLowByte pins the NR$60 write-8 path
+// (zxnext.vhd:3977): a cursor moved onto an ODD byte address writes
+// just the low half of that instruction, leaving the high half.
+func TestWriteDataOddAddressPatchesLowByte(t *testing.T) {
+	c := New()
+	c.WriteData(0x07) // instruction 0 high
+	c.WriteData(0x10) // instruction 0 low
+	c.SetWritePtrLow(0x01)
+	c.WriteData(0x99) // patch low byte only
+	if got := c.Instruction(0); got.Reg != 0x07 || got.Val != 0x99 {
+		t.Errorf("instruction[0] = %+v, want MOVE 0x07/0x99", got)
+	}
+}
+
+// TestWriteData16CommitsAtomically pins the NR$63 (16-bit port)
+// staging: the even byte lands in nr_copper_data_stored and nothing
+// reaches instruction memory until the odd byte commits the pair
+// (zxnext.vhd:5432-5437).
+func TestWriteData16CommitsAtomically(t *testing.T) {
+	c := New()
+	c.WriteData16(0x07)
+	if got := c.Instruction(0); got.Op != OpNOOP {
+		t.Errorf("instruction[0] committed after one NR$63 byte: %+v", got)
+	}
+	if c.Cursor() != 1 {
+		t.Errorf("Cursor = %#x, want 1 (NR$63 advances per byte)", c.Cursor())
+	}
+	c.WriteData16(0x22)
+	if got := c.Instruction(0); got.Op != OpMOVE || got.Reg != 0x07 || got.Val != 0x22 {
+		t.Errorf("instruction[0] = %+v, want MOVE 0x07/0x22", got)
 	}
 }
 
@@ -184,13 +222,12 @@ func TestMOVEIntoCopperOwnRegistersDoesNotCrash(t *testing.T) {
 func TestCursorWraps(t *testing.T) {
 	c := New()
 	c.SetWritePtrLow(0xFF)
-	c.SetWritePtrHighAndMode(0x03) // high 2 bits both set -> cursor 0x3FF
-	if c.Cursor() != 0x3FF {
-		t.Errorf("Cursor after high-write = %#x, want 0x3FF", c.Cursor())
+	c.SetWritePtrHighAndMode(0x07) // address bits 10:8 all set → byte $7FF
+	if c.Cursor() != 0x7FF {
+		t.Errorf("Cursor after high-write = %#x, want 0x7FF", c.Cursor())
 	}
-	// Write past end — pointer wraps.
-	c.WriteData(0x00)
-	c.WriteData(0x00) // commit at 0x3FF -> 0x400, wraps to 0
+	// Write past the 2 KB end — the 11-bit byte address wraps.
+	c.WriteData(0x00) // low byte of the last instruction; $7FF+1 wraps to 0
 	if c.Cursor() != 0 {
 		t.Errorf("Cursor after wrap = %#x, want 0", c.Cursor())
 	}

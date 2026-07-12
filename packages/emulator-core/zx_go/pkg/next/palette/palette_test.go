@@ -287,3 +287,35 @@ func TestWrite8NinthBit(t *testing.T) {
 		}
 	}
 }
+
+// TestNewBankULAFirstClassicDefault pins the booted machine's ULA
+// first palette: the 16 classic colours repeated across all 256
+// entries (see classicRGB333). The MrKWatkins NextReg_defaults
+// real-board reference reads NR$41 = $00 at index $70 and $02
+// (classic blue %000_000_101 >> 1) at index $71.
+func TestNewBankULAFirstClassicDefault(t *testing.T) {
+	b := NewBank()
+	ula := b.Palette(int(PaletteULAFirst))
+	for i := 0; i < 256; i++ {
+		if got, want := ula.Get(byte(i)), classicRGB333[i&0x0F]; got != want {
+			t.Fatalf("ULA first[%#x] = %#x, want %#x", i, got, want)
+		}
+	}
+	// Spot values the board reference pins through NR$41 (bits 8:1).
+	if got := byte(ula.Get(0x70) >> 1); got != 0x00 {
+		t.Errorf("entry $70 NR$41 read = %#x, want $00", got)
+	}
+	if got := byte(ula.Get(0x71) >> 1); got != 0x02 {
+		t.Errorf("entry $71 NR$41 read = %#x, want $02", got)
+	}
+	// The other seven palettes keep the RGB332 identity (Level2Order
+	// board reference).
+	l2 := b.Palette(int(PaletteLayer2First))
+	if got := l2.Get(0x71); got != 0x71<<1|1 {
+		t.Errorf("L2 first[$71] = %#x, want identity %#x", got, 0x71<<1|1)
+	}
+	spr2 := b.Palette(int(PaletteSpritesSecond))
+	if got := spr2.Get(0x72) & 1; got != 1 {
+		t.Errorf("sprites second[$72] low bit = %d, want 1 (identity)", got)
+	}
+}

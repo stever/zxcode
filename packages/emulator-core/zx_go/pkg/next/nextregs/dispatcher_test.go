@@ -23,8 +23,9 @@ func TestNewDispatcherDefaults(t *testing.T) {
 		0x08: 0x10,
 		0x0E: defaultCoreSubMinor, // NR$0E = core version sub-minor
 		0x0F: defaultBoardID,      // NR$0F = board ID
-		// 0x10 default: 0 (Core ID — generic). Don't list it (zero
-		// default is the implicit case).
+		// NR$10 read = '0' & coreid("00001") & buttons("00") = $04
+		// (zxnext.vhd:1133 + read mux :5923).
+		0x10: 0x04,
 		0x12: 0x08,
 		0x13: 0x0B,
 		0x14: 0xE3,
@@ -47,6 +48,18 @@ func TestNewDispatcherDefaults(t *testing.T) {
 		0x55: 0x05,
 		0x56: 0x00,
 		0x57: 0x01,
+		0x7F: 0xFF, // user register 0 (zxnext.vhd:1216)
+		// Internal / expansion-bus port-decode enables reset all-on
+		// (zxnext.vhd:1226-1235); $85/$89 read as reset_type bit 7 +
+		// 4 enable bits ($8F) per the read mux :6138/:6150.
+		0x82: 0xFF,
+		0x83: 0xFF,
+		0x84: 0xFF,
+		0x85: 0x8F,
+		0x86: 0xFF,
+		0x87: 0xFF,
+		0x88: 0xFF,
+		0x89: 0x8F,
 		0x98: 0xFF, // Pi GPIO output (zxnext.vhd:5070 nr_98_pi_gpio_o <= X"FF")
 		0x99: 0x01, // Pi GPIO output (zxnext.vhd:5071 nr_99_pi_gpio_o <= X"01")
 		0xB8: 0x83,
@@ -125,9 +138,10 @@ func TestWriteRegBypassesSelect(t *testing.T) {
 	if got := d.ReadReg(0x20); got != 0x55 {
 		t.Errorf("ReadReg(0x20) = %#x, want 0x55", got)
 	}
-	// 0x10 untouched — still at its post-reset default.
-	if got := d.ReadReg(0x10); got != 0x00 {
-		t.Errorf("ReadReg(0x10) = %#x, want 0x00 (Core ID generic — matches reference)", got)
+	// 0x10 untouched — still at its post-reset default ($04 =
+	// coreid "00001" composed read, zxnext.vhd:5923).
+	if got := d.ReadReg(0x10); got != 0x04 {
+		t.Errorf("ReadReg(0x10) = %#x, want 0x04 (composed coreid read-back)", got)
 	}
 }
 
@@ -284,8 +298,9 @@ func TestResetRestoresDefaults(t *testing.T) {
 		0x08: 0x10,
 		0x0E: defaultCoreSubMinor, // NR$0E = core version sub-minor
 		0x0F: defaultBoardID,      // NR$0F = board ID
-		// 0x10 default: 0 (Core ID — generic). Don't list it (zero
-		// default is the implicit case).
+		// NR$10 read = '0' & coreid("00001") & buttons("00") = $04
+		// (zxnext.vhd:1133 + read mux :5923).
+		0x10: 0x04,
 		0x12: 0x08,
 		0x13: 0x0B,
 		0x14: 0xE3,
@@ -307,6 +322,15 @@ func TestResetRestoresDefaults(t *testing.T) {
 		0x54: 0x04,
 		0x55: 0x05,
 		0x57: 0x01,
+		0x7F: 0xFF, // user register 0 (zxnext.vhd:1216)
+		0x82: 0xFF, // port-decode enables (zxnext.vhd:1226-1235)
+		0x83: 0xFF,
+		0x84: 0xFF,
+		0x85: 0x8F, // reset_type bit 7 + 4 enables (read mux :6138)
+		0x86: 0xFF,
+		0x87: 0xFF,
+		0x88: 0xFF,
+		0x89: 0x8F,
 		0x98: 0xFF, // Pi GPIO output (zxnext.vhd:5070)
 		0x99: 0x01, // Pi GPIO output (zxnext.vhd:5071)
 		0xB8: 0x83,

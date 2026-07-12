@@ -42,7 +42,7 @@ Every `nr_XX_* <= value` in the reset process. Read-back byte composed per the
 | $06 periph2 | $A0 (hotkey en 7,5) | $A0 | ✅ | zxnext.vhd:5161-5165 — FIXED (was $00, untracked by the matrix) |
 | $08 periph3 | $10 | $10 | ✅ | AY enable |
 | $0B joy iomode | bit0=1 | ⚠️ | ⚠️ | read-back composition unverified |
-| $10 core id | $01 (vhd) | $00 | ⚠️ | $00 matches the reference emulator (boots); vhd=$01. AND $03 @ $017E |
+| $10 core id | read $04 ('0' & coreid "00001" & buttons, vhd:1133+5923) | $04 | ✅ | FIXED (was $00): composed read seeded; MAME 0.282 concurs; bootrom AND $03 @ $017E reads the button bits, unaffected. Pinned by TestNexttestsNextRegDefaults ($10 cell red vs the 3.1.5-targeted expectation, by design) |
 | $12 L2 bank | $08 | $08 | ✅ | |
 | $13 L2 shadow | $0B | $0B | ✅ | |
 | $14 transp rgb | $E3 | $E3 | ✅ | |
@@ -60,6 +60,10 @@ Every `nr_XX_* <= value` in the reset process. Read-back byte composed per the
 | i2c $103B/$113B | SCL/SDA latches, open-drain | rtc.Bus + ULA dispatch | ✅ | zxnext.vhd:2630/3234 — TestI2C_* + TestI2CPortRouting (D31ai) |
 | $8C alt-rom | reset: 7:4←3:0 | promote in WireReset | ✅ | zxnext.vhd:2255 staged-nibble promote (both reset types) — TestWireResetPromotesAltROMStagedNibble (D31g) |
 | (rom3 automap gate) | (altrom_en∧alt_128_n)∨(rom3∧¬altrom_en) | Memory.DivMMCRom3Gate | ✅ | zxnext.vhd:3138 full gate — TestDivMMCRom3Gate (D31g) |
+| $7F user reg 0 | $FF | $FF | ✅ | FIXED (was $00) — zxnext.vhd:1216; NextReg_defaults grid |
+| $82-$88 port-decode enables | $FF | $FF | ✅ | FIXED (were $00 except $82/$83) — zxnext.vhd:1226-1235 |
+| $85/$89 decode+reset_type | read $8F (bit7 reset_type & "000" & 4 enables, vhd:6138/6150) | $8F | ✅ | FIXED — read-shape-composed seed |
+| ULA first palette | classic 16-colour pattern ×16 (booted state; BRAM itself powers up zero, dpram2.vhd) | NewULAClassic | ✅ | FIXED (was RGB332 identity) — NextReg_defaults board ref pins NR$41@$70=$00, @$71=$02 |
 | $B8 divmmc ep0 | $83 | $83 | ✅ | |
 | $B9 divmmc ep_valid | $01 | $01 | ✅ | divmmc.New seeds epValid0=$01 (verified 2026-06-05); soft reset re-arms via WireReset |
 | $BA divmmc ep_timing | $00 | $00 | ✅ | |
@@ -71,7 +75,9 @@ Every `nr_XX_* <= value` in the reset process. Read-back byte composed per the
 **Axis 1 remaining gaps to close:** NR$C4 (expbus bit 7 resets to 1, but its
 read-back is composed with the ULA/line int-enable bits — needs the composed
 mux, not a bare default), NR$0B/$A9 (composed). None are boot-blocking. (NR$98/
-$99 fixed this pass; NR$68 was a misread — already conformant.)
+$99 fixed earlier; NR$68 was a misread — already conformant; NR$10/$7F/$82-$89
+and the ULA-first palette default fixed by the NextReg_defaults audit, which
+now pins the whole default surface the upstream test reads.)
 **Action:** extend the reset test to assert the FULL vhd reset vector incl.
 composed read-backs.
 
@@ -81,14 +87,22 @@ composed read-backs.
 Source: zxnext.vhd `nr_wr_en` case (~5113+). Tests: `pkg/next/wire_specderived_test.go`,
 `wire_*_test.go` (iters 186-250). Status: **broad ✅** (reserved-bit masks for
 $0A,$22,$34,$1C,$12/$13,$2F,$6A,$6E/$6F,$70/$71,$4A-$4C,$CE/$D8/$DA; NR$8E paging;
-$80-$8A bus enables; $C0/$C4/$C6; $CD). **Gap:** no single test enumerates ALL
-256 write-maskable bits vs the VHDL case — spot-covered, not exhaustive.
+$80-$8A bus enables; $C0/$C4/$C6; $CD; copper $60-$63 byte-granular cursor with
+NR$63 atomic-pair staging, vhd:5417-5437; NR$8E bypasses the port_7ffd_locked
+guard — the lock gates only the port_1ffd_wr branch, vhd:3650/3727). **Gap:** no
+single test enumerates ALL 256 write-maskable bits vs the VHDL case — the
+MrKWatkins NextReg_defaults grid (TestNexttestsNextRegDefaults) now
+write+read-back-verifies every register its tables cover, closing most of the
+distance.
 
 ## Axis 3 — NextReg read-back (port_253b_dat mux, zxnext.vhd ~5890-6250)
 Tests: read-shape fixes for $07 (iter 223), $00 machine-id, $06, $41/$44 palette,
-clip windows. Tool: `--next-nrdiff` (CAVEAT: the reference emulator returns $00 for unimplemented
-read-backs — verify vs VHDL, never blind-match). **Gap:** ~30 composed read-backs
-($68,$69,$C0,$C4,$C6,$CC-$CE,$A9,$0B,...) not individually pinned to the VHDL mux.
+clip windows; copper $61/$62 = live byte address + mode (vhd:6083-6087, 3 address
+bits); $85/$89 reset_type shape (vhd:6138/6150). Tool: `--next-nrdiff` (CAVEAT: the
+reference emulator returns $00 for unimplemented read-backs — verify vs VHDL, never
+blind-match). The NextReg_defaults grid pins the read-back of every register its
+tables touch ($00-$B1 range). **Gap:** composed read-backs the grid skips
+($68,$69,$C0,$C4,$C6,$CC-$CE,$A9,$0B,...) still not individually pinned to the VHDL mux.
 
 ## Axis 4 — Ports / IO decode
 Source: zxnext.vhd port decode (`port_*`). Tests: scattered. **Confirmed gap this

@@ -1994,6 +1994,16 @@ func (m *Memory) PageMemoryPlus3(val byte) {
 		}
 		return
 	}
+	m.pageMemoryPlus3Apply(val)
+}
+
+// pageMemoryPlus3Apply is PageMemoryPlus3 without the port-write
+// paging-lock gate. The NextReg $8E write path needs it: per
+// zxnext.vhd the `port_7ffd_locked` guard applies only to the
+// `port_1ffd_wr` branch — the `nr_8e_we` branch updates
+// port_1ffd_reg unconditionally, so NR$8E can re-page a machine
+// whose classic 7FFD port is locked (e.g. the ZX48 personality).
+func (m *Memory) pageMemoryPlus3Apply(val byte) {
 	if m.PagingFrozen {
 		// When frozen, only update port1FFD for ROM selection purposes.
 		m.port1FFD = val

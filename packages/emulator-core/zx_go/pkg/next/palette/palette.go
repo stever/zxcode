@@ -27,13 +27,21 @@ type Palette struct {
 	priority [256]byte
 }
 
-// New returns a fresh Palette seeded with the hardware's power-on
-// default: the RGB332 identity map, where each 9-bit entry is the
-// 8-bit index with the low blue bit set to the OR of the two blue
-// bits (the FPGA initialises the palette BRAMs this way, so a program
-// that never writes a palette still gets sensible colours — pinned by
-// the ported Level2Order conformance test, whose Layer 2 never
-// touches the palette).
+// New returns a fresh Palette seeded with the RGB332 identity map,
+// where each 9-bit entry is the 8-bit index with the low blue bit
+// set to the OR of the two blue bits.
+//
+// Strictly the FPGA's palette BRAMs power up all-ZERO (dpram2.vhd
+// defaults to the empty init file; the palette_utm / palette_l2s
+// instances at zxnext.vhd:6960/7013 pass no init) — the identity
+// and classic contents are installed by the boot firmware before
+// any user code can run. Since a real Next is never usable
+// pre-firmware, the emulator bakes the booted state in as the
+// power-on default: identity for the Layer 2 / sprite / tilemap
+// palettes (pinned by the Level2Order conformance test's real-board
+// reference, whose Layer 2 never writes a palette) and the classic
+// repeating pattern for the ULA first palette (NewULAClassic,
+// pinned by the NextReg_defaults board reference).
 func New() *Palette {
 	p := &Palette{}
 	for i := 0; i < 256; i++ {
@@ -42,6 +50,28 @@ func New() *Palette {
 			lo = 1
 		}
 		p.entries[i] = uint16(i)<<1 | lo
+	}
+	return p
+}
+
+// classicRGB333 is the booted machine's default ULA palette pattern:
+// the 16 standard Spectrum colours (non-bright components %101,
+// bright %111) repeated 16 times across all 256 entries. Pinned by
+// the MrKWatkins NextReg_defaults real-board reference (core 3.1.5
+// photo): a fresh NR$41 read at index $70 returns $00 (black) and
+// index $71 reads $02 (blue %000_000_101 >> 1).
+var classicRGB333 = [16]uint16{
+	0x000, 0x005, 0x140, 0x145, 0x028, 0x02D, 0x168, 0x16D,
+	0x000, 0x007, 0x1C0, 0x1C7, 0x038, 0x03F, 0x1F8, 0x1FF,
+}
+
+// NewULAClassic returns a Palette seeded with the booted machine's
+// ULA first-palette default: the classic 16-colour pattern repeated
+// (see classicRGB333).
+func NewULAClassic() *Palette {
+	p := &Palette{}
+	for i := 0; i < 256; i++ {
+		p.entries[i] = classicRGB333[i&0x0F]
 	}
 	return p
 }
@@ -151,12 +181,15 @@ const (
 )
 
 // NewBank constructs a Bank with all eight palettes initialised to
-// zeros.
+// the booted machine's defaults: RGB332 identity everywhere except
+// the ULA first palette, which holds the classic repeating pattern
+// (see New / NewULAClassic for the provenance).
 func NewBank() *Bank {
 	b := &Bank{}
 	for i := range b.palettes {
 		b.palettes[i] = New()
 	}
+	b.palettes[PaletteULAFirst] = NewULAClassic()
 	return b
 }
 

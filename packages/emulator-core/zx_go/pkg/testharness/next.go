@@ -17,6 +17,7 @@ import (
 	"github.com/conorarmstrong/zx_go/pkg/next/dma"
 	"github.com/conorarmstrong/zx_go/pkg/next/esxdos"
 	"github.com/conorarmstrong/zx_go/pkg/next/install"
+	"github.com/conorarmstrong/zx_go/pkg/next/keymap"
 	"github.com/conorarmstrong/zx_go/pkg/next/layer2"
 	"github.com/conorarmstrong/zx_go/pkg/next/nex"
 	"github.com/conorarmstrong/zx_go/pkg/next/nextregs"
@@ -24,6 +25,7 @@ import (
 	rtcpkg "github.com/conorarmstrong/zx_go/pkg/next/rtc"
 	"github.com/conorarmstrong/zx_go/pkg/next/sdcard"
 	"github.com/conorarmstrong/zx_go/pkg/next/sprite"
+	"github.com/conorarmstrong/zx_go/pkg/next/tilemap"
 	uartpkg "github.com/conorarmstrong/zx_go/pkg/next/uart"
 	"github.com/conorarmstrong/zx_go/pkg/peripherals"
 	"github.com/conorarmstrong/zx_go/pkg/roms"
@@ -73,6 +75,8 @@ func newNext() (*Harness, error) {
 	cop.SetRegWriter(disp)
 	rtcEngine := rtcpkg.New()
 	uartEngine := uartpkg.New()
+	keymapEngine := keymap.New()
+	tilemapLayer := tilemap.New(mem)
 	dmaEngine := dma.New(mem)
 	dacBank := dac.New()
 	next.Wire(next.WireOpts{
@@ -87,12 +91,15 @@ func newNext() (*Harness, error) {
 		Copper:     cop,
 		RTC:        rtcEngine,
 		UART:       uartEngine,
+		Keymap:     keymapEngine,
+		Tilemap:    tilemapLayer,
 	})
 	cpu.NextRegs = disp
 	u.SetNextRegs(disp)
 	u.SetNextAY(ayEngine)
 	comp := compositor.New(pal, l2)
 	comp.SetSprites(sprites)
+	comp.SetTilemap(tilemapLayer)
 	comp.SetPrioritySource(prio)
 	// Same as the production wiring (cmd/zx_go/next.go): the classic
 	// ULA palette lets the compositor resolve ULA transparency.
