@@ -14,6 +14,7 @@ import {
   splitSpriteFile,
   spritePatternCount,
 } from "../lib/sprites/spr";
+import { imageDataToPatterns } from "../lib/sprites/imageImport";
 import { useTranslation } from "@zxplay/i18n";
 
 // Editor pixels per sprite pixel on the drawing canvas.
@@ -461,6 +462,55 @@ export function SpriteEditor({ fileId, content }) {
     setPattern((p) => Math.max(0, Math.min(count - 1, p + delta)));
   };
 
+  // Import an image file: quantise to the default palette, slice into
+  // 16x16 patterns and append as many as fit under the content-size cap.
+  // The file loads through a data: URL — the proxy's CSP allows img-src
+  // data: but not blob:, so createObjectURL images never render there.
+  const importImageRef = useRef(null);
+  const handleImportImage = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scratch = document.createElement("canvas");
+        scratch.width = img.naturalWidth;
+        scratch.height = img.naturalHeight;
+        const ctx = scratch.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        const patterns = imageDataToPatterns(
+          ctx.getImageData(0, 0, scratch.width, scratch.height)
+        );
+        const headerLength = headerRef.current ? headerRef.current.length : 0;
+        const room = Math.floor(
+          ((MAX_FILE_CONTENT_SIZE * 3) / 4 -
+            headerLength -
+            bytesRef.current.length) /
+            SPRITE_BYTES
+        );
+        const take = Math.min(spritePatternCount(patterns.length), room);
+        if (take <= 0) return;
+        const grown = new Uint8Array(
+          bytesRef.current.length + take * SPRITE_BYTES
+        );
+        grown.set(bytesRef.current);
+        grown.set(
+          patterns.subarray(0, take * SPRITE_BYTES),
+          bytesRef.current.length
+        );
+        const firstNew = spritePatternCount(bytesRef.current.length);
+        bytesRef.current = grown;
+        allThumbsDirtyRef.current = true;
+        setPattern(firstNew);
+        commit(firstNew);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const deletePattern = () => {
     if (count <= 1) return;
     const shrunk = new Uint8Array(bytesRef.current.length - SPRITE_BYTES);
@@ -781,6 +831,20 @@ export function SpriteEditor({ fileId, content }) {
           title={t("editor.sprites.pastePattern")}
           disabled={!hasClipboard}
           onClick={(e) => pastePattern(e.shiftKey)}
+        />
+        <Button
+          icon="pi pi-image"
+          className="p-button-sm p-button-outlined"
+          title={t("editor.sprites.importImage")}
+          disabled={!canAddPattern}
+          onClick={() => importImageRef.current?.click()}
+        />
+        <input
+          type="file"
+          ref={importImageRef}
+          accept="image/png,image/gif,image/jpeg,image/bmp,image/webp"
+          style={{ display: "none" }}
+          onChange={handleImportImage}
         />
         <span className="sprite-editor-hint">
           {t("editor.sprites.patternLabel", {

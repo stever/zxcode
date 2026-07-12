@@ -221,6 +221,7 @@
       "duplicatePattern": "Duplicate sprite",
       "copyPattern": "Copy sprite (Ctrl+C)",
       "pastePattern": "Paste sprite (Ctrl+V; hold Shift to paste over transparent)",
+      "importImage": "Import image as sprites (colours quantised to the Next palette)",
       "patternLabel": "Sprite {{index}} of {{count}}",
       "transparent": "Transparent",
       "pickHint": "Right-click the canvas to pick up a colour."
