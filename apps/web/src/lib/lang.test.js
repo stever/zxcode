@@ -1,9 +1,47 @@
 import {
+    editorMode,
     joinProjectFilePath,
     projectFileNameError,
     projectFilePathError,
     splitProjectFilePath,
 } from "./lang";
+
+describe("editorMode", () => {
+    test("main source follows the project language", () => {
+        expect(editorMode("pascal")).toBe("text/x-pasta80");
+        expect(editorMode("sjasmplus", null)).toBe("text/x-sjasmplus");
+        expect(editorMode("zxbasic")).toBe("text/x-zxbasic");
+    });
+
+    test("asm files in a Pascal project read as sjasmplus ({$l} links)", () => {
+        expect(editorMode("pascal", "helper.asm")).toBe("text/x-sjasmplus");
+        expect(editorMode("pascal", "lib/HELPER.ASM")).toBe("text/x-sjasmplus");
+        expect(editorMode("pascal", "helper.z80")).toBe("text/x-sjasmplus");
+    });
+
+    test("asm files elsewhere keep their toolchain's dialect", () => {
+        expect(editorMode("sjasmplus", "lib/util.asm")).toBe("text/x-sjasmplus");
+        expect(editorMode("asm", "util.asm")).toBe("text/x-pasmo");
+        // Generic Z80 for toolchains with no asm dialect of their own.
+        expect(editorMode("c", "util.asm")).toBe("text/x-pasmo");
+    });
+
+    test("extensions that pin a syntax win over the language", () => {
+        expect(editorMode("sjasmplus", "defs.h")).toBe("text/x-z88dk-csrc");
+        expect(editorMode("c", "unit.pas")).toBe("text/x-pasta80");
+        // A .bas in a non-BASIC project is an SD-card NextBASIC program.
+        expect(editorMode("c", "loader.bas")).toBe("text/x-nextbas");
+        expect(editorMode("zxbasic", "lib.bas")).toBe("text/x-zxbasic");
+        expect(editorMode("nextbas", "extra.bas")).toBe("text/x-nextbas");
+    });
+
+    test("neutral extensions keep the language mode", () => {
+        expect(editorMode("pascal", "part.inc")).toBe("text/x-pasta80");
+        expect(editorMode("sjasmplus", "macros.inc")).toBe("text/x-sjasmplus");
+        expect(editorMode("pascal", "notes.txt")).toBe("text/x-pasta80");
+        expect(editorMode("pascal", "README")).toBe("text/x-pasta80");
+    });
+});
 
 describe("splitProjectFilePath", () => {
     test("treats a bare name as a root file", () => {

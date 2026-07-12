@@ -134,6 +134,83 @@ def test_parse_listing_include_files_and_ambiguity(tmp_path):
     }
 
 
+def test_parse_listing_maps_linked_asm_rows(tmp_path):
+    # A staged {$l} asm file maps through its flagged listing rows: the
+    # 1-based listing line numbers are the editor's, byte-emitting rows
+    # only (labels, comments and blank lines don't arm).
+    work = tmp_path / "work"
+    work.mkdir()
+    helper = "my_nop:\n\tret\n"
+    (work / "helper.asm").write_text(helper)
+    lst = work / "program.lst"
+    lst.write_text(
+        "# file opened: program.z80\n"
+        " 100  A000              ; [1] {$l helper.asm}\n"
+        f' 101  A000                              include "{work}/helper.asm"\n'
+        "# file opened: helper.asm\n"
+        "   1+ A000              my_nop:\n"
+        "   2+ A000 C9           \tret\n"
+        "   3+ A001\n"
+        "# file closed: helper.asm\n"
+        " 102  A001              ; [2] begin\n"
+        " 103  A001 C9                           ret\n"
+        "# file closed: program.z80\n")
+    source = "program T;\n{$l helper.asm}\nbegin\nend.\n"
+    # The {$l} marker's pending state survives the include section (the
+    # begin marker replaces it before any main-level bytes), and only the
+    # helper's byte-emitting row maps — not its label or blank line.
+    assert parse_listing_line_map(
+        str(lst), {'': source, 'helper.asm': helper}) == {
+        '': [[3, 0xA001]],
+        'helper.asm': [[2, 0xA000]],
+    }
+
+
+def test_parse_listing_asm_nesting_and_rtl_shadowing(tmp_path):
+    # The listing echoes only basenames on '# file opened', so the staged
+    # identity resolves from the include directive's path: an RTL file
+    # outside the workdir must not map even when a staged file shares its
+    # basename, a relative include resolves against the including file's
+    # directory, and depth-2 rows lose the space before the address
+    # ('1++A001') yet still parse.
+    work = tmp_path / "work"
+    work.mkdir()
+    rtl = tmp_path / "rtl"
+    rtl.mkdir()
+    (rtl / "system.asm").write_text("\txor a\n")
+    staged = {
+        "system.asm": "\tinc a\n",
+        "helper.asm": "my_nop:\n\tret\n\tinclude \"inner.asm\"\n\tld b, 2\n",
+        "inner.asm": "\tld a, 1\n\tret\n",
+    }
+    for name, text in staged.items():
+        (work / name).write_text(text)
+    lst = work / "program.lst"
+    lst.write_text(
+        "# file opened: program.z80\n"
+        f'  26  8003                              include "{rtl}/system.asm"\n'
+        "# file opened: system.asm\n"
+        "   1+ 8003 AF           \txor a\n"
+        "# file closed: system.asm\n"
+        f' 100  A000                              include "{work}/helper.asm"\n'
+        "# file opened: helper.asm\n"
+        "   1+ A000              my_nop:\n"
+        "   2+ A000 C9           \tret\n"
+        '   3+ A001              \tinclude "inner.asm"\n'
+        "# file opened: inner.asm\n"
+        "   1++A001 3E 01        \tld a, 1\n"
+        "   2++A003 C9           \tret\n"
+        "# file closed: inner.asm\n"
+        "   4+ A004 06 02        \tld b, 2\n"
+        "# file closed: helper.asm\n"
+        "# file closed: program.z80\n")
+    sources = {'': "program T;\nbegin\nend.\n", **staged}
+    assert parse_listing_line_map(str(lst), sources) == {
+        'helper.asm': [[2, 0xA000], [4, 0xA004]],
+        'inner.asm': [[1, 0xA001], [2, 0xA003]],
+    }
+
+
 INCLUDE_MAIN = """program Multi;
 {$i inc/greet.pas}
 begin
@@ -165,6 +242,43 @@ def test_compile_endpoint_maps_include_files():
     main_entries = dict(info['files'][''])
     # The main body's statements too.
     assert 4 in main_entries and 5 in main_entries, main_entries
+
+
+ASM_MAIN = """program AsmLink;
+procedure SetBorder(Color: Byte); register; external 'set_border';
+{$l lib/helper.asm}
+begin
+  SetBorder(2)
+end.
+"""
+
+ASM_FILE = """; sets the border to the colour in L
+set_border:
+        ld      a, l
+        out     ($fe), a
+        ret
+"""
+
+
+def test_compile_endpoint_maps_linked_asm_files():
+    """End-to-end: a {$l}-linked asm file's lines map under its own key."""
+    response = compile_request(ASM_MAIN, files=[
+        {'name': 'lib/helper.asm', 'content': ASM_FILE, 'is_binary': False},
+    ])
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload.get('sld'), 'debug map missing from compile response'
+    info = json.loads(payload['sld'])
+    assert 'lib/helper.asm' in info['files'], info['files'].keys()
+    entries = dict(info['files']['lib/helper.asm'])
+    # The instruction lines are breakable, ascending; the comment and the
+    # label emit nothing and must not be.
+    for required in (3, 4, 5):
+        assert required in entries, f'line {required} missing from {entries}'
+    assert entries[3] < entries[4] < entries[5]
+    assert 1 not in entries and 2 not in entries
+    # The Pascal side still maps: the call line at least.
+    assert 5 in dict(info['files']['']), info['files']['']
 
 
 def test_debug_map_present_for_every_machine_target():

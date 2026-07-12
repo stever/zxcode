@@ -5,7 +5,11 @@ import "codemirror/mode/z80/z80";
 import { setCode, setFileContent } from "../redux/project/actions";
 import { selectActiveFile } from "../redux/project/selectors";
 import { toggleBreakpoint } from "../redux/debugger/actions";
-import { joinProjectFilePath, languageSupportsSourceDebug } from "../lib/lang";
+import {
+  editorMode,
+  joinProjectFilePath,
+  languageSupportsSourceDebug,
+} from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
 import "../lib/syntax/pasmo";
 import "../lib/syntax/pasta80";
@@ -53,42 +57,11 @@ export function ProjectEditor() {
   );
   const pausedLineRef = useRef(null);
 
-  let mode;
-  switch (lang) {
-    case "asm":
-      mode = "text/x-pasmo";
-      break;
-    case "basic":
-      mode = "text/x-zmakebas";
-      break;
-    case "bas2tap":
-      mode = "text/x-zmakebas";
-      break;
-    case "nextbas":
-      // Consolidated Sinclair/Next BASIC (#110): txt2bas tokenises for
-      // every machine, so the NextBASIC highlight always applies.
-      mode = "text/x-nextbas";
-      break;
-    case "c":
-      mode = "text/x-z88dk-csrc";
-      break;
-    case "sdcc":
-      mode = "text/x-z88dk-csrc";
-      break;
-    case "pascal":
-      mode = "text/x-pasta80";
-      break;
-    case "sjasmplus":
-      mode = "text/x-sjasmplus";
-      break;
-    case "zmac":
-      mode = "text/x-pasmo";
-      break;
-    case "zxbasic":
-      mode = "text/x-zxbasic";
-      break;
-    default:
-      throw `unexpected case: ${lang}`;
+  // Additional files can carry a different syntax than the main source —
+  // e.g. a {$l}-linked sjasmplus .asm in a Pascal project.
+  const mode = editorMode(lang, activeFileName);
+  if (!mode) {
+    throw `unexpected case: ${lang}`;
   }
 
   // Only languages with a source map get the breakpoint gutter — a dot the
@@ -150,6 +123,12 @@ export function ProjectEditor() {
       cm.clearHistory();
     }
   }, [activeFileId, activeIsBinary]);
+
+  // Keep the mode in step when the buffer swaps to a file of a different
+  // syntax without a remount.
+  useEffect(() => {
+    cmRef.current?.getCodeMirror().setOption("mode", mode);
+  }, [mode]);
 
   useEffect(() => {
     if (cmRef.current) {

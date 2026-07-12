@@ -163,6 +163,62 @@ export function isTextFileName(name) {
   return TEXT_FILE_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
 }
 
+// CodeMirror mode (MIME) per language, for the project's main source.
+const LANGUAGE_MODES = {
+  asm: "text/x-pasmo",
+  basic: "text/x-zmakebas",
+  bas2tap: "text/x-zmakebas",
+  // Consolidated Sinclair/Next BASIC (#110): txt2bas tokenises for every
+  // machine, so the NextBASIC highlight always applies.
+  nextbas: "text/x-nextbas",
+  c: "text/x-z88dk-csrc",
+  sdcc: "text/x-z88dk-csrc",
+  pascal: "text/x-pasta80",
+  sjasmplus: "text/x-sjasmplus",
+  zmac: "text/x-pasmo",
+  zxbasic: "text/x-zxbasic",
+};
+
+// The asm dialect an .asm/.z80 project file holds, per toolchain: Pasta80
+// {$l}-links sjasmplus source (its backend IS sjasmplus); the sjasmplus
+// language keeps its own dialect; anywhere else the file is at best
+// generic Z80, which the pasmo highlighter covers.
+const ASM_FILE_MODES = {
+  pascal: "text/x-sjasmplus",
+  sjasmplus: "text/x-sjasmplus",
+};
+
+// CodeMirror mode for the buffer showing a project file. The main source
+// (fileName null) follows the project language; additional files follow
+// their extension where it identifies the content — an .asm next to a
+// Pascal main source is sjasmplus source, not Pascal. Extensions that
+// don't pin a syntax (.inc, .txt, .def, ...) keep the language mode, so
+// e.g. Turbo Pascal-style {$i file.inc} includes still read as Pascal.
+export function editorMode(lang, fileName = null) {
+  const langMode = LANGUAGE_MODES[lang] || null;
+  if (!fileName) return langMode;
+  const dot = fileName.lastIndexOf(".");
+  const ext = dot < 0 ? "" : fileName.slice(dot + 1).toLowerCase();
+  switch (ext) {
+    case "asm":
+    case "z80":
+      return ASM_FILE_MODES[lang] || "text/x-pasmo";
+    case "c":
+    case "h":
+      return "text/x-z88dk-csrc";
+    case "pas":
+      return "text/x-pasta80";
+    case "bas":
+      // In a non-BASIC project a .bas file is an SD-card program for the
+      // Next; NextBASIC is the dialect that runs there.
+      return isBasicLang(lang) || lang === "zxbasic"
+        ? langMode
+        : "text/x-nextbas";
+    default:
+      return langMode;
+  }
+}
+
 // Languages whose compile path returns a source map, enabling editor gutter
 // breakpoints and the paused-line highlight. sjasmplus emits an SLD
 // line-to-address map (lib/debugger/sld.js); the interpreted BASICs

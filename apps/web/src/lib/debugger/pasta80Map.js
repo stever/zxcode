@@ -2,9 +2,10 @@
 // sjasmplus: its generated asm marks every source line and the service
 // parses the listing into per-file line→address entries ({kind: "pasta80",
 // files: {"<file>": [[line, addr], ...]}} — "" keys the main source, other
-// keys staged {$i} include files by relative path; see apps/pasta80
-// build_debug_info). An older service may still send the single-file shape
-// ({entries: [[line, addr], ...]}), which reads as main-source-only.
+// keys staged files by relative path: {$i} Pascal includes and {$l}-linked
+// asm files alike; see apps/pasta80 build_debug_info). An older service
+// may still send the single-file shape ({entries: [[line, addr], ...]}),
+// which reads as main-source-only.
 //
 // These are plain Z80 program addresses, so the returned map is a straight
 // ADDRESS map like parseSld's (no `kind`): breakpoints arm as ordinary

@@ -187,9 +187,11 @@ class CompileResult(BaseModel):
     # type already declares (SLD text for sjasmplus, JSON for zxbasic; JSON
     # here): {"kind": "pasta80", "files": {"<file>": [[line, addr], ...]}}
     # mapping 1-based source lines to the address of the first code emitted
-    # for them — "" keys the main source, other keys are staged {$i} include
-    # files by their relative path. Null when the debug-info phase fails —
-    # the compile itself still succeeds without it.
+    # for them — "" keys the main source, other keys are staged files by
+    # their relative path: {$i} Pascal includes (mapped through the line
+    # markers) and {$l}/include'd asm files (mapped through their listing
+    # rows). Null when the debug-info phase fails — the compile itself
+    # still succeeds without it.
     sld: Optional[str] = None
 
 
@@ -201,9 +203,11 @@ class CompileResult(BaseModel):
 #     2145  A21C              ; [6]     WriteLn(I);
 #     2146  A21C 21 B8 A1                     ld      hl,global102 + 0
 #
-# Rows from include files (the rtl .asm sources) are flagged with `+` after
-# the listing line number; the compiler-generated .z80 — runtime .pas
-# markers, user includes and the main program alike — lists unflagged.
+# Rows from include files are flagged with one `+` per nesting level after
+# the listing line number (at depth 2 the `++` fills the column and the
+# space before the address disappears, so the row pattern cannot require
+# one); the compiler-generated .z80 — runtime .pas markers, user includes
+# and the main program alike — lists unflagged.
 # Markers are attributed to a source by their echoed text matching that
 # source at the marker's 0-based line, which holds regardless of how {$i}
 # includes interleave their own `[0]`-based blocks: the main source, each
@@ -211,29 +215,103 @@ class CompileResult(BaseModel):
 # marker matching MORE than one candidate is ambiguous and dropped rather
 # than guessed (a marker matching only runtime text matches no candidate
 # and drops the same way).
-LST_ROW_RE = re.compile(r'^\s*(\d+)(\+*)\s+([0-9A-F]{4})(.*)$')
+#
+# Flagged rows are mostly Pasta80's RTL, but a staged asm file pulled in
+# via {$l} (or a nested include inside one) lists the same way, carrying
+# its own 1-based line numbers — exactly the editor lines — so those rows
+# map directly under the staged file's relative path. Which file a flagged
+# row belongs to comes from the `# file opened:`/`# file closed:` lines;
+# they echo only the basename, so the staged identity resolves from the
+# `include "<path>"` directive echoed on the row immediately before each
+# open ({$l} writes an absolute path under the workdir; a relative include
+# resolves against the including file's directory then the workdir, the
+# way sjasmplus searches). RTL files resolve outside the workdir and stay
+# unmapped even when their basename matches a staged file's.
+LST_ROW_RE = re.compile(r'^\s*(\d+)(\+*)\s*([0-9A-F]{4})(.*)$')
 LST_MARKER_RE = re.compile(r'^\s*; \[(\d+)\] (.*)$')
 LST_BYTES_RE = re.compile(r'^\s[0-9A-F]{2}[\s$]')
+LST_FILE_OPENED_RE = re.compile(r'^# file opened: (.+?)\s*$')
+LST_FILE_CLOSED_RE = re.compile(r'^# file closed: ')
+LST_INCLUDE_RE = re.compile(r'\binclude\s+"([^"]+)"', re.IGNORECASE)
+
+
+def _opened_listing_file(name, inc_path, parent_path, workdir, staged_keys):
+    """(full path, staged key or None) for a '# file opened' listing event.
+
+    `name` is the basename the listing echoes, `inc_path` the path from the
+    include directive that triggered the open, `parent_path` the full path
+    of the file containing that directive (None for the .z80 itself)."""
+    candidates = []
+    if inc_path:
+        if os.path.isabs(inc_path):
+            candidates.append(inc_path)
+        else:
+            if parent_path:
+                candidates.append(
+                    os.path.join(os.path.dirname(parent_path), inc_path))
+            candidates.append(os.path.join(workdir, inc_path))
+    for candidate in candidates:
+        path = os.path.normpath(candidate)
+        if os.path.basename(path) != name or not os.path.isfile(path):
+            continue
+        rel = os.path.relpath(path, workdir).replace(os.sep, '/')
+        return path, (rel if rel in staged_keys else None)
+    return None, None
 
 
 def parse_listing_line_map(lst_path: str, sources: dict) -> dict:
     """{file_key: [[1-based line, address], ...]} for source lines with code.
 
     `sources` maps file keys to their text ('' = the main source, staged
-    text files by relative path). A marker only maps when at least one
-    unflagged row between it and the next marker emits bytes — declarations
-    and blank lines produce no code and would otherwise alias onto the next
-    real line's address.
+    text files by relative path). Pascal lines map through their `; [N]`
+    markers: a marker only maps when at least one unflagged row between it
+    and the next marker emits bytes — declarations and blank lines produce
+    no code and would otherwise alias onto the next real line's address.
+    Staged files assembled directly ({$l} and nested includes) map each
+    byte-emitting flagged row at the row's own listing line number.
     """
+    workdir = os.path.dirname(os.path.abspath(lst_path))
     split = {key: text.split('\n') for key, text in sources.items()}
     pending = None  # (file_key, line0, addr) awaiting a code row
     entries = {}
+    stack = []       # (full path, staged key or None) per open listing file
+    inc_path = None  # path from the latest live include directive row
     with open(lst_path, errors='replace') as f:
         for row in f:
-            m = LST_ROW_RE.match(row)
-            if not m or m.group(2):
+            opened = LST_FILE_OPENED_RE.match(row)
+            if opened:
+                parent = stack[-1][0] if stack else None
+                stack.append(_opened_listing_file(
+                    opened.group(1), inc_path, parent, workdir, split))
+                inc_path = None
                 continue
-            addr, rest = int(m.group(3), 16), m.group(4)
+            if LST_FILE_CLOSED_RE.match(row):
+                if stack:
+                    stack.pop()
+                continue
+            m = LST_ROW_RE.match(row)
+            if not m:
+                continue
+            depth, rest = len(m.group(2)), m.group(4)
+            # Rows inside skipped conditionals and LUA blocks print a '~'
+            # after the address: never live code, and an include echoed
+            # there did not open anything.
+            if rest.lstrip().startswith('~'):
+                continue
+            inc = LST_INCLUDE_RE.search(rest)
+            if inc:
+                inc_path = inc.group(1)
+            if depth:
+                # A flagged row belongs to the innermost open file; when
+                # that file is staged, its listing line numbers ARE the
+                # editor's, so a byte-emitting row maps directly.
+                key = stack[-1][1] if stack else None
+                if (key is not None and depth == len(stack) - 1
+                        and LST_BYTES_RE.match(rest)):
+                    entries.setdefault(key, {}).setdefault(
+                        int(m.group(1)), int(m.group(3), 16))
+                continue
+            addr = int(m.group(3), 16)
             marker = LST_MARKER_RE.match(rest)
             if marker:
                 line0 = int(marker.group(1))
