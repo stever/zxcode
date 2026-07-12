@@ -565,6 +565,67 @@ type login_token_mutation_response {
   affected_rows: Int!
 }
 
+type user_otp {
+  user_id: uuid!
+  secret: String!
+  created: timestamptz!
+  enabled: timestamptz
+}
+
+input user_otp_bool_exp {
+  _and: [user_otp_bool_exp!]
+  _or: [user_otp_bool_exp!]
+  _not: user_otp_bool_exp
+  user_id: uuid_comparison_exp
+  enabled: timestamptz_comparison_exp
+}
+
+input user_otp_insert_input {
+  user_id: uuid
+  secret: String
+  created: timestamptz
+}
+
+input user_otp_set_input {
+  enabled: timestamptz
+}
+
+type user_otp_mutation_response {
+  affected_rows: Int!
+}
+
+type otp_recovery_code {
+  recovery_code_id: uuid!
+  user_id: uuid!
+  code_hash: String!
+  created: timestamptz!
+  used: timestamptz
+}
+
+input otp_recovery_code_bool_exp {
+  _and: [otp_recovery_code_bool_exp!]
+  _or: [otp_recovery_code_bool_exp!]
+  _not: otp_recovery_code_bool_exp
+  recovery_code_id: uuid_comparison_exp
+  user_id: uuid_comparison_exp
+  code_hash: String_comparison_exp
+  used: timestamptz_comparison_exp
+}
+
+input otp_recovery_code_insert_input {
+  user_id: uuid
+  code_hash: String
+  created: timestamptz
+}
+
+input otp_recovery_code_set_input {
+  used: timestamptz
+}
+
+type otp_recovery_code_mutation_response {
+  affected_rows: Int!
+}
+
 type role {
   role_id: uuid!
   name: String!
@@ -636,6 +697,8 @@ type Query {
   user_follows_aggregate(where: user_follows_bool_exp): user_follows_aggregate!
   session(where: session_bool_exp, order_by: [session_order_by!], limit: Int, offset: Int): [session!]!
   login_token(where: login_token_bool_exp, order_by: [login_token_order_by!], limit: Int, offset: Int): [login_token!]!
+  user_otp(where: user_otp_bool_exp, limit: Int, offset: Int): [user_otp!]!
+  otp_recovery_code(where: otp_recovery_code_bool_exp, limit: Int, offset: Int): [otp_recovery_code!]!
   text(where: text_bool_exp, order_by: [text_order_by!], limit: Int, offset: Int): [text!]!
 }
 
@@ -668,6 +731,14 @@ type Mutation {
   insert_login_token_one(object: login_token_insert_input!): login_token
   update_login_token(where: login_token_bool_exp!, _set: login_token_set_input): login_token_mutation_response
   delete_login_token(where: login_token_bool_exp!): login_token_mutation_response
+
+  insert_user_otp_one(object: user_otp_insert_input!): user_otp
+  update_user_otp(where: user_otp_bool_exp!, _set: user_otp_set_input): user_otp_mutation_response
+  delete_user_otp(where: user_otp_bool_exp!): user_otp_mutation_response
+
+  insert_otp_recovery_code_one(object: otp_recovery_code_insert_input!): otp_recovery_code
+  update_otp_recovery_code(where: otp_recovery_code_bool_exp!, _set: otp_recovery_code_set_input): otp_recovery_code_mutation_response
+  delete_otp_recovery_code(where: otp_recovery_code_bool_exp!): otp_recovery_code_mutation_response
 
   compile(basic: String!, files: [ProjectFileInput!]): CompileResult
   compileC(code: String!, files: [ProjectFileInput!]): CompileResult

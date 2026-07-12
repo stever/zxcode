@@ -106,6 +106,8 @@ attach("Query", {
     user_follows_aggregate: makeAggregateResolver("user_follows") as Resolver,
     session: makeListResolver("session") as Resolver,
     login_token: makeListResolver("login_token") as Resolver,
+    user_otp: makeListResolver("user_otp") as Resolver,
+    otp_recovery_code: makeListResolver("otp_recovery_code") as Resolver,
     text: makeListResolver("text") as Resolver,
 });
 
@@ -138,6 +140,14 @@ attach("Mutation", {
     insert_login_token_one: makeInsertOneResolver("login_token") as Resolver,
     update_login_token: makeUpdateManyResolver("login_token") as Resolver,
     delete_login_token: makeDeleteManyResolver("login_token") as Resolver,
+
+    insert_user_otp_one: makeInsertOneResolver("user_otp") as Resolver,
+    update_user_otp: makeUpdateManyResolver("user_otp") as Resolver,
+    delete_user_otp: makeDeleteManyResolver("user_otp") as Resolver,
+
+    insert_otp_recovery_code_one: makeInsertOneResolver("otp_recovery_code") as Resolver,
+    update_otp_recovery_code: makeUpdateManyResolver("otp_recovery_code") as Resolver,
+    delete_otp_recovery_code: makeDeleteManyResolver("otp_recovery_code") as Resolver,
 
     compile: makeActionResolver("compile") as Resolver,
     compileC: makeActionResolver("compileC") as Resolver,

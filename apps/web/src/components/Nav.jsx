@@ -231,6 +231,16 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
+  // Served by the auth service, not this app: OTP secrets stay there.
+  const twoFactorAuthMenuItem = {
+    label: t("nav.twoFactorAuth"),
+    icon: "pi pi-fw pi-shield",
+    disabled: !userId,
+    command: () => {
+      window.location.href = `${Constants.authBase}/otp`;
+    },
+  };
+
   const feedMenuItem = {
     label: t("nav.feed"),
     icon: "pi pi-fw pi-list",
@@ -260,6 +270,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   viewMenu.items.push(publicProfilesMenuItem);
   viewMenu.items.push(viewProfileMenuItem);
   viewMenu.items.push(profileSettingsMenuItem);
+  viewMenu.items.push(twoFactorAuthMenuItem);
 
   const infoMenu = {
     label: t("nav.info"),

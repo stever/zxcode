@@ -513,6 +513,30 @@ export const tables: Record<string, TableConfig> = {
         select: {},
     },
 
+    user_otp: {
+        prismaModel: "user_otp",
+        pk: ["user_id"],
+        columns: ["user_id", "secret", "created", "enabled"],
+        jsonColumns: [],
+        nullableColumns: ["enabled"],
+        relations: {
+            user: { table: "user", prismaField: "user", kind: "one" },
+        },
+        select: {},
+    },
+
+    otp_recovery_code: {
+        prismaModel: "otp_recovery_code",
+        pk: ["recovery_code_id"],
+        columns: ["recovery_code_id", "user_id", "code_hash", "created", "used"],
+        jsonColumns: [],
+        nullableColumns: ["used"],
+        relations: {
+            user: { table: "user", prismaField: "user", kind: "one" },
+        },
+        select: {},
+    },
+
     role: {
         prismaModel: "role",
         pk: ["role_id"],

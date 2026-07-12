@@ -4,21 +4,55 @@
 // consumes it and establishes the session.
 
 import express, { type Request, type Response } from "express";
+import QRCode from "qrcode-svg";
 import { config } from "./config.js";
-import { authenticate, deleteAuthCookies, popReturnUrl } from "./cookies.js";
-import { performLogin } from "./login.js";
-import { getRoles } from "./users.js";
-import { mintHasuraToken } from "./tokens.js";
+import {
+    authenticate,
+    deleteAuthCookies,
+    popReturnUrl,
+    requestCookie,
+    type Authenticated,
+} from "./cookies.js";
+import { establishSession, performLogin } from "./login.js";
+import { getRoles, getUser, getUserByEmail, getUserById } from "./users.js";
+import {
+    mintHasuraToken,
+    mintOtpChallenge,
+    readOtpChallenge,
+} from "./tokens.js";
 import { consumeToken, issueToken } from "./logintokens.js";
+import {
+    consumeRecoveryCode,
+    createPendingOtp,
+    deleteOtp,
+    enableOtp,
+    getUserOtp,
+    replaceRecoveryCodes,
+    unusedRecoveryCodeCount,
+} from "./otp.js";
+import { otpauthUri, verifyTotp } from "./totp.js";
 import { sendMagicLink } from "./mailer.js";
 import { allow } from "./ratelimit.js";
-import { checkEmailPage, linkInvalidPage, loginPage, sendPage } from "./pages.js";
+import {
+    checkEmailPage,
+    linkInvalidPage,
+    loginPage,
+    otpChallengePage,
+    otpRecoveryCodesPage,
+    otpSetupPage,
+    otpStatusPage,
+    sendPage,
+} from "./pages.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const EMAIL_RATE_LIMIT = 3;
 const IP_RATE_LIMIT = 10;
+const OTP_ATTEMPT_LIMIT = 10;
 const RATE_WINDOW_MS = 15 * 60_000;
+
+const OTP_CHALLENGE_COOKIE = "otp_challenge";
+const OTP_ISSUER = "ZX Play";
 
 function corsMiddleware(
     req: Request,
@@ -61,14 +95,73 @@ function safeReturnUrl(redirect: string | undefined): string {
     }
 }
 
-function magicLinkUrl(rawToken: string): string {
+// Absolute public URL of a route on this service (the proxy mounts it under
+// /auth). Redirects use these rather than relative paths, which would
+// resolve against the POST target's URL.
+function publicUrl(route: string): string {
     let base = config.authRedirect;
     if (!base.endsWith("/")) base = `${base}/`;
-    return `${base}auth/verify?token=${rawToken}`;
+    return `${base}auth/${route}`;
+}
+
+function magicLinkUrl(rawToken: string): string {
+    return `${publicUrl("verify")}?token=${rawToken}`;
 }
 
 function sessionExpiry(): Date {
     return new Date(Date.now() + config.login.defaultExpirationMinutes * 60_000);
+}
+
+function otpSetupQr(secret: string, account: string): string {
+    return new QRCode({
+        content: otpauthUri(secret, account, OTP_ISSUER),
+        width: 180,
+        height: 180,
+        padding: 0,
+        color: "#000000",
+        background: "#ffffff",
+        ecl: "M",
+        join: true,
+        container: "svg-viewbox",
+    }).svg();
+}
+
+function setOtpChallengeCookie(res: Response, jwt: string): void {
+    res.cookie(OTP_CHALLENGE_COOKIE, jwt, {
+        sameSite: "lax",
+        secure: !config.devMode,
+        httpOnly: true,
+        maxAge: 10 * 60_000,
+    });
+}
+
+// The OTP management pages need a live session; anonymous visitors go
+// through the login flow and return here.
+async function requireSession(
+    req: Request,
+    res: Response,
+): Promise<Authenticated | null> {
+    const auth = await authenticate(req);
+    if (!auth) {
+        res.redirect(
+            `${publicUrl("login")}?redirect_url=${encodeURIComponent(publicUrl("otp"))}`,
+        );
+        return null;
+    }
+    return auth;
+}
+
+// Six digits reads as an authenticator code; anything else is tried as a
+// recovery code.
+async function verifyOtpCode(
+    userId: string,
+    secret: string,
+    code: string,
+): Promise<boolean> {
+    if (/^\d{6}$/.test(code.replace(/\s/g, ""))) {
+        return verifyTotp(code, secret);
+    }
+    return consumeRecoveryCode(userId, code);
 }
 
 async function handleLogin(req: Request, res: Response): Promise<void> {
@@ -147,6 +240,24 @@ export function createApp(): express.Express {
         }
         // The stored redirect was validated at issuance; re-check anyway.
         const redirect = safeReturnUrl(consumed.redirectUrl ?? undefined);
+
+        // An OTP-enabled account is only half authenticated by the link:
+        // park the verified identity in a short-lived challenge cookie and
+        // ask for the code. New or OTP-less accounts log straight in.
+        const user =
+            (await getUser(consumed.email)) ??
+            (await getUserByEmail(consumed.email));
+        if (user) {
+            const otp = await getUserOtp(user.user_id);
+            if (otp?.enabled) {
+                setOtpChallengeCookie(
+                    res,
+                    await mintOtpChallenge(user.user_id, redirect),
+                );
+                sendPage(res, 200, otpChallengePage());
+                return;
+            }
+        }
         await performLogin(
             consumed.email,
             sessionExpiry(),
@@ -155,6 +266,133 @@ export function createApp(): express.Express {
             res,
             redirect,
         );
+    });
+
+    app.post("/otp/login", async (req, res) => {
+        const body = req.body as Record<string, unknown>;
+        const code = typeof body.code === "string" ? body.code : "";
+        const cookie = requestCookie(req, OTP_CHALLENGE_COOKIE);
+        const challenge = cookie ? await readOtpChallenge(cookie) : null;
+        if (!challenge) {
+            sendPage(res, 400, linkInvalidPage());
+            return;
+        }
+
+        if (!allow(`otp:${challenge.userId}`, OTP_ATTEMPT_LIMIT, RATE_WINDOW_MS)) {
+            sendPage(res, 429, otpChallengePage("Too many attempts. Wait a while, then request a new sign-in link."));
+            return;
+        }
+
+        // OTP switched off between the link and the code: no factor left to
+        // check, the verified link suffices.
+        const otp = await getUserOtp(challenge.userId);
+        const passed = !otp?.enabled
+            ? true
+            : await verifyOtpCode(challenge.userId, otp.secret, code);
+        if (!passed) {
+            sendPage(res, 400, otpChallengePage("That code didn't work. Codes expire quickly — try the current one."));
+            return;
+        }
+
+        res.clearCookie(OTP_CHALLENGE_COOKIE);
+        await establishSession(
+            challenge.userId,
+            sessionExpiry(),
+            req,
+            res,
+            safeReturnUrl(challenge.redirectUrl ?? undefined),
+        );
+    });
+
+    app.get("/otp", async (req, res) => {
+        const auth = await requireSession(req, res);
+        if (!auth) return;
+        const userId = auth.session.user.user_id;
+        const otp = await getUserOtp(userId);
+        if (otp?.enabled) {
+            sendPage(res, 200, otpStatusPage(true, await unusedRecoveryCodeCount(userId)));
+        } else {
+            sendPage(res, 200, otpStatusPage(false));
+        }
+    });
+
+    app.post("/otp/setup", async (req, res) => {
+        const auth = await requireSession(req, res);
+        if (!auth) return;
+        const userId = auth.session.user.user_id;
+        if ((await getUserOtp(userId))?.enabled) {
+            res.redirect(publicUrl("otp"));
+            return;
+        }
+        const secret = await createPendingOtp(userId);
+        const user = await getUserById(userId);
+        const account = user?.email_address ?? user?.username ?? "account";
+        sendPage(res, 200, otpSetupPage(otpSetupQr(secret, account), secret));
+    });
+
+    app.post("/otp/enable", async (req, res) => {
+        const auth = await requireSession(req, res);
+        if (!auth) return;
+        const userId = auth.session.user.user_id;
+        const body = req.body as Record<string, unknown>;
+        const code = typeof body.code === "string" ? body.code : "";
+
+        const otp = await getUserOtp(userId);
+        if (!otp || otp.enabled) {
+            res.redirect(publicUrl("otp"));
+            return;
+        }
+        if (
+            !allow(`otp:${userId}`, OTP_ATTEMPT_LIMIT, RATE_WINDOW_MS) ||
+            !verifyTotp(code, otp.secret)
+        ) {
+            const user = await getUserById(userId);
+            const account = user?.email_address ?? user?.username ?? "account";
+            sendPage(
+                res,
+                400,
+                otpSetupPage(
+                    otpSetupQr(otp.secret, account),
+                    otp.secret,
+                    "That code didn't match. Enter the current code from your app.",
+                ),
+            );
+            return;
+        }
+        await enableOtp(userId);
+        const codes = await replaceRecoveryCodes(userId);
+        sendPage(res, 200, otpRecoveryCodesPage(codes));
+    });
+
+    app.post("/otp/disable", async (req, res) => {
+        const auth = await requireSession(req, res);
+        if (!auth) return;
+        const userId = auth.session.user.user_id;
+        const body = req.body as Record<string, unknown>;
+        const code = typeof body.code === "string" ? body.code : "";
+
+        const otp = await getUserOtp(userId);
+        if (!otp?.enabled) {
+            res.redirect(publicUrl("otp"));
+            return;
+        }
+        if (
+            !allow(`otp:${userId}`, OTP_ATTEMPT_LIMIT, RATE_WINDOW_MS) ||
+            !(await verifyOtpCode(userId, otp.secret, code))
+        ) {
+            sendPage(
+                res,
+                400,
+                otpStatusPage(
+                    true,
+                    await unusedRecoveryCodeCount(userId),
+                    "That code didn't work, so two-factor stays on.",
+                ),
+            );
+            return;
+        }
+        await deleteOtp(userId);
+        res.redirect(publicUrl("otp"));
     });
 
     app.get("/me", async (req, res) => {

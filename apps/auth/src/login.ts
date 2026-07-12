@@ -29,6 +29,26 @@ function randomToken(length: number): string {
     return out;
 }
 
+// The session-establishment tail shared by every login path: session row,
+// session-JWT cookie, redirect. Callers have already authenticated the user
+// by whatever factor(s) apply.
+export async function establishSession(
+    userId: string,
+    expiry: Date,
+    req: Request,
+    res: Response,
+    redirectUrl?: string | null,
+): Promise<void> {
+    const authToken = randomToken(64);
+    await createSession(userId, authToken, new Date(), expiry);
+
+    const roles = await getRoles(userId);
+    const jwt = await mintSessionToken(authToken, roles);
+    setAuthCookie(res, jwt, expiry);
+
+    res.redirect(redirectUrl ?? popReturnUrl(req, res));
+}
+
 // redirectUrl (already validated by the caller) takes precedence over the
 // return-URL cookie: a magic link may be opened in a browser that never
 // carried the cookie.
@@ -67,12 +87,5 @@ export async function performLogin(
         if (email && user.username) await updateUserEmail(user.username, email);
     }
 
-    const authToken = randomToken(64);
-    await createSession(user.user_id, authToken, new Date(), expiry);
-
-    const roles = await getRoles(user.user_id);
-    const jwt = await mintSessionToken(authToken, roles);
-    setAuthCookie(res, jwt, expiry);
-
-    res.redirect(redirectUrl ?? popReturnUrl(req, res));
+    await establishSession(user.user_id, expiry, req, res, redirectUrl);
 }

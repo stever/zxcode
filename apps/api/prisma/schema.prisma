@@ -35,6 +35,8 @@ model user {
   following        user_follows[] @relation("follows_follower")
   sessions         session[]
   user_roles       user_role[]
+  otp              user_otp?
+  otp_recovery_codes otp_recovery_code[]
 }
 
 model project {
@@ -150,6 +152,31 @@ model login_token {
   consumed       DateTime? @db.Timestamptz(6)
 
   @@index([email], map: "idx_login_token_email")
+}
+
+// Authenticator-app (TOTP) second factor. One row per user: a row with
+// enabled NULL is a pending enrolment awaiting its first valid code; enabled
+// set means magic-link logins must pass the OTP challenge.
+model user_otp {
+  user_id String    @id @db.Uuid
+  secret  String    @db.VarChar(64)
+  created DateTime  @db.Timestamptz(6)
+  enabled DateTime? @db.Timestamptz(6)
+
+  user user @relation(fields: [user_id], references: [user_id], onUpdate: Cascade, onDelete: Cascade, map: "user_otp_user_id_fkey")
+}
+
+// Single-use OTP recovery codes, SHA-256 hashes only.
+model otp_recovery_code {
+  recovery_code_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @db.Uuid
+  code_hash        String    @unique(map: "otp_recovery_code_hash_key") @db.VarChar(64)
+  created          DateTime  @db.Timestamptz(6)
+  used             DateTime? @db.Timestamptz(6)
+
+  user user @relation(fields: [user_id], references: [user_id], onUpdate: Cascade, onDelete: Cascade, map: "otp_recovery_code_user_id_fkey")
+
+  @@index([user_id], map: "idx_otp_recovery_code_user")
 }
 
 model role {

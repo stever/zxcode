@@ -12,7 +12,7 @@ import { config } from "./config.js";
 import { readSessionCookie } from "./tokens.js";
 import { getSession, type Session } from "./sessions.js";
 
-function requestCookie(req: Request, name: string): string | undefined {
+export function requestCookie(req: Request, name: string): string | undefined {
     const header = req.headers.cookie;
     if (!header) return undefined;
     return parseCookies(header)[name];

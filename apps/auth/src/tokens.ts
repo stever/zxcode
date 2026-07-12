@@ -44,6 +44,50 @@ export async function mintHasuraToken(
         .sign(hasuraKey);
 }
 
+// The half-logged-in state between a verified magic link and a passed OTP
+// challenge: a short-lived JWT carried in its own cookie. Signed with the
+// session-token key but a distinct audience, so neither token verifies as
+// the other.
+
+const OTP_CHALLENGE_AUDIENCE = "otp-challenge";
+const OTP_CHALLENGE_SECONDS = 600;
+
+export interface OtpChallenge {
+    userId: string;
+    redirectUrl: string | null;
+}
+
+export async function mintOtpChallenge(
+    userId: string,
+    redirectUrl: string | null,
+): Promise<string> {
+    return new SignJWT({ props: { user: userId, redirect: redirectUrl } })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuer(config.jwt.sessionToken.issuer)
+        .setAudience(OTP_CHALLENGE_AUDIENCE)
+        .setExpirationTime(Math.floor(Date.now() / 1000) + OTP_CHALLENGE_SECONDS)
+        .sign(sessionKey);
+}
+
+export async function readOtpChallenge(jwt: string): Promise<OtpChallenge | null> {
+    try {
+        const { payload } = await jwtVerify(jwt, sessionKey, {
+            algorithms: ["HS256"],
+            audience: OTP_CHALLENGE_AUDIENCE,
+        });
+        const props = payload.props as
+            | { user?: unknown; redirect?: unknown }
+            | undefined;
+        if (typeof props?.user !== "string") return null;
+        return {
+            userId: props.user,
+            redirectUrl: typeof props.redirect === "string" ? props.redirect : null,
+        };
+    } catch {
+        return null;
+    }
+}
+
 // Extracts props.auth from the session cookie JWT. Returns null on any
 // verification failure (bad signature, expired) — the .NET reader threw a
 // 500 on an expired cookie JWT; a null here becomes the 401 the frontend

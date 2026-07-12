@@ -20,6 +20,20 @@ export async function getUser(username: string): Promise<User | null> {
     return data.user[0] ?? null;
 }
 
+export interface UserDetails extends User {
+    email_address: string | null;
+}
+
+export async function getUserById(userId: string): Promise<UserDetails | null> {
+    const data = await gql<{ user: UserDetails[] }>(
+        `query GetUserById($user_id: uuid!) {
+            user(where: {user_id: {_eq: $user_id}}) { user_id username email_address }
+        }`,
+        { user_id: userId },
+    );
+    return data.user[0] ?? null;
+}
+
 export async function getUserByEmail(email: string): Promise<User | null> {
     const data = await gql<{ user: User[] }>(
         `query GetUserByEmail($email_address: String!) {

@@ -1181,6 +1181,109 @@ describe("admin role (apps/auth documents)", () => {
         expect((deleted.delete_login_token as { affected_rows: number }).affected_rows).toBe(2);
     });
 
+    it("user_otp / otp_recovery_code documents (OTP enrolment and consumption)", async () => {
+        const now = new Date().toISOString();
+
+        await data(
+            `mutation CreateUserOtp($user_id: uuid!, $secret: String!, $created: timestamptz!) {
+                insert_user_otp_one(object: {user_id: $user_id, secret: $secret, created: $created}) { user_id }
+            }`,
+            { user_id: bob.id, secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", created: now },
+            { admin: true },
+        );
+
+        const pending = await data(
+            `query GetUserOtp($user_id: uuid!) {
+                user_otp(where: {user_id: {_eq: $user_id}}) { secret enabled }
+            }`,
+            { user_id: bob.id },
+            { admin: true },
+        );
+        const rows = pending.user_otp as Array<{ secret: string; enabled: string | null }>;
+        expect(rows[0]?.secret).toBe("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
+        expect(rows[0]?.enabled).toBeNull();
+
+        const enabled = await data(
+            `mutation EnableUserOtp($user_id: uuid!, $now: timestamptz!) {
+                update_user_otp(where: {user_id: {_eq: $user_id}, enabled: {_is_null: true}}, _set: {enabled: $now}) {
+                    affected_rows
+                }
+            }`,
+            { user_id: bob.id, now },
+            { admin: true },
+        );
+        expect((enabled.update_user_otp as { affected_rows: number }).affected_rows).toBe(1);
+
+        const codeHash = "d".repeat(64);
+        await data(
+            `mutation CreateOtpRecoveryCode($user_id: uuid!, $code_hash: String!, $created: timestamptz!) {
+                insert_otp_recovery_code_one(object: {user_id: $user_id, code_hash: $code_hash, created: $created}) {
+                    recovery_code_id
+                }
+            }`,
+            { user_id: bob.id, code_hash: codeHash, created: now },
+            { admin: true },
+        );
+
+        // Single-use consumption: affected_rows 1, then 0.
+        const consumeDoc = `mutation ConsumeOtpRecoveryCode($user_id: uuid!, $code_hash: String!, $now: timestamptz!) {
+            update_otp_recovery_code(where: {user_id: {_eq: $user_id}, code_hash: {_eq: $code_hash}, used: {_is_null: true}}, _set: {used: $now}) {
+                affected_rows
+            }
+        }`;
+        const consumed = await data(
+            consumeDoc,
+            { user_id: bob.id, code_hash: codeHash, now },
+            { admin: true },
+        );
+        expect((consumed.update_otp_recovery_code as { affected_rows: number }).affected_rows).toBe(1);
+        const again = await data(
+            consumeDoc,
+            { user_id: bob.id, code_hash: codeHash, now },
+            { admin: true },
+        );
+        expect((again.update_otp_recovery_code as { affected_rows: number }).affected_rows).toBe(0);
+
+        const unused = await data(
+            `query GetUnusedRecoveryCodes($user_id: uuid!) {
+                otp_recovery_code(where: {user_id: {_eq: $user_id}, used: {_is_null: true}}) { recovery_code_id }
+            }`,
+            { user_id: bob.id },
+            { admin: true },
+        );
+        expect((unused.otp_recovery_code as unknown[]).length).toBe(0);
+
+        const deletedCodes = await data(
+            `mutation DeleteOtpRecoveryCodes($user_id: uuid!) {
+                delete_otp_recovery_code(where: {user_id: {_eq: $user_id}}) { affected_rows }
+            }`,
+            { user_id: bob.id },
+            { admin: true },
+        );
+        expect((deletedCodes.delete_otp_recovery_code as { affected_rows: number }).affected_rows).toBe(1);
+
+        const deletedOtp = await data(
+            `mutation DeleteUserOtp($user_id: uuid!) {
+                delete_user_otp(where: {user_id: {_eq: $user_id}}) { affected_rows }
+            }`,
+            { user_id: bob.id },
+            { admin: true },
+        );
+        expect((deletedOtp.delete_user_otp as { affected_rows: number }).affected_rows).toBe(1);
+    });
+
+    it("OTP tables are admin-only", async () => {
+        const asPublic = await gql(`query { user_otp { user_id } }`);
+        expect(asPublic.errors?.[0]?.message).toMatch(/user_otp/);
+
+        const asUser = await gql(
+            `query { otp_recovery_code { recovery_code_id } }`,
+            {},
+            { token: bob.token },
+        );
+        expect(asUser.errors?.[0]?.message).toMatch(/otp_recovery_code/);
+    });
+
     it("login tokens are admin-only", async () => {
         const asPublic = await gql(`query { login_token { login_token_id } }`);
         expect(asPublic.errors?.[0]?.message).toMatch(/login_token/);

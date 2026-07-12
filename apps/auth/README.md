@@ -13,7 +13,12 @@ provider (Auth0 IdP); the session and token contracts are unchanged.
 | --- | --- |
 | `GET /` and `GET /login` | The email login form (or straight back when already authenticated). `?redirect_url=` must sit under `AuthRedirect`. Dev mode logs in `AUTH_DebugAutoLoginUsername` immediately with no email. |
 | `POST /login/email` | Takes `email` + `redirect_url` (form-urlencoded), stores a hashed single-use token, emails the magic link, renders a neutral "check your email" page. Rate-limited per email and per IP; the response never reveals whether the address has an account. |
-| `GET /verify?token=` | Consumes the token (single-use, expires after `MagicLinkExpiryMinutes`), provisions the user on first login, creates a session, sets the cookie, redirects. Invalid/expired/used tokens get a "request a new link" page. |
+| `GET /verify?token=` | Consumes the token (single-use, expires after `MagicLinkExpiryMinutes`), provisions the user on first login, creates a session, sets the cookie, redirects. Invalid/expired/used tokens get a "request a new link" page. OTP-enabled accounts get the code challenge instead of a session (see below). |
+| `GET /otp` | Two-factor management page (session required; anonymous visitors bounce through login). Shows on/off state, remaining recovery codes, and the turn-off form. Linked from the IDE's View menu. |
+| `POST /otp/setup` | Issues a pending TOTP secret and renders the QR / manual-entry enrolment page. |
+| `POST /otp/enable` | Verifies the first authenticator code, turns OTP on, and shows the 10 single-use recovery codes (once). |
+| `POST /otp/disable` | Turns OTP off given a current authenticator code or a recovery code. |
+| `POST /otp/login` | The login challenge: takes the code (authenticator or recovery), verifies it against the identity parked in the challenge cookie, then creates the session. |
 | `GET /me` | `{userId, roles}` for the session cookie, else 401. |
 | `GET /token` | `{token}`: a 15-minute HS256 JWT (audience `hasura`, the Hasura claims namespace) that apps/api verifies. 401 without a live session. |
 | `GET /logout` | Clears cookies, redirects to the validated `?redirect_url=` (or `AuthRedirect`). |
@@ -46,6 +51,24 @@ the SHA-256 hash, plus the validated redirect and an expiry (default 15
 minutes). Consumption is one atomic conditional update, so a token can be
 used exactly once, and requesting a new link invalidates the email's earlier
 pending ones. Emails are lowercased before lookup and storage.
+
+## Optional second factor (TOTP)
+
+A logged-in user can add an authenticator app at `/otp` (RFC 6238 TOTP:
+SHA-1, 6 digits, 30-second steps, one step of clock skew; implemented in
+`src/totp.ts` against the RFC test vectors, QR via qrcode-svg). The secret
+lives in the `user_otp` table — a row with `enabled` NULL is a pending
+enrolment that only activates on the first valid code. Enabling hands out
+10 recovery codes (`otp_recovery_code`, SHA-256 hashes, consumed by an
+atomic conditional update so each works once); a recovery code passes the
+login challenge and can turn OTP off.
+
+With OTP on, a verified magic link no longer creates a session directly:
+`/verify` parks the identity in a 10-minute signed `otp_challenge` cookie
+(session-token key, distinct audience) and asks for a code; `POST
+/otp/login` verifies it and establishes the session. Code attempts are
+rate-limited per user. Losing both the authenticator and the recovery codes
+means clearing the user's `user_otp` row by hand.
 
 ## First-login provisioning
 
@@ -91,9 +114,11 @@ Environment variables (`AUTH_` prefix, `__` nesting):
 ## Tests
 
 ```bash
-npm test                    # unit (handles, tokens, logintokens, ratelimit, mailer)
+npm test                    # unit (handles, tokens, logintokens, ratelimit,
+                            # mailer, totp RFC vectors)
 npm run test:integration    # needs the dev api on localhost:4000; covers the
                             # full magic-link flow (link captured via the
                             # mailer's dev hook), single-use/expiry/rate-limit
-                            # behaviour, and the session/token surface
+                            # behaviour, the session/token surface, and the
+                            # OTP enrolment/challenge/recovery/disable flow
 ```
