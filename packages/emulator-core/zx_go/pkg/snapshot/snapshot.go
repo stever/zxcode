@@ -73,7 +73,12 @@ func New() *Snapshot {
 func DetectFormat(path string) SnapshotFormat {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
-	case ".sna":
+	case ".sna", ".snx":
+		// .snx is the CSpect-era "SNA for the Next" extension: the
+		// container is a standard .sna (every .snx in the wild,
+		// including the whole MrKWatkins/ZXSpectrumNextTests suite,
+		// is a 49179-byte 48K SNA) — the extension just signals that
+		// the program expects a Spectrum Next machine.
 		return FormatSNA
 	case ".z80":
 		return FormatZ80

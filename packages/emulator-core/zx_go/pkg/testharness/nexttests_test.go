@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conorarmstrong/zx_go/pkg/next/install/installtest"
 	"github.com/conorarmstrong/zx_go/pkg/roms"
 )
 
@@ -148,4 +149,72 @@ func TestNexttestsDIHalt(t *testing.T) {
 	if got := h.ULA().BorderColour; got != green {
 		t.Fatalf("border = %d after further frames, want %d (green)", got, green)
 	}
+}
+
+// runNexttestsSNX loads one of the suite's Next-side .snx snapshots
+// (a standard 48K SNA whose extension signals "run on a Next") onto
+// the harness Next machine.
+func runNexttestsSNX(t *testing.T, name string, frames int) *Harness {
+	t.Helper()
+	installtest.RedirectConfig(t)
+	installFakeDistroForLoad(t)
+	h, err := New(roms.ModelNext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(h.CloseFiles)
+	if err := h.LoadSnapshot(filepath.Join("testdata", "nexttests", name)); err != nil {
+		t.Fatal(err)
+	}
+	h.RunFrames(frames)
+	return h
+}
+
+// driveZ80NSuite runs one of the interactive Z80N instruction testers:
+// key 2 enables the 28 MHz turbo (exercising NR$07 en route), key 5
+// starts the run. Every instruction row must end OK and the border
+// must go green; a red border or an ERR row is a real instruction bug
+// (this caught LDDX/LDDRX direction and LDWS flags on first run).
+func driveZ80NSuite(t *testing.T, snx string, rows int) {
+	t.Helper()
+	h := runNexttestsSNX(t, snx, 60)
+	h.kbd.PressMatrixKey(3, 0x02, true) // 2 = 28 MHz turbo
+	h.RunFrames(10)
+	h.kbd.PressMatrixKey(3, 0x02, false)
+	h.RunFrames(5)
+	h.kbd.PressMatrixKey(3, 0x10, true) // 5 = Go
+	h.RunFrames(10)
+	h.kbd.PressMatrixKey(3, 0x10, false)
+	h.RunFrames(1500)
+	text := h.ScreenText()
+	okRows := 0
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimRight(line, " ")
+		if strings.HasSuffix(trimmed, "OK") || strings.HasSuffix(trimmed, "OK1") {
+			okRows++
+		}
+		if strings.Contains(line, "ERR") {
+			t.Errorf("instruction failed: %q", strings.TrimSpace(line))
+		}
+	}
+	if okRows < rows {
+		t.Errorf("only %d of %d instruction rows report OK:\n%s", okRows, rows, text)
+	}
+	const green = 4
+	if got := h.ULA().BorderColour; got != green {
+		t.Errorf("border = %d, want %d (green = suite pass signal)", got, green)
+	}
+}
+
+// TestNexttestsZ80N — the suite's Z80N instruction tester: all 23
+// extended instructions across their operand ranges, verdicts pinned
+// to the real-hardware reference photo (release/!Z80N.jpg upstream).
+func TestNexttestsZ80N(t *testing.T) {
+	driveZ80NSuite(t, "Z80N.snx", 23)
+}
+
+// TestNexttestsZ80Nc2 — the core-2 additions: the barrel shifts
+// (BRLC/BSLA/BSRA/BSRF/BSRL) and JP (C).
+func TestNexttestsZ80Nc2(t *testing.T) {
+	driveZ80NSuite(t, "Z80Nc2.snx", 6)
 }

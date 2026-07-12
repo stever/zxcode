@@ -106,11 +106,13 @@ func (c *CPU) executeZ80NEDInstruction(opcode byte) bool {
 	// idiom on the Next — pixels matching the colour key are
 	// treated as transparent.
 	//
-	// Note the directions: LDIX advances DE forward; LDDX advances
-	// DE backward but still advances HL forward (the "D" in LDDX
-	// names the destination-decrement only, not source-decrement
-	// like classic LDD). LDWS is a pure word-step helper for
-	// bitmap-screen advance — INC L, INC D (8-bit each, so within
+	// Note the directions: the DESTINATION (DE) advances forward in
+	// the whole X family — the "D" in LDDX decrements the SOURCE
+	// (HL--, DE++), mirroring how classic LDD walks the source
+	// backwards (pinned by the ZXSpectrumNextTests Z80N suite; the
+	// original reading here had it inverted). LDWS is a pure
+	// word-step helper for bitmap-screen advance — INC L, INC D
+	// (8-bit each, so within
 	// a 256-byte row/page).
 	//
 	// Flag effects follow classic LDI/LDD for the non-repeating
@@ -199,8 +201,14 @@ func (c *CPU) executeZ80NEDInstruction(opcode byte) bool {
 		c.pixelad()
 		c.tstates += 8
 		return true
-	case 0x98: // JP (C)    PC = (PC & 0xC000) | (BC & 0x3FFF)
-		c.PC = (c.PC & 0xC000) | (c.bc() & 0x3FFF)
+	case 0x98: // JP (C)    PC = (PC & 0xC000) | (IN(BC) << 6)
+		// An I/O jump: the CPU READS the data bus through port BC and
+		// lands on a 64-byte boundary within the current 16K alignment
+		// (wiki.specnext.dev; pinned by ZXSpectrumNextTests Z80Nc2 —
+		// the original implementation jumped to BC's value instead).
+		c.mem.ContendPort(c.bc())
+		val, _ := c.ula.ReadPort(c.bc())
+		c.PC = (c.PC & 0xC000) | (uint16(val) << 6)
 		c.tstates += 13
 		return true
 	}
@@ -264,8 +272,8 @@ func (c *CPU) lddx() {
 	if val != c.A {
 		c.mem.Write(c.de(), val)
 	}
-	c.setHL(c.hl() + 1)
-	c.setDE(c.de() - 1)
+	c.setHL(c.hl() - 1)
+	c.setDE(c.de() + 1)
 	c.setBC(c.bc() - 1)
 	c.F &^= FLAG_N | FLAG_H | FLAG_PV
 	if c.bc() != 0 {
@@ -288,8 +296,10 @@ func (c *CPU) ldws() {
 	val := c.mem.Read(c.hl())
 	c.mem.Write(c.de(), val)
 	c.L++
-	c.D++
-	c.F = (c.F & FLAG_C) | c.sz53Table[val]
+	// Flags come from the INC D half-step (S/Z/H/PV/F53 of the
+	// incremented D, N cleared) — not from the byte copied. Pinned by
+	// the ZXSpectrumNextTests Z80N suite.
+	c.D = c.inc(c.D)
 }
 
 // ldpirx copies a pattern byte to (DE). The source address is

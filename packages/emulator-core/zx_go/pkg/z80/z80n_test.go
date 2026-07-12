@@ -449,12 +449,14 @@ func TestZ80N_LDDX(t *testing.T) {
 	if mem.Read(0x9010) != 0x55 {
 		t.Errorf("LDDX: dest = %#x, want 0x55", mem.Read(0x9010))
 	}
-	// HL advances forward; DE goes backward.
-	if cpu.hl() != 0x8001 {
-		t.Errorf("LDDX: HL = %#x, want 0x8001 (HL still increments)", cpu.hl())
+	// HL walks the source backwards; DE (destination) still advances
+	// forward, like the whole X family (wiki.specnext.dev Extended
+	// Z80 instruction set; pinned by ZXSpectrumNextTests Z80N).
+	if cpu.hl() != 0x7FFF {
+		t.Errorf("LDDX: HL = %#x, want 0x7FFF (HL decrements)", cpu.hl())
 	}
-	if cpu.de() != 0x900F {
-		t.Errorf("LDDX: DE = %#x, want 0x900F (DE decrements)", cpu.de())
+	if cpu.de() != 0x9011 {
+		t.Errorf("LDDX: DE = %#x, want 0x9011 (DE increments)", cpu.de())
 	}
 	if cpu.bc() != 0x0001 {
 		t.Errorf("LDDX: BC = %#x, want 0x0001", cpu.bc())
@@ -650,21 +652,25 @@ func TestZ80N_NEXTREGTolerantOfNilSink(t *testing.T) {
 }
 
 func TestZ80N_JPC(t *testing.T) {
+	// JP (C) is an I/O jump: PC = (PC & $C000) | (IN(BC) << 6)
+	// (wiki.specnext.dev; pinned by ZXSpectrumNextTests Z80Nc2). The
+	// test ULA returns 0xFF for every port read, so the landing
+	// address is the last 64-byte slot of the current 16K alignment.
 	cpu, _ := createZ80NTestCPU()
-	cpu.PC = 0x8123   // top two bits 10
-	cpu.setBC(0x1234) // bottom 14 bits = 0x1234
+	cpu.PC = 0x8123 // top two bits 10
+	cpu.setBC(0x1234)
 	_ = cpu.executeZ80NEDInstruction(0x98)
-	// (0x8123 & 0xC000) | (0x1234 & 0x3FFF) = 0x8000 | 0x1234 = 0x9234
-	if cpu.PC != 0x9234 {
-		t.Errorf("JP (C): PC = %#x, want 0x9234", cpu.PC)
+	// (0x8123 & 0xC000) | (0xFF << 6) = 0x8000 | 0x3FC0 = 0xBFC0
+	if cpu.PC != 0xBFC0 {
+		t.Errorf("JP (C): PC = %#x, want 0xBFC0", cpu.PC)
 	}
 
-	// Verify high bits are preserved across boundaries.
+	// Verify the 16K alignment is preserved across boundaries.
 	cpu.PC = 0x4567
-	cpu.setBC(0xC123) // BC&0x3FFF = 0x0123
+	cpu.setBC(0xC123)
 	_ = cpu.executeZ80NEDInstruction(0x98)
-	if cpu.PC != 0x4123 {
-		t.Errorf("JP (C) mask: PC = %#x, want 0x4123", cpu.PC)
+	if cpu.PC != 0x7FC0 {
+		t.Errorf("JP (C) mask: PC = %#x, want 0x7FC0", cpu.PC)
 	}
 }
 
@@ -804,39 +810,44 @@ func TestZ80N_TStateCostsTable(t *testing.T) {
 // =============================================================================
 
 func TestZ80N_LDWS_Flags(t *testing.T) {
-	// LDWS: S/Z/F3/F5 from src; H, P/V, N cleared; C preserved.
-	t.Run("zero source sets Z, clears S", func(t *testing.T) {
+	// LDWS: "flags are identical to what the INC D instruction would
+	// produce" (wiki.specnext.dev) — NOT derived from the copied byte.
+	// Pinned by ZXSpectrumNextTests Z80N.
+	t.Run("flags follow INC D", func(t *testing.T) {
 		cpu, mem := createZ80NTestCPU()
 		cpu.setHL(0x8000)
-		cpu.setDE(0x9000)
-		mem.Write(0x8000, 0x00)
-		cpu.F = FLAG_C | FLAG_N | FLAG_H | FLAG_PV | FLAG_S
+		cpu.setDE(0xFF00) // D = 0xFF -> INC D wraps to 0x00: Z and H set
+		mem.Write(0x8000, 0x80)
+		cpu.F = FLAG_C | FLAG_N | FLAG_PV | FLAG_S
 		_ = cpu.executeZ80NEDInstruction(0xA5)
 		if cpu.F&FLAG_Z == 0 {
-			t.Errorf("LDWS src=0: Z should be set")
+			t.Errorf("LDWS with D=0xFF: Z should be set (INC D wrapped to 0)")
 		}
-		if cpu.F&FLAG_S != 0 {
-			t.Errorf("LDWS src=0: S should be clear")
+		if cpu.F&FLAG_H == 0 {
+			t.Errorf("LDWS with D=0xFF: H should be set (carry from bit 3)")
 		}
-		if cpu.F&(FLAG_H|FLAG_PV|FLAG_N) != 0 {
-			t.Errorf("LDWS: H, P/V, N should be cleared (F=%#x)", cpu.F)
+		if cpu.F&(FLAG_S|FLAG_PV|FLAG_N) != 0 {
+			t.Errorf("LDWS: S, P/V, N should be clear (F=%#x)", cpu.F)
 		}
 		if cpu.F&FLAG_C == 0 {
 			t.Errorf("LDWS: C should be preserved")
 		}
 	})
-	t.Run("negative source sets S, clears Z", func(t *testing.T) {
+	t.Run("INC D overflow sets S and PV", func(t *testing.T) {
 		cpu, mem := createZ80NTestCPU()
 		cpu.setHL(0x8000)
-		cpu.setDE(0x9000)
-		mem.Write(0x8000, 0x80)
+		cpu.setDE(0x7F00) // D = 0x7F -> INC D = 0x80: S and PV set
+		mem.Write(0x8000, 0x00)
 		cpu.F = 0 // C clear
 		_ = cpu.executeZ80NEDInstruction(0xA5)
 		if cpu.F&FLAG_S == 0 {
-			t.Errorf("LDWS src=0x80: S should be set")
+			t.Errorf("LDWS with D=0x7F: S should be set (INC D -> 0x80)")
+		}
+		if cpu.F&FLAG_PV == 0 {
+			t.Errorf("LDWS with D=0x7F: PV should be set (signed overflow)")
 		}
 		if cpu.F&FLAG_Z != 0 {
-			t.Errorf("LDWS src=0x80: Z should be clear")
+			t.Errorf("LDWS with D=0x7F: Z should be clear")
 		}
 		if cpu.F&FLAG_C != 0 {
 			t.Errorf("LDWS: C cleared at start should stay cleared")
@@ -900,9 +911,10 @@ func TestZ80N_JPC_HighBitsAtBoundary(t *testing.T) {
 	cpu.PC = 0x4000 // just past a 16K boundary
 	cpu.setBC(0x0010)
 	_ = cpu.executeZ80NEDInstruction(0x98)
-	// PC at execution: 0x4000 -> high bits 01 -> (0x4000 & 0xC000) | (0x10 & 0x3FFF) = 0x4010
-	if cpu.PC != 0x4010 {
-		t.Errorf("JP (C) at 16K boundary: PC = %#x, want 0x4010", cpu.PC)
+	// PC at execution: 0x4000 -> high bits 01; the test ULA reads 0xFF
+	// -> (0x4000 & 0xC000) | (0xFF << 6) = 0x7FC0
+	if cpu.PC != 0x7FC0 {
+		t.Errorf("JP (C) at 16K boundary: PC = %#x, want 0x7FC0", cpu.PC)
 	}
 }
 

@@ -316,7 +316,7 @@
       "roadmap": "ZX Play #139",
       "link": "https://github.com/MrKWatkins/ZXSpectrumNextTests",
       "detail": "nexttests.html",
-      "notes": "Community acceptance suite with real-hardware reference screenshots. 35 tests in 8 groups — see the breakdown page. Classic (.sna) tests are live; the Next-side tests ship as .snx snapshots zx_go cannot load yet."
+      "notes": "Community acceptance suite with real-hardware reference screenshots. 35 tests in 8 groups — see the breakdown page. The .snx blocker is resolved (.snx = 48K SNA); classic tests plus the Z80N groups are live, the remaining Next-side tests are being wired group by group."
     },
     {
       "id": "ext-327tests",
@@ -442,12 +442,24 @@
             {
               "name": "Z80N",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80N",
-              "notes": "Extended Z80N instruction behaviour"
+              "notes": "All 23 Z80N instructions OK with green border (matches the real-hardware photo). First run caught LDDX/LDDRX direction and LDWS flags — fixed in pkg/z80",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80N"
+                ]
+              }
             },
             {
               "name": "Z80Nc2",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80Nc2",
-              "notes": "Z80N, core 2 variant"
+              "notes": "Core-2 additions (barrel shifts, JP (C)) all OK; caught the JP (C) I/O-jump semantics bug — fixed in pkg/z80",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80Nc2"
+                ]
+              }
             },
             {
               "name": "NextReg_defaults",
