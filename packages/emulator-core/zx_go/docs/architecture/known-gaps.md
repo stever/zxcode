@@ -107,3 +107,7 @@ When you close a gap listed here, delete its row and note the fix in
 `ROADMAP.md`. When you accept a new simplification, add a row with a
 status and a source. Keeping this file honest is part of the definition
 of done (see [README.md](README.md)).
+
+Note: this file's tables render verbatim onto the PUBLIC conformance
+dashboard (`conformance/`, published to GitHub Pages), so it stays the
+single source for gap rows. Write rows accordingly.

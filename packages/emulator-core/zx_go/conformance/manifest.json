@@ -1,0 +1,211 @@
+{
+  "comment": "Conformance manifest: the machine-readable source for the published conformance dashboard. Schema and maintenance rules: conformance/README.md. Entries with a runner get their live status from the go-test JSON stream; entries without one use the explicit status field.",
+  "entries": [
+    {
+      "id": "cpu-zexdoc",
+      "title": "zexdoc — documented Z80 instruction exerciser",
+      "area": "CPU (Z80)",
+      "kind": "internal",
+      "oracle": "Cringle zexdoc",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/z80", "tests": ["TestZexdoc"] }
+    },
+    {
+      "id": "cpu-zexall",
+      "title": "zexall — undocumented-flags Z80 instruction exerciser",
+      "area": "CPU (Z80)",
+      "kind": "internal",
+      "oracle": "Cringle zexall",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/z80", "tests": ["TestZexall"] }
+    },
+    {
+      "id": "cpu-z80n-gate",
+      "title": "Z80N gate-level golden (GHDL simulation of the FPGA t80n core)",
+      "area": "CPU (Z80)",
+      "kind": "internal",
+      "oracle": "t80n VHDL via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/z80", "tests": ["TestZ80NMatchesCoreGolden"] }
+    },
+    {
+      "id": "golden-ay",
+      "title": "AY / YM2149 FPGA golden",
+      "area": "Audio",
+      "kind": "internal",
+      "oracle": "audio/ym2149.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/ay", "tests": ["TestYM2149MatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-dac",
+      "title": "DAC / SounDrive FPGA golden",
+      "area": "Audio",
+      "kind": "internal",
+      "oracle": "DAC VHDL via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/dac", "tests": ["TestSounDriveMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-paging",
+      "title": "Memory paging FPGA golden",
+      "area": "Memory / paging",
+      "kind": "internal",
+      "oracle": "zxnext.vhd memory mux via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/memory", "tests": ["TestPagingMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-divmmc",
+      "title": "divMMC automap FPGA golden",
+      "area": "Storage",
+      "kind": "internal",
+      "oracle": "divmmc.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/divmmc", "tests": ["TestDivMMCMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-sdcard",
+      "title": "SD SPI master FPGA golden",
+      "area": "Storage",
+      "kind": "internal",
+      "oracle": "SPI VHDL via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/sdcard", "tests": ["TestSPIMasterMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-layer2",
+      "title": "Layer 2 address + pixel FPGA goldens",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "layer2.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/layer2", "tests": ["TestLayer2AddressMatchesFPGAGolden", "TestLayer2PixelMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-tilemap",
+      "title": "Tilemap render + below/text status FPGA goldens",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "tilemap.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/tilemap", "tests": ["TestTilemapRenderMatchesFPGAGolden", "TestTilemapBelowTextStatusFPGAGolden"] }
+    },
+    {
+      "id": "golden-sprite",
+      "title": "Sprite render FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "sprites.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/sprite", "tests": ["TestSpriteRenderMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-lores",
+      "title": "LoRes / Radastan FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "lores.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/lores", "tests": ["TestLoResMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-palette",
+      "title": "Palette FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "zxnext.vhd palette via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/palette", "tests": ["TestPaletteMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-mixer",
+      "title": "Video mixer (compositor) FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "zxnext.vhd mixer via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/compositor", "tests": ["TestMixerMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-copper",
+      "title": "Copper FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "copper.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/copper", "tests": ["TestCopperMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-ctc",
+      "title": "CTC channel FPGA golden",
+      "area": "Interrupts / timing",
+      "kind": "internal",
+      "oracle": "ctc_chan.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/ctc", "tests": ["TestCTCMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-im2",
+      "title": "IM2 daisy-chain FPGA golden",
+      "area": "Interrupts / timing",
+      "kind": "internal",
+      "oracle": "peripherals.vhd / im2_*.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next", "tests": ["TestIM2DaisyChainMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-multiface",
+      "title": "Multiface FPGA golden",
+      "area": "Peripherals",
+      "kind": "internal",
+      "oracle": "multiface.vhd via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/multiface", "tests": ["TestMultifaceMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-uart",
+      "title": "UART FPGA golden",
+      "area": "Peripherals",
+      "kind": "internal",
+      "oracle": "UART VHDL via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/uart", "tests": ["TestUARTMatchesFPGAGolden"] }
+    },
+    {
+      "id": "golden-keyboard",
+      "title": "Keyboard / keymap FPGA golden",
+      "area": "Peripherals",
+      "kind": "internal",
+      "oracle": "keymap VHDL via GHDL",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/keyboard", "tests": ["TestKeyboardMatchesFPGAGolden"] }
+    },
+    {
+      "id": "boot-nextzxos",
+      "title": "NextZXOS cold boot end-to-end (skips when licensed ROMs are not staged)",
+      "area": "Boot",
+      "kind": "internal",
+      "oracle": "Real NextZXOS through the FPGA-bootrom chain",
+      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNextRealROMBoot"] }
+    },
+    {
+      "id": "matrix-vhdl",
+      "title": "VHDL conformance matrix (per-axis enumeration of the FPGA surface)",
+      "area": "Meta",
+      "kind": "manual",
+      "status": "partial",
+      "link": "https://github.com/stever/zxcode/blob/main/packages/emulator-core/zx_go/VHDL_CONFORMANCE.md",
+      "notes": "Hand-maintained matrix; open rows are listed in the document and mirrored in known-gaps.md."
+    },
+    {
+      "id": "ext-z80test",
+      "title": "raxoft/z80test — z80full / z80doc / z80flags / z80ccf / z80memptr",
+      "area": "CPU (Z80)",
+      "kind": "external",
+      "status": "planned",
+      "roadmap": "ZX Play #137",
+      "link": "https://github.com/raxoft/z80test",
+      "notes": "Stricter than zexall (SCF/CCF X/Y flags, MEMPTR). To run headlessly on the 48K via tape load."
+    },
+    {
+      "id": "ext-nexttests",
+      "title": "MrKWatkins/ZXSpectrumNextTests — Z80N, sprites, Layer 2, mixing, Copper, DMA, ULA, interrupts, timing",
+      "area": "Next acceptance",
+      "kind": "external",
+      "status": "planned",
+      "roadmap": "ZX Play #137",
+      "link": "https://github.com/MrKWatkins/ZXSpectrumNextTests",
+      "notes": "Community acceptance suite with real-hardware reference screenshots. To run via the headless harness with OCR / screenshot comparison."
+    },
+    {
+      "id": "ext-327tests",
+      "title": "Threetwosevensixseven/ZXSpectrumNextTests — MMU paging, DMA copy, layer order",
+      "area": "Next acceptance",
+      "kind": "external",
+      "status": "planned",
+      "roadmap": "ZX Play #137",
+      "link": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests"
+    }
+  ]
+}

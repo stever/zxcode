@@ -122,9 +122,12 @@ agent — as part of the change, not after it; the update map (which code
 area touches which doc + diagram) is in `docs/architecture/README.md`.
 
 The initiative itself is tracked in Wolfpack (ZX Play roadmap item
-**#r2**, with linked work items #134-#136 for the open follow-ups:
+**#r2**, with linked work items #134-#137 for the open follow-ups:
 the .NEX Copper doc/implementation inconsistency, the per-subsystem
-doc.go sweep, and a doc-drift check). This section records the in-repo
+doc.go sweep, a doc-drift check, and integrating the external test
+suites — z80test and the ZXSpectrumNextTests repos — into the headless
+harness). The initiative's notes also hold the research on testing
+against documented Next features. This section records the in-repo
 state only.
 
 - [x] Initial documentation set: 7 documents + 7 Draw.io diagrams

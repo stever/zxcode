@@ -56,6 +56,10 @@ Suggested reading order for a first session on this codebase:
 
 Related documents outside this folder:
 
+- `../../conformance/` — the conformance dashboard: manifest + generator
+  publishing live pass/gap status to GitHub Pages
+  (https://stever.github.io/zxcode/). Its inputs are the manifest, the
+  real test run, and [known-gaps.md](known-gaps.md).
 - `../../README.md` — user-facing project README.
 - `../../ROADMAP.md` — current state, backlog, hardware-feature catalogue,
   do-not-regress invariants.
@@ -102,6 +106,9 @@ These rules apply to everyone who changes the emulator, human or agent.
   - closing a known gap, or accepting a new simplification →
     [known-gaps.md](known-gaps.md), and `ROADMAP.md` if it is catalogued
     there
+  - renaming or adding a conformance/golden test, or integrating an
+    external test suite → `conformance/manifest.json` (the published
+    dashboard resolves statuses by exact package + test name)
   - a new chip or a new emulation style → [chips.md](chips.md) and
     [emulation-patterns.md](emulation-patterns.md)
 - Line numbers drift. Prefer symbol names (types, functions, NextReg

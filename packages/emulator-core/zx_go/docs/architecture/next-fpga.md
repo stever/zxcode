@@ -34,6 +34,20 @@ project replaces spot-checking with enumeration:
 Source comments cite exact VHDL lines. When you change any of this code,
 carry the citation with it.
 
+External validation material (not yet integrated; tracked on the ZX Play
+roadmap initiative for this documentation):
+
+- Specifications: the official FPGA core source on GitLab
+  (SpecNext/ZX_Spectrum_Next_FPGA) and wiki.specnext.dev (NextReg
+  registry, the Z80N extended instruction set, the .NEX V1.2 format).
+- Test suites: MrKWatkins/ZXSpectrumNextTests (.nex/.tap programs for
+  Z80N, sprites, Layer 2, mixing, Copper, DMA, ULA, interrupts, timing,
+  with real-hardware reference screenshots),
+  raxoft/z80test (stricter classic-CPU suite than zexall), and
+  Threetwosevensixseven/ZXSpectrumNextTests (paging/DMA/layer order).
+  All map onto the headless harness (screen OCR or screenshot
+  comparison).
+
 ## The NextReg file (`pkg/next/nextregs`)
 
 `Dispatcher` models the register file behind ports $243B (select) and
