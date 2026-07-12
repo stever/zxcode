@@ -1,4 +1,5 @@
 import {
+    PLUS3DOS_HEADER_SIZE,
     SPRITE_BYTES,
     TRANSPARENT_INDEX,
     base64ByteLength,
@@ -8,8 +9,35 @@ import {
     defaultSpritePalette,
     isEditableSpriteContent,
     isSpriteFileName,
+    joinSpriteFile,
+    splitSpriteFile,
     spritePatternCount,
 } from "./spr";
+
+// A minimal valid +3DOS CODE header for the given data length.
+function plus3DosFile(dataLength, fill = 0) {
+    const bytes = new Uint8Array(PLUS3DOS_HEADER_SIZE + dataLength).fill(fill);
+    const sig = "PLUS3DOS\x1a";
+    for (let i = 0; i < sig.length; i++) {
+        bytes[i] = sig.charCodeAt(i);
+    }
+    bytes[9] = 1; // issue
+    bytes[10] = 0; // version
+    const total = bytes.length;
+    bytes[11] = total & 0xff;
+    bytes[12] = (total >> 8) & 0xff;
+    bytes[13] = 0;
+    bytes[14] = 0;
+    bytes[15] = 3; // CODE
+    bytes[16] = dataLength & 0xff;
+    bytes[17] = (dataLength >> 8) & 0xff;
+    let sum = 0;
+    for (let i = 0; i < PLUS3DOS_HEADER_SIZE - 1; i++) {
+        sum += bytes[i];
+    }
+    bytes[PLUS3DOS_HEADER_SIZE - 1] = sum & 0xff;
+    return bytes;
+}
 
 describe("isSpriteFileName", () => {
     test("matches the .spr extension case-insensitively", () => {
@@ -63,6 +91,63 @@ describe("sprite content shape", () => {
         const bytes = base64ToBytes(blankSpriteBase64());
         expect(bytes.length).toBe(SPRITE_BYTES);
         expect(bytes.every((b) => b === TRANSPARENT_INDEX)).toBe(true);
+    });
+});
+
+describe("+3DOS headers", () => {
+    test("a headered file with whole patterns is editable", () => {
+        expect(isEditableSpriteContent(bytesToBase64(plus3DosFile(256)))).toBe(true);
+        expect(isEditableSpriteContent(bytesToBase64(plus3DosFile(1024)))).toBe(true);
+    });
+
+    test("header-sized junk without the signature is not", () => {
+        const junk = new Uint8Array(PLUS3DOS_HEADER_SIZE + 256).fill(7);
+        expect(isEditableSpriteContent(bytesToBase64(junk))).toBe(false);
+    });
+
+    test("a headered file with partial patterns is not", () => {
+        expect(isEditableSpriteContent(bytesToBase64(plus3DosFile(100)))).toBe(false);
+    });
+
+    test("split separates header from pattern data", () => {
+        const file = plus3DosFile(512, 5);
+        const { header, data } = splitSpriteFile(file);
+        expect(header.length).toBe(PLUS3DOS_HEADER_SIZE);
+        expect(data.length).toBe(512);
+        expect(data.every((b) => b === 5)).toBe(true);
+    });
+
+    test("split leaves bare files alone", () => {
+        const bare = new Uint8Array(256).fill(9);
+        const { header, data } = splitSpriteFile(bare);
+        expect(header).toBe(null);
+        expect(data).toEqual(bare);
+    });
+
+    test("join round-trips a file unchanged", () => {
+        const file = plus3DosFile(512, 5);
+        const { header, data } = splitSpriteFile(file);
+        expect(joinSpriteFile(header, data)).toEqual(file);
+    });
+
+    test("join refreshes lengths and checksum when patterns grow", () => {
+        const { header } = splitSpriteFile(plus3DosFile(256));
+        const grown = joinSpriteFile(header, new Uint8Array(512));
+        expect(grown.length).toBe(PLUS3DOS_HEADER_SIZE + 512);
+        // Total-length dword and CODE data length word.
+        expect(grown[11] | (grown[12] << 8)).toBe(PLUS3DOS_HEADER_SIZE + 512);
+        expect(grown[16] | (grown[17] << 8)).toBe(512);
+        // Checksum re-covers the updated fields.
+        let sum = 0;
+        for (let i = 0; i < PLUS3DOS_HEADER_SIZE - 1; i++) {
+            sum += grown[i];
+        }
+        expect(grown[PLUS3DOS_HEADER_SIZE - 1]).toBe(sum & 0xff);
+    });
+
+    test("join without a header returns the data as-is", () => {
+        const data = new Uint8Array(256).fill(3);
+        expect(joinSpriteFile(null, data)).toEqual(data);
     });
 });
 

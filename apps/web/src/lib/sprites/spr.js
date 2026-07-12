@@ -11,6 +11,16 @@ export const SPRITE_SIZE = 16;
 export const SPRITE_BYTES = SPRITE_SIZE * SPRITE_SIZE;
 export const TRANSPARENT_INDEX = 0xe3;
 
+// Files saved from NextZXOS (SAVE "x.spr" CODE / BANK) carry a 128-byte
+// +3DOS header before the pattern data: "PLUS3DOS", $1A, issue/version,
+// a total-length dword at 11, the BASIC header data (CODE type + data
+// length) at 15, and a mod-256 checksum of bytes 0..126 at 127. The editor
+// keeps the header byte for byte and rewrites its length fields and
+// checksum when the pattern count changes, so a round-tripped file still
+// LOADs on the machine.
+export const PLUS3DOS_HEADER_SIZE = 128;
+const PLUS3DOS_SIGNATURE = "PLUS3DOS\x1a";
+
 export function isSpriteFileName(name) {
   return /\.spr$/i.test(name || "");
 }
@@ -41,12 +51,71 @@ export function base64ByteLength(content) {
   return Math.floor((b64.length * 3) / 4) - padding;
 }
 
+function bytesHaveSignature(bytes) {
+  if (bytes.length < PLUS3DOS_SIGNATURE.length) return false;
+  for (let i = 0; i < PLUS3DOS_SIGNATURE.length; i++) {
+    if (bytes[i] !== PLUS3DOS_SIGNATURE.charCodeAt(i)) return false;
+  }
+  return true;
+}
+
+function bytesHavePlus3DosHeader(bytes) {
+  return bytes.length >= PLUS3DOS_HEADER_SIZE && bytesHaveSignature(bytes);
+}
+
+// Cheap +3DOS sniff on the stored base64: only files sized header + whole
+// patterns are candidates (their size mod 256 is exactly 128), and the
+// signature fits in the first 18 bytes, so decoding a 24-char prefix
+// suffices. This runs per render, so it must not decode the whole file.
+function contentHasPlus3DosHeader(content) {
+  const size = base64ByteLength(content);
+  if (size <= PLUS3DOS_HEADER_SIZE || size % SPRITE_BYTES !== PLUS3DOS_HEADER_SIZE) {
+    return false;
+  }
+  return bytesHaveSignature(base64ToBytes((content || "").slice(0, 24)));
+}
+
 // The editor opens a .spr only when it holds a whole number of 8-bit
-// patterns; anything else (empty, truncated, or an odd 4-bit layout) keeps
-// the plain binary-asset panel.
+// patterns — bare, or behind a +3DOS header; anything else (empty,
+// truncated, or an odd 4-bit layout) keeps the plain binary-asset panel.
 export function isEditableSpriteContent(content) {
   const size = base64ByteLength(content);
-  return size > 0 && size % SPRITE_BYTES === 0;
+  if (size > 0 && size % SPRITE_BYTES === 0) return true;
+  return contentHasPlus3DosHeader(content);
+}
+
+// Splits a sprite file into its optional +3DOS header and the pattern data.
+export function splitSpriteFile(bytes) {
+  if (bytesHavePlus3DosHeader(bytes)) {
+    return {
+      header: bytes.slice(0, PLUS3DOS_HEADER_SIZE),
+      data: bytes.slice(PLUS3DOS_HEADER_SIZE),
+    };
+  }
+  return { header: null, data: bytes };
+}
+
+// Rebuilds the file from a (possibly null) header and the pattern data,
+// refreshing the header's total-length dword, CODE data length word and
+// checksum so edits that grow or shrink the file stay loadable.
+export function joinSpriteFile(header, data) {
+  if (!header) return data;
+  const bytes = new Uint8Array(PLUS3DOS_HEADER_SIZE + data.length);
+  bytes.set(header);
+  bytes.set(data, PLUS3DOS_HEADER_SIZE);
+  const total = bytes.length;
+  bytes[11] = total & 0xff;
+  bytes[12] = (total >> 8) & 0xff;
+  bytes[13] = (total >> 16) & 0xff;
+  bytes[14] = (total >> 24) & 0xff;
+  bytes[16] = data.length & 0xff;
+  bytes[17] = (data.length >> 8) & 0xff;
+  let sum = 0;
+  for (let i = 0; i < PLUS3DOS_HEADER_SIZE - 1; i++) {
+    sum += bytes[i];
+  }
+  bytes[PLUS3DOS_HEADER_SIZE - 1] = sum & 0xff;
+  return bytes;
 }
 
 export function spritePatternCount(byteLength) {

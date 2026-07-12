@@ -10,6 +10,8 @@ import {
   base64ToBytes,
   bytesToBase64,
   defaultSpritePalette,
+  joinSpriteFile,
+  splitSpriteFile,
   spritePatternCount,
 } from "../lib/sprites/spr";
 import { useTranslation } from "@zxplay/i18n";
@@ -45,7 +47,10 @@ export function SpriteEditor({ fileId, content }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const canvasRef = useRef(null);
+  // Pattern bytes only; a +3DOS header (if the file carries one) is held
+  // aside verbatim and re-attached on every emit.
   const bytesRef = useRef(null);
+  const headerRef = useRef(null);
   // The last base64 this editor dispatched: content-prop changes that echo
   // it back are our own edits; anything else (revert, project reload) is
   // external and reloads the pattern bytes.
@@ -80,7 +85,9 @@ export function SpriteEditor({ fileId, content }) {
   );
 
   if (bytesRef.current === null) {
-    bytesRef.current = base64ToBytes(content || "");
+    const file = splitSpriteFile(base64ToBytes(content || ""));
+    bytesRef.current = file.data;
+    headerRef.current = file.header;
     lastEmittedRef.current = content || "";
     historyRef.current = {
       stack: [{ bytes: bytesRef.current.slice(), pattern: 0 }],
@@ -90,7 +97,9 @@ export function SpriteEditor({ fileId, content }) {
 
   useEffect(() => {
     if ((content || "") === lastEmittedRef.current) return;
-    bytesRef.current = base64ToBytes(content || "");
+    const file = splitSpriteFile(base64ToBytes(content || ""));
+    bytesRef.current = file.data;
+    headerRef.current = file.header;
     lastEmittedRef.current = content || "";
     const clamped = Math.max(
       0,
@@ -182,7 +191,7 @@ export function SpriteEditor({ fileId, content }) {
 
   // Push the current bytes to the store (and bump the thumbnails).
   const emit = () => {
-    const b64 = bytesToBase64(bytesRef.current);
+    const b64 = bytesToBase64(joinSpriteFile(headerRef.current, bytesRef.current));
     lastEmittedRef.current = b64;
     dispatch(setFileContent(fileId, b64));
     setVersion((v) => v + 1);
@@ -345,8 +354,11 @@ export function SpriteEditor({ fileId, content }) {
     transformPattern((view) => view.fill(TRANSPARENT_INDEX));
 
   const canAddPattern =
-    base64Length(bytesRef.current.length + SPRITE_BYTES) <=
-    MAX_FILE_CONTENT_SIZE;
+    base64Length(
+      (headerRef.current ? headerRef.current.length : 0) +
+        bytesRef.current.length +
+        SPRITE_BYTES
+    ) <= MAX_FILE_CONTENT_SIZE;
 
   const addPattern = () => {
     const grown = new Uint8Array(bytesRef.current.length + SPRITE_BYTES);
