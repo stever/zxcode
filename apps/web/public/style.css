@@ -400,6 +400,12 @@ code {
     gap: 16px;
 }
 
+.sprite-editor-canvas-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
 .sprite-editor-canvas {
     border: 1px solid #3f3f3f;
     border-radius: 2px;
@@ -408,6 +414,31 @@ code {
     /* Shrink with narrow layouts; sprite pixels stay square. */
     max-width: 100%;
     height: auto;
+    image-rendering: pixelated;
+}
+
+.sprite-editor-canvas.zoomed {
+    width: 576px;
+}
+
+.sprite-editor-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 28px;
+    font-size: 0.8rem;
+    font-family: monospace;
+    opacity: 0.8;
+}
+
+.sprite-recent-colours {
+    display: flex;
+    gap: 2px;
+}
+
+.sprite-recent-colours .sprite-palette-swatch {
+    width: 18px;
+    height: 18px;
 }
 
 .sprite-editor-side {

@@ -84,6 +84,12 @@ export function SpriteEditor({ fileId, content, tile = false }) {
   const [pattern, setPattern] = useState(0);
   const [selectedColour, setSelectedColour] = useState(0xff);
   const [tool, setTool] = useState("pen");
+  // Recently used colours (most recent first, max 8), selectable via keys
+  // 1..8; and a 1.5x canvas zoom toggle.
+  const [recentColours, setRecentColours] = useState([]);
+  const [zoomed, setZoomed] = useState(false);
+  // Cursor readout under the canvas, updated imperatively per pointer move.
+  const statusRef = useRef(null);
   // Bumped when the bytes change outside a stroke; re-renders thumbnails.
   const [version, setVersion] = useState(0);
   // Editor-internal pattern clipboard (a 256-byte copy) and the thumb being
@@ -398,8 +404,7 @@ export function SpriteEditor({ fileId, content, tile = false }) {
         if (colour === transparentIndex) {
           setTool("erase");
         } else {
-          setSelectedColour(colour);
-          setTool("pen");
+          useColour(colour);
         }
       }
       return;
@@ -414,7 +419,31 @@ export function SpriteEditor({ fileId, content, tile = false }) {
     paintAt(e);
   };
 
+  // Selecting a colour (palette click, eyedrop, history) records it in the
+  // recent list.
+  const useColour = (value) => {
+    setSelectedColour(value);
+    setTool("pen");
+    setRecentColours((prev) =>
+      [value, ...prev.filter((c) => c !== value)].slice(0, 8)
+    );
+  };
+
+  const updateStatus = (e) => {
+    const el = statusRef.current;
+    if (!el) return;
+    const p = pixelAt(e);
+    if (!p) {
+      el.textContent = "";
+      return;
+    }
+    const value = bytesRef.current[pattern * pixels + p.y * size + p.x];
+    const hex = `$${value.toString(16).padStart(2, "0").toUpperCase()}`;
+    el.textContent = `${p.x},${p.y}  ${hex}  ${palette[displayIndex(value)]}`;
+  };
+
   const handlePointerMove = (e) => {
+    updateStatus(e);
     if (strokeRef.current) paintAt(e);
   };
 
@@ -759,12 +788,32 @@ export function SpriteEditor({ fileId, content, tile = false }) {
   const copyRef = useRef(null);
   const pasteRef = useRef(null);
   const selectRef = useRef(null);
+  const plainKeyRef = useRef(null);
   undoRef.current = undo;
   redoRef.current = redo;
   shiftRef.current = shiftPattern;
   copyRef.current = copyPattern;
   pasteRef.current = pastePattern;
   selectRef.current = selectPattern;
+  // Unmodified single keys: tools (b/e/f, zx-tools' letters), transforms
+  // (r/h/v) and recent colours (1..8).
+  plainKeyRef.current = (key) => {
+    if (key === "b") setTool("pen");
+    else if (key === "e") setTool("erase");
+    else if (key === "f") setTool("fill");
+    else if (key === "r") rotatePattern();
+    else if (key === "h") flipHorizontal();
+    else if (key === "v") flipVertical();
+    else if (key >= "1" && key <= "8") {
+      const colour = recentColours[Number(key) - 1];
+      if (colour !== undefined && !(fourBit && colour > 0x0f)) {
+        useColour(colour);
+      }
+    } else {
+      return false;
+    }
+    return true;
+  };
   useEffect(() => {
     const ARROWS = {
       arrowleft: [-1, 0],
@@ -804,6 +853,12 @@ export function SpriteEditor({ fileId, content, tile = false }) {
           pasteRef.current(e.shiftKey);
           return;
         }
+      }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !ARROWS[key]) {
+        if (plainKeyRef.current(key)) {
+          e.preventDefault();
+        }
+        return;
       }
       if (!ARROWS[key] || e.altKey) return;
       if (e.shiftKey) {
@@ -973,17 +1028,33 @@ export function SpriteEditor({ fileId, content, tile = false }) {
         </span>
       </div>
       <div className="sprite-editor-main">
-        <canvas
-          ref={canvasRef}
-          width={CANVAS_SIZE}
-          height={CANVAS_SIZE}
-          className="sprite-editor-canvas"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={endStroke}
-          onPointerCancel={endStroke}
-          onContextMenu={(e) => e.preventDefault()}
-        />
+        <div className="sprite-editor-canvas-wrap">
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_SIZE}
+            height={CANVAS_SIZE}
+            className={
+              zoomed ? "sprite-editor-canvas zoomed" : "sprite-editor-canvas"
+            }
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={endStroke}
+            onPointerCancel={endStroke}
+            onPointerLeave={() => {
+              if (statusRef.current) statusRef.current.textContent = "";
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+          <div className="sprite-editor-status">
+            <span ref={statusRef} />
+            <Button
+              icon={zoomed ? "pi pi-search-minus" : "pi pi-search-plus"}
+              className="p-button-sm p-button-text"
+              title={t("editor.sprites.zoom")}
+              onClick={() => setZoomed(!zoomed)}
+            />
+          </div>
+        </div>
         <div className="sprite-editor-side">
           {palFiles.length > 0 && (
             <Dropdown
@@ -1017,6 +1088,24 @@ export function SpriteEditor({ fileId, content, tile = false }) {
               ? t("editor.sprites.transparent")
               : `$${selectedColour.toString(16).padStart(2, "0").toUpperCase()}`}
           </div>
+          {recentColours.length > 0 && (
+            <div className="sprite-recent-colours">
+              {recentColours.map((value, i) => (
+                <div
+                  key={i}
+                  className="sprite-palette-swatch"
+                  style={{ backgroundColor: palette[displayIndex(value)] }}
+                  title={`${i + 1}: $${value
+                    .toString(16)
+                    .padStart(2, "0")
+                    .toUpperCase()}`}
+                  onClick={() => {
+                    if (!(fourBit && value > 0x0f)) useColour(value);
+                  }}
+                />
+              ))}
+            </div>
+          )}
           <div className="sprite-palette">
             {Array.from({ length: fourBit ? 16 : 256 }, (_, index) => (
               <div
@@ -1036,8 +1125,7 @@ export function SpriteEditor({ fileId, content, tile = false }) {
                   if (index === transparentIndex) {
                     setTool("erase");
                   } else {
-                    setSelectedColour(index);
-                    setTool("pen");
+                    useColour(index);
                   }
                 }}
               />
