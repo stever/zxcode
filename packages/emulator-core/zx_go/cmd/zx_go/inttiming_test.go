@@ -10,11 +10,13 @@ import (
 )
 
 // TestConfigureClassicIntTiming pins the maskable frame-INT model per machine:
-// 128K-family models get the hardware-faithful narrow pulse (so an INT whose
-// pulse falls inside a DI'd section — e.g. an ISR spanning the frame boundary —
-// is MISSED, as on real hardware), while 48K keeps the legacy held-whole-frame
-// model. The held model over-fired the INT and drifted timing-sensitive games
-// (garbled sprites in Ghouls 'n' Ghosts).
+// every classic Spectrum gets the hardware-faithful narrow pulse (so an INT
+// whose pulse falls inside a DI'd section — or entirely inside one long
+// instruction — is MISSED, as on real hardware). The 48K joined the pulse
+// model for the int_skip conformance work (prefix/EI inhibition and
+// /INT-pulse ISR re-entry, ZXSpectrumNextTests); the held model over-fired
+// the INT and drifted timing-sensitive games (garbled sprites in Ghouls 'n'
+// Ghosts).
 func TestConfigureClassicIntTiming(t *testing.T) {
 	newCPU := func(model roms.SpectrumModel) *z80.CPU {
 		mem, err := memory.New("roms", model)
@@ -34,7 +36,7 @@ func TestConfigureClassicIntTiming(t *testing.T) {
 		{roms.ModelPlus3, 32, true},
 		{roms.ModelPlus2A, 32, true},
 		{roms.ModelPentagon, 36, true},
-		{roms.Model48K, 0, false},
+		{roms.Model48K, 32, true},
 	}
 	for _, c := range cases {
 		cpu := newCPU(c.model)

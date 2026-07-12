@@ -71,9 +71,8 @@ func TestNexttestsZ80BlockFlags(t *testing.T) {
 		t.Fatalf("expected at least 15 result rows, OCR found %d:\n%s", rows, text)
 	}
 	if mismatched > 0 {
-		t.Skipf("known gap: interrupted-block-instruction undocumented flags "+
-			"(YF/XF from PC, David Banks 2018) not implemented — %d of %d rows "+
-			"mismatch real hardware (see known-gaps.md, ZX Play #141)", mismatched, rows)
+		t.Fatalf("interrupted-block-instruction flags diverge from real hardware "+
+			"in %d of %d rows (blockRepeatFlags regression):\n%s", mismatched, rows, text)
 	}
 }
 
@@ -103,10 +102,12 @@ func TestNexttestsZ80IntSkipBasics(t *testing.T) {
 	}
 }
 
-// TestNexttestsZ80IntSkipInhibition — the parts zx_go knowingly lacks:
-// interrupt acceptance must be inhibited after DD/FD prefix bytes and
-// after EI (so prefix/EI blocks count ~0 ISR entries), and a held /INT
-// pulse must re-enter the ISR at least twice per signal.
+// TestNexttestsZ80IntSkipInhibition — interrupt acceptance must be
+// inhibited after DD/FD prefix bytes and across EI chains (a narrow
+// /INT pulse expiring inside the block is missed, never delivered
+// late), and the level-triggered pulse must re-enter the ISR at least
+// twice per signal. Implemented via the classic narrow-pulse frame INT
+// (frameIntPulse); hard regression guard.
 func TestNexttestsZ80IntSkipInhibition(t *testing.T) {
 	h := runNexttestsSNA(t, "int_skip.sna", 400)
 	text := h.ScreenText()
@@ -120,9 +121,7 @@ func TestNexttestsZ80IntSkipInhibition(t *testing.T) {
 		errs = append(errs, "only 1 ISR entry per /INT signal (hardware: 2+ while the pulse holds)")
 	}
 	if len(errs) > 0 {
-		t.Skipf("known gap: interrupt-acceptance inhibition after prefix/EI and "+
-			"/INT-pulse re-entry not modelled — %s (see known-gaps.md, ZX Play #141)",
-			strings.Join(errs, "; "))
+		t.Fatalf("interrupt-window regression: %s\nscreen:\n%s", strings.Join(errs, "; "), text)
 	}
 }
 

@@ -310,8 +310,14 @@ func TestOUTI_FlagSOnBNegative(t *testing.T) {
 	if cpu.F&FLAG_Z != 0 {
 		t.Errorf("OUTI with B'=$FF: Z flag set, want clear")
 	}
-	if cpu.F&FLAG_N == 0 {
-		t.Errorf("OUTI: N flag clear, want set (always)")
+	// N mirrors bit 7 of the value written (Sean Young §4.3; z80test
+	// OUTI vectors) — $42 has bit 7 clear, so N must be clear.
+	if cpu.F&FLAG_N != 0 {
+		t.Errorf("OUTI writing $42: N flag set, want clear (N = val bit 7)")
+	}
+	// F5/F3 mirror B post-decrement ($FF → both set).
+	if cpu.F&(FLAG_F5|FLAG_F3) != FLAG_F5|FLAG_F3 {
+		t.Errorf("OUTI with B'=$FF: F5/F3 = %02X, want both set", cpu.F&(FLAG_F5|FLAG_F3))
 	}
 }
 

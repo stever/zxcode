@@ -1,5 +1,7 @@
 package next
 
+import "github.com/conorarmstrong/zx_go/pkg/roms"
+
 // Frame-interrupt timing model, transcribed from the FPGA core so the
 // whole class of INT-timing behaviour conforms in one place (timing.md
 // §1a/§1c). See inttiming_test.go for the conformance matrix.
@@ -19,6 +21,29 @@ package next
 //
 // The per-mode (c_int_h, c_int_v, c_max_hc) constants are zxula_timing.vhd
 // lines 155-298.
+// FrameIntTimingForModel maps a classic SpectrumModel to its frame-INT
+// pulse parameters via the NR$03 machine-timing encoding, so the
+// desktop emulator and the test harness configure CPUs identically.
+// ok is false for machines that drive their own interrupt (ZX80/81,
+// SAM) — leave those on their existing model.
+func FrameIntTimingForModel(model roms.SpectrumModel, sixtyHz bool) (assertTstate, pulseTstates int, ok bool) {
+	var nr03 byte
+	switch model {
+	case roms.Model48K:
+		nr03 = 0x01
+	case roms.Model128K, roms.ModelPlus2:
+		nr03 = 0x02
+	case roms.ModelPlus3, roms.ModelPlus2A, roms.ModelNext:
+		nr03 = 0x03
+	case roms.ModelPentagon:
+		nr03 = 0x04
+	default:
+		return 0, 0, false
+	}
+	assertTstate, pulseTstates = FrameIntTiming(nr03, sixtyHz)
+	return assertTstate, pulseTstates, true
+}
+
 func FrameIntTiming(nr03MachineTiming byte, sixtyHz bool) (assertTstate, pulseTstates int) {
 	switch nr03MachineTiming & 0x07 {
 	case 0x02: // 128K

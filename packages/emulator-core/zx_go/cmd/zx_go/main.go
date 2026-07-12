@@ -377,7 +377,9 @@ func userKeymapPath() string {
 // frame boundary, it takes an interrupt that real hardware MISSES — drifting
 // timing-sensitive code (the cause of garbled sprites in Ghouls 'n' Ghosts).
 // Pulse/assert values come from next.FrameIntTiming, already validated against
-// a reference emulator. 48K keeps the legacy held model. The Next gets the same
+// a reference emulator. The 48K uses the same narrow pulse (32 T-states at
+// tstate 58) — required for the level-triggered /INT behaviours the external
+// int_skip conformance test pins down. The Next gets the same
 // narrow pulse (it boots in +3/128K timing, NR$03 "011") — this is what the
 // Machine-menu switch path relies on, since otherwise the Next inherits the
 // previous model's INT mode (e.g. 48K held), re-firing the frame INT across
@@ -387,25 +389,13 @@ func configureClassicIntTiming(cpu *z80.CPU, model roms.SpectrumModel) {
 	if cpu == nil {
 		return
 	}
-	var nr03 byte
-	switch model {
-	case roms.Model128K, roms.ModelPlus2:
-		nr03 = 0x02
-	case roms.ModelPlus3, roms.ModelPlus2A:
-		nr03 = 0x03
-	case roms.ModelPentagon:
-		nr03 = 0x04
-	case roms.ModelNext:
-		nr03 = 0x03 // NextZXOS boots in +3/128K timing (NR$03 default "011")
-	default: // 48K and others: keep the legacy held-INT model.
+	assert, pulse, ok := next.FrameIntTimingForModel(model, false)
+	if !ok || os.Getenv("ZX_GO_NO_INT_TIMING") != "" {
+		// Machines that drive their own interrupt (ZX80/81, SAM), or
+		// an explicit opt-out for A/B comparison.
 		cpu.IntAssertTstate, cpu.IntPulseTstates = 0, 0
 		return
 	}
-	if os.Getenv("ZX_GO_NO_INT_TIMING") != "" {
-		cpu.IntAssertTstate, cpu.IntPulseTstates = 0, 0
-		return
-	}
-	assert, pulse := next.FrameIntTiming(nr03, false)
 	cpu.IntAssertTstate = uint64(assert)
 	cpu.IntPulseTstates = uint64(pulse)
 }

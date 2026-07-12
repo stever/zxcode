@@ -157,6 +157,15 @@ type CPU struct {
 	// query F3/F5 won't notice if a particular update site is missing.
 	WZ uint16
 
+	// Q models the Z80's "the previous instruction wrote F" state
+	// (the Q register). SCF/CCF take YF/XF straight from A when Q is
+	// set and OR A's bits into the existing YF/XF when it is not
+	// (Zilog NMOS; hoglet67 Undocumented-Flags; z80test's ccf variant
+	// is the oracle). Maintained by setQFor and the prefix
+	// dispatchers — see qflags.go for the classification tables and
+	// the POP AF / EX AF,AF' / prefix subtleties.
+	Q bool
+
 	// Variant selects between the standard Z80 dispatch table and
 	// the Z80N (Spectrum Next) extended set. Defaults to VariantZ80.
 	Variant Variant
@@ -494,6 +503,7 @@ func (c *CPU) Reset() {
 	c.SP, c.PC = 0xFFFF, 0x0000
 	c.I, c.R = 0, 0
 	c.IFF1, c.IFF2 = false, false
+	c.Q = false
 	c.IM = 0
 	c.Halted = false
 	c.tstates = 0
@@ -544,6 +554,7 @@ func (c *CPU) SoftReset() {
 	c.R = 0
 	c.IFF1 = false
 	c.IFF2 = false
+	c.Q = false
 	c.IM = 0
 	c.Halted = false
 }
@@ -811,13 +822,31 @@ func (c *CPU) frameIntPulse(frameStart uint64) {
 	assertAt := frameStart + c.IntAssertTstate*uint64(c.SpeedMultiplier())
 	switch {
 	case !c.frameIntFired && c.tstates >= assertAt:
-		c.IRQPending.Store(true)
 		c.frameIntFired = true
-	case c.frameIntFired && !c.frameIntDeasct && c.tstates >= assertAt+c.IntPulseTstates:
-		// pulse window elapsed; interrupt() clears IRQPending on
-		// acceptance, so a still-set latch here means it was missed.
-		c.IRQPending.Store(false)
-		c.frameIntDeasct = true
+		if c.tstates < assertAt+c.IntPulseTstates {
+			c.IRQPending.Store(true)
+		} else {
+			// The whole pulse window elapsed inside one instruction
+			// (a long prefix chain, LDIR burst, ...). Real hardware
+			// samples /INT at instruction end, by which time the line
+			// has already been withdrawn — the interrupt is MISSED,
+			// never delivered late (int_skip's DD/FD rows).
+			c.frameIntDeasct = true
+		}
+	case c.frameIntFired && !c.frameIntDeasct:
+		if c.tstates >= assertAt+c.IntPulseTstates {
+			// Pulse window elapsed; interrupt() clears IRQPending on
+			// acceptance, so a still-set latch here means it was missed.
+			c.IRQPending.Store(false)
+			c.frameIntDeasct = true
+		} else if !c.IRQPending.Load() {
+			// /INT is LEVEL-triggered: the line stays active for the
+			// whole window, so an ISR that re-enables interrupts inside
+			// it is re-entered (int_skip "ISR entries per /INT" ≥ 2 on
+			// real hardware). Re-raise after an acceptance until the
+			// window closes.
+			c.IRQPending.Store(true)
+		}
 	}
 }
 
@@ -2206,18 +2235,31 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 		c.F = (c.F & (FLAG_S | FLAG_Z | FLAG_PV | FLAG_C)) | (c.A & (FLAG_F5 | FLAG_F3)) | FLAG_H | FLAG_N
 		c.tstates += 4
 	case 0x37: // SCF
-		c.F = (c.F & (FLAG_S | FLAG_Z | FLAG_PV)) | (c.A & (FLAG_F5 | FLAG_F3)) | FLAG_C
+		// YF/XF from A alone when the previous instruction wrote F
+		// (Q set), otherwise OR'd into the existing bits — Zilog NMOS
+		// behaviour (see qflags.go).
+		yx := c.A & (FLAG_F5 | FLAG_F3)
+		if c.Variant != VariantZ80N && !c.Q {
+			// Zilog NMOS OR path; the Next's t80n takes YF/XF from A
+			// unconditionally — pinned by the GHDL core golden.
+			yx |= c.F & (FLAG_F5 | FLAG_F3)
+		}
+		c.F = (c.F & (FLAG_S | FLAG_Z | FLAG_PV)) | yx | FLAG_C
 		c.tstates += 4
 	case 0x3F: // CCF
 		// Z80 spec: H ← old C; C ← !old C; N ← 0; S,Z,PV unchanged;
-		// F3,F5 from A.
+		// F3,F5 from A — Q-dependent like SCF (see qflags.go).
 		oldC := c.F & FLAG_C
+		yx := c.A & (FLAG_F5 | FLAG_F3)
+		if c.Variant != VariantZ80N && !c.Q {
+			yx |= c.F & (FLAG_F5 | FLAG_F3)
+		}
 		f := c.F & (FLAG_S | FLAG_Z | FLAG_PV)
 		if oldC != 0 {
 			f |= FLAG_H
 		}
 		f |= oldC ^ FLAG_C
-		f |= c.A & (FLAG_F5 | FLAG_F3)
+		f |= yx
 		c.F = f
 		c.tstates += 4
 
@@ -2352,6 +2394,7 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 		}
 		c.tstates += 4
 	}
+	c.setQFor(opcode)
 }
 
 // DAA (Decimal Adjust Accumulator) implementation
@@ -2383,6 +2426,9 @@ func (c *CPU) daa() {
 
 // CB prefix instructions (bit manipulation, shifts, rotates)
 func (c *CPU) executeCBInstruction(opcode byte) {
+	// Rotates/shifts (0x00-0x3F) and BIT (0x40-0x7F) write F; SET and
+	// RES (0x80-0xFF) do not (see qflags.go).
+	c.Q = opcode < 0x80
 	switch opcode {
 	// Rotate left circular
 	case 0x00: // RLC B
@@ -2682,6 +2728,9 @@ func (c *CPU) executeCBInstruction(opcode byte) {
 }
 
 func (c *CPU) executeEDInstruction(opcode byte) {
+	// Nothing in the ED space consumes Q, so recording the
+	// classification up front is safe (see qflags.go).
+	c.Q = flagWritingED[opcode]
 	switch opcode {
 	// 16-bit loads. All set MEMPTR (WZ) = addr + 1.
 	case 0x43: // LD (nn),BC
@@ -3012,6 +3061,11 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 }
 
 func (c *CPU) executeDDInstruction(opcode byte) {
+	// A DD prefix destroys the "previous instruction wrote F"
+	// information (hoglet67 Undocumented-Flags), so a prefixed
+	// SCF/CCF always takes the OR path. The tail of this function
+	// restores Q for the index operations that do write F.
+	c.Q = false
 	switch opcode {
 	// ADD IX,rr instructions
 	case 0x09: // ADD IX,BC
@@ -3328,6 +3382,11 @@ func (c *CPU) executeDDInstruction(opcode byte) {
 		c.tstates += 4
 		c.executeBaseInstruction(opcode)
 	}
+	// The index operations share the base opcode space's F-writing
+	// classification (0x09 = ADD IX,BC ↔ ADD HL,BC, 0x86 = ADD A,(IX+d)
+	// ↔ ADD A,(HL), ...); prefix and NONI cases are skipped by the
+	// guard inside setQFor / handled by the inner dispatch.
+	c.setQFor(opcode)
 }
 
 // Helper functions for IX operations
@@ -3402,6 +3461,9 @@ func (c *CPU) storeIYd(value byte) {
 // real-hardware behaviour). BIT n,(IX+d) ignores the register
 // field.
 func (c *CPU) executeDDCBInstruction(opcode byte, addr uint16) {
+	// Same F-writing split as plain CB: rotates and BIT write F,
+	// SET/RES do not (see qflags.go).
+	c.Q = opcode < 0x80
 	// Per Sean Young §3.4, every DDCB instruction sets
 	// MEMPTR = IX + d as part of the effective-address calculation.
 	c.WZ = addr
@@ -3469,6 +3531,8 @@ func (c *CPU) executeDDCBInstruction(opcode byte, addr uint16) {
 }
 
 func (c *CPU) executeFDInstruction(opcode byte) {
+	// FD destroys the Q information exactly like DD (see there).
+	c.Q = false
 	switch opcode {
 	// ADD IY,rr instructions
 	case 0x09: // ADD IY,BC
@@ -3782,10 +3846,14 @@ func (c *CPU) executeFDInstruction(opcode byte) {
 		c.tstates += 4
 		c.executeBaseInstruction(opcode)
 	}
+	// Same F-writing classification tail as executeDDInstruction.
+	c.setQFor(opcode)
 }
 
 func (c *CPU) executeFDCBInstruction(opcode byte, d int8) {
 	// FD CB prefix instructions - IY indexed bit operations.
+	// Same F-writing split as plain CB (see qflags.go).
+	c.Q = opcode < 0x80
 	// Per Sean Young §3.4, every FDCB instruction sets
 	// MEMPTR = IY + d as part of the effective-address calculation.
 	addr := uint16(int32(c.IY) + int32(d))
@@ -4287,6 +4355,57 @@ func (c *CPU) adc16(hl, value uint16) {
 	c.setHL(uint16(result))
 }
 
+// blockRepeatFlags applies the flag effects of a repeating block
+// instruction's PC-rewind machine cycle (David Banks 2018;
+// hoglet67/Z80Decoder wiki "Undocumented Flags"; observable via an
+// interrupt landing mid-loop or via self-modifying code, and tested by
+// z80test's ->NOP' vectors and ZXSpectrumNextTests' z80bltst): YF/XF
+// are copied from bits 13/11 of PC, which points back at the ED
+// prefix after the rewind. The IN/OUT repeaters additionally adjust
+// PF and HF from B and the iteration's C and N flags.
+func (c *CPU) blockRepeatFlags(inOut bool) {
+	// NMOS-only: the Next's t80n has not been shown to implement the
+	// repeat-cycle flag effects, and the GHDL core golden is the Z80N
+	// oracle — extend to the Next only with golden evidence.
+	if c.Variant == VariantZ80N {
+		return
+	}
+	c.F = (c.F &^ (FLAG_F5 | FLAG_F3)) | (byte(c.PC>>8) & (FLAG_F5 | FLAG_F3))
+	if !inOut {
+		return
+	}
+	if c.F&FLAG_C != 0 {
+		if c.F&FLAG_N != 0 {
+			if oddParity3(c.B - 1) {
+				c.F ^= FLAG_PV
+			}
+			if c.B&0x0F == 0x00 {
+				c.F |= FLAG_H
+			} else {
+				c.F &^= FLAG_H
+			}
+		} else {
+			if oddParity3(c.B + 1) {
+				c.F ^= FLAG_PV
+			}
+			if c.B&0x0F == 0x0F {
+				c.F |= FLAG_H
+			} else {
+				c.F &^= FLAG_H
+			}
+		}
+	} else if oddParity3(c.B) {
+		c.F ^= FLAG_PV
+	}
+}
+
+// oddParity3 reports whether the low 3 bits of v hold an odd number
+// of set bits (the "PF ^ Parity(x) ^ 1" term in the Banks formulas
+// flips PF exactly when the parity is odd).
+func oddParity3(v byte) bool {
+	return (0x96>>(v&7))&1 == 1
+}
+
 // Block load operations
 func (c *CPU) ldi() {
 	// Load and increment. Timing: 2×M1 (8) + MR (HL) (3) + MW (DE) (3)
@@ -4348,6 +4467,7 @@ func (c *CPU) ldir() {
 		// already been adjusted by -2, so PC+1 is the address of the
 		// LDIR opcode byte itself).
 		c.WZ = c.PC + 1
+		c.blockRepeatFlags(false)
 	}
 }
 
@@ -4358,6 +4478,7 @@ func (c *CPU) lddr() {
 		c.PC -= 2           // Repeat the instruction
 		c.exec(c.de()+1, 5) // 5 internal cycles at the written address
 		c.WZ = c.PC + 1     // per Sean Young §4.2
+		c.blockRepeatFlags(false)
 	}
 }
 
@@ -4461,6 +4582,7 @@ func (c *CPU) cpir() {
 		c.PC -= 2           // Repeat the instruction
 		c.exec(c.hl()-1, 5) // 5 internal cycles at the address just read
 		c.WZ = c.PC + 1     // per Sean Young §4.2
+		c.blockRepeatFlags(false)
 	}
 }
 
@@ -4471,6 +4593,7 @@ func (c *CPU) cpdr() {
 		c.PC -= 2           // Repeat the instruction
 		c.exec(c.hl()+1, 5) // 5 internal cycles at the address just read
 		c.WZ = c.PC + 1     // per Sean Young §4.2
+		c.blockRepeatFlags(false)
 	}
 }
 
@@ -4500,21 +4623,19 @@ func (c *CPU) outi() {
 	c.setHL(c.hl() + 1)
 	c.WZ = c.bc() + 1
 
-	c.F = 0
-	if c.B == 0 {
-		c.F |= FLAG_Z
-	}
-	if (c.B & 0x80) != 0 {
-		c.F |= FLAG_S
-	}
-	c.F |= FLAG_N
-
-	// Complex flag calculation for block I/O
+	// Flag semantics per Sean Young §4.3 (same shape as INI):
+	// S/Z/F5/F3 from B post-decrement, H = C = (L + val) > 255 with
+	// the post-increment L, P/V = parity((k & 7) XOR B), and N from
+	// bit 7 of the value written — NOT unconditionally set.
+	c.F = c.sz53Table[c.B]
 	temp := uint16(val) + uint16(c.L)
 	if temp > 255 {
 		c.F |= FLAG_H | FLAG_C
 	}
 	c.F |= c.parityTable[(byte(temp)&7)^c.B]
+	if val&0x80 != 0 {
+		c.F |= FLAG_N
+	}
 }
 
 func (c *CPU) outd() {
@@ -4534,21 +4655,17 @@ func (c *CPU) outd() {
 	c.setHL(c.hl() - 1)
 	c.WZ = c.bc() - 1
 
-	c.F = 0
-	if c.B == 0 {
-		c.F |= FLAG_Z
-	}
-	if (c.B & 0x80) != 0 {
-		c.F |= FLAG_S
-	}
-	c.F |= FLAG_N
-
-	// Complex flag calculation for block I/O
+	// Flag semantics per Sean Young §4.3 (same shape as OUTI, with
+	// the post-decrement L in the k sum).
+	c.F = c.sz53Table[c.B]
 	temp := uint16(val) + uint16(c.L)
 	if temp > 255 {
 		c.F |= FLAG_H | FLAG_C
 	}
 	c.F |= c.parityTable[(byte(temp)&7)^c.B]
+	if val&0x80 != 0 {
+		c.F |= FLAG_N
+	}
 }
 
 func (c *CPU) otir() {
@@ -4558,6 +4675,7 @@ func (c *CPU) otir() {
 		c.PC -= 2         // Repeat the instruction
 		c.exec(c.bc(), 5) // 5 internal cycles at BC (FUSE z80_ops.c)
 		c.WZ = c.PC + 1   // per Sean Young §4.2
+		c.blockRepeatFlags(true)
 	}
 }
 
@@ -4568,6 +4686,7 @@ func (c *CPU) otdr() {
 		c.PC -= 2         // Repeat the instruction
 		c.exec(c.bc(), 5) // 5 internal cycles at BC (FUSE z80_ops.c)
 		c.WZ = c.PC + 1   // per Sean Young §4.2
+		c.blockRepeatFlags(true)
 	}
 }
 
@@ -4665,6 +4784,7 @@ func (c *CPU) inir() {
 		c.PC -= 2
 		c.exec(c.bc(), 5) // 5 internal cycles at BC (FUSE z80_ops.c)
 		c.WZ = c.PC + 1   // per Sean Young §4.2
+		c.blockRepeatFlags(true)
 	}
 }
 
@@ -4675,6 +4795,7 @@ func (c *CPU) indr() {
 		c.PC -= 2
 		c.exec(c.bc(), 5) // 5 internal cycles at BC (FUSE z80_ops.c)
 		c.WZ = c.PC + 1   // per Sean Young §4.2
+		c.blockRepeatFlags(true)
 	}
 }
 

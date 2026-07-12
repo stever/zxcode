@@ -7,7 +7,12 @@
       "area": "CPU (Z80)",
       "kind": "internal",
       "oracle": "Cringle zexdoc",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/z80", "tests": ["TestZexdoc"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/z80",
+        "tests": [
+          "TestZexdoc"
+        ]
+      }
     },
     {
       "id": "cpu-zexall",
@@ -15,7 +20,12 @@
       "area": "CPU (Z80)",
       "kind": "internal",
       "oracle": "Cringle zexall",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/z80", "tests": ["TestZexall"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/z80",
+        "tests": [
+          "TestZexall"
+        ]
+      }
     },
     {
       "id": "cpu-z80n-gate",
@@ -23,7 +33,12 @@
       "area": "CPU (Z80)",
       "kind": "internal",
       "oracle": "t80n VHDL via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/z80", "tests": ["TestZ80NMatchesCoreGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/z80",
+        "tests": [
+          "TestZ80NMatchesCoreGolden"
+        ]
+      }
     },
     {
       "id": "golden-ay",
@@ -31,7 +46,12 @@
       "area": "Audio",
       "kind": "internal",
       "oracle": "audio/ym2149.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/ay", "tests": ["TestYM2149MatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/ay",
+        "tests": [
+          "TestYM2149MatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-dac",
@@ -39,7 +59,12 @@
       "area": "Audio",
       "kind": "internal",
       "oracle": "DAC VHDL via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/dac", "tests": ["TestSounDriveMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/dac",
+        "tests": [
+          "TestSounDriveMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-paging",
@@ -47,7 +72,12 @@
       "area": "Memory / paging",
       "kind": "internal",
       "oracle": "zxnext.vhd memory mux via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/memory", "tests": ["TestPagingMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/memory",
+        "tests": [
+          "TestPagingMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-divmmc",
@@ -55,7 +85,12 @@
       "area": "Storage",
       "kind": "internal",
       "oracle": "divmmc.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/divmmc", "tests": ["TestDivMMCMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/divmmc",
+        "tests": [
+          "TestDivMMCMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-sdcard",
@@ -63,7 +98,12 @@
       "area": "Storage",
       "kind": "internal",
       "oracle": "SPI VHDL via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/sdcard", "tests": ["TestSPIMasterMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/sdcard",
+        "tests": [
+          "TestSPIMasterMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-layer2",
@@ -71,7 +111,13 @@
       "area": "Video (Next)",
       "kind": "internal",
       "oracle": "layer2.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/layer2", "tests": ["TestLayer2AddressMatchesFPGAGolden", "TestLayer2PixelMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/layer2",
+        "tests": [
+          "TestLayer2AddressMatchesFPGAGolden",
+          "TestLayer2PixelMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-tilemap",
@@ -79,7 +125,13 @@
       "area": "Video (Next)",
       "kind": "internal",
       "oracle": "tilemap.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/tilemap", "tests": ["TestTilemapRenderMatchesFPGAGolden", "TestTilemapBelowTextStatusFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/tilemap",
+        "tests": [
+          "TestTilemapRenderMatchesFPGAGolden",
+          "TestTilemapBelowTextStatusFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-sprite",
@@ -87,7 +139,12 @@
       "area": "Video (Next)",
       "kind": "internal",
       "oracle": "sprites.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/sprite", "tests": ["TestSpriteRenderMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/sprite",
+        "tests": [
+          "TestSpriteRenderMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-lores",
@@ -95,7 +152,12 @@
       "area": "Video (Next)",
       "kind": "internal",
       "oracle": "lores.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/lores", "tests": ["TestLoResMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/lores",
+        "tests": [
+          "TestLoResMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-palette",
@@ -103,7 +165,12 @@
       "area": "Video (Next)",
       "kind": "internal",
       "oracle": "zxnext.vhd palette via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/palette", "tests": ["TestPaletteMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/palette",
+        "tests": [
+          "TestPaletteMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-mixer",
@@ -111,7 +178,12 @@
       "area": "Video (Next)",
       "kind": "internal",
       "oracle": "zxnext.vhd mixer via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/compositor", "tests": ["TestMixerMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/compositor",
+        "tests": [
+          "TestMixerMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-copper",
@@ -119,7 +191,12 @@
       "area": "Video (Next)",
       "kind": "internal",
       "oracle": "copper.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/copper", "tests": ["TestCopperMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/copper",
+        "tests": [
+          "TestCopperMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-ctc",
@@ -127,7 +204,12 @@
       "area": "Interrupts / timing",
       "kind": "internal",
       "oracle": "ctc_chan.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/ctc", "tests": ["TestCTCMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/ctc",
+        "tests": [
+          "TestCTCMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-im2",
@@ -135,7 +217,12 @@
       "area": "Interrupts / timing",
       "kind": "internal",
       "oracle": "peripherals.vhd / im2_*.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next", "tests": ["TestIM2DaisyChainMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next",
+        "tests": [
+          "TestIM2DaisyChainMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-multiface",
@@ -143,7 +230,12 @@
       "area": "Peripherals",
       "kind": "internal",
       "oracle": "multiface.vhd via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/multiface", "tests": ["TestMultifaceMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/multiface",
+        "tests": [
+          "TestMultifaceMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-uart",
@@ -151,7 +243,12 @@
       "area": "Peripherals",
       "kind": "internal",
       "oracle": "UART VHDL via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/next/uart", "tests": ["TestUARTMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/next/uart",
+        "tests": [
+          "TestUARTMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "golden-keyboard",
@@ -159,7 +256,12 @@
       "area": "Peripherals",
       "kind": "internal",
       "oracle": "keymap VHDL via GHDL",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/keyboard", "tests": ["TestKeyboardMatchesFPGAGolden"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/keyboard",
+        "tests": [
+          "TestKeyboardMatchesFPGAGolden"
+        ]
+      }
     },
     {
       "id": "boot-nextzxos",
@@ -167,7 +269,12 @@
       "area": "Boot",
       "kind": "internal",
       "oracle": "Real NextZXOS through the FPGA-bootrom chain",
-      "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNextRealROMBoot"] }
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+        "tests": [
+          "TestNextRealROMBoot"
+        ]
+      }
     },
     {
       "id": "matrix-vhdl",
@@ -181,14 +288,24 @@
     },
     {
       "id": "ext-z80test",
-      "title": "raxoft/z80test v1.2a — z80doc / z80docflags / z80flags / z80full / z80ccf / z80memptr",
+      "title": "raxoft/z80test v1.2a — all six CPU variants",
       "area": "CPU (Z80)",
       "kind": "external",
-      "status": "partial",
-      "roadmap": "ZX Play #137",
+      "roadmap": "ZX Play #r3",
       "link": "https://github.com/raxoft/z80test",
       "detail": "z80test.html",
-      "notes": "Stricter than zexall. doc, docflags and memptr pass; flags/full fail 12/160 and ccf 67/160 (documented gaps, ZX Play #141) — see the breakdown page."
+      "notes": "Stricter than zexall: all six variants pass 160/160 (Q register, block/OUTx flags and MEMPTR included) — see the breakdown page. z80ccfscr is manual-only.",
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+        "tests": [
+          "TestZ80TestDoc",
+          "TestZ80TestDocFlags",
+          "TestZ80TestFlags",
+          "TestZ80TestFull",
+          "TestZ80TestCcf",
+          "TestZ80TestMemptr"
+        ]
+      }
     },
     {
       "id": "ext-nexttests",
@@ -219,18 +336,83 @@
       "title": "raxoft/z80test v1.2a — test inventory",
       "page": "z80test.html",
       "link": "https://github.com/raxoft/z80test",
-      "description": "Patrik Rak's Z80 instruction exerciser: exhaustive per-instruction CRCs compared against captures from a real Zilog Z80 in a 48K Spectrum. Vendored release taps (pkg/testharness/testdata/z80test) run on the 48K harness via direct CODE-block injection; SKIP rows are documented gaps (known-gaps.md, ZX Play #141).",
+      "description": "Patrik Rak's Z80 instruction exerciser: exhaustive per-instruction CRCs compared against captures from a real Zilog Z80 in a 48K Spectrum. Vendored release taps (pkg/testharness/testdata/z80test) run on the 48K harness via direct CODE-block injection. All six CPU variants pass; z80ccfscr is manual/visual only.",
       "groups": [
         {
           "name": "Variants",
           "tests": [
-            { "name": "z80doc", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestDoc"] }, "notes": "All registers, documented flags — 160/160 pass" },
-            { "name": "z80docflags", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestDocFlags"] }, "notes": "Documented flags only — 160/160 pass" },
-            { "name": "z80flags", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestFlags"] }, "notes": "SKIP = documented gap: 12/160 fail — SCF/CCF (Q register) ×4 + block/OUTx undocumented flags ×8" },
-            { "name": "z80full", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestFull"] }, "notes": "SKIP = documented gap: same 12/160 as z80flags" },
-            { "name": "z80ccf", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestCcf"] }, "notes": "SKIP = documented gap: 67/160 fail — SCF/CCF flags depend on the previous instruction (Q register)" },
-            { "name": "z80memptr", "path": "https://github.com/raxoft/z80test", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestZ80TestMemptr"] }, "notes": "BIT n,(HL) after every instruction — 160/160 pass (MEMPTR emulation is deeper than its in-source caveat suggests)" },
-            { "name": "z80ccfscr", "path": "https://github.com/raxoft/z80test", "notes": "Visualises random CCF behaviour; emulators produce a stable pattern by construction — manual/visual only, not wired into CI" }
+            {
+              "name": "z80doc",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestDoc"
+                ]
+              },
+              "notes": "All registers, documented flags — 160/160 pass"
+            },
+            {
+              "name": "z80docflags",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestDocFlags"
+                ]
+              },
+              "notes": "Documented flags only — 160/160 pass"
+            },
+            {
+              "name": "z80flags",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestFlags"
+                ]
+              },
+              "notes": "All flags — 160/160 pass (Q register + block/OUTx flag work, ZX Play #141)"
+            },
+            {
+              "name": "z80full",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestFull"
+                ]
+              },
+              "notes": "All flags and registers — 160/160 pass"
+            },
+            {
+              "name": "z80ccf",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestCcf"
+                ]
+              },
+              "notes": "Flags after CCF following every instruction — 160/160 pass (the Q register)"
+            },
+            {
+              "name": "z80memptr",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestMemptr"
+                ]
+              },
+              "notes": "BIT n,(HL) after every instruction — 160/160 pass (MEMPTR emulation is deeper than its in-source caveat suggests)"
+            },
+            {
+              "name": "z80ccfscr",
+              "path": "https://github.com/raxoft/z80test",
+              "notes": "Visualises random CCF behaviour; emulators produce a stable pattern by construction — manual/visual only, not wired into CI",
+              "status": "manual"
+            }
           ]
         }
       ]
@@ -245,77 +427,242 @@
         {
           "name": "base — CPU and register fundamentals",
           "tests": [
-            { "name": "Z80N", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80N", "notes": "Extended Z80N instruction behaviour" },
-            { "name": "Z80Nc2", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80Nc2", "notes": "Z80N, core 2 variant" },
-            { "name": "NextReg_defaults", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/NextReg_defaults", "notes": "Reset/default NextReg values — overlaps our dispatcher default tests" },
-            { "name": "Copper", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Copper", "notes": "Copper coprocessor behaviour" },
-            { "name": "DMA", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/DMA", "notes": "zxnDMA behaviour" }
+            {
+              "name": "Z80N",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80N",
+              "notes": "Extended Z80N instruction behaviour"
+            },
+            {
+              "name": "Z80Nc2",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80Nc2",
+              "notes": "Z80N, core 2 variant"
+            },
+            {
+              "name": "NextReg_defaults",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/NextReg_defaults",
+              "notes": "Reset/default NextReg values — overlaps our dispatcher default tests"
+            },
+            {
+              "name": "Copper",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Copper",
+              "notes": "Copper coprocessor behaviour"
+            },
+            {
+              "name": "DMA",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/DMA",
+              "notes": "zxnDMA behaviour"
+            }
           ]
         },
         {
           "name": "Graphics — Layer 2 and layer mixing",
           "tests": [
-            { "name": "Layer2Colours", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Colours" },
-            { "name": "Layer2Port", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Port", "notes": "Port $123B paging behaviour" },
-            { "name": "Layer2Scroll", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Scroll" },
-            { "name": "LayersMixingHiCol", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiCol", "notes": "Timex hi-colour mixing" },
-            { "name": "LayersMixingHiRes", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiRes", "notes": "Timex hi-res mixing" },
-            { "name": "LayersMixingLoRes", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingLoRes", "notes": "LoRes mixing" },
-            { "name": "LightenDarken_L2_ULA", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LightenDarken_L2_ULA", "notes": "Additive blend modes — exercises a catalogued known gap (blend modes 6/7 approximated)" },
-            { "name": "NextReg0x69", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/NextReg0x69", "notes": "Display control register" }
+            {
+              "name": "Layer2Colours",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Colours"
+            },
+            {
+              "name": "Layer2Port",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Port",
+              "notes": "Port $123B paging behaviour"
+            },
+            {
+              "name": "Layer2Scroll",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Scroll"
+            },
+            {
+              "name": "LayersMixingHiCol",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiCol",
+              "notes": "Timex hi-colour mixing"
+            },
+            {
+              "name": "LayersMixingHiRes",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiRes",
+              "notes": "Timex hi-res mixing"
+            },
+            {
+              "name": "LayersMixingLoRes",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingLoRes",
+              "notes": "LoRes mixing"
+            },
+            {
+              "name": "LightenDarken_L2_ULA",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LightenDarken_L2_ULA",
+              "notes": "Additive blend modes — exercises a catalogued known gap (blend modes 6/7 approximated)"
+            },
+            {
+              "name": "NextReg0x69",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/NextReg0x69",
+              "notes": "Display control register"
+            }
           ]
         },
         {
           "name": "Sprites",
           "tests": [
-            { "name": "Transparency", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Transparency" },
-            { "name": "Relative", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Relative", "notes": "Anchor/relative sprite groups" },
-            { "name": "BigSprite", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite" },
-            { "name": "BigSprite4b", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite4b", "notes": "4bpp variant" },
-            { "name": "ScanlineDelay", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/ScanlineDelay", "notes": "Exercises the catalogued known gap: per-line sprite bandwidth limit not modelled" }
+            {
+              "name": "Transparency",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Transparency"
+            },
+            {
+              "name": "Relative",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Relative",
+              "notes": "Anchor/relative sprite groups"
+            },
+            {
+              "name": "BigSprite",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite"
+            },
+            {
+              "name": "BigSprite4b",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite4b",
+              "notes": "4bpp variant"
+            },
+            {
+              "name": "ScanlineDelay",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/ScanlineDelay",
+              "notes": "Exercises the catalogued known gap: per-line sprite bandwidth limit not modelled"
+            }
           ]
         },
         {
           "name": "ULA — palettes, transparency, scroll",
           "tests": [
-            { "name": "DefaultTransparency", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/DefaultTransparency" },
-            { "name": "BorderTransparencyFallback", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/BorderTransparencyFallback", "notes": "NR$4A fallback colour" },
-            { "name": "ChangePaletteTransparency", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency" },
-            { "name": "ChangePaletteTransparency_v2", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v2" },
-            { "name": "ChangePaletteTransparency_v3", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v3" },
-            { "name": "ClassicPaletized", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ClassicPaletized", "notes": "Next ULA palette on the classic screen — relates to the catalogued ULA-palette gap" },
-            { "name": "UlaScroll", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/UlaScroll" }
+            {
+              "name": "DefaultTransparency",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/DefaultTransparency"
+            },
+            {
+              "name": "BorderTransparencyFallback",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/BorderTransparencyFallback",
+              "notes": "NR$4A fallback colour"
+            },
+            {
+              "name": "ChangePaletteTransparency",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency"
+            },
+            {
+              "name": "ChangePaletteTransparency_v2",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v2"
+            },
+            {
+              "name": "ChangePaletteTransparency_v3",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v3"
+            },
+            {
+              "name": "ClassicPaletized",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ClassicPaletized",
+              "notes": "Next ULA palette on the classic screen — relates to the catalogued ULA-palette gap"
+            },
+            {
+              "name": "UlaScroll",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/UlaScroll"
+            }
           ]
         },
         {
           "name": "Interrupts",
           "tests": [
-            { "name": "HaltAfterDisable", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Interrupts/HaltAfterDisable", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsDIHalt"] }, "notes": "DI + HALT must hang forever; asserted via the border-colour signature" }
+            {
+              "name": "HaltAfterDisable",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Interrupts/HaltAfterDisable",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsDIHalt"
+                ]
+              },
+              "notes": "DI + HALT must hang forever; asserted via the border-colour signature"
+            }
           ]
         },
         {
           "name": "Timing",
           "tests": [
-            { "name": "Changing8kBank", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank", "notes": "MMU bank-switch timing" },
-            { "name": "Changing8kBank_NoContention", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank_NoContention" },
-            { "name": "ScanlineReadingAndInterrupt", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/ScanlineReadingAndInterrupt", "notes": "NR$1E/$1F raster reads vs the frame interrupt" }
+            {
+              "name": "Changing8kBank",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank",
+              "notes": "MMU bank-switch timing"
+            },
+            {
+              "name": "Changing8kBank_NoContention",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank_NoContention"
+            },
+            {
+              "name": "ScanlineReadingAndInterrupt",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/ScanlineReadingAndInterrupt",
+              "notes": "NR$1E/$1F raster reads vs the frame interrupt"
+            }
           ]
         },
         {
           "name": "Misc — DMA deep dives",
           "tests": [
-            { "name": "ZilogDMA", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/ZilogDMA", "notes": "Zilog-DMA-mode behaviour" },
-            { "name": "DmaInteractive", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/DmaInteractive", "notes": "Interactive; includes real Zilog hardware photos — manual comparison rather than CI" }
+            {
+              "name": "ZilogDMA",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/ZilogDMA",
+              "notes": "Zilog-DMA-mode behaviour"
+            },
+            {
+              "name": "DmaInteractive",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/DmaInteractive",
+              "notes": "Interactive; includes real Zilog hardware photos — manual comparison rather than CI",
+              "status": "manual"
+            }
           ]
         },
         {
           "name": "ZX48 / ZX128 classic tests",
           "tests": [
-            { "name": "Z80BlockInstructionFlags", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80BlockInstructionFlags", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsZ80BlockFlags"] }, "notes": "SKIP = documented gap: interrupted-block-instruction flags (David Banks) not implemented — known-gaps.md, ZX Play #141" },
-            { "name": "Z80CcfScfOutcomeStability", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80CcfScfOutcomeStability", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsCcfScfStability"] }, "notes": "SCF/CCF outcomes must be deterministic frame over frame" },
-            { "name": "Z80IntSkip (basics)", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsZ80IntSkipBasics"] }, "notes": "NOP benchmark, DI inhibition, SCF/CCF chains, IFF2 reads during int-ack" },
-            { "name": "Z80IntSkip (prefix/EI inhibition)", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestNexttestsZ80IntSkipInhibition"] }, "notes": "SKIP = documented gap: INT acceptance not inhibited after DD/FD prefixes or EI; /INT pulse re-entry once not 2+ — known-gaps.md, ZX Play #141" },
-            { "name": "ULAvsSJS", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/ULAvsSJS", "notes": "ULA timing comparison" }
+            {
+              "name": "Z80BlockInstructionFlags",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80BlockInstructionFlags",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80BlockFlags"
+                ]
+              },
+              "notes": "Interrupted-block flags (David Banks) — matches real hardware (blockRepeatFlags); hard regression guard"
+            },
+            {
+              "name": "Z80CcfScfOutcomeStability",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80CcfScfOutcomeStability",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsCcfScfStability"
+                ]
+              },
+              "notes": "SCF/CCF outcomes must be deterministic frame over frame"
+            },
+            {
+              "name": "Z80IntSkip (basics)",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80IntSkipBasics"
+                ]
+              },
+              "notes": "NOP benchmark, DI inhibition, SCF/CCF chains, IFF2 reads during int-ack"
+            },
+            {
+              "name": "Z80IntSkip (prefix/EI inhibition)",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80IntSkipInhibition"
+                ]
+              },
+              "notes": "Prefix/EI interrupt inhibition + level-triggered /INT pulse re-entry — conformant via the classic narrow-pulse frame INT; hard regression guard"
+            },
+            {
+              "name": "ULAvsSJS",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/ULAvsSJS",
+              "notes": "ULA timing comparison"
+            }
           ]
         }
       ]
@@ -330,11 +677,40 @@
         {
           "name": "Tests",
           "tests": [
-            { "name": "MMUPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/MMUPaging.asm", "notes": "Top-16K paging via port $7FFD vs the Next MMU registers. Zeus source only — no prebuilt .nex upstream" },
-            { "name": "DFFDPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DFFDPaging.asm", "notes": "Port $DFFD high-bank extension paging. Zeus source only — no prebuilt .nex upstream" },
-            { "name": "ULAScreenPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/ULAScreenPaging.asm", "notes": "Screen-page selection behaviour. Zeus source only — no prebuilt .nex upstream" },
-            { "name": "DMACopy", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DMACopy.asm", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestExt327DMAFill", "TestExt327DMACopy", "TestExt327LDIRFill", "TestExt327LDIRCopy"] }, "notes": "All four build variants vendored (pkg/testharness/testdata/ext327) and asserted at memory level: zxnDMA fill/copy must be byte-identical to the LDIR ground truth, with each mode's border/attr signature" },
-            { "name": "Level2Order", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/Level2Order.asm", "notes": "All six sprite / Layer 2 / ULA priority orderings" }
+            {
+              "name": "MMUPaging",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/MMUPaging.asm",
+              "notes": "Top-16K paging via port $7FFD vs the Next MMU registers. Zeus source only — no prebuilt .nex upstream"
+            },
+            {
+              "name": "DFFDPaging",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DFFDPaging.asm",
+              "notes": "Port $DFFD high-bank extension paging. Zeus source only — no prebuilt .nex upstream"
+            },
+            {
+              "name": "ULAScreenPaging",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/ULAScreenPaging.asm",
+              "notes": "Screen-page selection behaviour. Zeus source only — no prebuilt .nex upstream"
+            },
+            {
+              "name": "DMACopy",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DMACopy.asm",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestExt327DMAFill",
+                  "TestExt327DMACopy",
+                  "TestExt327LDIRFill",
+                  "TestExt327LDIRCopy"
+                ]
+              },
+              "notes": "All four build variants vendored (pkg/testharness/testdata/ext327) and asserted at memory level: zxnDMA fill/copy must be byte-identical to the LDIR ground truth, with each mode's border/attr signature"
+            },
+            {
+              "name": "Level2Order",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/Level2Order.asm",
+              "notes": "All six sprite / Layer 2 / ULA priority orderings"
+            }
           ]
         }
       ]

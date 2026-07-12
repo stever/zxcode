@@ -127,24 +127,23 @@ func TestZ80TestDocFlags(t *testing.T) {
 	assertZ80Test(t, h, "")
 }
 
-// The 12 failures shared by the flags and full variants (captured
-// 2026-07-12): 001 SCF, 002 CCF, 005 SCF (ST), 006 CCF (ST) — the
-// Q-register-dependent SCF/CCF YF/XF behaviour — plus 089 LDIR->NOP',
-// 090 LDDR->NOP', 102 INIR->NOP', 103 INDR->NOP', 107 OUTI, 108 OUTD,
-// 109 OTIR, 110 OTDR — undocumented block/OUTx flag effects.
+// The flags/full/ccf variants exercise the Q register (SCF/CCF
+// YF/XF), the full OUTx flag model, and the block-repeat flag effects
+// — all implemented in pkg/z80 (qflags.go, blockRepeatFlags) and
+// asserted hard here as regression guards.
 func TestZ80TestFlags(t *testing.T) {
 	h := runZ80Test(t, "z80flags.tap", 40000)
-	assertZ80Test(t, h, "12/160 undocumented-flag tests: SCF/CCF (Q register) + block/OUTx flags")
+	assertZ80Test(t, h, "")
 }
 
 func TestZ80TestFull(t *testing.T) {
 	h := runZ80Test(t, "z80full.tap", 40000)
-	assertZ80Test(t, h, "12/160 undocumented-flag tests: SCF/CCF (Q register) + block/OUTx flags")
+	assertZ80Test(t, h, "")
 }
 
 func TestZ80TestCcf(t *testing.T) {
 	h := runZ80Test(t, "z80ccf.tap", 40000)
-	assertZ80Test(t, h, "SCF/CCF flags depend on whether the previous instruction modified F (Q register); 67/160 fail")
+	assertZ80Test(t, h, "")
 }
 
 // The memptr variant passes outright — MEMPTR emulation is deeper than

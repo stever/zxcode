@@ -27,6 +27,7 @@ import (
 
 	"github.com/conorarmstrong/zx_go/pkg/keyboard"
 	"github.com/conorarmstrong/zx_go/pkg/memory"
+	"github.com/conorarmstrong/zx_go/pkg/next"
 	"github.com/conorarmstrong/zx_go/pkg/next/dac"
 	"github.com/conorarmstrong/zx_go/pkg/next/divmmc"
 	"github.com/conorarmstrong/zx_go/pkg/next/esxdos"
@@ -95,6 +96,13 @@ func New(model roms.SpectrumModel) (*Harness, error) {
 	kbd := keyboard.New()
 	u := ula.New(mem, kbd)
 	cpu := z80.New(mem, u)
+	// Same narrow frame-INT pulse the desktop emulator configures
+	// (level-triggered 32/36 T window; legacy held-INT otherwise), so
+	// harness tests exercise the conformant interrupt model.
+	if assert, pulse, ok := next.FrameIntTimingForModel(model, false); ok {
+		cpu.IntAssertTstate = uint64(assert)
+		cpu.IntPulseTstates = uint64(pulse)
+	}
 	pm := peripherals.NewPeripheralManager(mem, "")
 	u.SetPeripherals(pm)
 	mem.PeripheralRead = pm.HandleMemoryRead
