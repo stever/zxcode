@@ -176,6 +176,7 @@
       "kind": "manual",
       "status": "partial",
       "link": "https://github.com/stever/zxcode/blob/main/packages/emulator-core/zx_go/VHDL_CONFORMANCE.md",
+      "detail": "vhdl.html",
       "notes": "Hand-maintained matrix; open rows are listed in the document and mirrored in known-gaps.md."
     },
     {
@@ -196,16 +197,124 @@
       "status": "planned",
       "roadmap": "ZX Play #137",
       "link": "https://github.com/MrKWatkins/ZXSpectrumNextTests",
-      "notes": "Community acceptance suite with real-hardware reference screenshots. To run via the headless harness with OCR / screenshot comparison."
+      "detail": "nexttests.html",
+      "notes": "Community acceptance suite with real-hardware reference screenshots. 35 tests in 8 groups — see the breakdown page. To run via the headless harness with OCR / screenshot comparison."
     },
     {
       "id": "ext-327tests",
-      "title": "Threetwosevensixseven/ZXSpectrumNextTests — MMU paging, DMA copy, layer order",
+      "title": "Threetwosevensixseven/ZXSpectrumNextTests — paging, DMA, layer order",
       "area": "Next acceptance",
       "kind": "external",
       "status": "planned",
       "roadmap": "ZX Play #137",
-      "link": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests"
+      "link": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests",
+      "detail": "327tests.html",
+      "notes": "Five Zeus-built .nex feature tests — see the breakdown page."
+    }
+  ],
+  "suites": [
+    {
+      "id": "nexttests",
+      "title": "MrKWatkins/ZXSpectrumNextTests — test inventory",
+      "page": "nexttests.html",
+      "link": "https://github.com/MrKWatkins/ZXSpectrumNextTests",
+      "description": "The main community acceptance suite for Spectrum Next emulators and FPGA cores: .nex/.tap programs with reference screenshots from real hardware. Statuses flip from planned to live results as each test is wired into the headless harness (ZX Play work item #137).",
+      "groups": [
+        {
+          "name": "base — CPU and register fundamentals",
+          "tests": [
+            { "name": "Z80N", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80N", "notes": "Extended Z80N instruction behaviour" },
+            { "name": "Z80Nc2", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80Nc2", "notes": "Z80N, core 2 variant" },
+            { "name": "NextReg_defaults", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/NextReg_defaults", "notes": "Reset/default NextReg values — overlaps our dispatcher default tests" },
+            { "name": "Copper", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Copper", "notes": "Copper coprocessor behaviour" },
+            { "name": "DMA", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/DMA", "notes": "zxnDMA behaviour" }
+          ]
+        },
+        {
+          "name": "Graphics — Layer 2 and layer mixing",
+          "tests": [
+            { "name": "Layer2Colours", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Colours" },
+            { "name": "Layer2Port", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Port", "notes": "Port $123B paging behaviour" },
+            { "name": "Layer2Scroll", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Scroll" },
+            { "name": "LayersMixingHiCol", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiCol", "notes": "Timex hi-colour mixing" },
+            { "name": "LayersMixingHiRes", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiRes", "notes": "Timex hi-res mixing" },
+            { "name": "LayersMixingLoRes", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingLoRes", "notes": "LoRes mixing" },
+            { "name": "LightenDarken_L2_ULA", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LightenDarken_L2_ULA", "notes": "Additive blend modes — exercises a catalogued known gap (blend modes 6/7 approximated)" },
+            { "name": "NextReg0x69", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/NextReg0x69", "notes": "Display control register" }
+          ]
+        },
+        {
+          "name": "Sprites",
+          "tests": [
+            { "name": "Transparency", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Transparency" },
+            { "name": "Relative", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Relative", "notes": "Anchor/relative sprite groups" },
+            { "name": "BigSprite", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite" },
+            { "name": "BigSprite4b", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite4b", "notes": "4bpp variant" },
+            { "name": "ScanlineDelay", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/ScanlineDelay", "notes": "Exercises the catalogued known gap: per-line sprite bandwidth limit not modelled" }
+          ]
+        },
+        {
+          "name": "ULA — palettes, transparency, scroll",
+          "tests": [
+            { "name": "DefaultTransparency", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/DefaultTransparency" },
+            { "name": "BorderTransparencyFallback", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/BorderTransparencyFallback", "notes": "NR$4A fallback colour" },
+            { "name": "ChangePaletteTransparency", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency" },
+            { "name": "ChangePaletteTransparency_v2", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v2" },
+            { "name": "ChangePaletteTransparency_v3", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v3" },
+            { "name": "ClassicPaletized", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ClassicPaletized", "notes": "Next ULA palette on the classic screen — relates to the catalogued ULA-palette gap" },
+            { "name": "UlaScroll", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/UlaScroll" }
+          ]
+        },
+        {
+          "name": "Interrupts",
+          "tests": [
+            { "name": "HaltAfterDisable", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Interrupts/HaltAfterDisable", "notes": "HALT with interrupts disabled" }
+          ]
+        },
+        {
+          "name": "Timing",
+          "tests": [
+            { "name": "Changing8kBank", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank", "notes": "MMU bank-switch timing" },
+            { "name": "Changing8kBank_NoContention", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank_NoContention" },
+            { "name": "ScanlineReadingAndInterrupt", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/ScanlineReadingAndInterrupt", "notes": "NR$1E/$1F raster reads vs the frame interrupt" }
+          ]
+        },
+        {
+          "name": "Misc — DMA deep dives",
+          "tests": [
+            { "name": "ZilogDMA", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/ZilogDMA", "notes": "Zilog-DMA-mode behaviour" },
+            { "name": "DmaInteractive", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/DmaInteractive", "notes": "Interactive; includes real Zilog hardware photos — manual comparison rather than CI" }
+          ]
+        },
+        {
+          "name": "ZX48 / ZX128 classic tests",
+          "tests": [
+            { "name": "Z80BlockInstructionFlags", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80BlockInstructionFlags", "notes": "Undocumented flags of the block instructions" },
+            { "name": "Z80CcfScfOutcomeStability", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80CcfScfOutcomeStability", "notes": "SCF/CCF X/Y flag stability" },
+            { "name": "Z80IntSkip", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip", "notes": "Interrupt acceptance edge cases" },
+            { "name": "ULAvsSJS", "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/ULAvsSJS", "notes": "ULA timing comparison" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "327tests",
+      "title": "Threetwosevensixseven/ZXSpectrumNextTests — test inventory",
+      "page": "327tests.html",
+      "link": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests",
+      "description": "Five Zeus-built .nex feature tests (MIT). Small but targeted: paging equivalences, DMA vs LDIR, and layer ordering.",
+      "groups": [
+        {
+          "name": "Tests",
+          "tests": [
+            { "name": "MMUPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/MMUPaging.asm", "notes": "Top-16K paging via port $7FFD vs the Next MMU registers" },
+            { "name": "DFFDPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DFFDPaging.asm", "notes": "Port $DFFD high-bank extension paging" },
+            { "name": "ULAScreenPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/ULAScreenPaging.asm", "notes": "Screen-page selection behaviour" },
+            { "name": "DMACopy", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DMACopy.asm", "notes": "DMA screen fill/copy vs LDIR (ships DMAFill/DMACopy/LDIRFill/LDIRCopy .nex builds)" },
+            { "name": "Level2Order", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/Level2Order.asm", "notes": "All six sprite / Layer 2 / ULA priority orderings" }
+          ]
+        }
+      ]
     }
   ]
 }

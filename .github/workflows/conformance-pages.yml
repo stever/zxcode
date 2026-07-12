@@ -52,6 +52,7 @@ jobs:
           -manifest ../manifest.json
           -results /tmp/gotest.json
           -gaps ../../docs/architecture/known-gaps.md
+          -vhdl ../../VHDL_CONFORMANCE.md
           -out /tmp/site
 
       - uses: actions/configure-pages@v5

@@ -58,7 +58,7 @@ Related documents outside this folder:
 
 - `../../conformance/` — the conformance dashboard: manifest + generator
   publishing live pass/gap status to GitHub Pages
-  (https://stever.github.io/zxcode/). Its inputs are the manifest, the
+  (https://stever.dev/zxcode/). Its inputs are the manifest, the
   real test run, and [known-gaps.md](known-gaps.md).
 - `../../README.md` — user-facing project README.
 - `../../ROADMAP.md` — current state, backlog, hardware-feature catalogue,
