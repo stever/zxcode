@@ -204,6 +204,18 @@
       "tooLarge": "File is too large. The limit is 256KB.",
       "assetSize": "{{size}} bytes",
       "assetHint": "Binary asset. Reference it from your code by its path (e.g. INCBIN \"folder/name\") and it is staged under your source's directory at compile time."
+    },
+    "sprites": {
+      "draw": "Draw",
+      "erase": "Erase (transparent)",
+      "flipHorizontal": "Flip horizontally",
+      "flipVertical": "Flip vertically",
+      "clear": "Clear sprite",
+      "addPattern": "Add sprite",
+      "deletePattern": "Delete sprite",
+      "patternLabel": "Sprite {{index}} of {{count}}",
+      "transparent": "Transparent",
+      "pickHint": "Right-click the canvas to pick up a colour."
     }
   },
   "projectList": {

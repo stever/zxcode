@@ -356,6 +356,120 @@ code {
     color: #ffffff;
 }
 
+/* Sprite editor shown in place of the text editor for .spr assets. */
+.sprite-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #3f3f3f;
+    border-radius: 4px;
+    background-color: #1a1a1a;
+    color: #cccccc;
+    font-family: var(--font-family);
+}
+
+.sprite-editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 16px;
+    row-gap: 8px;
+}
+
+.sprite-editor-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sprite-editor-hint {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.sprite-editor-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.sprite-editor-canvas {
+    border: 1px solid #3f3f3f;
+    border-radius: 2px;
+    cursor: crosshair;
+    touch-action: none;
+    /* Shrink with narrow layouts; sprite pixels stay square. */
+    max-width: 100%;
+    height: auto;
+}
+
+.sprite-editor-side {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sprite-editor-colour {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+}
+
+.sprite-editor-swatch {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 1px solid #3f3f3f;
+    border-radius: 2px;
+}
+
+/* Erase tool selected: the swatch shows transparency stripes. */
+.sprite-editor-swatch.erase {
+    background:
+        repeating-linear-gradient(45deg, #2e2e2e 0 5px, #3a3a3a 5px 10px);
+}
+
+.sprite-palette {
+    display: grid;
+    grid-template-columns: repeat(16, 18px);
+    grid-auto-rows: 18px;
+    gap: 1px;
+}
+
+.sprite-palette-swatch {
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.sprite-palette-swatch.selected {
+    outline: 2px solid #ffffff;
+    outline-offset: -1px;
+}
+
+.sprite-pattern-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.sprite-pattern-thumb {
+    width: 48px;
+    height: 48px;
+    image-rendering: pixelated;
+    border: 1px solid #3f3f3f;
+    border-radius: 2px;
+    cursor: pointer;
+    background-color: #1a1a1a;
+}
+
+.sprite-pattern-thumb.selected {
+    border-color: #ffffff;
+}
+
 .editor-toolbar {
     display: flex;
     flex-wrap: wrap;

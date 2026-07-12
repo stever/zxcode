@@ -2,6 +2,11 @@ import React, { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import CodeMirror from "./CodeMirror";
 import "codemirror/mode/z80/z80";
+import { SpriteEditor } from "./SpriteEditor";
+import {
+  isEditableSpriteContent,
+  isSpriteFileName,
+} from "../lib/sprites/spr";
 import { setCode, setFileContent } from "../redux/project/actions";
 import { selectActiveFile } from "../redux/project/selectors";
 import { toggleBreakpoint } from "../redux/debugger/actions";
@@ -196,9 +201,24 @@ export function ProjectEditor() {
       - (activeFile.content.endsWith("==") ? 2 : activeFile.content.endsWith("=") ? 1 : 0)
     : 0;
 
+  // .spr assets holding whole 16x16 8-bit patterns open in the sprite
+  // editor instead of the info panel; its edits flow through the same
+  // setFileContent path as text, so save/staging/ZIP are unchanged.
+  const activeIsSprite =
+    activeIsBinary &&
+    isSpriteFileName(activeFile.name) &&
+    isEditableSpriteContent(activeFile.content);
+
   return (
     <>
-      {activeIsBinary && (
+      {activeIsSprite && (
+        <SpriteEditor
+          key={activeFileId}
+          fileId={activeFileId}
+          content={activeFile.content}
+        />
+      )}
+      {activeIsBinary && !activeIsSprite && (
         <div className="binary-asset-panel">
           <i className="pi pi-box" style={{ fontSize: "2rem" }} />
           <div className="binary-asset-name">{activeFileName}</div>
