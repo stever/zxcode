@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -54,6 +54,35 @@ export function ProjectToolbar() {
 
   // Check if current user owns this project
   const isOwner = userId && ownerId && userId === ownerId;
+
+  // Ctrl+S / Cmd+S mirrors the Save button (and suppresses the browser's
+  // save-page dialog even when there is nothing to save). Keys aimed at the
+  // emulator stay game input: Ctrl is the Spectrum's Symbol Shift there.
+  useEffect(() => {
+    if (!isOwner) return undefined;
+    const handler = (event) => {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        event.shiftKey ||
+        event.key.toLowerCase() !== "s"
+      ) {
+        return;
+      }
+      if (
+        event.target instanceof Element &&
+        event.target.closest("#jsspeccy-screen")
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (hasUnsavedChanges) {
+        dispatch(saveCodeChanges());
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isOwner, hasUnsavedChanges]);
 
   const deleteConfirm = (event) => {
     confirmPopup({
