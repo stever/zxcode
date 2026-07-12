@@ -4,6 +4,11 @@ import CodeMirror from "./CodeMirror";
 import "codemirror/mode/z80/z80";
 import { SpriteEditor } from "./SpriteEditor";
 import { PaletteEditor } from "./PaletteEditor";
+import { TileMapEditor } from "./TileMapEditor";
+import {
+  isEditableMapContent,
+  isMapFileName,
+} from "../lib/sprites/map";
 import {
   isEditableSpriteContent,
   isSpriteFileName,
@@ -221,6 +226,13 @@ export function ProjectEditor() {
     !activeIsSprite &&
     isPaletteFileName(activeFile.name) &&
     isEditablePaletteContent(activeFile.content);
+  // .map files open in the tile map editor.
+  const activeIsMap =
+    activeIsBinary &&
+    !activeIsSprite &&
+    !activeIsPalette &&
+    isMapFileName(activeFile.name) &&
+    isEditableMapContent(activeFile.content);
 
   return (
     <>
@@ -239,7 +251,14 @@ export function ProjectEditor() {
           content={activeFile.content}
         />
       )}
-      {activeIsBinary && !activeIsSprite && !activeIsPalette && (
+      {activeIsMap && (
+        <TileMapEditor
+          key={activeFileId}
+          fileId={activeFileId}
+          content={activeFile.content}
+        />
+      )}
+      {activeIsBinary && !activeIsSprite && !activeIsPalette && !activeIsMap && (
         <div className="binary-asset-panel">
           <i className="pi pi-box" style={{ fontSize: "2rem" }} />
           <div className="binary-asset-name">{activeFileName}</div>

@@ -32,6 +32,7 @@ import {
   isTileFileName,
 } from "../lib/sprites/spr";
 import { defaultPaletteBase64, isPaletteFileName } from "../lib/sprites/pal";
+import { defaultMapBase64, isMapFileName } from "../lib/sprites/map";
 import { useTranslation } from "@zxplay/i18n";
 
 // The editor TabView: the language-named tab is the project's main source,
@@ -128,6 +129,8 @@ export function ProjectFileTabView() {
         dispatch(addFile(name, blankTileBase64(), true, folder));
       } else if (isPaletteFileName(name)) {
         dispatch(addFile(name, defaultPaletteBase64(), true, folder));
+      } else if (isMapFileName(name)) {
+        dispatch(addFile(name, defaultMapBase64(), true, folder));
       } else {
         dispatch(addFile(name, "", false, folder));
       }

@@ -247,6 +247,15 @@
       "value": "Value",
       "priority": "Layer 2 priority",
       "pickerHint": "Click a colour below to assign it to the selected entry."
+    },
+    "tilemap": {
+      "fill": "Fill the whole map with the selected tile",
+      "width": "Size",
+      "widthHint": "Map dimensions (width × height); the raw bytes carry no size, so this reinterprets them",
+      "tiles": "Tiles",
+      "tilesHint": "Project file the tile graphics come from",
+      "pickHint": "Right-click the map to pick up a tile.",
+      "tileLabel": "Tile {{index}} of {{count}}"
     }
   },
   "projectList": {

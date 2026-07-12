@@ -441,6 +441,45 @@ code {
     height: 18px;
 }
 
+/* Tile map (.map) editor, sharing the sprite editor's styling. */
+.tilemap-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #3f3f3f;
+    border-radius: 4px;
+    background-color: #1a1a1a;
+    color: #cccccc;
+    font-family: var(--font-family);
+}
+
+.tilemap-canvas-scroll {
+    overflow: auto;
+    max-height: 480px;
+    border: 1px solid #3f3f3f;
+    border-radius: 2px;
+    align-self: flex-start;
+    max-width: 100%;
+}
+
+.tilemap-canvas {
+    display: block;
+    cursor: crosshair;
+    touch-action: none;
+    image-rendering: pixelated;
+}
+
+.tilemap-tile-strip {
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.tilemap-tile-strip .sprite-pattern-thumb {
+    width: 32px;
+    height: 32px;
+}
+
 .sprite-editor-side {
     display: flex;
     flex-direction: column;
