@@ -22,8 +22,10 @@
 //     parsed and skipped
 //   - WR4: port B start address (+ transfer-mode bits)
 //   - WR6 commands: RESET ($C3), reset port A/B timing ($C7/$CB),
-//     LOAD ($CF), ENABLE ($87); other status/continue commands are
-//     accepted as no-ops
+//     LOAD ($CF), CONTINUE ($D3), ENABLE ($87), DISABLE ($83), the
+//     read-back commands ($BB read mask, $A7 initiate sequence, $BF
+//     read status) and $8B reinitialise status; the interrupt
+//     commands are accepted as no-ops
 //
 // Memory<->memory transfers run synchronously to completion; IO-port
 // endpoints and burst+prescaler transfers interleave with the CPU via
@@ -113,8 +115,27 @@ type DMA struct {
 	// internal registers (status, byte-counter lo/hi, port A lo/hi, port B
 	// lo/hi — bits 0..6) appear in the read sequence; IO reads of port 0x6B
 	// return them in order, cycling. Power-up mask is 0x7F.
-	readMask byte
-	readIdx  int
+	//
+	// readState mirrors the FPGA's reg_rd_seq_s: WHICH register (0..6) the
+	// next port read returns. $BB (dma.vhd:859-886) and $A7 (:694-720) aim
+	// it at the first masked register; $BF aims it at STATUS (:687); each
+	// read advances it to the next masked register after the current one,
+	// wrapping, defaulting to STATUS when nothing else is masked
+	// (:895-1133). Registers outside the mask are simply never LANDED on —
+	// the state itself is not validated against the mask, exactly like the
+	// hardware (a $BF read of status works even with status unmasked).
+	readMask  byte
+	readState int
+
+	// atLeastOne mirrors status_atleastone: set when a transfer moves a
+	// byte while the FSM stays busy (an in-flight interleaved burst),
+	// cleared when the FSM returns to IDLE (dma.vhd:265) — end of a
+	// non-auto-restart block, DISABLE ($83) — or by RESET / $8B
+	// (dma.vhd:640/692). Synchronous transfers complete inside ENABLE and
+	// are already back at "IDLE" when the CPU can next read, so they never
+	// expose the bit — matching what a CPU-visible read observes on
+	// hardware.
+	atLeastOne bool
 
 	// cycleSink, when set, is called with a continuous-mode transfer's T-state
 	// duration so the emulator can charge it to the CPU clock (the DMA stalls
@@ -122,11 +143,22 @@ type DMA struct {
 	// running while the DMA waits between bytes.
 	cycleSink func(uint64)
 
-	// clock returns the current CPU T-state count. When set, a burst-mode
-	// transfer with a non-zero prescaler is interleaved with the CPU: it pumps
-	// one byte every prescaler T-states from Step(), letting the CPU run in the
-	// gaps (so DMA-streamed audio is paced across the CPU timeline).
+	// clock returns the current position on a MONOTONIC 3.5MHz-reference
+	// timeline (z80.CPU.RefTstates — the raw per-frame T-state counter
+	// wraps at every frame end, which would stall a burst whose next byte
+	// falls past the boundary). When set, a burst-mode transfer with a
+	// non-zero prescaler is interleaved with the CPU: it pumps one byte
+	// every prescaler-delay reference T-states from Step(), letting the
+	// CPU run in the gaps (so DMA-streamed audio is paced across the CPU
+	// timeline).
 	clock func() uint64
+
+	// turbo returns the current CPU speed (NR$07, 0=3.5MHz .. 3=28MHz).
+	// The FPGA's prescaler timer gains 8>>turbo per 28MHz tick
+	// (dma.vhd:250-255) and a byte's transfer stalls until the timer
+	// reaches prescaler*32 (dma.vhd:424/451), so the per-byte delay in
+	// CPU T-states is prescaler*4^turbo/2. nil = speed 0.
+	turbo func() byte
 
 	// Active interleaved-burst state.
 	activeBurst bool
@@ -160,6 +192,10 @@ func (d *DMA) SetCycleSink(sink func(uint64)) { d.cycleSink = sink }
 // transfers interleave with the CPU via Step(). Optional — without it, burst
 // transfers run to completion at ENABLE.
 func (d *DMA) SetClock(clock func() uint64) { d.clock = clock }
+
+// SetTurbo attaches the CPU speed source (NR$07 value, 0..3) used to scale
+// the prescaler delay. Optional — without it the reset speed 0 is assumed.
+func (d *DMA) SetTurbo(turbo func() byte) { d.turbo = turbo }
 
 // WriteCommand accepts one byte of the port-0x6B command stream. Wired
 // via ULA.SetNextDMA / the routing in ULA.WritePort.
@@ -312,7 +348,7 @@ func (d *DMA) command(val byte) {
 	switch val {
 	case 0xC3: // RESET — clear configuration + state machine (keep the buses)
 		*d = DMA{mem: d.mem, io: d.io, cycleSink: d.cycleSink, clock: d.clock,
-			aCycleLen: 2, bCycleLen: 2, readMask: 0x7F}
+			turbo: d.turbo, aCycleLen: 2, bCycleLen: 2, readMask: 0x7F}
 	case 0xCF: // LOAD — latch the start addresses into the internal pointers
 		d.loaded = true
 		d.curA = d.portAStart
@@ -328,18 +364,29 @@ func (d *DMA) command(val byte) {
 		if d.loaded {
 			d.Trigger()
 		}
-	case 0xBB: // READ MASK FOLLOWS — next byte sets the read mask
+	case 0x83: // DISABLE — dma_seq_s := IDLE (dma.vhd:727-728): stops an
+		// in-flight interleaved burst; IDLE clears status_atleastone (:265).
+		d.activeBurst = false
+		d.atLeastOne = false
+	case 0xBB: // READ MASK FOLLOWS — next byte sets the read mask AND aims
+		// the read state at the first masked register (dma.vhd:859-886).
 		d.pending = []func(byte){func(m byte) {
 			d.readMask = m & 0x7F
-			d.readIdx = 0
+			d.readState = d.firstMaskedReg()
 		}}
-	case 0xA7: // INITIATE READ SEQUENCE — reset the read cursor
-		d.readIdx = 0
-	case 0x8B: // REINITIALIZE STATUS BYTE (dma.vhd:690): endofblock_n='1'
+	case 0xA7: // INITIATE READ SEQUENCE — aim the read state at the first
+		// masked register (dma.vhd:694-720).
+		d.readState = d.firstMaskedReg()
+	case 0xBF: // READ STATUS BYTE — the next read returns status
+		// (dma.vhd:687-688: reg_rd_seq_s := RD_STATUS).
+		d.readState = 0
+	case 0x8B: // REINITIALIZE STATUS BYTE (dma.vhd:690-692):
+		// endofblock_n='1', atleastone='0'.
 		d.endOfBlock = false
+		d.atLeastOne = false
 	default:
-		// $C7/$CB reset-timing, $83 disable, status-reinit commands need no
-		// state change for the transfers the zxnDMA actually runs.
+		// $C7/$CB reset-timing and the interrupt commands need no state
+		// change for the transfers the zxnDMA actually runs.
 	}
 }
 
@@ -399,19 +446,25 @@ func (d *DMA) finishBlock() {
 		d.counter = 0
 	} else {
 		d.loaded = false
+		d.atLeastOne = false // FSM back to IDLE clears status_atleastone (dma.vhd:265)
 	}
 }
 
 // Step advances an interleaved burst transfer: it transfers every byte whose
 // due time has arrived by `now` (the current CPU T-state), spacing them by the
-// prescaler. No-op unless a burst+prescaler transfer is in flight. Call it from
-// the CPU's per-instruction hook so DMA-streamed audio is paced correctly and
-// the CPU runs between bytes.
+// per-byte cycle cost (prescaler delay included, at the live turbo speed).
+// No-op unless a burst+prescaler transfer is in flight. Call it from the CPU's
+// per-instruction hook so DMA-streamed audio is paced correctly and the CPU
+// runs between bytes.
+//
+// An auto-restart block (WR5 D5) reloads the start addresses and keeps
+// going — the FPGA goes FINISH_DMA -> START_DMA without ever idling
+// (dma.vhd:469-489) — until DISABLE ($83) or RESET stops it.
 func (d *DMA) Step(now uint64) {
 	if !d.activeBurst {
 		return
 	}
-	per := d.perByteCycles()
+	per := d.perByteClockUnits()
 	srcIsA := d.aToB
 	for d.remaining > 0 && now >= d.nextDue {
 		b := d.portRead(srcIsA)
@@ -419,6 +472,18 @@ func (d *DMA) Step(now uint64) {
 		d.counter++
 		d.remaining--
 		d.nextDue += per
+		d.atLeastOne = true // status_atleastone, set per byte (dma.vhd:412)
+		if d.remaining == 0 && d.autoRestart {
+			d.endOfBlock = true // FINISH_DMA latches it even on restart (dma.vhd:471)
+			d.curA = d.portAStart
+			d.curB = d.portBStart
+			d.counter = 0
+			length := int(d.blockLen)
+			if length == 0 {
+				length = 65536
+			}
+			d.remaining = length
+		}
 	}
 	if d.remaining == 0 {
 		d.activeBurst = false
@@ -472,17 +537,54 @@ func (d *DMA) endpointWrite(isIO bool, addr uint16, val byte) {
 }
 
 // perByteCycles is the T-state cost of moving one byte: the source read cycle
-// length plus the destination write cycle length, or the fixed-time prescaler
-// if it is larger (zxnDMA "the transfer takes at least <prescaler> cycles per
-// byte" — the sampled-audio feature).
+// length plus the destination write cycle length, or the prescaler delay if it
+// is larger (the FPGA waits after each byte's write until its 28MHz timer
+// reaches prescaler*32, dma.vhd:424/451 — the zxnDMA fixed-time sampled-audio
+// feature).
 func (d *DMA) perByteCycles() uint64 {
 	srcCyc, dstCyc := d.aCycleLen, d.bCycleLen
 	if !d.aToB { // B is the source
 		srcCyc, dstCyc = d.bCycleLen, d.aCycleLen
 	}
 	per := uint64(srcCyc) + uint64(dstCyc)
-	if uint64(d.prescaler) > per {
-		per = uint64(d.prescaler)
+	if delay := d.prescalerTstates(); delay > per {
+		per = delay
+	}
+	return per
+}
+
+// prescalerTstates is the prescaler's per-byte delay in CPU T-states at the
+// current turbo speed. The FPGA timer gains 8>>turbo per 28MHz tick
+// (dma.vhd:250-255) and the transfer stalls until it reaches prescaler*32
+// (timer bits 13:5 compared against the prescaler, dma.vhd:424/451), so the
+// delay is prescaler*32/(8>>turbo) 28MHz ticks = prescaler*4^turbo/2
+// T-states — the delay per byte GROWS with the CPU speed, which is exactly
+// what the upstream DMA test's MHz-stepping burst fill shows on hardware.
+func (d *DMA) prescalerTstates() uint64 {
+	if d.prescaler == 0 {
+		return 0
+	}
+	t := d.turboLevel()
+	return (uint64(d.prescaler) << (2 * t)) / 2
+}
+
+func (d *DMA) turboLevel() byte {
+	if d.turbo == nil {
+		return 0
+	}
+	return d.turbo() & 3
+}
+
+// perByteClockUnits is the per-byte spacing of an interleaved burst in the
+// clock's units — MONOTONIC 3.5MHz-reference T-states. The prescaler's wall
+// delay of prescaler*32/(8>>turbo) 28MHz ticks is prescaler*2^turbo/2
+// reference T-states (one reference T-state = 8 ticks). The read+write
+// cycle-length component is negligible against any prescaler that engages
+// this path and is not added.
+func (d *DMA) perByteClockUnits() uint64 {
+	per := (uint64(d.prescaler) << d.turboLevel()) / 2
+	if per == 0 {
+		per = 1
 	}
 	return per
 }
@@ -519,35 +621,40 @@ func (d *DMA) Duration() uint64 { return d.lastDuration }
 // Mode returns the transfer mode (continuous or burst) from the last WR4 write.
 func (d *DMA) Mode() byte { return d.mode }
 
-// ReadCommand returns the next register value in the read sequence (an IO read
-// of port 0x6B), advancing and wrapping the cursor. The read mask selects which
-// of the seven registers participate. If the mask is empty it returns 0xFF.
+// ReadCommand returns the register the read state currently points at (an IO
+// read of port 0x6B), then advances the state to the next masked register
+// after it, wrapping — exactly the FPGA's per-read reg_rd_seq_s transitions
+// (dma.vhd:895-1133). An empty mask parks the state on STATUS, so reads
+// return the status byte (every VHDL else-branch lands on RD_STATUS).
 func (d *DMA) ReadCommand() byte {
-	regs := d.readSequence()
-	if len(regs) == 0 {
-		return 0xFF
-	}
-	if d.readIdx >= len(regs) {
-		d.readIdx = 0
-	}
-	v := d.regValue(regs[d.readIdx])
-	d.readIdx++
-	if d.readIdx >= len(regs) {
-		d.readIdx = 0
-	}
+	v := d.regValue(d.readState)
+	d.readState = d.nextMaskedReg(d.readState)
 	return v
 }
 
-// readSequence returns the register indices (0..6) selected by the read mask,
-// in ascending order.
-func (d *DMA) readSequence() []int {
-	var seq []int
+// firstMaskedReg returns the register the read state is aimed at by $A7 /
+// the $BB follow byte: the lowest set mask bit, or STATUS when the mask is
+// empty (dma.vhd:694-720 / 859-886).
+func (d *DMA) firstMaskedReg() int {
 	for bit := 0; bit < 7; bit++ {
 		if d.readMask&(1<<bit) != 0 {
-			seq = append(seq, bit)
+			return bit
 		}
 	}
-	return seq
+	return 0
+}
+
+// nextMaskedReg returns the read state following a read of register cur: the
+// next masked register scanning cur+1..6 then 0..cur, defaulting to STATUS
+// (dma.vhd:895-1133 — each RD_* case's if/elsif ladder in exactly this order).
+func (d *DMA) nextMaskedReg(cur int) int {
+	for i := 1; i <= 7; i++ {
+		bit := (cur + i) % 7
+		if d.readMask&(1<<bit) != 0 {
+			return bit
+		}
+	}
+	return 0
 }
 
 // regValue returns the current value of read-mask register reg:
@@ -577,15 +684,19 @@ func (d *DMA) regValue(reg int) byte {
 //	bits 7:6 = 00
 //	bit 5    = status_endofblock_n (1 = not at end, 0 = block finished)
 //	bits 4:1 = 1101 (fixed)
-//	bit 0    = status_atleastone — set while a transfer is mid-flight, but the
-//	           FPGA clears it once the FSM returns to IDLE (dma.vhd:265). Our
-//	           transfers complete synchronously, so a read always observes the
-//	           idle state: 0.
+//	bit 0    = status_atleastone — set while a transfer is mid-flight
+//	           (an interleaved burst that has moved a byte), cleared when
+//	           the FSM returns to IDLE (dma.vhd:265). Synchronous transfers
+//	           complete inside ENABLE, so a read only ever observes them
+//	           idle: 0.
 func (d *DMA) statusByte() byte {
 	const fixed = 0x1A // bits 4:1 = 1101, bits 5/0 = 0
 	s := byte(fixed)
 	if !d.endOfBlock { // status_endofblock_n = 1
 		s |= 0x20
+	}
+	if d.atLeastOne {
+		s |= 0x01
 	}
 	return s
 }

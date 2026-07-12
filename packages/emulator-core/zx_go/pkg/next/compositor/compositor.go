@@ -425,6 +425,25 @@ func (c *Compositor) recomputeULATrans() {
 // Transparency returns the currently-installed transparency index.
 func (c *Compositor) Transparency() byte { return c.transparency }
 
+// ULARGBA resolves a ULA palette index (0..255) through the LIVE active ULA
+// palette — the FPGA feeds every ULA pixel (and border pixel) through the
+// palette SRAM, so NR$40/$41/$44 redefinitions (including copper MOVEs)
+// recolour the classic screen. transparent reports whether the entry's
+// 8-bit projection equals the NR$14 global transparency colour — the
+// hardware's uniform ULA-transparency rule. Satisfies pkg/ula's
+// nextULAPaletteResolver; returns opaque black when no palette is wired.
+func (c *Compositor) ULARGBA(idx byte) (byte, byte, byte, bool) {
+	if c.pal == nil {
+		return 0, 0, 0, false
+	}
+	p := c.pal.PaletteForLayer(palette.LayerULA)
+	if p == nil {
+		return 0, 0, 0, false
+	}
+	r, g, b := p.RGB(idx)
+	return r, g, b, byte(p.Get(idx)>>1) == c.transparency
+}
+
 // ComposeScanline writes 256 composited RGBA pixels (1024 bytes)
 // to dst, given the ULA's already-rendered RGBA scanline (also
 // 1024 bytes) for row y. The compositor fetches Layer 2's, the
@@ -460,6 +479,15 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 	doTilemap := c.tilemap != nil && c.tilemap.Enabled() && c.pal != nil && !c.tilemap.Is80Col()
 	if !doL2 && !doSprites && !doTilemap {
 		copy(dst[:Width*4], ulaRGBA[:Width*4])
+		// Transparent ULA pixels (alpha 0 from the live-palette row
+		// render) have nothing beneath them here: show the NR$4A
+		// fallback, as the FPGA does when every layer is transparent.
+		for off := 0; off < Width*4; off += 4 {
+			if dst[off+3] == 0 {
+				dst[off+0], dst[off+1], dst[off+2], dst[off+3] =
+					c.fallback[0], c.fallback[1], c.fallback[2], c.fallback[3]
+			}
+		}
 		return
 	}
 
@@ -560,6 +588,13 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 	// always false, so paintBase/paintULAStencil collapse to paintULA and
 	// the verified compositing is unchanged.
 	ulaTransparentAt := func(off int) bool {
+		// Alpha 0 is the live-palette ULA render's per-pixel transparency
+		// signal (palette entry == NR$14) — the primary, index-accurate
+		// path. The RGBA value-matching below serves rows the classic
+		// renderer produced (fallback paths).
+		if ulaRGBA[off+3] == 0 {
+			return true
+		}
 		if c.ulaTransActive &&
 			ulaRGBA[off+0] == c.ulaTransRGBA[0] && ulaRGBA[off+1] == c.ulaTransRGBA[1] &&
 			ulaRGBA[off+2] == c.ulaTransRGBA[2] && ulaRGBA[off+3] == c.ulaTransRGBA[3] {

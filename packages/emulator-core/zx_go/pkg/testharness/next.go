@@ -48,6 +48,17 @@ import (
 // pager is wired with a nil ROM, which behaves as open bus for any
 // fetch from 0x2000–0x3FFF while paged in. The boot path doesn't
 // touch the divMMC ROM area, so this is fine.
+// harnessDMAPortBus adapts the ULA's port dispatch to the zxnDMA's IOBus
+// contract (ReadPort returns a bare byte) — the same adapter production
+// uses (cmd/zx_go/next.go dmaPortBus).
+type harnessDMAPortBus struct{ u *ula.ULA }
+
+func (b harnessDMAPortBus) WritePort(port uint16, val byte) { b.u.WritePort(port, val) }
+func (b harnessDMAPortBus) ReadPort(port uint16) byte {
+	v, _ := b.u.ReadPort(port)
+	return v
+}
+
 func newNext() (*Harness, error) {
 	mem, err := memory.New("", roms.ModelNext)
 	if err != nil {
@@ -93,6 +104,7 @@ func newNext() (*Harness, error) {
 		UART:       uartEngine,
 		Keymap:     keymapEngine,
 		Tilemap:    tilemapLayer,
+		ULANext:    u,
 	})
 	cpu.NextRegs = disp
 	u.SetNextRegs(disp)
@@ -107,6 +119,18 @@ func newNext() (*Harness, error) {
 	u.SetNextCompositor(comp)
 	u.SetNextSpritePort(sprites) // port $303B select (write) / status (read); $5B/$57 upload
 	u.SetNextDMA(dmaEngine)
+	// zxnDMA bus hooks, mirroring the production wiring in
+	// cmd/zx_go/next.go: IO endpoints route through the ULA's port
+	// dispatch (without this an IO-source transfer reads $FF — the
+	// upstream base/DMA test's IO rows caught exactly that), a
+	// continuous transfer's duration is charged to the CPU clock, and
+	// burst+prescaler transfers interleave with the CPU via the
+	// per-instruction Step (prescaler delay scaled by NR$07 turbo).
+	dmaEngine.SetIOBus(harnessDMAPortBus{u})
+	dmaEngine.SetCycleSink(func(n uint64) { cpu.SetTstates(cpu.Tstates() + n) })
+	dmaEngine.SetClock(cpu.RefTstates)
+	dmaEngine.SetTurbo(func() byte { return cpu.SpeedSelect() & 3 })
+	cpu.AddPreFetchHook("zxndma-step", func(uint16) { dmaEngine.Step(cpu.RefTstates()) })
 	u.SetNextCopper(cop)
 	u.SetNextDAC(dacBank)
 	// i2c DS1307 RTC on ports $103B/$113B: NextZXOS bit-bangs this bus

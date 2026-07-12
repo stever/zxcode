@@ -28,16 +28,19 @@ func TestBurstInterleavesWithClock(t *testing.T) {
 	var now uint64
 	d := New(mem)
 	d.SetClock(func() uint64 { return now })
-	feed(d, burstStream(0x4000, 0x6000, 4, 50)) // prescaler 50 → byte every 50 T
+	// Prescaler 50 at the default turbo 0 → a byte every 50/2 = 25 T-states
+	// (prescaler*4^turbo/2, dma.vhd:250-255/424).
+	const perByte = 25
+	feed(d, burstStream(0x4000, 0x6000, 4, 50))
 
 	// Deferred: nothing transferred at ENABLE.
 	if d.ByteCounter() != 0 {
 		t.Fatalf("burst transferred %d bytes at ENABLE, want 0 (deferred)", d.ByteCounter())
 	}
 
-	// Byte i becomes due at now = i*50. Step in 10-T increments.
+	// Byte i becomes due at now = i*perByte. Step in 10-T increments.
 	transferredBy := map[uint16]uint64{}
-	for now = 0; now <= 4*50; now += 10 {
+	for now = 0; now <= 4*perByte; now += 10 {
 		before := d.ByteCounter()
 		d.Step(now)
 		for b := before; b < d.ByteCounter(); b++ {
@@ -52,10 +55,10 @@ func TestBurstInterleavesWithClock(t *testing.T) {
 	if d.ByteCounter() != 4 {
 		t.Fatalf("after stepping, counter = %d, want 4", d.ByteCounter())
 	}
-	// Byte i should not have transferred before its due time i*50.
+	// Byte i should not have transferred before its due time i*perByte.
 	for i := uint16(0); i < 4; i++ {
-		if transferredBy[i] < uint64(i)*50 {
-			t.Errorf("byte %d transferred at T=%d, before its due time %d", i, transferredBy[i], uint64(i)*50)
+		if transferredBy[i] < uint64(i)*perByte {
+			t.Errorf("byte %d transferred at T=%d, before its due time %d", i, transferredBy[i], uint64(i)*perByte)
 		}
 	}
 }

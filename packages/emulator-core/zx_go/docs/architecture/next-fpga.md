@@ -161,7 +161,8 @@ defaults):
 Diagram: [next-video-pipeline.drawio](diagrams/next-video-pipeline.drawio).
 
 Per frame the ULA renders its classic base image, then for each active
-scanline steps the Copper and calls the compositor. The pieces:
+scanline re-renders the ULA row through the live Next ULA palette with
+the Copper interleaved per pixel, and calls the compositor. The pieces:
 
 - Layer 2 (`pkg/next/layer2`): framebuffer over three consecutive 16K
   banks. 256×192 8bpp row-major, 320×256 8bpp and 640×256 4bpp
@@ -196,12 +197,29 @@ scanline steps the Copper and calls the compositor. The pieces:
   wide render paths (640px), and border passes composite tilemap and
   sprites over the border area.
 - Copper (`pkg/next/copper`): 1024 × 16-bit instruction store, MOVE /
-  WAIT / NOOP / HALT, four start modes (NR$62), and the FPGA's 11-bit
-  byte-granular write address (every NR$60/$63 byte advances it; NR$63
-  stages the even byte and commits the pair atomically, NR$61/$62 read
-  it back live). Execution is scanline-quantised: the ULA steps it
-  before each row with an end-of-line hpos so WAITs release on the
-  correct scanline and threshold. StartOnVBL restarts at the frame wrap.
+  WAIT / NOOP / HALT, four start modes (NR$62, list restart only on a
+  mode TRANSITION into 01/11 per copper.vhd's edge detect), and the
+  FPGA's 11-bit byte-granular write address (every NR$60/$63 byte
+  advances it; NR$63 stages the even byte and commits the pair
+  atomically, NR$61/$62 read it back live). Execution is cycle-paced
+  (`RunToCycle`): MOVE costs 2 and NOOP 1 cycle of the 28MHz copper
+  clock (4 cycles per 7MHz pixel), WAIT releases only when vcount
+  equals its line and hcount reaches (X<<3)+12, and the list address
+  wraps at 1024. The ULA's compositor pass interleaves it per PIXEL
+  with the live-palette ULA row render (mid-scanline palette MOVEs land
+  on the right pixel — the base/Copper flags), sweeps lines 192..311
+  after the visible rows, and restarts StartOnVBL lists at the frame
+  wrap. The legacy per-scanline `Step` remains for the golden replay
+  and non-live fallback paths.
+- Live-palette ULA render (`pkg/ula` renderNextULARow +
+  `Compositor.ULARGBA`): on the Next, ULA inner-screen and border
+  pixels resolve through the LIVE ULA palette exactly like the FPGA's
+  palette SRAM lookup (zxula.vhd:483-558): standard decode
+  ink/16+paper (+8 bright, flash swap), ULANext decode (NR$42 ink mask,
+  paper 128|attr>>n, non-canonical masks and format $FF show the NR$4A
+  background), border via the paper entry. Transparency (entry ==
+  NR$14) travels to the compositor as alpha 0. Timex hi-res and the
+  ULA-disabled fill keep the classic pre-render.
 
 Raster feedback: `ULA.BeamPosition()` derives (line, hpos) from the
 shared T-state counter, wired to NR$1E/$1F, so DI'd raster-polling code
@@ -225,11 +243,20 @@ shared T-state counter, wired to NR$1E/$1F, so DI'd raster-polling code
 
 The zxnDMA on port $6B speaks the Z80-DMA WR-group protocol: variable
 length register groups decoded by a pending-follow-byte state machine,
-WR6 commands (RESET/LOAD/CONTINUE/ENABLE/READ MASK...), read-back
-sequence and status byte per dma.vhd, and the prescaler for
-sampled-audio transfers. Continuous mode stalls the CPU by charging
-cycles; burst mode interleaves with CPU execution. Not modelled:
-interrupt/match logic and DMA-vs-CPU bus contention.
+WR6 commands (RESET/LOAD/CONTINUE/ENABLE/DISABLE/READ MASK/INITIATE
+READ SEQUENCE/READ STATUS/REINIT STATUS), the read-back state machine
+mirroring dma.vhd's reg_rd_seq_s (each read returns the aimed register
+and advances to the next masked one; $A7/$BB aim at the first masked
+register, $BF at status), and the status byte
+"00"&endofblock_n&"1101"&atleastone. The prescaler delay is
+turbo-scaled per dma.vhd's timer (prescaler*4^turbo/2 CPU T-states per
+byte). Continuous mode stalls the CPU by charging cycles; burst+
+prescaler mode interleaves with CPU execution via a per-instruction
+Step paced on the MONOTONIC reference clock (the raw per-frame T-state
+counter wraps), and an auto-restart block reloads and repeats until
+DISABLE. Not modelled: interrupt/match logic and DMA-vs-CPU bus
+contention; read/write cycle lengths are charged in CPU T-states as a
+model convention.
 
 ## Storage: divMMC, SD, esxDOS, .NEX
 

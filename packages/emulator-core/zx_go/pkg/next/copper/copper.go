@@ -10,15 +10,20 @@
 //   - NextReg 0x61 / 0x62 control: byte-address low 8 / high 3
 //     bits + 2-bit start mode
 //   - Decoded MOVE / WAIT / NOOP / HALT opcodes
-//   - Step(scanline, hpos) that walks the program against the
-//     supplied raster position, executing MOVE writes through a
-//     callback and respecting WAIT
+//   - RunToCycle(vcount, cycle): cycle-paced execution at the FPGA's
+//     28MHz copper clock costs (MOVE 2 cycles, NOOP 1, WAIT re-checked
+//     per cycle releasing at vcount==Y && hcount>=(X<<3)+12), driven
+//     per pixel by the ULA's compositor pass
+//   - Step(scanline, hpos): the coarser functional walker (at most
+//     maxInstr instructions against a raster position) used by the
+//     GHDL golden replay and non-cycle-paced callers
 //   - VBL auto-restart (StartOnVBL resets the program counter at
-//     the top of each frame)
+//     the top of each frame; mode writes restart the list only on a
+//     mode TRANSITION into 01/11, per copper.vhd's edge detect)
 //
-// Not implemented: tight raster-precise execution against per-T-state CPU
-// stepping — the execution model uses a scanline+hpos quantum instead, so
-// it is functional but not cycle-accurate.
+// Precision limit: the ULA render samples palette state once per 7MHz
+// pixel, so effects narrower than a pixel (two MOVEs inside one pixel)
+// collapse to one sample — see docs/architecture/known-gaps.md.
 package copper
 
 // Instruction is one decoded copper opcode.
@@ -61,6 +66,13 @@ type RegWriter interface {
 	WriteReg(reg, val byte)
 }
 
+// CyclesPerHcount is the number of copper cycles per hcount unit (one
+// 7MHz ULA pixel): since core 3.0 the copper is clocked at 28MHz, four
+// cycles per pixel — a MOVE (2 cycles) spans half a pixel, which is why
+// the upstream base/Copper test's per-MOVE flag "pixels" render at 50%
+// width on real hardware.
+const CyclesPerHcount = 4
+
 // Copper holds the instruction memory + cursor + start mode.
 type Copper struct {
 	program [MaxInstructions]uint16
@@ -81,6 +93,14 @@ type Copper struct {
 	// lastScanline tracks the previous Step's raster line so a wrap back
 	// to the top of the frame can trigger the StartOnVBL program restart.
 	lastScanline uint16
+
+	// Cycle-paced engine state (RunToCycle): the scanline being executed
+	// and the 28MHz cycle position consumed within it, plus its own
+	// raster-wrap tracker for the StartOnVBL restart. Independent of the
+	// functional Step path — a machine drives one engine or the other.
+	lineV    uint16
+	linePos  int
+	runLastV uint16
 }
 
 // New returns an empty copper.
@@ -141,9 +161,20 @@ func (c *Copper) SetWritePtrLow(b byte) {
 
 // SetWritePtrHighAndMode sets byte-address bits 10:8 (val bits 2:0)
 // AND the start-mode (val bits 7:6).
+//
+// The program counter resets ONLY on a mode TRANSITION into 01/11 —
+// the FPGA edge-detects copper_en_i against last_state_s
+// (copper.vhd:70-79), so re-writing NR$62 with the SAME mode bits
+// (e.g. to select a write address while a list runs, as the upstream
+// base/Copper test's Z80 line-animation patcher does every frame)
+// does not disturb the running program.
 func (c *Copper) SetWritePtrHighAndMode(b byte) {
 	c.addr = (c.addr & 0x00FF) | (uint16(b&0x07) << 8)
-	c.mode = StartMode((b >> 6) & 0x03)
+	mode := StartMode((b >> 6) & 0x03)
+	if mode == c.mode {
+		return
+	}
+	c.mode = mode
 	switch c.mode {
 	case StartStop:
 		c.stopped = true
@@ -220,6 +251,68 @@ func Decode(w uint16) Instruction {
 // the 6-bit column is taken as 8-pixel units with a fixed +12 pixel offset
 // (device/copper.vhd:94).
 func WaitHThreshold(x byte) uint16 { return uint16(x)<<3 + 12 }
+
+// RunToCycle advances the cycle-paced copper on raster line vcount through
+// 28MHz cycle `cycle` of that line (hcount h spans cycles h*4..h*4+3, see
+// CyclesPerHcount). It executes every instruction whose cycles complete by
+// then, at the FPGA's per-cycle costs: a MOVE presents its write pulse then
+// spends a bubble cycle clearing it = 2 cycles (copper.vhd:87-89/100-110), a
+// NOP (MOVE with reg field 0) costs 1 with no pulse (copper.vhd:104), and a
+// WAIT re-checks its condition every cycle (copper.vhd:92-98), releasing only
+// when vcount EQUALS its target line and hcount has reached (X<<3)+12
+// (copper.vhd:94) — a WAIT for another line parks the copper for the rest of
+// this call. HALT ($FFFF) is a WAIT that can never be satisfied (line 511,
+// hcount 516): it parks forever, and in StartOnVBL mode the frame-origin
+// restart un-parks it. The instruction address wraps at the 1024-entry list
+// end exactly like the FPGA's 10-bit counter.
+//
+// Callers step a line by calling RunToCycle with monotonically increasing
+// cycle targets (e.g. once per rendered pixel), then move to the next line —
+// crossing lines resets the intra-line cycle position.
+func (c *Copper) RunToCycle(vcount uint16, cycle int) {
+	// StartOnVBL: restart the list when the raster wraps to the frame top
+	// (copper.vhd:80-83, vcount==0 && hcount==0).
+	if c.mode == StartOnVBL && vcount < c.runLastV {
+		c.pc = 0
+	}
+	c.runLastV = vcount
+	if vcount != c.lineV {
+		c.lineV = vcount
+		c.linePos = 0
+	}
+	if c.mode == StartStop { // copper_en "00": no execution (copper.vhd:85)
+		return
+	}
+	for c.linePos <= cycle {
+		inst := Decode(c.program[c.pc&(MaxInstructions-1)])
+		switch inst.Op {
+		case OpMOVE:
+			if c.regs != nil {
+				c.regs.WriteReg(inst.Reg, inst.Val)
+			}
+			c.pc = (c.pc + 1) & (MaxInstructions - 1)
+			c.linePos += 2
+		case OpNOOP:
+			c.pc = (c.pc + 1) & (MaxInstructions - 1)
+			c.linePos++
+		case OpWAIT:
+			if inst.Y != vcount { // strict line equality (copper.vhd:94)
+				return
+			}
+			release := int(WaitHThreshold(inst.X)) * CyclesPerHcount
+			if release > cycle {
+				return
+			}
+			if c.linePos < release {
+				c.linePos = release
+			}
+			c.linePos++ // the releasing condition check consumes one cycle
+			c.pc = (c.pc + 1) & (MaxInstructions - 1)
+		case OpHALT:
+			return
+		}
+	}
+}
 
 // Step advances the copper by at most maxInstr instructions
 // against the supplied raster position. Returns the number of

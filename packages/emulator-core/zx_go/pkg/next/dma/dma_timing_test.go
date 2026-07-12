@@ -47,13 +47,33 @@ func TestTransferDurationMixedCycles(t *testing.T) {
 	}
 }
 
-// A non-zero prescaler forces each byte to take at least that many cycles
-// (the fixed-time-transfer feature used for sampled audio): 8 bytes × 100 = 800.
+// A non-zero prescaler forces each byte to take at least the prescaler delay
+// (the fixed-time-transfer feature used for sampled audio). The FPGA's delay
+// timer gains 8>>turbo per 28MHz tick (dma.vhd:250-255) and each byte stalls
+// until it reaches prescaler*32 (dma.vhd:424/451), so the per-byte delay is
+// prescaler*4^turbo/2 CPU T-states. At the reset speed (turbo 0, 3.5MHz):
+// 8 bytes × 100/2 = 400.
 func TestPrescalerDominatesDuration(t *testing.T) {
 	d := New(memMap{})
 	feed(d, withTiming(0x4000, 0x6000, 8, 0x02, 0x02, 100))
-	if got := d.Duration(); got != 8*100 {
-		t.Errorf("Duration with prescaler = %d, want %d", got, 8*100)
+	if got := d.Duration(); got != 8*100/2 {
+		t.Errorf("Duration with prescaler = %d, want %d", got, 8*100/2)
+	}
+}
+
+// The prescaler delay scales with the CPU speed: prescaler*4^turbo/2 T-states
+// per byte (dma.vhd:250-255 timer increments + :424/451 threshold), so the
+// SAME prescaler stalls longer at higher turbo — the visible MHz-dependent
+// fill-rate change in the upstream base/DMA test's burst area.
+func TestPrescalerScalesWithTurbo(t *testing.T) {
+	for turbo, wantPerByte := range map[byte]uint64{0: 50, 1: 200, 2: 800, 3: 3200} {
+		speed := turbo
+		d := New(memMap{})
+		d.SetTurbo(func() byte { return speed })
+		feed(d, withTiming(0x4000, 0x6000, 4, 0x02, 0x02, 100))
+		if got := d.Duration(); got != 4*wantPerByte {
+			t.Errorf("turbo %d: Duration = %d, want %d", turbo, got, 4*wantPerByte)
+		}
 	}
 }
 

@@ -475,12 +475,24 @@
             {
               "name": "Copper",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Copper",
-              "notes": "Copper coprocessor behaviour"
+              "notes": "Full visible surface asserted: both self-reported counters 03F3 (board + MAME), all five Swedish flags incl. the over-left-border one, the horizontal-wait >= probe's single yellow pixel, the Z80-animated line with its left-border segment one row lower, rulers and background. Drove the cycle-paced copper (MOVE 2 / NOOP 1 cycles at 28MHz, mode-transition-only list restart) and the live-palette ULA/border render (ULANext decode). Residual precision: palette sampled once per 7MHz pixel, so half-pixel flag detail collapses to one colour per pixel",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsCopper"
+                ]
+              }
             },
             {
               "name": "DMA",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/DMA",
-              "notes": "zxnDMA behaviour"
+              "notes": "Full verdict surface asserted: all 24 A->B/B->A mode cells (IO rows yellow), short-init 4+4+1 and CONTINUE 4+4 areas, the 16-byte read-back stream (adjudicated against dma.vhd — the board photo predates the hex display and MAME 0.281's read-back is non-conformant), the auto-restart prescaler burst fill and the IM2 CPU-speed stepping. Fixed: $BF read-status, read-state machine, $83 disable, burst auto-restart, monotonic burst clock, turbo-scaled prescaler delay, harness DMA IO-bus wiring",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsDMA"
+                ]
+              }
             }
           ]
         },

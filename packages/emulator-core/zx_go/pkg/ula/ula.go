@@ -87,6 +87,19 @@ type ULA struct {
 	// = hi-res ink/paper colour. 0 (the reset default) is the normal screen.
 	timexVideoMode byte
 
+	// ULANext attribute-decode state (Spectrum Next only), pushed by the
+	// NextReg wiring: NR$43 bit 0 enables ULANext, NR$42 is the ink
+	// colour mask. Consumed by the live-palette row render
+	// (renderNextULARow, per video/zxula.vhd:483-558).
+	ulaNextEnabled bool
+	ulaNextFormat  byte
+
+	// borderLineColours is the per-display-line border colour map built by
+	// Render each frame (port-$FE change list applied). Kept on the ULA so
+	// the Next compositor pass can re-resolve border pixels through the
+	// live ULA palette per row.
+	borderLineColours [TotalHeight]byte
+
 	// Port 0xFE state
 	BorderColour byte
 	Mic          bool
@@ -350,6 +363,26 @@ type NextI2C interface {
 // the row composites.
 type NextCopper interface {
 	Step(scanline uint16, hcount uint16, maxInstr int) int
+}
+
+// nextCopperCyclePaced is the optional cycle-paced copper contract
+// (pkg/next/copper RunToCycle). When the wired NextCopper also satisfies
+// it, the compositor pass interleaves copper execution with the ULA row
+// render at per-pixel granularity — mid-scanline MOVEs (the upstream
+// base/Copper test's Swedish flags) land on the right pixels instead of
+// quantising to whole scanlines.
+type nextCopperCyclePaced interface {
+	RunToCycle(vcount uint16, cycle int)
+}
+
+// nextULAPaletteResolver is the optional compositor contract for resolving
+// a ULA palette index (0..255) through the LIVE Next ULA palette, the way
+// the FPGA feeds every ULA pixel through the palette SRAM. transparent
+// reports whether the entry's 8-bit projection equals the NR$14 global
+// transparency colour (a transparent ULA pixel lets lower layers / the
+// NR$4A fallback show).
+type nextULAPaletteResolver interface {
+	ULARGBA(idx byte) (r, g, b byte, transparent bool)
 }
 
 // NextDAC is the contract for the four Spectrum Next DAC channels.
@@ -622,6 +655,14 @@ func (u *ULA) SetBorderTracer(fn func(port uint16, val byte, newBorder byte, sca
 // not painted (see Render). Idempotent and safe to call every frame.
 func (u *ULA) SetULAOutputDisabled(disabled bool) { u.ulaOutputDisabled = disabled }
 
+// SetULANext mirrors the ULANext attribute-decode state: NR$43 bit 0
+// (enable) and NR$42 (ink colour mask). Pushed by the Next wiring
+// (pkg/next.WirePalette).
+func (u *ULA) SetULANext(enabled bool, format byte) {
+	u.ulaNextEnabled = enabled
+	u.ulaNextFormat = format
+}
+
 // ulaDisabledFill is the colour painted across the frame when the ULA output
 // is disabled: the Next compositor's NR$4A fallback when one is wired, else
 // opaque black.
@@ -679,6 +720,9 @@ func (u *ULA) Render() *image.RGBA {
 	// Snapshot the now-current border colour as the baseline for the next
 	// frame's render (see frameStartBorderColour).
 	u.frameStartBorderColour = u.BorderColour
+	// Keep the per-line border map for the Next compositor pass, which
+	// re-resolves border pixels through the live ULA palette.
+	u.borderLineColours = borderPerLine
 
 	// NextReg $68 bit 7 ("Disable ULA output"): the ULA layer paints
 	// nothing. Fill the whole frame with the disabled fill (the NR$4A
@@ -1616,38 +1660,117 @@ func (u *ULA) applyNextCompositor() {
 	// per scanline. Round to 64 for headroom; programs heavy on
 	// WAITs typically execute far fewer.
 	const copperInstrPerScanline = 64
+	// Raster geometry for the cycle-paced copper interleave. hcount
+	// counts 7MHz pixels (448 per 48K-timing line); the copper runs 4
+	// cycles per hcount (28 MHz, copper.CyclesPerHcount). Display pixel
+	// x is influenced by copper activity through hcount x+12 — the same
+	// +12 offset the WAIT release threshold (X<<3)+12 carries
+	// (device/copper.vhd:94), so WAIT(h=X) + MOVE recolours the pixel at
+	// exactly x = X*8, matching the real-board behaviour the upstream
+	// base/Copper test's ReadMe documents. The +2 inside pixelCycle
+	// admits the releasing WAIT check (1 cycle) plus its following
+	// MOVE's write pulse into the pixel's own 4-cycle window.
+	const cyclesPerHcount = 4
+	const lineEndCycle = 448*cyclesPerHcount - 1
+	const frameLines = 312
+	pixelCycle := func(x int) int { return (x+12)*cyclesPerHcount + 2 }
 	if u.compositorScan == nil {
 		u.compositorScan = make([]byte, w*4)
 		u.compositorComposed = make([]byte, w*4)
 	}
 	ulaScan := u.compositorScan
 	composed := u.compositorComposed
+	resolver, liveULA := u.nextCompositor.(nextULAPaletteResolver)
+	if u.ulaOutputDisabled || u.timexHiResActive() {
+		// The disabled-fill and Timex hi-res contents don't come from the
+		// standard attribute decode; keep the pre-rendered u.img rows.
+		liveULA = false
+	}
+	var paced nextCopperCyclePaced
+	if u.nextCopper != nil {
+		paced, _ = u.nextCopper.(nextCopperCyclePaced)
+	}
+	// Raster order of one display row's border pixels (hcount = pixel+12,
+	// 448 hcounts per line): the left border's first 20 pixels display
+	// during the PREVIOUS line's tail (hcount 428..447) and its last 12
+	// during hcount 0..11 of the row's own line; the right border follows
+	// the paper at hcount 268..299. leftCarry hands the previous line's
+	// tail pixels (resolved live, mid-tail) to the next row — this is what
+	// renders the base/Copper test's over-left-border flag, whose MOVEs
+	// live entirely inside that tail and are white-restored before the
+	// line ends.
+	const leftTailPx = 20
+	var leftCarry [leftTailPx][4]byte
+	leftCarryValid := false
 	for y := 0; y < h; y++ {
-		// Tick the Copper BEFORE composing the row so MOVEs affecting
-		// the compositor palette / Layer 2 are visible to this row's
-		// composition (these layers ARE composited per-scanline here).
-		//
-		// A per-scanline ULA *inner-screen* refactor is NOT needed: that
-		// content (u.img) is built from the fixed classic palette, screen
-		// RAM, and the already-per-scanline border (port $FE) — none of
-		// which a Copper NextReg MOVE can change — so there is no
-		// copper-MOVE timing gap to close for it. (It would matter only
-		// if the ULA honoured the copper-changeable Next ULA palette,
-		// which it does not yet — a separate feature, not a timing bug.)
-		if u.nextCopper != nil {
+		// Run the Copper for this row BEFORE composing it so MOVEs
+		// affecting the compositor palette / Layer 2 are visible to this
+		// row's composition. With a cycle-paced copper + live-palette ULA
+		// render the interleave is per PIXEL (inside renderNextULARow);
+		// otherwise the whole line executes up front — the pre-existing
+		// scanline quantum.
+		if u.nextCopper != nil && (paced == nil || !liveULA) {
 			// Step the Copper for scanline y at the end-of-line horizontal
 			// counter (>= 511) so every WAIT targeting any column on scanline
 			// y releases on y, not one scanline late. The Copper's WAIT
 			// release threshold is hcount >= (X<<3)+12 (device/copper.vhd:94);
-			// passing the max hcount clears it for all X. This is the
-			// achievable raster precision for a per-scanline renderer
-			// (per-pixel hcount precision would need per-pixel rendering).
+			// passing the max hcount clears it for all X.
 			u.nextCopper.Step(uint16(y), 511, copperInstrPerScanline)
 		}
 		rowStart := (BorderTop+y)*u.img.Stride + BorderLeft*4
-		copy(ulaScan, u.img.Pix[rowStart:rowStart+w*4])
+		if liveULA {
+			// Left border: carried tail pixels first, then the 12 pixels
+			// that belong to this line's own hcount 0..11.
+			for bx := 0; bx < leftTailPx; bx++ {
+				if leftCarryValid {
+					u.paintImagePixel(y, bx, leftCarry[bx])
+				} else {
+					u.paintImagePixel(y, bx, u.nextBorderRGBA(y, resolver))
+				}
+			}
+			for bx := leftTailPx; bx < BorderLeft; bx++ {
+				if paced != nil {
+					paced.RunToCycle(uint16(y), (bx-leftTailPx)*cyclesPerHcount+2)
+				}
+				u.paintImagePixel(y, bx, u.nextBorderRGBA(y, resolver))
+			}
+			u.renderNextULARow(y, ulaScan, resolver, paced, pixelCycle)
+		} else {
+			copy(ulaScan, u.img.Pix[rowStart:rowStart+w*4])
+		}
 		u.nextCompositor.ComposeScanline(y, ulaScan, composed)
 		copy(u.img.Pix[rowStart:rowStart+w*4], composed)
+		if liveULA {
+			// Right border: per pixel at hcount 268+bx.
+			for bx := 0; bx < BorderLeft; bx++ {
+				if paced != nil {
+					paced.RunToCycle(uint16(y), (268+bx)*cyclesPerHcount+2)
+				}
+				u.paintImagePixel(y, BorderLeft+w+bx, u.nextBorderRGBA(y, resolver))
+			}
+			// Line tail: resolve the next row's carried left-border pixels
+			// live at their hcount, then finish the copper's line.
+			if y+1 < h {
+				for bx := 0; bx < leftTailPx; bx++ {
+					if paced != nil {
+						paced.RunToCycle(uint16(y), (428+bx)*cyclesPerHcount+2)
+					}
+					leftCarry[bx] = u.nextBorderRGBA(y+1, resolver)
+				}
+				leftCarryValid = true
+			}
+			if paced != nil {
+				paced.RunToCycle(uint16(y), lineEndCycle)
+			}
+		}
+	}
+	// Sweep the copper through the vertical blank / border lines so WAITs
+	// targeting lines 192..311 release on their line and the raster wrap
+	// to line 0 restarts a StartOnVBL list next frame.
+	if paced != nil && liveULA {
+		for v := h; v < frameLines; v++ {
+			paced.RunToCycle(uint16(v), lineEndCycle)
+		}
 	}
 
 	// Border-area tilemap pass. Tilemap content in NextZXOS Browser
@@ -1709,6 +1832,135 @@ func (u *ULA) applyNextCompositor() {
 			}
 			u.nextCompositor.ComposeSpriteBorderRow(y+bias, rowFull, inBorder)
 			copy(u.img.Pix[imgRowStart:imgRowStart+TotalWidth*4], rowFull)
+		}
+	}
+}
+
+// ulaNextPaperShift maps a canonical ULANext ink mask (NR$42) to the paper
+// index shift: paper = 128 | attr>>shift (video/zxula.vhd:516-527's case
+// arms). 0 = non-canonical mask (paper/border show the NR$4A background).
+func ulaNextPaperShift(format byte) int {
+	switch format {
+	case 0x01:
+		return 1
+	case 0x03:
+		return 2
+	case 0x07:
+		return 3
+	case 0x0F:
+		return 4
+	case 0x1F:
+		return 5
+	case 0x3F:
+		return 6
+	case 0x7F:
+		return 7
+	}
+	return 0
+}
+
+// nextBorderRGBA resolves display row y's border colour through the LIVE
+// Next ULA palette: entry 128+border in ULANext mode (video/zxula.vhd:
+// 496-504 — paper_base & border), entry 16+border otherwise (zxula.vhd:547
+// — border pixels take the standard paper path, bright 0). A transparent
+// entry (== NR$14) and the ULANext all-ink format $FF show the NR$4A
+// fallback.
+func (u *ULA) nextBorderRGBA(y int, res nextULAPaletteResolver) [4]byte {
+	border := u.borderLineColours[BorderTop+y] & 7
+	var r, g, b byte
+	var transparent bool
+	if u.ulaNextEnabled {
+		if u.ulaNextFormat == 0xFF {
+			transparent = true
+		} else {
+			r, g, b, transparent = res.ULARGBA(128 + border)
+		}
+	} else {
+		r, g, b, transparent = res.ULARGBA(16 + border)
+	}
+	if transparent {
+		f := u.ulaDisabledFill()
+		r, g, b = f.R, f.G, f.B
+	}
+	return [4]byte{r, g, b, 0xFF}
+}
+
+// paintImagePixel writes one RGBA pixel at image column x of display row y.
+func (u *ULA) paintImagePixel(y, x int, c [4]byte) {
+	off := (BorderTop+y)*u.img.Stride + x*4
+	u.img.Pix[off+0] = c[0]
+	u.img.Pix[off+1] = c[1]
+	u.img.Pix[off+2] = c[2]
+	u.img.Pix[off+3] = c[3]
+}
+
+// renderNextULARow renders one 256-pixel ULA row straight from screen RAM
+// through the LIVE Next ULA palette — the FPGA feeds every ULA pixel
+// through the palette SRAM (video/zxula.vhd:483-558), so palette
+// redefinitions (NR$40/$41/$44, incl. copper MOVEs) recolour the classic
+// screen. Index composition per that process:
+//
+//	standard: ink = bright<<3 | ink, paper = 16 | bright<<3 | paper
+//	          (attr bit 7 flash swaps ink/paper, standard mode only)
+//	ULANext:  ink = attr & format; paper = 128 | attr>>shift for the
+//	          canonical formats, else the NR$4A background
+//
+// Transparent pixels (palette value == NR$14) are emitted with alpha 0 —
+// the compositor's per-pixel ULA transparency signal. When a cycle-paced
+// copper is wired, execution interleaves per pixel so mid-scanline MOVEs
+// recolour from exactly their pixel onward.
+func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
+	paced nextCopperCyclePaced, pixelCycle func(int) int) {
+	screenMem := u.mem.GetPage(u.mem.ScreenPage)
+	attrMem := screenMem[0x1800:]
+	fallback := u.ulaDisabledFill()
+	paperShift := ulaNextPaperShift(u.ulaNextFormat)
+	for cx := 0; cx < ScreenWidth/8; cx++ {
+		pixels := screenMem[screenAddrForRowCol(y, cx)]
+		attr := attrMem[(y>>3)*32+cx]
+		for bit := 0; bit < 8; bit++ {
+			x := cx*8 + bit
+			if paced != nil {
+				paced.RunToCycle(uint16(y), pixelCycle(x))
+			}
+			on := pixels&(0x80>>bit) != 0
+			var idx byte
+			background := false
+			if u.ulaNextEnabled {
+				if on {
+					idx = attr & u.ulaNextFormat
+				} else if paperShift == 0 {
+					background = true
+				} else {
+					idx = 128 | attr>>paperShift
+				}
+			} else {
+				if u.flash && attr&0x80 != 0 {
+					on = !on
+				}
+				bright := (attr >> 6) & 1
+				if on {
+					idx = bright<<3 | attr&7
+				} else {
+					idx = 16 | bright<<3 | (attr>>3)&7
+				}
+			}
+			var r, g, b byte
+			var transparent bool
+			if background {
+				r, g, b = fallback.R, fallback.G, fallback.B
+			} else {
+				r, g, b, transparent = res.ULARGBA(idx)
+			}
+			off := x * 4
+			dst[off+0] = r
+			dst[off+1] = g
+			dst[off+2] = b
+			if transparent {
+				dst[off+3] = 0
+			} else {
+				dst[off+3] = 0xFF
+			}
 		}
 	}
 }

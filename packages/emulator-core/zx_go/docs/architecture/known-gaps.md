@@ -21,11 +21,11 @@ Status vocabulary:
 
 | Gap | Status | Source |
 | --- | --- | --- |
-| Copper executes at scanline + hpos-threshold quantum, not per T-state | precision limit (per-scanline renderer) | `pkg/next/copper/copper.go` header, ROADMAP |
+| Copper palette effects sample once per 7MHz pixel: the copper is cycle-paced (RunToCycle: MOVE=2 / NOOP=1 cycles at 28MHz) and interleaves per pixel with the live-palette ULA row render, but half-pixel colour detail (two MOVEs inside one pixel) collapses to one sample, top/bottom border rows take frame-edge palette state, and NON-ULA layers (L2/sprites/tilemap) still see copper state at whole-line granularity | precision limit (per-pixel sampling; surface pinned by TestNexttestsCopper) | `pkg/next/copper/copper.go`, `pkg/ula/ula.go` (applyNextCompositor) |
 | Sprite per-scanline bandwidth limit not modelled; $303B bit 1 (max per line) always reads 0 | deferred | `pkg/next/sprite/doc.go` |
 | Compositor blend modes 6/7 approximated as SLU in the scanline painter (the faithful mixer exists in `mixer.go` but the painter has not migrated onto it); tilemap `tm_below` per-pixel bit approximated | deferred | `pkg/next/compositor/compositor.go` |
 | Hi-res Layer 2 shows visible rows 0..239; the bottom 16 of the 256-line modes are cropped (off-window overscan) | documented simplification | `pkg/ula/ula.go` (renderHiResLayer2), ROADMAP |
-| ULA inner screen does not honour a redefined Next ULA palette for COLOUR (classic palette only). TRANSPARENCY is honoured: entries redefined to the NR$14 value make their classic colour transparent (compositor value-driven set, pinned by the ported Level2Order test) | partially closed; colour redefinition deferred | `pkg/ula/ula.go`, `pkg/next/compositor/compositor.go` |
+| ULA inner screen + border now render through the LIVE Next ULA palette per pixel — colour redefinition AND transparency, ULANext + standard decode per zxula.vhd:483-558 (closed by the base/Copper work). Residue: Timex hi-res and the ULA-output-disabled fill keep the classic pre-render (live decode falls back to it), where transparency still relies on the legacy RGBA value-matching set | closed for the standard screen mode; Timex residue deferred to the Graphics/ULA groups | `pkg/ula/ula.go` (renderNextULARow), `pkg/next/compositor/compositor.go` (ULARGBA) |
 | Sprites composite 8 rows lower than the hardware paper position (the 256-line sprite frame is aligned to the 240-line canvas origin; the canvas draws 24 border lines where hardware shows 32) | canvas simplification, constant offset | `pkg/next/compositor/compositor.go`; observed via the ported Level2Order test |
 | Turbo-speed video timing: pkg/ula scanline/border tracking ignores the speed multiplier, so border effects are wrong above 3.5 MHz | deferred | `pkg/memory/memory.go` comment |
 
@@ -45,7 +45,7 @@ Status vocabulary:
 
 | Gap | Status | Source |
 | --- | --- | --- |
-| zxnDMA: interrupt/match logic and DMA-vs-CPU bus contention not modelled; descriptor mode (port $DB) deferred | deferred | `pkg/next/dma/dma.go` |
+| zxnDMA: interrupt/match logic and DMA-vs-CPU bus contention not modelled; descriptor mode (port $DB) deferred. Read/write cycle-length costs are charged in CPU T-states (the FPGA FSM ticks at 28MHz) — a documented model convention; the prescaler delay IS turbo-exact (prescaler*4^turbo/2 T-states, dma.vhd:250-255/424) | deferred | `pkg/next/dma/dma.go` |
 | UART/ESP: AT responder only, no real networking or socket emulation | out of scope | `pkg/next/uart/doc.go` |
 | NR$0B joystick I/O mode: register exact, pin-repurposing behaviour (GPIO/UART on joystick pins) not modelled | out of scope | `pkg/next/wire.go` |
 | RTC: clock-register writes discarded (host time is truth); only NVRAM persists; 1 Hz output disabled | pragmatic model | `pkg/next/rtc/rtc.go` |

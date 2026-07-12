@@ -741,14 +741,35 @@ func WireLayerPriority(d *nextregs.Dispatcher, p *LayerPriority, sprites *sprite
 	})
 }
 
+// ULANextSink receives the ULANext attribute-decode state — NR$43 bit 0
+// (enable) and NR$42 (ink colour mask) — so the ULA's live-palette row
+// render decodes attributes the way video/zxula.vhd:483-558 does.
+// pkg/ula.ULA satisfies it via SetULANext.
+type ULANextSink interface {
+	SetULANext(enabled bool, format byte)
+}
+
 // WirePalette installs the NextReg 0x40 (index), 0x41 (8-bit
-// value with auto-increment), 0x43 (palette select) and 0x44
-// (9-bit value, two-byte sequence) handlers.
+// value with auto-increment), 0x42 (ULANext format), 0x43 (palette
+// select) and 0x44 (9-bit value, two-byte sequence) handlers.
 //
 // NextReg 0x44 is two-byte: the first write captures the high
 // byte and the second write applies both bytes to the active
 // palette entry. We track that via a small two-step latch.
-func WirePalette(d *nextregs.Dispatcher, b *palette.Bank) {
+//
+// ulaNext may be nil; when set it is seeded with the current NR$42/$43
+// state and updated on every write of either register.
+func WirePalette(d *nextregs.Dispatcher, b *palette.Bank, ulaNext ULANextSink) {
+	pushULANext := func(disp *nextregs.Dispatcher) {
+		if ulaNext != nil {
+			ulaNext.SetULANext(disp.Raw(0x43)&0x01 != 0, disp.Raw(0x42))
+		}
+	}
+	pushULANext(d)
+	d.SetOnWrite(0x42, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x42, val)
+		pushULANext(disp)
+	})
 	d.SetOnWrite(0x40, func(disp *nextregs.Dispatcher, val byte) {
 		b.SetIndex(val)
 		disp.Store(0x40, val)
@@ -811,6 +832,7 @@ func WirePalette(d *nextregs.Dispatcher, b *palette.Bank) {
 		b.SetActive(palette.LayerLayer2, (val>>2)&1)
 		b.SetActive(palette.LayerSprites, (val>>3)&1)
 		disp.Store(0x43, val)
+		pushULANext(disp)
 	})
 	d.SetOnWrite(0x44, func(disp *nextregs.Dispatcher, val byte) {
 		b.WriteNR44(val)
@@ -851,6 +873,9 @@ type WireOpts struct {
 	UART       *uart.UART
 	Keymap     *keymap.Map
 	Tilemap    *tilemap.Tilemap
+	// ULANext, if set, receives the NR$42/$43 ULANext decode state
+	// (typically the pkg/ula.ULA — see ULANextSink).
+	ULANext ULANextSink
 	// DivMMCPager, if set, has its SetAutomap toggled by NextReg
 	// $06 bit 4 writes (the master "Enable DivMMC" gate; see
 	// WirePeripheral2). If the value also satisfies
@@ -903,7 +928,7 @@ func Wire(opts WireOpts) {
 		}
 	}
 	if opts.Palette != nil {
-		WirePalette(opts.Dispatcher, opts.Palette)
+		WirePalette(opts.Dispatcher, opts.Palette, opts.ULANext)
 	}
 	if opts.Priority != nil {
 		WireLayerPriority(opts.Dispatcher, opts.Priority, opts.Sprites)

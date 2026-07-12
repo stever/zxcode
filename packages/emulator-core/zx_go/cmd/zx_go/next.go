@@ -999,6 +999,7 @@ func wireNextSubsystems(e *emulator) error {
 		UART:        uartEngine,
 		Keymap:      keymapEngine,
 		Tilemap:     tilemapLayer,
+		ULANext:     u,
 		DivMMCPager: pager,
 	})
 	cpu.NextRegs = disp
@@ -1221,11 +1222,17 @@ func wireNextSubsystems(e *emulator) error {
 	// lengths). Burst mode is not charged (the CPU runs during the waits).
 	dmaEngine.SetCycleSink(func(n uint64) { cpu.SetTstates(cpu.Tstates() + n) })
 	// Burst-mode + prescaler transfers interleave with the CPU: the DMA pumps
-	// one byte every prescaler T-states from this per-instruction Step, so
-	// DMA-streamed audio is paced across the CPU timeline (and the CPU runs in
-	// the gaps). No-op unless such a transfer is in flight.
-	dmaEngine.SetClock(func() uint64 { return cpu.Tstates() })
-	cpu.AddPreFetchHook("zxndma-step", func(uint16) { dmaEngine.Step(cpu.Tstates()) })
+	// one byte every prescaler-delay reference T-states from this
+	// per-instruction Step, so DMA-streamed audio is paced across the CPU
+	// timeline (and the CPU runs in the gaps). No-op unless such a transfer
+	// is in flight. The clock is RefTstates, NOT the raw Tstates counter —
+	// the raw counter wraps every frame, which stalled any burst spanning a
+	// frame boundary (the upstream base/DMA test's auto-restart fill).
+	dmaEngine.SetClock(cpu.RefTstates)
+	// The prescaler delay scales with the CPU speed (dma.vhd:250-255):
+	// prescaler*4^turbo/2 T-states per byte.
+	dmaEngine.SetTurbo(func() byte { return cpu.SpeedSelect() & 3 })
+	cpu.AddPreFetchHook("zxndma-step", func(uint16) { dmaEngine.Step(cpu.RefTstates()) })
 	// i2c DS1307 RTC on ports $103B/$113B (zxnext.vhd:2630/3234) —
 	// NextZXOS bit-bangs this bus for the menu's date/time line; with
 	// no slave the clock fetch fails every frame and the menu engine

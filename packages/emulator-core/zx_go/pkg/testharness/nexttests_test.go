@@ -219,6 +219,304 @@ func TestNexttestsZ80Nc2(t *testing.T) {
 	driveZ80NSuite(t, "Z80Nc2.snx", 6)
 }
 
+// --- base/Copper: raster-timed palette rewrites -------------------------
+//
+// Copper.snx enables ULANext (ink mask 7), uploads ~1011 copper
+// instructions that redraw PAPER/BORDER 7 per half-pixel — five Swedish
+// flags, a horizontal-wait probe and a Z80-animated full-width line —
+// and self-reports the instruction count both as uploaded (counted in
+// IY) and as read back from NR$61/$62. Ground truth: the core 3.01.5
+// board photo and the MAME 0.282 capture both show 03F3/03F3 and the
+// same scene (Tests/base/Copper/*.jpg upstream); positions follow the
+// core-3.0 28MHz copper (release/!Copper.txt EDIT: flag pixels are
+// half-width and positions shift ~1px vs the old 14MHz description).
+
+// Colours the test produces, as 9-bit palette entries through the
+// live-palette ULA render: C_WHITE=$B6, C_BLUE=$0E, C_YELLOW=$F8 and
+// black ink 0 (Main.asm's constants; low blue bit = OR of the two
+// 8-bit blue bits).
+var (
+	copperWhite  = [3]byte{182, 182, 182}
+	copperBlue   = [3]byte{0, 109, 182}
+	copperYellow = [3]byte{255, 219, 0}
+	copperBlack  = [3]byte{0, 0, 0}
+)
+
+// copperFlagRows builds the 16-half-pixel Swedish flag rows as rendered
+// at the 28MHz copper's 2-cycles-per-MOVE pacing: 8 full pixels wide,
+// with the vertical yellow stripe (FlagData half-pixels 5-6) landing on
+// pixel column `yellowCol` — the visible column depends on the flag's
+// x mod 8 NOOP-padding phase (2 NOOPs = half a pixel), so flags at odd
+// sub-columns sample halves 1,3,5,... (stripe on column 2) and the rest
+// sample halves 0,2,4,... (stripe on column 3). B=blue Y=yellow.
+func copperFlagRows(yellowCol int) [10]string {
+	edge := []byte("BBBBBBBB")
+	edge[yellowCol] = 'Y'
+	stripe := string(edge)
+	return [10]string{
+		stripe, stripe, stripe, stripe,
+		"YYYYYYYY", "YYYYYYYY",
+		stripe, stripe, stripe, stripe,
+	}
+}
+
+// TestNexttestsCopper runs base/Copper and asserts the full visible
+// surface: the two self-reported counters, all five flags (including
+// the over-left-border one), the horizontal-wait greater/equal probe's
+// single yellow pixel, the Z80-animated full-width line (with its left
+// border segment one row lower), the ruler dots and the restored-white
+// background.
+//
+// Documented residual precision: the render samples the palette once
+// per 7MHz pixel (state 2 copper cycles into the pixel), so the flags'
+// half-pixel internal detail collapses to one colour per pixel. The
+// half-pixel phase our sampling picks is not resolvable from the
+// upstream photos; everything at pixel granularity and above is
+// asserted here.
+func TestNexttestsCopper(t *testing.T) {
+	h := runNexttestsSNX(t, "Copper.snx", 200)
+
+	// Self-reported instruction counters (board + MAME: 03F3 both).
+	text := h.ScreenText()
+	if line := screenLine(text, "Copper ins."); !strings.Contains(line, "03F3") {
+		t.Errorf("uploaded-count line = %q, want 03F3", line)
+	}
+	if line := screenLine(text, "Read back"); !strings.Contains(line, "03F3") {
+		t.Errorf("read-back line = %q, want 03F3 (NR$61/$62 byte cursor /2)", line)
+	}
+
+	img := h.ScreenImage()
+	at := func(sx, sy int) [3]byte {
+		px := img.RGBAAt(32+sx, 24+sy)
+		return [3]byte{px.R, px.G, px.B}
+	}
+	check := func(what string, sx, sy int, want [3]byte) {
+		if got := at(sx, sy); got != want {
+			t.Errorf("%s at (%d,%d): got %v, want %v", what, sx, sy, got, want)
+		}
+	}
+	checkFlag := func(name string, x0, y0, yellowCol int) {
+		for r, row := range copperFlagRows(yellowCol) {
+			for c := 0; c < 8; c++ {
+				want := copperBlue
+				if row[c] == 'Y' {
+					want = copperYellow
+				}
+				check(name, x0+c, y0+r, want)
+			}
+		}
+		// The flag ends after 8 pixels; the restore MOVE brings white back.
+		check(name+" right restore", x0+8, y0, copperWhite)
+	}
+
+	// The five flags. Positions are the 28MHz-copper landing pixels:
+	// an (x mod 8) sub-column offset of 1-2 costs 2(x mod 8) NOOP
+	// cycles = half a pixel each, so [1,64] keeps x=1 while [66,77]
+	// and [242,118] land one pixel after their 8-aligned column, and
+	// [248,91] (offset 0) lands exactly at 248 — consistent with the
+	// !Copper.txt EDIT that core-3.0 positions shift vs the 14MHz
+	// description. The over-left-border flag (WAIT column 52 =
+	// hcount 428, the previous line's tail) renders in the left
+	// border one row below its nominal y, like the animated line's
+	// border segment.
+	checkFlag("flag[1,64]", 1, 64, 2)
+	checkFlag("flag[66,77]", 65, 77, 3)
+	checkFlag("flag[248,91]", 248, 91, 3)
+	checkFlag("flag[left-border,104]", -32, 105, 3)
+	checkFlag("flag[242,118]", 241, 118, 3)
+
+	// Ruler dots (INK 0 through ULANext ink mask 7 = palette entry 0):
+	// row 63 at x=0,4,8,... and row 128 at x=...,236,240,244,248,252.
+	for _, x := range []int{0, 4, 8, 12} {
+		check("ruler row 63", x, 63, copperBlack)
+	}
+	for _, x := range []int{236, 240, 244, 252} {
+		check("ruler row 128", x, 128, copperBlack)
+	}
+
+	// Horizontal-wait greater/equal probe (y=140): blue x=128..191,
+	// ONE yellow pixel at 192 (the h=0 WAIT releases instantly), then
+	// white — if the h=0 WAIT rolled over to the next frame the whole
+	// row would stay blue/yellow.
+	check("y140 pre-line white", 127, 140, copperWhite)
+	for _, x := range []int{128, 150, 191} {
+		check("y140 blue", x, 140, copperBlue)
+	}
+	check("y140 yellow pixel", 192, 140, copperYellow)
+	check("y140 post-yellow white", 193, 140, copperWhite)
+	check("y139 untouched", 150, 139, copperWhite)
+	check("y141 untouched", 150, 141, copperWhite)
+
+	// Z80-animated line: exactly one row in 144..159 is blue across
+	// the paper and right border, with its left-border segment one
+	// row lower (the border pixels at the line start belong to the
+	// previous raster line's tail — !Copper.txt).
+	blueRow := -1
+	for y := 144; y < 160; y++ {
+		if at(0, y) == copperBlue && at(255, y) == copperBlue {
+			if blueRow != -1 {
+				t.Errorf("animated line: rows %d and %d both blue, want exactly one", blueRow, y)
+			}
+			blueRow = y
+		}
+	}
+	if blueRow == -1 {
+		t.Fatalf("animated line: no blue row in 144..159")
+	}
+	check("animated line right border", 280, blueRow, copperBlue)
+	check("animated line left border, one row lower", -20, blueRow+1, copperBlue)
+	check("animated line left border not on its own row", -20, blueRow, copperWhite)
+
+	// Background/border restored white everywhere the program isn't
+	// drawing (PAPER 7 = C_WHITE $B6 → (182,182,182) via the 9-bit
+	// palette — the FPGA feeds every ULA/border pixel through the
+	// palette SRAM).
+	check("paper background", 200, 40, copperWhite)
+	check("left border", -20, 40, copperWhite)
+	check("right border", 280, 96, copperWhite)
+}
+
+// --- base/DMA: zxnDMA transfer-mode matrix ------------------------------
+
+// TestNexttestsDMA runs base/DMA and asserts its full verdict surface.
+// The program drives 12 A->B and 12 B->A four-byte transfers through
+// every source/destination address-mode combination (increment /
+// decrement / fixed / IO port), plus short-init and CONTINUE reuse
+// tests, painting each transfer's bytes INTO the attribute area — the
+// attribute map IS the verdict. It then prints the 16 bytes its DMA
+// read-back sequences returned and finishes with a slow auto-restart
+// burst fill paced by the prescaler while an IM2 handler cycles the
+// fill colour and steps the CPU speed every 2s.
+//
+// Attribute expectations are derived from the upstream Main.asm
+// (constants: ATTR_NO_DMA=$22 green/red frame, ATTR_DMA=$14,
+// ATTR_DMA_B=$54 bright start/end markers, ATTR_IO=$56 yellow) — the
+// colour-coded verdicts the ReadMe describes ("IO is yellow colour
+// when OK"; dark green ahead/after means no over-run). The MAME 0.282
+// capture shows the same green/yellow matrix.
+//
+// The read-back row is adjudicated against dma.vhd (the FPGA read
+// state machine), NOT against the captures: the board photo (core
+// 3.00.5) predates the hex display and MAME 0.281's read-back is not
+// conformant (CD/38/19 bytes). Expected stream:
+//
+//	3A            read with nothing requested: status via the reset
+//	              read state (endofblock_n=1, atleastone=0)
+//	3A            after $BF READ STATUS (dma.vhd:687)
+//	1A 04 04 2A   masked sequence (status, counter lo, port A lo,
+//	              port B lo) after the first 4-byte A->B transfer:
+//	              endofblock latched, counter 4, src DmaSrcData4B+4,
+//	              dst $5826+4
+//	1A            sequence wrap: status again
+//	1A 04 D1 04 1A  after the short-init MSB B->A transfer to $58CD
+//	1A 04 D5 08   after the CONTINUE transfer (+4 from current
+//	              pointers: dst $58D1+4, src DmaSrcData9B+8)
+func TestNexttestsDMA(t *testing.T) {
+	h := runNexttestsSNX(t, "dma.snx", 240)
+
+	text := h.ScreenText()
+	if !strings.Contains(text, "3A3A1A04042A1A1A04D1041A1A04D508") {
+		t.Errorf("DMA read-back stream missing or wrong; row = %q",
+			screenLine(text, "3A"))
+	}
+
+	// Border goes blue when the test reaches its burst-fill stage.
+	if got := h.ULA().BorderColour; got != 1 {
+		t.Errorf("border = %d, want 1 (blue = test completed)", got)
+	}
+
+	// The transfer-verdict attribute map, rows 0..14. Layout per
+	// Main.asm's screen init: each mode row frames three test areas
+	// in $22 at cols 5-10, 17-22 and 29-31; the four transferred
+	// bytes land at cols 6-9 / 18-21 (decrementing targets write
+	// right-to-left) / col 30 (fixed). The source pattern is
+	// bright,bright,plain,bright ($54/$14), so the byte order the
+	// transfer delivered is visible in the marker positions.
+	rep := strings.Repeat
+	const (
+		mP = "54541454" // pattern via incrementing source
+		mM = "54145454" // via decrementing source (order reversed)
+		m0 = "54545454" // via fixed source (last byte everywhere)
+		io = "56565656" // via IO source: ATTR_IO yellow ("IO is yellow when OK")
+	)
+	modeRow := func(base, viaP, viaM string) string {
+		return rep(base, 5) + "22" + viaP + "22" + rep(base, 6) + "22" + viaM + "22" + rep(base, 6) + "22" + "54" + "22"
+	}
+	ioRow := func(base string) string {
+		return rep(base, 5) + "22" + io + "22" + rep(base, 6) + "22" + io + "22" + rep(base, 6) + "22" + "56" + "22"
+	}
+	wantRows := [15]string{
+		0: rep("38", 32),
+		1: modeRow("28", mP, mM), // m+ source: m+ / m- / m0 targets
+		2: modeRow("38", mM, mP), // m- source reverses the delivered order
+		3: modeRow("28", m0, m0), // m0 source repeats its last byte
+		4: ioRow("38"),
+		5: rep("2F", 32),
+		// Short-init 4+4+1: one 9-byte area (two bright at start, one
+		// at end — the CONTINUE test's contract from the ReadMe).
+		6:  rep("38", 12) + "22" + "54" + "54" + rep("14", 6) + "54" + "22" + rep("38", 9),
+		7:  rep("28286868", 8), // hex read-back row: cyan, alternating bright
+		8:  rep("38", 32),
+		9:  modeRow("28", mP, mM),
+		10: modeRow("38", mM, mP),
+		11: modeRow("28", m0, m0),
+		12: ioRow("38"),
+		13: rep("28", 32),
+		// Short cont 4+4: two 4-byte areas with a gap column.
+		14: rep("38", 12) + "22" + mP + "22" + mM + "22" + rep("38", 9),
+	}
+	rowHex := func(row int) string {
+		s := ""
+		for col := 0; col < 32; col++ {
+			s += fmt.Sprintf("%02X", h.Memory(uint16(0x5800+row*32+col)))
+		}
+		return s
+	}
+	for row := 0; row < 15; row++ {
+		if got := rowHex(row); got != wantRows[row] {
+			t.Errorf("attr row %d:\n got %s\nwant %s", row, got, wantRows[row])
+		}
+	}
+
+	// Burst area (rows 16..21): the auto-restart prescaler burst
+	// repaints it continuously with the IM2 handler's colour orbit
+	// (((a+9)|$20)&$3F = values $20..$3F). The initial pre-fill was
+	// P_WHITE|RED = $3A too, so repaint is proven by every cell
+	// sitting in the orbit AND the area holding at most a few
+	// mid-fill bands (a stalled burst would be a single $3A field —
+	// caught by the marker-row assert below plus the band values).
+	distinct := map[byte]bool{}
+	for row := 16; row <= 21; row++ {
+		for col := 0; col < 32; col++ {
+			v := h.Memory(uint16(0x5800 + row*32 + col))
+			if v < 0x20 || v > 0x3F {
+				t.Fatalf("burst area [%d,%d] = $%02X, outside the IM2 colour orbit", row, col, v)
+			}
+			distinct[v] = true
+		}
+	}
+	if len(distinct) > 4 {
+		t.Errorf("burst area holds %d distinct colours, want <= 4 mid-fill bands", len(distinct))
+	}
+
+	// CPU-speed marker row (22): the IM2 handler steps NR$07 every 2s
+	// of interrupts — and its timer seeds at 200, so the FIRST step
+	// fires on the first interrupt (~frame 3), then every 100 frames:
+	// 28MHz -> 3.5 -> 7 -> 14. At 240 frames three steps have run, so
+	// the cyan current-speed marker sits on the "14" slot (cols
+	// 10..13) and the passed slots show the bright-white-blue clear
+	// colour.
+	for col := 2; col < 18; col++ {
+		want := byte(0x79)
+		if col >= 10 && col <= 13 {
+			want = 0x28
+		}
+		if got := h.Memory(uint16(0x5800 + 22*32 + col)); got != want {
+			t.Errorf("speed marker col %d = $%02X, want $%02X", col, got, want)
+		}
+	}
+}
+
 // --- base/NextReg_defaults: the per-register NextReg availability +
 // default-value audit ---------------------------------------------------
 //

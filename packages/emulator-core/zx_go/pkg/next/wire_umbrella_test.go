@@ -254,7 +254,7 @@ func TestWireUmbrellaInstallsAllHandlers(t *testing.T) {
 func TestWirePalette44StateMachine(t *testing.T) {
 	disp := nextregs.New()
 	pal := palette.NewBank()
-	WirePalette(disp, pal)
+	WirePalette(disp, pal, nil)
 
 	// Walk through three two-byte writes — confirm each pair
 	// lands at the right index with auto-increment between pairs.

@@ -140,6 +140,21 @@ or the SPI / CSD command set to the VHDL.
 ## Axis 9 — Video (ULA/L2/tilemap/sprite/lores/palette/copper)
 Broad render edge tests (iters 204-217). Not boot-critical (boot stalls pre-render).
 
+Pinned since (base/Copper + base/DMA conformance work):
+- ✅ ULA pixel/border palette-index composition per video/zxula.vhd:483-558
+  (standard ink / 16+paper / border=paper path; ULANext ink mask + paper
+  128|attr>>n + $FF/non-canonical → NR$4A background; flash standard-only)
+  — the Next ULA renders through the live palette SRAM like the FPGA
+  (`pkg/ula` renderNextULARow, TestNexttestsCopper).
+- ✅ Copper cycle costs + WAIT release per device/copper.vhd (MOVE 2 /
+  NOOP 1 cycles at 28MHz; vcount==Y && hcount>=(X<<3)+12; list-restart
+  only on mode transition into 01/11; 10-bit address wrap) —
+  `pkg/next/copper` RunToCycle unit tests + the GHDL golden.
+- ✅ zxnDMA read-back state machine + status byte per dma.vhd:687-720/
+  859-886/895-1133/902, auto-restart FINISH_DMA loop (:469-489), turbo-
+  scaled prescaler timer (:250-255/424) — `pkg/next/dma` unit tests +
+  the GHDL golden + TestNexttestsDMA.
+
 ---
 
 ## Method to complete the matrix
