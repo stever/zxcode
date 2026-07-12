@@ -1,7 +1,10 @@
 import {
+    FOUR_BIT_TRANSPARENT,
     PLUS3DOS_HEADER_SIZE,
     SPRITE_BYTES,
     TRANSPARENT_INDEX,
+    expandFourBit,
+    packFourBit,
     base64ByteLength,
     base64ToBytes,
     bytesToBase64,
@@ -75,11 +78,16 @@ describe("sprite content shape", () => {
         expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(1024)))).toBe(true);
     });
 
+    test("whole 4-bit patterns are editable too", () => {
+        // A lone 4-bit pattern (128 bytes) or an odd count of them.
+        expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(128)))).toBe(true);
+        expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(384)))).toBe(true);
+    });
+
     test("empty or partial patterns are not", () => {
         expect(isEditableSpriteContent("")).toBe(false);
         expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(100)))).toBe(false);
-        // A lone 4-bit pattern (128 bytes) falls back to the asset panel.
-        expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(128)))).toBe(false);
+        expect(isEditableSpriteContent(bytesToBase64(new Uint8Array(300)))).toBe(false);
     });
 
     test("pattern count", () => {
@@ -94,15 +102,35 @@ describe("sprite content shape", () => {
     });
 });
 
+describe("4-bit packing", () => {
+    test("expand and pack round trip", () => {
+        const packed = new Uint8Array([0x12, 0xaf, 0x03]);
+        const pixels = expandFourBit(packed);
+        expect(Array.from(pixels)).toEqual([1, 2, 0xa, 0xf, 0, 3]);
+        expect(packFourBit(pixels)).toEqual(packed);
+    });
+
+    test("pack masks out-of-range values to nibbles", () => {
+        expect(Array.from(packFourBit(new Uint8Array([0xe3, 0x1f])))).toEqual([0x3f]);
+    });
+
+    test("the transparent nibble is the low bits of $E3", () => {
+        expect(FOUR_BIT_TRANSPARENT).toBe(3);
+    });
+});
+
 describe("+3DOS headers", () => {
     test("a headered file with whole patterns is editable", () => {
         expect(isEditableSpriteContent(bytesToBase64(plus3DosFile(256)))).toBe(true);
         expect(isEditableSpriteContent(bytesToBase64(plus3DosFile(1024)))).toBe(true);
     });
 
-    test("header-sized junk without the signature is not", () => {
+    test("header-sized data without the signature reads as bare 4-bit patterns", () => {
+        // 384 bytes without PLUS3DOS is not headered — but it IS three whole
+        // 4-bit patterns, so it stays editable; split treats it as bare data.
         const junk = new Uint8Array(PLUS3DOS_HEADER_SIZE + 256).fill(7);
-        expect(isEditableSpriteContent(bytesToBase64(junk))).toBe(false);
+        expect(isEditableSpriteContent(bytesToBase64(junk))).toBe(true);
+        expect(splitSpriteFile(junk).header).toBe(null);
     });
 
     test("a headered file with partial patterns is not", () => {

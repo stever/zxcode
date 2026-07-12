@@ -10,6 +10,11 @@
 export const SPRITE_SIZE = 16;
 export const SPRITE_BYTES = SPRITE_SIZE * SPRITE_SIZE;
 export const TRANSPARENT_INDEX = 0xe3;
+// 4-bit patterns pack two pixels per byte (128 bytes each); the hardware
+// takes the transparency nibble from the low 4 bits of the global
+// transparency index, so $E3 -> 3.
+export const FOUR_BIT_PATTERN_BYTES = SPRITE_BYTES / 2;
+export const FOUR_BIT_TRANSPARENT = TRANSPARENT_INDEX & 0x0f;
 
 // Files saved from NextZXOS (SAVE "x.spr" CODE / BANK) carry a 128-byte
 // +3DOS header before the pattern data: "PLUS3DOS", $1A, issue/version,
@@ -70,23 +75,33 @@ export function base64HasPlus3DosSignature(content) {
   return bytesHaveSignature(base64ToBytes((content || "").slice(0, 24)));
 }
 
-// Only files sized header + whole patterns are candidates (their size mod
-// 256 is exactly 128).
-function contentHasPlus3DosHeader(content) {
-  const size = base64ByteLength(content);
-  if (size <= PLUS3DOS_HEADER_SIZE || size % SPRITE_BYTES !== PLUS3DOS_HEADER_SIZE) {
-    return false;
+// 4-bit packing: two pixels per byte, high nibble first (the layout
+// zx-tools and the sprite pattern memory use).
+export function expandFourBit(bytes) {
+  const out = new Uint8Array(bytes.length * 2);
+  for (let i = 0; i < bytes.length; i++) {
+    out[i * 2] = bytes[i] >> 4;
+    out[i * 2 + 1] = bytes[i] & 0x0f;
   }
-  return base64HasPlus3DosSignature(content);
+  return out;
 }
 
-// The editor opens a .spr only when it holds a whole number of 8-bit
-// patterns — bare, or behind a +3DOS header; anything else (empty,
-// truncated, or an odd 4-bit layout) keeps the plain binary-asset panel.
+export function packFourBit(pixels) {
+  const out = new Uint8Array(pixels.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = ((pixels[i * 2] & 0x0f) << 4) | (pixels[i * 2 + 1] & 0x0f);
+  }
+  return out;
+}
+
+// The editor opens a .spr when it holds a whole number of patterns — 8-bit
+// (256 bytes each) or 4-bit (128), bare or behind a +3DOS header; anything
+// else (empty or truncated) keeps the plain binary-asset panel. Any
+// header + whole patterns is also a multiple of 128, so one rule covers
+// all four shapes.
 export function isEditableSpriteContent(content) {
   const size = base64ByteLength(content);
-  if (size > 0 && size % SPRITE_BYTES === 0) return true;
-  return contentHasPlus3DosHeader(content);
+  return size > 0 && size % FOUR_BIT_PATTERN_BYTES === 0;
 }
 
 // Splits a sprite file into its optional +3DOS header and the pattern data.

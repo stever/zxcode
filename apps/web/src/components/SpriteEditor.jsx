@@ -11,13 +11,17 @@ import {
   paletteCssFromBytes,
 } from "../lib/sprites/pal";
 import {
+  FOUR_BIT_PATTERN_BYTES,
+  FOUR_BIT_TRANSPARENT,
   SPRITE_BYTES,
   SPRITE_SIZE,
   TRANSPARENT_INDEX,
   base64ToBytes,
   bytesToBase64,
   defaultSpritePalette,
+  expandFourBit,
   joinSpriteFile,
+  packFourBit,
   splitSpriteFile,
   spritePatternCount,
 } from "../lib/sprites/spr";
@@ -118,10 +122,30 @@ export function SpriteEditor({ fileId, content }) {
     [palette]
   );
 
-  if (bytesRef.current === null) {
+  // 8-bit (256 bytes per pattern) or 4-bit (128, two pixels per byte).
+  // The bytes carry no marker, so the mode is a user toggle remembered per
+  // file; a file that is not a whole number of 8-bit patterns can only be
+  // 4-bit and the toggle locks. In 4-bit mode bytesRef holds UNPACKED
+  // pixels (one nibble value per byte) so every tool works unchanged;
+  // pack/unpack happen at the load/emit boundary.
+  const fourBitRef = useRef(false);
+  const [palOffset, setPalOffset] = useState(0);
+  const modeKey = `zxcoder-sprite-4bit-${fileId}`;
+
+  const loadFile = () => {
     const file = splitSpriteFile(base64ToBytes(content || ""));
-    bytesRef.current = file.data;
     headerRef.current = file.header;
+    const forced =
+      file.data.length % SPRITE_BYTES !== 0 &&
+      file.data.length % FOUR_BIT_PATTERN_BYTES === 0;
+    fourBitRef.current = forced || localStorage.getItem(modeKey) === "1";
+    bytesRef.current = fourBitRef.current
+      ? expandFourBit(file.data)
+      : file.data;
+  };
+
+  if (bytesRef.current === null) {
+    loadFile();
     lastEmittedRef.current = content || "";
     historyRef.current = {
       stack: [{ bytes: bytesRef.current.slice(), pattern: 0 }],
@@ -131,9 +155,7 @@ export function SpriteEditor({ fileId, content }) {
 
   useEffect(() => {
     if ((content || "") === lastEmittedRef.current) return;
-    const file = splitSpriteFile(base64ToBytes(content || ""));
-    bytesRef.current = file.data;
-    headerRef.current = file.header;
+    loadFile();
     lastEmittedRef.current = content || "";
     const clamped = Math.max(
       0,
@@ -149,6 +171,12 @@ export function SpriteEditor({ fileId, content }) {
   }, [content]);
 
   const count = spritePatternCount(bytesRef.current.length);
+  const fourBit = fourBitRef.current;
+  // The value painted for "transparent" and the palette entry a stored
+  // pixel value displays through (4-bit nibbles address a 16-colour row).
+  const transparentIndex = fourBit ? FOUR_BIT_TRANSPARENT : TRANSPARENT_INDEX;
+  const displayIndex = (value) =>
+    fourBit ? (palOffset << 4) | (value & 0x0f) : value;
 
   const drawCanvas = () => {
     const canvas = canvasRef.current;
@@ -162,14 +190,14 @@ export function SpriteEditor({ fileId, content }) {
         const colour = bytes[base + y * SPRITE_SIZE + x];
         const px = x * ZOOM;
         const py = y * ZOOM;
-        if (colour === TRANSPARENT_INDEX) {
+        if (colour === transparentIndex) {
           ctx.fillStyle = CHECKER_DARK;
           ctx.fillRect(px, py, ZOOM, ZOOM);
           ctx.fillStyle = CHECKER_LIGHT;
           ctx.fillRect(px, py, half, half);
           ctx.fillRect(px + half, py + half, half, half);
         } else {
-          ctx.fillStyle = palette[colour];
+          ctx.fillStyle = palette[displayIndex(colour)];
           ctx.fillRect(px, py, ZOOM, ZOOM);
         }
       }
@@ -181,13 +209,13 @@ export function SpriteEditor({ fileId, content }) {
     }
   };
 
-  useEffect(drawCanvas, [pattern, version, palette]);
+  useEffect(drawCanvas, [pattern, version, palette, palOffset]);
 
-  // A palette change recolours every thumbnail too.
+  // A palette or 4-bit offset change recolours every thumbnail too.
   useEffect(() => {
     allThumbsDirtyRef.current = true;
     setVersion((v) => v + 1);
-  }, [palette]);
+  }, [palette, palOffset]);
 
   // A strip thumbnail: the 16x16 pattern rendered 1:1, scaled up by CSS.
   const drawThumb = (index) => {
@@ -200,14 +228,15 @@ export function SpriteEditor({ fileId, content }) {
     for (let i = 0; i < SPRITE_BYTES; i++) {
       const colour = bytes[base + i];
       const o = i * 4;
-      if (colour === TRANSPARENT_INDEX) {
+      if (colour === transparentIndex) {
         image.data[o] = 0x1a;
         image.data[o + 1] = 0x1a;
         image.data[o + 2] = 0x1a;
       } else {
-        image.data[o] = rgb[colour][0];
-        image.data[o + 1] = rgb[colour][1];
-        image.data[o + 2] = rgb[colour][2];
+        const entry = rgb[displayIndex(colour)];
+        image.data[o] = entry[0];
+        image.data[o + 1] = entry[1];
+        image.data[o + 2] = entry[2];
       }
       image.data[o + 3] = 0xff;
     }
@@ -229,9 +258,13 @@ export function SpriteEditor({ fileId, content }) {
     dirtyThumbsRef.current.clear();
   }, [version, count]);
 
-  // Push the current bytes to the store (and bump the thumbnails).
+  // Push the current bytes to the store (and bump the thumbnails). 4-bit
+  // pixels pack back to nibbles here.
   const emit = () => {
-    const b64 = bytesToBase64(joinSpriteFile(headerRef.current, bytesRef.current));
+    const data = fourBitRef.current
+      ? packFourBit(bytesRef.current)
+      : bytesRef.current;
+    const b64 = bytesToBase64(joinSpriteFile(headerRef.current, data));
     lastEmittedRef.current = b64;
     dispatch(setFileContent(fileId, b64));
     setVersion((v) => v + 1);
@@ -291,7 +324,7 @@ export function SpriteEditor({ fileId, content }) {
     if (!p) return;
     // Holding Shift erases regardless of the active tool (zx-tools habit).
     const value =
-      tool === "erase" || e.shiftKey ? TRANSPARENT_INDEX : selectedColour;
+      tool === "erase" || e.shiftKey ? transparentIndex : selectedColour;
     const i = pattern * SPRITE_BYTES + p.y * SPRITE_SIZE + p.x;
     if (bytesRef.current[i] !== value) {
       bytesRef.current[i] = value;
@@ -307,7 +340,7 @@ export function SpriteEditor({ fileId, content }) {
     const bytes = bytesRef.current;
     const base = pattern * SPRITE_BYTES;
     const from = bytes[base + p.y * SPRITE_SIZE + p.x];
-    const to = e.shiftKey ? TRANSPARENT_INDEX : selectedColour;
+    const to = e.shiftKey ? transparentIndex : selectedColour;
     if (from === to) return;
     const stack = [[p.x, p.y]];
     while (stack.length) {
@@ -330,7 +363,7 @@ export function SpriteEditor({ fileId, content }) {
       if (p) {
         const colour =
           bytesRef.current[pattern * SPRITE_BYTES + p.y * SPRITE_SIZE + p.x];
-        if (colour === TRANSPARENT_INDEX) {
+        if (colour === transparentIndex) {
           setTool("erase");
         } else {
           setSelectedColour(colour);
@@ -388,7 +421,7 @@ export function SpriteEditor({ fileId, content }) {
     });
 
   const clearPattern = () =>
-    transformPattern((view) => view.fill(TRANSPARENT_INDEX));
+    transformPattern((view) => view.fill(transparentIndex));
 
   // 90° clockwise: dst(x, y) = src(y, 15 - x).
   const rotatePattern = () =>
@@ -415,17 +448,24 @@ export function SpriteEditor({ fileId, content }) {
       }
     });
 
+  // File bytes on disk per pattern (in-memory patterns are always 256
+  // unpacked pixels).
+  const filePatternBytes = fourBit ? FOUR_BIT_PATTERN_BYTES : SPRITE_BYTES;
+  const fileDataLength = fourBit
+    ? bytesRef.current.length / 2
+    : bytesRef.current.length;
+
   const canAddPattern =
     base64Length(
       (headerRef.current ? headerRef.current.length : 0) +
-        bytesRef.current.length +
-        SPRITE_BYTES
+        fileDataLength +
+        filePatternBytes
     ) <= MAX_FILE_CONTENT_SIZE;
 
   const addPattern = () => {
     const grown = new Uint8Array(bytesRef.current.length + SPRITE_BYTES);
     grown.set(bytesRef.current);
-    grown.fill(TRANSPARENT_INDEX, bytesRef.current.length);
+    grown.fill(transparentIndex, bytesRef.current.length);
     bytesRef.current = grown;
     allThumbsDirtyRef.current = true;
     setPattern(count);
@@ -447,8 +487,10 @@ export function SpriteEditor({ fileId, content }) {
     if (!clip) return;
     transformPattern((view) => {
       for (let i = 0; i < SPRITE_BYTES; i++) {
-        if (!over || clip[i] !== TRANSPARENT_INDEX) {
-          view[i] = clip[i];
+        // Clipboard values from the other bit mode mask down to nibbles.
+        const value = fourBit ? clip[i] & 0x0f : clip[i];
+        if (!over || value !== transparentIndex) {
+          view[i] = value;
         }
       }
     });
@@ -494,6 +536,32 @@ export function SpriteEditor({ fileId, content }) {
 
   const selectPattern = (delta) => {
     setPattern((p) => Math.max(0, Math.min(count - 1, p + delta)));
+  };
+
+  // Whether the current data could also read as whole 8-bit patterns (a
+  // 4-bit file with an odd pattern count cannot).
+  const canBeEightBit = fileDataLength % SPRITE_BYTES === 0;
+
+  // Reinterpret the same file bytes in the other depth: the content does
+  // not change (so nothing dirties), only the unpacked working copy and
+  // the pattern count do. History resets like an external reload.
+  const toggleFourBit = () => {
+    const fileData = fourBitRef.current
+      ? packFourBit(bytesRef.current)
+      : bytesRef.current;
+    const next = !fourBitRef.current;
+    if (next === false && fileData.length % SPRITE_BYTES !== 0) return;
+    fourBitRef.current = next;
+    localStorage.setItem(modeKey, next ? "1" : "0");
+    bytesRef.current = next ? expandFourBit(fileData) : fileData;
+    historyRef.current = {
+      stack: [{ bytes: bytesRef.current.slice(), pattern: 0 }],
+      index: 0,
+    };
+    allThumbsDirtyRef.current = true;
+    setSelectedColour((c) => (next ? Math.min(c, 0x0f) : c));
+    setPattern(0);
+    setVersion((v) => v + 1);
   };
 
   // Import an image file: quantise to the default palette, slice into
@@ -740,6 +808,27 @@ export function SpriteEditor({ fileId, content }) {
             onClick={() => shiftPattern(0, 1)}
           />
         </div>
+        <div className="sprite-editor-toolbar-group">
+          <Button
+            label={fourBit ? "4-bit" : "8-bit"}
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.bitMode")}
+            disabled={fourBit && !canBeEightBit}
+            onClick={toggleFourBit}
+          />
+          {fourBit && (
+            <Dropdown
+              className="p-inputtext-sm"
+              value={palOffset}
+              options={Array.from({ length: 16 }, (_, i) => ({
+                label: `${t("editor.sprites.palOffset")} ${i}`,
+                value: i,
+              }))}
+              onChange={(e) => setPalOffset(e.value)}
+              title={t("editor.sprites.palOffsetHint")}
+            />
+          )}
+        </div>
         <span className="sprite-editor-hint">{t("editor.sprites.pickHint")}</span>
       </div>
       <div className="sprite-editor-main">
@@ -780,7 +869,7 @@ export function SpriteEditor({ fileId, content }) {
               style={
                 tool === "erase"
                   ? undefined
-                  : { backgroundColor: palette[selectedColour] }
+                  : { backgroundColor: palette[displayIndex(selectedColour)] }
               }
             />
             {tool === "erase"
@@ -788,7 +877,7 @@ export function SpriteEditor({ fileId, content }) {
               : `$${selectedColour.toString(16).padStart(2, "0").toUpperCase()}`}
           </div>
           <div className="sprite-palette">
-            {palette.map((colour, index) => (
+            {Array.from({ length: fourBit ? 16 : 256 }, (_, index) => (
               <div
                 key={index}
                 className={
@@ -796,14 +885,14 @@ export function SpriteEditor({ fileId, content }) {
                     ? "sprite-palette-swatch selected"
                     : "sprite-palette-swatch"
                 }
-                style={{ backgroundColor: colour }}
+                style={{ backgroundColor: palette[displayIndex(index)] }}
                 title={
-                  index === TRANSPARENT_INDEX
+                  index === transparentIndex
                     ? `$${index.toString(16).padStart(2, "0").toUpperCase()} (${t("editor.sprites.transparent")})`
                     : `$${index.toString(16).padStart(2, "0").toUpperCase()}`
                 }
                 onClick={() => {
-                  if (index === TRANSPARENT_INDEX) {
+                  if (index === transparentIndex) {
                     setTool("erase");
                   } else {
                     setSelectedColour(index);
@@ -884,8 +973,12 @@ export function SpriteEditor({ fileId, content }) {
         <Button
           icon="pi pi-image"
           className="p-button-sm p-button-outlined"
-          title={t("editor.sprites.importImage")}
-          disabled={!canAddPattern}
+          title={
+            fourBit
+              ? t("editor.sprites.importImage4bit")
+              : t("editor.sprites.importImage")
+          }
+          disabled={!canAddPattern || fourBit}
           onClick={() => importImageRef.current?.click()}
         />
         <input
