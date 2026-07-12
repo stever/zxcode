@@ -524,6 +524,47 @@ input session_pk_columns_input {
   session_id: uuid!
 }
 
+type login_token {
+  login_token_id: uuid!
+  email: String!
+  token_hash: String!
+  redirect_url: String
+  created: timestamptz!
+  expires: timestamptz!
+  consumed: timestamptz
+}
+
+input login_token_bool_exp {
+  _and: [login_token_bool_exp!]
+  _or: [login_token_bool_exp!]
+  _not: login_token_bool_exp
+  login_token_id: uuid_comparison_exp
+  email: String_comparison_exp
+  token_hash: String_comparison_exp
+  expires: timestamptz_comparison_exp
+  consumed: timestamptz_comparison_exp
+}
+
+input login_token_order_by {
+  created: order_by
+}
+
+input login_token_insert_input {
+  email: String
+  token_hash: String
+  redirect_url: String
+  created: timestamptz
+  expires: timestamptz
+}
+
+input login_token_set_input {
+  consumed: timestamptz
+}
+
+type login_token_mutation_response {
+  affected_rows: Int!
+}
+
 type role {
   role_id: uuid!
   name: String!
@@ -594,6 +635,7 @@ type Query {
   user_follows(where: user_follows_bool_exp, order_by: [user_follows_order_by!], limit: Int, offset: Int): [user_follows!]!
   user_follows_aggregate(where: user_follows_bool_exp): user_follows_aggregate!
   session(where: session_bool_exp, order_by: [session_order_by!], limit: Int, offset: Int): [session!]!
+  login_token(where: login_token_bool_exp, order_by: [login_token_order_by!], limit: Int, offset: Int): [login_token!]!
   text(where: text_bool_exp, order_by: [text_order_by!], limit: Int, offset: Int): [text!]!
 }
 
@@ -622,6 +664,10 @@ type Mutation {
 
   insert_session_one(object: session_insert_input!): session
   update_session_by_pk(pk_columns: session_pk_columns_input!, _set: session_set_input): session
+
+  insert_login_token_one(object: login_token_insert_input!): login_token
+  update_login_token(where: login_token_bool_exp!, _set: login_token_set_input): login_token_mutation_response
+  delete_login_token(where: login_token_bool_exp!): login_token_mutation_response
 
   compile(basic: String!, files: [ProjectFileInput!]): CompileResult
   compileC(code: String!, files: [ProjectFileInput!]): CompileResult

@@ -1084,6 +1084,122 @@ describe("admin role (apps/auth documents)", () => {
         expect((result.update_user as { affected_rows: number }).affected_rows).toBe(1);
     });
 
+    it("CreateLoginToken / GetLoginToken / ConsumeLoginToken / InvalidatePendingLoginTokens", async () => {
+        const now = new Date();
+        const hash = "a".repeat(64);
+        const staleHash = "b".repeat(64);
+
+        // Issuing first invalidates any pending tokens for the email.
+        await data(
+            `mutation CreateLoginToken($email: String!, $token_hash: String!, $redirect_url: String, $created: timestamptz!, $expires: timestamptz!) {
+                insert_login_token_one(object: {email: $email, token_hash: $token_hash, redirect_url: $redirect_url, created: $created, expires: $expires}) {
+                    login_token_id
+                }
+            }`,
+            {
+                email: "magic@example.com",
+                token_hash: staleHash,
+                redirect_url: null,
+                created: now.toISOString(),
+                expires: new Date(now.getTime() + 15 * 60_000).toISOString(),
+            },
+            { admin: true },
+        );
+        const invalidated = await data(
+            `mutation InvalidatePendingLoginTokens($email: String!, $now: timestamptz!) {
+                update_login_token(where: {email: {_eq: $email}, consumed: {_is_null: true}}, _set: {consumed: $now}) {
+                    affected_rows
+                }
+            }`,
+            { email: "magic@example.com", now: now.toISOString() },
+            { admin: true },
+        );
+        expect((invalidated.update_login_token as { affected_rows: number }).affected_rows).toBe(1);
+
+        await data(
+            `mutation CreateLoginToken($email: String!, $token_hash: String!, $redirect_url: String, $created: timestamptz!, $expires: timestamptz!) {
+                insert_login_token_one(object: {email: $email, token_hash: $token_hash, redirect_url: $redirect_url, created: $created, expires: $expires}) {
+                    login_token_id
+                }
+            }`,
+            {
+                email: "magic@example.com",
+                token_hash: hash,
+                redirect_url: "http://localhost:8080/",
+                created: now.toISOString(),
+                expires: new Date(now.getTime() + 15 * 60_000).toISOString(),
+            },
+            { admin: true },
+        );
+
+        // Consumption is the atomic single-use gate: affected_rows 1 then 0.
+        const consumeDoc = `mutation ConsumeLoginToken($token_hash: String!, $now: timestamptz!) {
+            update_login_token(where: {token_hash: {_eq: $token_hash}, consumed: {_is_null: true}, expires: {_gt: $now}}, _set: {consumed: $now}) {
+                affected_rows
+            }
+        }`;
+        const consumed = await data(
+            consumeDoc,
+            { token_hash: hash, now: now.toISOString() },
+            { admin: true },
+        );
+        expect((consumed.update_login_token as { affected_rows: number }).affected_rows).toBe(1);
+
+        const fetched = await data(
+            `query GetLoginToken($token_hash: String!) {
+                login_token(where: {token_hash: {_eq: $token_hash}}) { email redirect_url }
+            }`,
+            { token_hash: hash },
+            { admin: true },
+        );
+        const tokens = fetched.login_token as Array<{ email: string; redirect_url: string | null }>;
+        expect(tokens[0]?.email).toBe("magic@example.com");
+        expect(tokens[0]?.redirect_url).toBe("http://localhost:8080/");
+
+        const again = await data(
+            consumeDoc,
+            { token_hash: hash, now: now.toISOString() },
+            { admin: true },
+        );
+        expect((again.update_login_token as { affected_rows: number }).affected_rows).toBe(0);
+
+        // The stale (invalidated) token cannot be consumed either.
+        const stale = await data(
+            consumeDoc,
+            { token_hash: staleHash, now: now.toISOString() },
+            { admin: true },
+        );
+        expect((stale.update_login_token as { affected_rows: number }).affected_rows).toBe(0);
+
+        const deleted = await data(
+            `mutation DeleteLoginTokens($email: String!) {
+                delete_login_token(where: {email: {_eq: $email}}) { affected_rows }
+            }`,
+            { email: "magic@example.com" },
+            { admin: true },
+        );
+        expect((deleted.delete_login_token as { affected_rows: number }).affected_rows).toBe(2);
+    });
+
+    it("login tokens are admin-only", async () => {
+        const asPublic = await gql(`query { login_token { login_token_id } }`);
+        expect(asPublic.errors?.[0]?.message).toMatch(/login_token/);
+
+        const asUser = await gql(
+            `query { login_token { login_token_id } }`,
+            {},
+            { token: bob.token },
+        );
+        expect(asUser.errors?.[0]?.message).toMatch(/login_token/);
+
+        const userInsert = await gql(
+            `mutation { insert_login_token_one(object: {email: "x@example.com", token_hash: "${"c".repeat(64)}", created: "2026-01-01T00:00:00Z", expires: "2026-01-01T00:15:00Z"}) { login_token_id } }`,
+            {},
+            { token: bob.token },
+        );
+        expect(userInsert.errors?.[0]?.message).toMatch(/insert_login_token_one/);
+    });
+
     it("rejects a wrong admin secret", async () => {
         const res = await fetch(`${baseUrl}/v1/graphql`, {
             method: "POST",

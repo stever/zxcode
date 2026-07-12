@@ -1,7 +1,7 @@
 // Cookie handling, matching the .NET CookieRepository:
 // - access_token: the SessionToken JWT. HttpOnly, SameSite=Lax, Secure in
 //   production, expires with the session.
-// - redirect_url: return URL surviving the round trip to the IdP. HttpOnly,
+// - redirect_url: return URL surviving a redirect away and back. HttpOnly,
 //   10 minutes, SameSite=None+Secure in production (third-party redirect),
 //   Lax and insecure in dev. Only honoured on read when it starts with
 //   AuthRedirect.
@@ -25,7 +25,7 @@ export interface Authenticated {
 
 // Cookie → JWT → session token → live session row, or null at any failure.
 export async function authenticate(req: Request): Promise<Authenticated | null> {
-    const cookie = requestCookie(req, config.saml.authCookieName);
+    const cookie = requestCookie(req, config.login.authCookieName);
     if (!cookie) return null;
     const authToken = await readSessionCookie(cookie);
     if (!authToken) return null;
@@ -35,7 +35,7 @@ export async function authenticate(req: Request): Promise<Authenticated | null> 
 }
 
 export function setAuthCookie(res: Response, jwt: string, expires: Date): void {
-    res.cookie(config.saml.authCookieName, jwt, {
+    res.cookie(config.login.authCookieName, jwt, {
         sameSite: "lax",
         secure: !config.devMode,
         httpOnly: true,
@@ -44,7 +44,7 @@ export function setAuthCookie(res: Response, jwt: string, expires: Date): void {
 }
 
 export function storeReturnUrl(res: Response, returnUrl: string): void {
-    res.cookie(config.saml.returnUrlCookieName, returnUrl, {
+    res.cookie(config.login.returnUrlCookieName, returnUrl, {
         sameSite: config.devMode ? "lax" : "none",
         secure: !config.devMode,
         httpOnly: true,
@@ -53,13 +53,13 @@ export function storeReturnUrl(res: Response, returnUrl: string): void {
 }
 
 export function popReturnUrl(req: Request, res: Response): string {
-    const value = requestCookie(req, config.saml.returnUrlCookieName);
-    res.clearCookie(config.saml.returnUrlCookieName);
+    const value = requestCookie(req, config.login.returnUrlCookieName);
+    res.clearCookie(config.login.returnUrlCookieName);
     if (value && value.startsWith(config.authRedirect)) return value;
     return config.authRedirect;
 }
 
 export function deleteAuthCookies(res: Response): void {
-    res.clearCookie(config.saml.authCookieName);
-    res.clearCookie(config.saml.returnUrlCookieName);
+    res.clearCookie(config.login.authCookieName);
+    res.clearCookie(config.login.returnUrlCookieName);
 }

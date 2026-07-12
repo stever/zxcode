@@ -1,14 +1,20 @@
-// Configuration with the exact same environment variable names the .NET
-// service used (AUTH_ prefix, __ for nesting), so the deploy compose is
-// unchanged. Defaults mirror appsettings.json; AUTH_DEV_MODE=true (set by the
-// npm dev script) layers on the appsettings.Development.json values the .NET
-// DEBUG build carried.
+// Configuration with the same environment variable conventions the .NET
+// service used (AUTH_ prefix, __ for nesting). The generic login settings
+// moved from AUTH_SAML__* to AUTH_Login__* when SAML was replaced by the
+// magic-link flow; the old names are still read as fallbacks so an
+// unmodified deploy compose keeps working. AUTH_DEV_MODE=true (set by the
+// npm dev script) layers on local-development defaults.
 
 const DEV_MODE = process.env.AUTH_DEV_MODE === "true";
 
 function env(name: string): string | undefined {
     const value = process.env[name];
     return value === undefined || value === "" ? undefined : value;
+}
+
+// Renamed settings: prefer the new name, fall back to the legacy SAML name.
+function loginEnv(setting: string): string | undefined {
+    return env(`AUTH_Login__${setting}`) ?? env(`AUTH_SAML__${setting}`);
 }
 
 function dev<T>(value: T): T | undefined {
@@ -22,14 +28,22 @@ function parseCorsOrigins(): string[] | null {
     return null;
 }
 
+// Dev auto-login is on by default in dev mode; AUTH_DebugAutoLoginUsername=off
+// disables it so the real magic-link form can be exercised locally.
+function debugAutoLoginUsername(): string | undefined {
+    if (!DEV_MODE) return undefined;
+    const username = env("AUTH_DebugAutoLoginUsername") ?? "dev";
+    return username === "off" ? undefined : username;
+}
+
+const smtpPort = parseInt(env("AUTH_SMTP__Port") ?? "465", 10);
+
 export const config = {
     devMode: DEV_MODE,
     port: parseInt(env("PORT") ?? "8080", 10),
 
-    // In dev the whole SAML flow is bypassed and this user is logged in.
-    debugAutoLoginUsername: DEV_MODE
-        ? (env("AUTH_DebugAutoLoginUsername") ?? "dev")
-        : undefined,
+    // In dev the whole login flow is bypassed and this user is logged in.
+    debugAutoLoginUsername: debugAutoLoginUsername(),
 
     authRedirect: env("AUTH_AuthRedirect") ?? dev("http://localhost:8080/") ?? "",
     corsOrigins: parseCorsOrigins(),
@@ -43,20 +57,33 @@ export const config = {
             env("AUTH_GraphQL__AdminSecret") ?? dev("hasurapassword") ?? "",
     },
 
-    saml: {
-        appId: env("AUTH_SAML__AppId") ?? "zxplay",
+    login: {
         defaultExpirationMinutes: parseInt(
-            env("AUTH_SAML__DefaultExpirationMinutes") ?? "480",
+            loginEnv("DefaultExpirationMinutes") ?? "480",
             10,
         ),
-        admitNewUsers: (env("AUTH_SAML__AdmitNewUsers") ?? "true") === "true",
-        authCookieName: env("AUTH_SAML__AuthCookieName") ?? "access_token",
-        returnUrlCookieName:
-            env("AUTH_SAML__ReturnUrlCookieName") ?? "redirect_url",
-        responseCertificate: env("AUTH_SAML__ResponseCertificate"),
-        assertionConsumer: env("AUTH_SAML__AssertionConsumer"),
-        ssoEndpoint: env("AUTH_SAML__SsoEndpoint"),
-        logoutLink: env("AUTH_SAML__LogoutLink"),
+        admitNewUsers: (loginEnv("AdmitNewUsers") ?? "true") === "true",
+        authCookieName: loginEnv("AuthCookieName") ?? "access_token",
+        returnUrlCookieName: loginEnv("ReturnUrlCookieName") ?? "redirect_url",
+        magicLinkExpiryMinutes: parseInt(
+            env("AUTH_Login__MagicLinkExpiryMinutes") ?? "15",
+            10,
+        ),
+    },
+
+    // Outbound mail for the magic links (Migadu: smtp.migadu.com, port 465
+    // implicit TLS or 587 STARTTLS, auth = full mailbox address + password).
+    // When not configured the mailer logs the link instead of sending.
+    smtp: {
+        host: env("AUTH_SMTP__Host"),
+        port: smtpPort,
+        secure: smtpPort === 465,
+        username: env("AUTH_SMTP__Username"),
+        password: env("AUTH_SMTP__Password"),
+        from: env("AUTH_SMTP__From") ?? "ZX Play <noreply@zxplay.org>",
+        get configured(): boolean {
+            return Boolean(this.host && this.username && this.password);
+        },
     },
 
     jwt: {

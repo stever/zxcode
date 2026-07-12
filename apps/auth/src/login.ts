@@ -29,12 +29,16 @@ function randomToken(length: number): string {
     return out;
 }
 
+// redirectUrl (already validated by the caller) takes precedence over the
+// return-URL cookie: a magic link may be opened in a browser that never
+// carried the cookie.
 export async function performLogin(
     username: string,
     expiry: Date,
     email: string | null,
     req: Request,
     res: Response,
+    redirectUrl?: string | null,
 ): Promise<void> {
     if (!username) {
         res.status(400).end();
@@ -46,7 +50,7 @@ export async function performLogin(
     if (!user && email) user = await getUserByEmail(email);
 
     if (!user) {
-        if (!config.saml.admitNewUsers) {
+        if (!config.login.admitNewUsers) {
             res.status(401).end();
             return;
         }
@@ -70,5 +74,5 @@ export async function performLogin(
     const jwt = await mintSessionToken(authToken, roles);
     setAuthCookie(res, jwt, expiry);
 
-    res.redirect(popReturnUrl(req, res));
+    res.redirect(redirectUrl ?? popReturnUrl(req, res));
 }

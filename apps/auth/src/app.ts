@@ -1,13 +1,24 @@
-// The HTTP surface, route for route with the .NET controllers. The proxy
-// strips the /auth prefix, so paths here are /login, /me, etc.
+// The HTTP surface. The proxy strips the /auth prefix, so paths here are
+// /login, /me, etc. Login is a passwordless magic-link flow: the login page
+// takes an email address, /login/email mails a single-use link, /verify
+// consumes it and establishes the session.
 
 import express, { type Request, type Response } from "express";
 import { config } from "./config.js";
-import { authenticate, deleteAuthCookies, popReturnUrl, storeReturnUrl } from "./cookies.js";
+import { authenticate, deleteAuthCookies, popReturnUrl } from "./cookies.js";
 import { performLogin } from "./login.js";
 import { getRoles } from "./users.js";
 import { mintHasuraToken } from "./tokens.js";
-import { loginUrl, samlEnabled, validateSamlResponse } from "./saml.js";
+import { consumeToken, issueToken } from "./logintokens.js";
+import { sendMagicLink } from "./mailer.js";
+import { allow } from "./ratelimit.js";
+import { checkEmailPage, linkInvalidPage, loginPage, sendPage } from "./pages.js";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const EMAIL_RATE_LIMIT = 3;
+const IP_RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 15 * 60_000;
 
 function corsMiddleware(
     req: Request,
@@ -40,25 +51,40 @@ function loginReturnUrl(redirect: string | undefined): string {
     return redirect;
 }
 
-// Logout's variant appends a route to the normalised base (no validation —
-// the value only ends up in the prefix-checked redirect_url cookie).
-function logoutReturnUrl(route: string | undefined): string {
+// Lenient variant for values that only steer where a page or emailed link
+// eventually redirects: anything invalid falls back to the base.
+function safeReturnUrl(redirect: string | undefined): string {
+    try {
+        return loginReturnUrl(redirect);
+    } catch {
+        return config.authRedirect;
+    }
+}
+
+function magicLinkUrl(rawToken: string): string {
     let base = config.authRedirect;
     if (!base.endsWith("/")) base = `${base}/`;
-    if (!route) return base;
-    return base + (route.startsWith("/") ? route.slice(1) : route);
+    return `${base}auth/verify?token=${rawToken}`;
+}
+
+function sessionExpiry(): Date {
+    return new Date(Date.now() + config.login.defaultExpirationMinutes * 60_000);
 }
 
 async function handleLogin(req: Request, res: Response): Promise<void> {
     const redirect =
         typeof req.query.redirect_url === "string" ? req.query.redirect_url : undefined;
 
-    // Dev mode: skip SAML entirely and log in the configured user.
+    // Dev mode: skip the magic-link flow entirely and log in the configured
+    // user.
     if (config.debugAutoLoginUsername) {
-        const expiry = new Date(
-            Date.now() + config.saml.defaultExpirationMinutes * 60_000,
+        await performLogin(
+            config.debugAutoLoginUsername,
+            sessionExpiry(),
+            null,
+            req,
+            res,
         );
-        await performLogin(config.debugAutoLoginUsername, expiry, null, req, res);
         return;
     }
 
@@ -67,17 +93,13 @@ async function handleLogin(req: Request, res: Response): Promise<void> {
         return;
     }
 
-    if (!samlEnabled()) {
-        res.status(500).send("SAML is not configured");
-        return;
-    }
-    storeReturnUrl(res, redirect ?? "");
-    res.redirect(await loginUrl());
+    sendPage(res, 200, loginPage(safeReturnUrl(redirect)));
 }
 
 export function createApp(): express.Express {
     const app = express();
     app.disable("x-powered-by");
+    app.set("trust proxy", true);
     app.use(corsMiddleware);
     app.use(express.urlencoded({ extended: false }));
 
@@ -88,26 +110,50 @@ export function createApp(): express.Express {
     app.get("/", handleLogin);
     app.get("/login", handleLogin);
 
-    app.post("/assertion-consumer", async (req, res) => {
-        const samlResponse = (req.body as Record<string, unknown>).SAMLResponse;
-        if (typeof samlResponse !== "string" || !samlResponse) {
-            res.status(400).end();
+    app.post("/login/email", async (req, res) => {
+        const body = req.body as Record<string, unknown>;
+        const rawEmail = typeof body.email === "string" ? body.email : "";
+        const email = rawEmail.trim().toLowerCase();
+        const redirect = safeReturnUrl(
+            typeof body.redirect_url === "string" ? body.redirect_url : undefined,
+        );
+
+        if (!EMAIL_PATTERN.test(email)) {
+            sendPage(res, 400, loginPage(redirect, "That doesn't look like an email address."));
             return;
         }
-        let result;
-        try {
-            result = await validateSamlResponse(samlResponse);
-        } catch (err) {
-            console.error("SAML response rejected:", err);
-            res.status(400).end();
+
+        // Over the limit the response is indistinguishable from success; the
+        // page never reveals whether an email maps to an account either way.
+        const withinLimits =
+            allow(`email:${email}`, EMAIL_RATE_LIMIT, RATE_WINDOW_MS) &&
+            allow(`ip:${req.ip}`, IP_RATE_LIMIT, RATE_WINDOW_MS);
+        if (withinLimits) {
+            const rawToken = await issueToken(email, redirect);
+            await sendMagicLink(email, magicLinkUrl(rawToken));
+        } else {
+            console.log(`rate limit hit for ${email} (${req.ip})`);
+        }
+        sendPage(res, 200, checkEmailPage());
+    });
+
+    app.get("/verify", async (req, res) => {
+        const rawToken =
+            typeof req.query.token === "string" ? req.query.token : "";
+        const consumed = rawToken ? await consumeToken(rawToken) : null;
+        if (!consumed) {
+            sendPage(res, 400, linkInvalidPage());
             return;
         }
+        // The stored redirect was validated at issuance; re-check anyway.
+        const redirect = safeReturnUrl(consumed.redirectUrl ?? undefined);
         await performLogin(
-            result.username,
-            result.sessionExpiry,
-            result.email,
+            consumed.email,
+            sessionExpiry(),
+            consumed.email,
             req,
             res,
+            redirect,
         );
     });
 
@@ -143,12 +189,7 @@ export function createApp(): express.Express {
             return;
         }
         deleteAuthCookies(res);
-        if (config.saml.logoutLink) {
-            storeReturnUrl(res, logoutReturnUrl(redirect));
-            res.redirect(config.saml.logoutLink);
-            return;
-        }
-        res.redirect(config.authRedirect);
+        res.redirect(safeReturnUrl(redirect));
     });
 
     app.get("/logout/return", (req, res) => {

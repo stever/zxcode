@@ -105,6 +105,7 @@ attach("Query", {
     user_follows: makeListResolver("user_follows") as Resolver,
     user_follows_aggregate: makeAggregateResolver("user_follows") as Resolver,
     session: makeListResolver("session") as Resolver,
+    login_token: makeListResolver("login_token") as Resolver,
     text: makeListResolver("text") as Resolver,
 });
 
@@ -133,6 +134,10 @@ attach("Mutation", {
 
     insert_session_one: makeInsertOneResolver("session") as Resolver,
     update_session_by_pk: makeUpdateByPkResolver("session") as Resolver,
+
+    insert_login_token_one: makeInsertOneResolver("login_token") as Resolver,
+    update_login_token: makeUpdateManyResolver("login_token") as Resolver,
+    delete_login_token: makeDeleteManyResolver("login_token") as Resolver,
 
     compile: makeActionResolver("compile") as Resolver,
     compileC: makeActionResolver("compileC") as Resolver,

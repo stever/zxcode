@@ -49,11 +49,12 @@ export async function createUser(
     if (!trimmedUsername) throw new Error("username required");
     const trimmedEmail = email?.trim() || null;
 
-    // Opaque provider ids (e.g. "auth0|...") get a friendly generated handle
-    // and display name; real usernames slugify directly.
+    // Opaque provider ids (e.g. legacy "auth0|...") and email addresses get a
+    // friendly generated handle and display name — an email must not leak
+    // into the public slug. Real usernames slugify directly.
     let slug: string;
     let greetingName: string | null = null;
-    if (trimmedUsername.includes("|")) {
+    if (trimmedUsername.includes("|") || trimmedUsername.includes("@")) {
         let handle = generateHandle();
         while (await slugExists(handle.slug)) handle = generateHandle();
         slug = handle.slug;

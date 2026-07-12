@@ -503,6 +503,16 @@ export const tables: Record<string, TableConfig> = {
         select: {},
     },
 
+    login_token: {
+        prismaModel: "login_token",
+        pk: ["login_token_id"],
+        columns: ["login_token_id", "email", "token_hash", "redirect_url", "created", "expires", "consumed"],
+        jsonColumns: [],
+        nullableColumns: ["redirect_url", "consumed"],
+        relations: {},
+        select: {},
+    },
+
     role: {
         prismaModel: "role",
         pk: ["role_id"],

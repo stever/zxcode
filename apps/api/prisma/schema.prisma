@@ -137,6 +137,21 @@ model session {
   user user @relation(fields: [user_id], references: [user_id], onUpdate: Cascade, onDelete: Cascade, map: "session_user_id_fkey")
 }
 
+// Pending magic-link login tokens. No FK to user: a token can be issued for
+// an email address that has no account yet (the user is provisioned when the
+// link is followed). Only a SHA-256 hash of the token is stored.
+model login_token {
+  login_token_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String
+  token_hash     String    @unique(map: "login_token_hash_key") @db.VarChar(64)
+  redirect_url   String?
+  created        DateTime  @db.Timestamptz(6)
+  expires        DateTime  @db.Timestamptz(6)
+  consumed       DateTime? @db.Timestamptz(6)
+
+  @@index([email], map: "idx_login_token_email")
+}
+
 model role {
   role_id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name       String    @unique(map: "role_name_key")

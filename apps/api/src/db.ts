@@ -29,6 +29,7 @@ export const delegates: Record<string, Delegate> = {
     project_star: asDelegate(prisma.project_star),
     user_follows: asDelegate(prisma.user_follows),
     session: asDelegate(prisma.session),
+    login_token: asDelegate(prisma.login_token),
     role: asDelegate(prisma.role),
     user_role: asDelegate(prisma.user_role),
     text: asDelegate(prisma.text),
