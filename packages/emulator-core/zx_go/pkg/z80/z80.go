@@ -499,6 +499,7 @@ func (c *CPU) Reset() {
 	c.tstates = 0
 	c.refClock8, c.refMark = 0, 0
 	c.frameEnd = 0
+	c.nextFrameBoundary = 0
 	c.IM2Vector = 0xFF // ZX Spectrum ULA puts 0xFF on data bus during INTA
 }
 
@@ -685,6 +686,10 @@ func (c *CPU) setSpeed(v byte) {
 	newM := uint64(c.SpeedMultiplier())
 	if c.frameEnd > c.tstates {
 		c.frameEnd = c.tstates + (c.frameEnd-c.tstates)*newM/oldM
+		// The step path tracks the frame end (see ExecuteFrame entry);
+		// follow the rescale so a debugger step after a mid-frame speed
+		// change still sees the true boundary.
+		c.nextFrameBoundary = c.frameEnd
 	}
 }
 
@@ -828,6 +833,14 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	budget := uint64(tstatesPerFrame) * uint64(c.SpeedMultiplier())
 	frameStart := c.tstates
 	c.frameEnd = c.tstates + budget
+	// Keep the step path's frame bookkeeping in sync. nextFrameBoundary
+	// is otherwise only maintained by StepInstructionWithIRQ itself, so
+	// after bulk-frame execution it is stale (far behind tstates) and
+	// the FIRST debugger step after a breakpoint pause would read the
+	// gap as a frame boundary — injecting a spurious ULA INT that yanks
+	// the single-step into the IM1 handler instead of the next
+	// instruction.
+	c.nextFrameBoundary = c.frameEnd
 
 	// ULA INT line: asserted at the start of every ULA frame and
 	// held until the CPU acknowledges or the next frame begins.
@@ -967,6 +980,12 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	c.tstates -= c.frameEnd
 	c.refMark = c.tstates
 	c.frameEnd = 0
+	// Rebase the step path's boundary across the wrap: the pre-wrap
+	// value is meaningless on the wrapped counter. One budget out is
+	// where the NEXT frame's INT belongs; steps taken during a
+	// between-frames pause fire it there, and the next ExecuteFrame
+	// call re-syncs on entry regardless.
+	c.nextFrameBoundary = c.tstates + budget
 }
 
 func (c *CPU) executeInstruction() {

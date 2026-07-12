@@ -175,6 +175,102 @@ func TestStepInstructionWithIRQ_EIDelayGates(t *testing.T) {
 	}
 }
 
+// TestStepInstructionWithIRQ_NoSpuriousINTAfterBreakpointPause
+// reproduces the debugger bug where the FIRST Step pressed at a
+// breakpoint jumped into the ROM IM1 handler instead of executing
+// the instruction at PC. ExecuteFrame historically never maintained
+// nextFrameBoundary, so at a mid-frame breakpoint pause the step
+// path found it stale (tstates far past it), read that as a frame
+// boundary, and injected a spurious ULA INT. ExecuteFrame now syncs
+// nextFrameBoundary to the real frame end on entry; a step taken
+// mid-frame must execute exactly one instruction, and a step taken
+// AT the frame end must still fire the genuine INT.
+func TestStepInstructionWithIRQ_NoSpuriousINTAfterBreakpointPause(t *testing.T) {
+	cpu, mem := createTestCPU()
+	defer cleanupTestROMs("test_roms_z80")
+
+	// Deterministic instruction stream: NOPs in RAM. Interrupts stay
+	// off during the bulk frame so execution runs linearly through
+	// them instead of vectoring to $0038.
+	for a := uint16(0x8000); a < 0x8100; a++ {
+		mem.Write(a, 0x00)
+	}
+	cpu.PC = 0x8000
+	cpu.IFF1 = false
+	cpu.IM = 1
+
+	// Bulk-run a frame that a "breakpoint" aborts mid-way — the
+	// debugger pause: BreakpointCheck returns true, ExecuteFrame
+	// returns early with tstates mid-frame.
+	calls := 0
+	cpu.BreakpointCheck = func(pc uint16) bool {
+		calls++
+		return calls > 40
+	}
+	cpu.ExecuteFrame(int(stepFrameBudget))
+	cpu.BreakpointCheck = nil
+	if cpu.frameEnd == 0 || cpu.tstates >= cpu.frameEnd {
+		t.Fatalf("setup: frame not aborted mid-way (tstates=%d frameEnd=%d)", cpu.tstates, cpu.frameEnd)
+	}
+	if cpu.nextFrameBoundary != cpu.frameEnd {
+		t.Errorf("nextFrameBoundary = %d after aborted frame; want frameEnd = %d", cpu.nextFrameBoundary, cpu.frameEnd)
+	}
+
+	// Model the paused guest: interrupts enabled, no INT in flight
+	// (the frame-start INT was consumed/withdrawn long before a
+	// random mid-frame pause).
+	cpu.IRQPending.Store(false)
+	cpu.IFF1 = true
+	cpu.eiDelay = false
+	pc, sp := cpu.PC, cpu.SP
+
+	cpu.StepInstructionWithIRQ()
+
+	// One NOP, nothing else: no push, no vector, IFF1 untouched.
+	if cpu.PC != pc+1 {
+		t.Errorf("PC = $%04X after step; want $%04X (spurious INT delivered?)", cpu.PC, pc+1)
+	}
+	if cpu.SP != sp {
+		t.Errorf("SP = $%04X after step; want $%04X (no push expected)", cpu.SP, sp)
+	}
+	if !cpu.IFF1 {
+		t.Errorf("IFF1 cleared by step; want still set (no IRQ acceptance)")
+	}
+	if cpu.IRQPending.Load() {
+		t.Errorf("IRQPending asserted by a mid-frame step; want false")
+	}
+
+	// Stepping AT the genuine frame end must still fire the INT.
+	cpu.tstates = cpu.nextFrameBoundary
+	cpu.IFF1 = false
+	cpu.StepInstructionWithIRQ()
+	if !cpu.IRQPending.Load() {
+		t.Errorf("IRQPending = false stepping at the frame end; want true")
+	}
+}
+
+// TestExecuteFrame_RebasesStepBoundaryAcrossWrap verifies the
+// end-of-frame counter wrap also rebases nextFrameBoundary: after a
+// completed frame the pre-wrap value is on the wrong scale, and a
+// step taken during a between-frames pause should see the next
+// frame's INT one budget out, not a garbage boundary.
+func TestExecuteFrame_RebasesStepBoundaryAcrossWrap(t *testing.T) {
+	cpu, mem := createTestCPU()
+	defer cleanupTestROMs("test_roms_z80")
+
+	for a := uint16(0x8000); a < 0x8100; a++ {
+		mem.Write(a, 0x00)
+	}
+	cpu.PC = 0x8000
+	cpu.IFF1 = false
+
+	cpu.ExecuteFrame(int(stepFrameBudget))
+
+	if want := cpu.tstates + stepFrameBudget; cpu.nextFrameBoundary != want {
+		t.Errorf("nextFrameBoundary = %d after completed frame; want %d (tstates + budget)", cpu.nextFrameBoundary, want)
+	}
+}
+
 // TestStepInstructionWithIRQ_HaltWakeOnInt verifies the Spectrum
 // Next "HALT wakes on edge regardless of IFF1" path. With IFF1=0,
 // the standard interrupt() path can't fire, but HaltWakeOnInt=true
