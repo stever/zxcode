@@ -1,0 +1,74 @@
+<mxfile host="app.diagrams.net" version="24.7.7">
+  <diagram id="wasm-integration" name="Browser / wasm integration">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="lane-js" value="Page (packages/emulator — @zxplay/emulator)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="440" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="js1" value="GoEmulator.js&#10;loadGoRuntime(): wasm_exec.js + /dist/zx.wasm&#10;sets go.env: ZX_GO_NO_FPGA_BOOTROM=1,&#10;ZX_GO_NEXT_DIRECT_BOOT=1 · polls zxReady&#10;ENGINE_REV logged at boot" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="70" y="75" width="380" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="js2" value="requestAnimationFrame loop&#10;audio-clock paced (AudioContext.currentTime)&#10;boot fast-forward while zxFastBoot()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="70" y="195" width="380" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="js3" value="AudioWorklet 'zx-feeder'&#10;/dist/zx-feeder.worklet.js (real static file:&#10;CSP script-src 'self' blocks blob/data modules)&#10;pumpAudio(): transferable Uint8Array posts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="70" y="285" width="380" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="js4" value="KeyboardHandler (JSSpeccy3 heritage)&#10;worker-shaped shim: postMessage {keyDown,row,mask}&#10;→ setMatrixKey → zxMatrixKey; blur releases held keys" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="70" y="395" width="380" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="js5" value="Asset staging&#10;/next/: enNextZX.rom, enNxtmmc.rom,&#10;tbblue.mmc.zip (JSZip inflate, raw fallback)&#10;stageSdFiles / openNexGameZip for project files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="70" y="495" width="380" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-exports" value="wasm exports (cmd/zx_go/wasm_js.go — js.FuncOf globals)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="520" y="40" width="400" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="ex1" value="Boot / machine&#10;zxRegisterROM · zxBootNext(sd) · zxBoot48/128&#10;zxReset · zxModel · zxReady" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="550" y="80" width="340" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ex2" value="Frame + audio&#10;zxFrame(dst) → {w,h,debug,paused,pc}&#10;zxPullAudio(dst) → n mono int16 samples&#10;zxFastBoot · zxMacroActive" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="550" y="170" width="340" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="ex3" value="Input&#10;zxMatrixKey(row,mask,down) · zxType(rune)&#10;zxKeyName(name,down,shift)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="550" y="275" width="340" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ex4" value="Media / programs&#10;zxLoadTap · zxTapeInsert/Play/Stop/Status/Traps&#10;zxLoadSnapshot(z80/sna/szx)&#10;zxRunNex · zxRunBas · zxPutFile (SD staging)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="550" y="365" width="340" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ex5" value="Debug bridge (wasm_debug_js.go)&#10;zxDebugAttach/Detach · zxDebugCmd(line)&#10;zxDebugState/Mem/Disasm/Paging/StepFrame&#10;same handleCommand dispatch as GUI + telnet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="550" y="475" width="340" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-go" value="Go core (single wasm module, MAIN thread)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="960" y="40" width="400" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="go1" value="entry_js.go main()&#10;setupWasmExports(); parked timer goroutine&#10;keeps the Go scheduler alive between calls" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="990" y="80" width="340" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="go2" value="wasmEmu *emulator (singleton)&#10;same emulator struct as desktop; CPU only&#10;advances inside zxFrame calls" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="990" y="175" width="340" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="go3" value="pkg/audio on js: no oto player&#10;PullMono drains the ring; underrun decay&#10;handled by the worklet, not Go" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="990" y="270" width="340" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="go4" value="pkg/next/install on js&#10;DiskDisabled=true; ROMs via InjectROM&#10;(zxRegisterROM); SD image in memory,&#10;writeback not available" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="990" y="365" width="340" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="go5" value="Build: //go:build js / !js tags&#10;GOOS=js GOARCH=wasm go build ./cmd/zx_go&#10;scripts/build-wasm.sh → dist/zx.wasm (~31 MB,&#10;Fyne linked as dead code) + wasm_exec.js&#10;prebuilt-dist fallback when Go is absent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="990" y="475" width="340" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="ew1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="js1" target="ex1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ew2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="js2" target="ex2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ew3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="js3" target="ex2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ew4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="js4" target="ex3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ew5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="js5" target="ex4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ew6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="ex1" target="go2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ew7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="ex2" target="go2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ew8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="ex2" target="go3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ew9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="ex4" target="go4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ew10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="ex5" target="go2"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

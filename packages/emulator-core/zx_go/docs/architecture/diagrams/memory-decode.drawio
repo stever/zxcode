@@ -1,0 +1,76 @@
+<mxfile host="app.diagrams.net" version="24.7.7">
+  <diagram id="memory-decode" name="Memory decode and paging">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title-next" value="Spectrum Next read dispatch — Memory.readValue(), priority top to bottom (mirrors the zxnext.vhd memory mux)" style="text;html=1;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="700" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="n1" value="1. FPGA bootrom ($0000-$3FFF, 8K mirrored)&#10;active until the first NR$03 write; masks reads only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="400" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" value="2. divMMC overlay ($0000-$3FFF)&#10;automap / CONMEM: divMMC ROM or RAM bank; beats everything below" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="135" width="400" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n3" value="3. Multiface overlay&#10;$0000-$1FFF MF ROM, $2000-$3FFF MF RAM (while mfActive)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="210" width="400" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n4" value="4. Alt-ROM redirect (NR$8C)&#10;skipped when an MMU RAM bank is mapped in the slot" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="285" width="400" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n5" value="5. Config-mode RAM window (NR$03 config mode + NR$04 page)&#10;boot.bin streams personality ROMs through here" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="360" width="400" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n6" value="6. Layer 2 read paging (port $123B bit 2)&#10;redirects the window into the Layer 2 banks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="435" width="400" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n7" value="7. 8K MMU override (NR$50-$57, mmuOverride[slot])&#10;bank $FF = ROM half; else 8K bank into the 2MB RAM array" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="510" width="400" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n8" value="8. Classic path&#10;Beta/TR-DOS ROM override ($3Dxx auto-page) → 16K page maps&#10;memoryPageReadMap[4] / memoryPageWriteMap[4] (≥16 = ROM)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="40" y="585" width="400" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="en1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n1" target="n2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="en2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n2" target="n3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="en3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n3" target="n4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="en4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n4" target="n5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="en5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n5" target="n6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="en6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n6" target="n7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="en7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n7" target="n8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="title-classic" value="Classic paging registers → 16K page maps" style="text;html=1;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="520" y="60" width="500" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="c1" value="Port $7FFD (128K+)&#10;bits 0-2 RAM bank at $C000 · bit 3 screen page (5/7)&#10;bit 4 ROM low bit · bit 5 paging lock" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="520" y="90" width="380" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" value="Port $1FFD (+2A/+3/Next)&#10;bit 0 special all-RAM paging ({0,1,2,3}/{4,5,6,7}/{4,5,6,3}/{4,7,6,3})&#10;bit 2 ROM high bit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="520" y="170" width="380" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" value="Port $DFFD (Next)&#10;high RAM-bank extension bits (bank = DFFD&lt;&lt;3 | 7FFD bits 0-2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="520" y="250" width="380" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" value="Port $EFF7 (Next)&#10;reg 3 reveals RAM bank 0 at $0000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="520" y="315" width="380" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="c5" value="16K page maps (4 slots)&#10;memoryPageReadMap / memoryPageWriteMap&#10;selectROM(): 7FFD bit4 + 1FFD bit2 → ROM 0-3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="960" y="170" width="320" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="c6" value="MMU sync rule&#10;classic port writes call syncMMUFromPage():&#10;rebuilds slot banks, clears mmuOverride for touched slots&#10;(classic paging beats stale MMU; SetMMU = last writer wins)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="960" y="270" width="320" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ec1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="c1" target="c5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="c2" target="c5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="c3" target="c5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="c4" target="c5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="c5" target="c6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="note-cont" value="Contention (classic models, pkg/memory)&#10;pattern {6,5,4,3,2,1,0,0} on $4000-$7FFF inside the display window&#10;disabled on Pentagon; returns 0 at any turbo speed (FPGA only contends at 3.5 MHz)&#10;port contention per Sean Young; +2A/+3 have no ULA port contention" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="520" y="420" width="500" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="note-write" value="Write dispatch mirrors the read order; differences:&#10;bootrom drops writes only outside config mode (config mode writes stream&#10;through to the selected page) · Alt-ROM bit 6 selects write-only vs read-only&#10;redirect · classic write map entry -1 = ROM (write ignored)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="520" y="530" width="500" height="90" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

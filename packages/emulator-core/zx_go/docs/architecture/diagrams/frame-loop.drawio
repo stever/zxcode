@@ -1,0 +1,109 @@
+<mxfile host="app.diagrams.net" version="24.7.7">
+  <diagram id="frame-loop" name="Frame loop and pacing">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="lane-desktop" value="Desktop / headless pacing" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="360" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" value="50 Hz wall-clock ticker&#10;time.Ticker(20 ms)&#10;gui_desktop.go run()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="280" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" value="rdbg.WaitIfPaused()&#10;debugger pause gate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="80" y="165" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="d3" value="Fast-tape turbo: many frames per tick&#10;while a loader polls port $FE&#10;(FEReadCount threshold)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="240" width="280" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="d4" value="oto pulls mixed audio itself&#10;(ring buffer, 882 samples/frame)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="315" width="280" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-browser" value="Browser pacing (GoEmulator.js)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="40" width="360" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="b1" value="requestAnimationFrame loop&#10;GoEmulator.js loop(t)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="80" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" value="Audio-clock pacing: produce frames until&#10;~60 ms of samples are in flight&#10;(AudioContext.currentTime @ 44.1 kHz)&#10;wall-clock fallback while suspended" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="150" width="280" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" value="zxFastBoot() true? run extra frames&#10;per displayed frame, discard audio&#10;(boot fast-forward, fastboot.go)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="245" width="280" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="b4" value="zxPullAudio() → AudioWorklet&#10;(zx-feeder.worklet.js, real file for CSP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="320" width="280" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-frame" value="One emulated frame (shared core)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="450" y="40" width="500" height="920" as="geometry" />
+        </mxCell>
+        <mxCell id="f1" value="cpu.ExecuteFrame(budget)&#10;budget = FrameTStates(model) × SpeedMultiplier&#10;48K 69888 · 128K/Next 70908 · Pentagon 71680" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="490" y="80" width="420" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" value="Per instruction:&#10;pre-fetch hooks (divMMC, IF1, Multiface, Beta, esxDOS)&#10;→ M1 fetch (R bump, 28 MHz wait state)&#10;→ execute (big switch; Z80N ops if VariantZ80N)&#10;→ memory contention (3.5 MHz window only)&#10;→ IN/OUT via ULA.ReadPort / WritePort" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="490" y="175" width="420" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" value="Frame INT window&#10;narrow pulse on the Next (IntAssertTstate + IntPulseTstates,&#10;zxnext.vhd values) · whole-frame assert on classics&#10;optional line INT (NR$22/$23)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="490" y="310" width="420" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" value="End of frame: peripherals.Frame(), kbd.Tick(),&#10;nexload macro tick, noteBootFrame()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="490" y="415" width="420" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" value="ULA.Render() — once per frame&#10;1. flushAudioFrame: event-timed box-filter mix&#10;   (beeper + tape + DACs) → DC blocker → ring&#10;2. border per line from recorded borderChanges&#10;3. 256×192 screen decode (interleave + attrs + FLASH)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="490" y="495" width="420" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="f6" value="Next only: applyNextCompositor()&#10;per scanline y: Copper.Step(y) then ComposeScanline(y)&#10;then border tilemap pass + sprite border pass&#10;wide paths: hi-res Layer 2 (320/640), 80-col tilemap" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="490" y="625" width="420" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="f7" value="Outputs" style="text;html=1;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="490" y="740" width="420" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="f8" value="RGBA framebuffer&#10;Fyne canvas (desktop) / copied into&#10;Uint8Array by zxFrame (browser)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="490" y="770" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="f9" value="Audio ring (mono int16, 44.1 kHz)&#10;oto Read callback mixes AY at pull&#10;time (desktop) / PullMono (browser)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="710" y="770" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ed1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d1" target="d2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d2" target="f1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eb1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="b1" target="b2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eb2" value="zxFrame()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="b2" target="f1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ef1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="f1" target="f2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ef2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="f2" target="f3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ef3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="f3" target="f4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ef4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="f4" target="f5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ef5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="f5" target="f6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ef6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="f6" target="f8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ef7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="f5" target="f9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ef8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;" edge="1" parent="1" source="f9" target="b4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ef9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;" edge="1" parent="1" source="f9" target="d4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

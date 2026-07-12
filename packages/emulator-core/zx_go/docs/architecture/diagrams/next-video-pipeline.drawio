@@ -1,0 +1,62 @@
+<mxfile host="app.diagrams.net" version="24.7.7">
+  <diagram id="next-video" name="Next video pipeline">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="v0" value="ULA.Render() base pass&#10;classic 256×192 screen + per-line border into 320×240 RGBA&#10;(Timex hi-res / LoRes handled in the base pass)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="440" y="40" width="480" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="v1" value="Per active scanline y (0..191): Copper.Step(y, 511, 64)&#10;MOVE writes NextRegs (palette, scroll, banks) before the row composites&#10;WAIT releases at scanline + hpos threshold (copper.vhd)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="440" y="140" width="480" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="l-ula" value="ULA row&#10;(already rendered&#10;RGBA row)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="60" y="250" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="l-l2" value="Layer 2&#10;RenderScanline&#10;256×192 / 320×256 /&#10;640×256, scroll, clip" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="230" y="250" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="l-tm" value="Tilemap (Layer 3)&#10;40/80 col, textmode,&#10;mirror/rotate, scroll, clip" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="410" y="250" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="l-spr" value="Sprites (128)&#10;4/8bpp, scale, mirror,&#10;rotate, anchor groups,&#10;collision $303B" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="600" y="250" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="l-lores" value="LoRes / Radastan&#10;128×96 (lores.vhd&#10;transcription)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="790" y="250" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="l-pal" value="Palettes (pkg/next/palette)&#10;9-bit RGB333, 256 entries × 8 banks (first/second per layer)&#10;per-entry Layer 2 priority bit (NR$44 bit 7)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="60" y="350" width="440" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="l-clip" value="Clip windows NR$18-$1B&#10;(4-coordinate + 2-bit index protocol)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="530" y="350" width="410" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="v2" value="Compositor.ComposeScanline(y)&#10;priority order from NR$15 bits 4:2 (SLU/LSU/SUL/LUS/USL/ULS + additive blends)&#10;transparency: global NR$14 · sprite NR$4B · tilemap nibble NR$4C&#10;SUL per-pixel stencil · Layer 2 priority-bit promotion · ULA+tilemap combine&#10;fallback colour NR$4A where every layer is transparent&#10;(mixer.go = fully faithful zxnext.vhd:7100-7355 port; scanline painter is the fast path)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="200" y="450" width="600" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="v3" value="Wide display paths (skip the 256-wide pass)&#10;hi-res Layer 2: renderHiResLayer2 (320/640×256, pixel-doubling for 640)&#10;80-col tilemap: renderWide (640px, pixel-doubled base + native tilemap)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="850" y="460" width="480" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="v4" value="Border passes over the full 320×240 image&#10;ComposeBorderRow (tilemap in border) · ComposeSpriteBorderRow (sprites over border,&#10;256-line sprite frame centred with Y bias 8) · renderNextFullHeight (320×256 over-border)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="200" y="600" width="600" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="v5" value="Final RGBA frame&#10;every mode composites into a fixed canvas (browser: 640×512), so page layout never moves" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="200" y="710" width="600" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ev0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="v0" target="v1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="l-ula" target="v2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="l-l2" target="v2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="l-tm" target="v2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="l-spr" target="v2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="l-lores" target="v2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="l-pal" target="v2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="l-clip" target="v2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="v1" target="l-tm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="v2" target="v4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;" edge="1" parent="1" source="v2" target="v3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="v4" target="v5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="v3" target="v5"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

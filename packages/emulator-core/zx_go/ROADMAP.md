@@ -111,6 +111,29 @@ downstream symptoms — see the development log.
 - [⊘] **[v1.1] #229 direct-boot (no-firmware) path polish**; #226
   direct-core boot default; #240 provenance phase 2b — boot-path polish.
 
+## Initiative: architecture documentation (opened 2026-07-12)
+
+Developer/architecture documentation for the emulation core lives in
+`docs/architecture/` (overview, code organisation, implementation
+patterns, chip-by-chip emulation styles, the Next FPGA emulation, the
+frontends/wasm/debugger surfaces, known gaps) with Draw.io diagrams in
+`docs/architecture/diagrams/`. It is maintained BY EVERYONE — human or
+agent — as part of the change, not after it; the update map (which code
+area touches which doc + diagram) is in `docs/architecture/README.md`.
+
+The initiative itself is tracked in Wolfpack (ZX Play roadmap item
+**#r2**, with linked work items #134-#136 for the open follow-ups:
+the .NEX Copper doc/implementation inconsistency, the per-subsystem
+doc.go sweep, and a doc-drift check). This section records the in-repo
+state only.
+
+- [x] Initial documentation set: 7 documents + 7 Draw.io diagrams
+  (system overview, frame loop, memory decode, Next video pipeline,
+  Next boot chain, wasm integration, debugger surfaces) (2026-07-12).
+- [x] Maintenance duties recorded: update map in
+  `docs/architecture/README.md`, convention in `CONTRIBUTING.md`,
+  agent note in the zxcode repo `CLAUDE.md`.
+
 ## Unimplemented hardware features (catalogued — 2026-06-09 code scan)
 
 Deferred / stubbed / approximated hardware behaviours found in the

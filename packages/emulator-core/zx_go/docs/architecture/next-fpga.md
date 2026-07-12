@@ -1,0 +1,271 @@
+# Spectrum Next FPGA emulation
+
+The ZX Spectrum Next is not a chip: it is a machine implemented as an
+FPGA core (TBBlue). zx_go therefore emulates the Next by treating the
+FPGA source itself as the schematic. `zxnext.vhd` plus the per-device
+VHDL modules under the TBBlue core are the oracle for every hardware
+question; a reference emulator serves only as a behavioural oracle for
+whole-boot comparisons. This document describes how that plays out in
+code.
+
+Diagrams:
+[memory-decode.drawio](diagrams/memory-decode.drawio),
+[next-video-pipeline.drawio](diagrams/next-video-pipeline.drawio),
+[next-boot-chain.drawio](diagrams/next-boot-chain.drawio).
+
+## The conformance method
+
+Per-feature "validated against the VHDL" claims are spot checks, so the
+project replaces spot-checking with enumeration:
+
+1. `VHDL_CONFORMANCE.md` lists the FPGA surface in nine axes (reset
+   defaults, write semantics, read-back mux, port decode, interrupts,
+   CPU ops, paging, divMMC/SD, video) and maps every row to an
+   implementation and a test.
+2. Each subsystem carries a `fpga_golden_test.go` replaying GHDL
+   simulations of the real VHDL (testbenches in
+   `_tools/<subsystem>-vhdl-test/`).
+3. The cold boot of real NextZXOS is the integration test that the rows
+   are complete.
+4. Divergence hunting against a reference emulator uses the dev modes in
+   `cmd/zx_go` (`--next-lockstep`, `--next-nrdiff`, `--next-memdiff`,
+   `--next-bisect`) keyed on a shared guest clock (FRAMES sysvar).
+
+Source comments cite exact VHDL lines. When you change any of this code,
+carry the citation with it.
+
+## The NextReg file (`pkg/next/nextregs`)
+
+`Dispatcher` models the register file behind ports $243B (select) and
+$253B (data) and the Z80N NEXTREG opcodes:
+
+- A 256-byte backing store plus optional per-register `onWrite` /
+  `onRead` handlers and `onReset` hooks.
+- Contract: an `onWrite` handler replaces default storage and calls
+  `Store()` itself if the value should read back; `onRead` returns live
+  state where reads have side-effect semantics. `Raw()`/`Store()` bypass
+  handlers.
+- Reset applies the FPGA's cold-reset values (each cited to the
+  zxnext.vhd reset block) in three phases: zero every register through
+  the handlers, re-apply non-zero defaults through the handlers, then
+  run `onReset` hooks for state outside the byte array (clip-window
+  indices and the like).
+- NR$01/NR$0E (core version) reject guest writes; NR$00/NR$0F stay
+  writable because games poke them as probes.
+
+## Wiring (`pkg/next/wire.go`)
+
+Every register-to-subsystem connection is a `WireXxx` function, applied
+together by `Wire(opts)`. Centralising the wiring means the production
+bus and the test harness are configured by the same code and cannot
+drift. Highlights:
+
+- Machine identity and boot: `WireMachineType` (NR$03: personality,
+  timing, config-mode transitions, bootrom un-mask), `WireReset` (NR$02:
+  typed soft/hard reset, see boot chain below), `applyTBBLUEFWBootDefaults`
+  (the register state the real firmware leaves behind).
+- Memory: `WireMMU` (NR$50-$57), `WireROMBank` (NR$8E), `WireAltROM`
+  (NR$8C), `WireConfigModeRAMPage` (NR$04).
+- CPU: `WireCPUSpeed` (NR$07 turbo), `WireContentionDisable` (NR$08).
+- Interrupts: `WireInterruptControl` (NR$C0 incl. stackless NMI),
+  `WireInterruptEnable0/2` (NR$C4/$C6), `WireLineInterrupt` (NR$22/$23).
+- Video: `WireLayer2`, `WireSprites`, `WireLayerPriority` (NR$15),
+  `WirePalette` (NR$40-$44), `WireTilemap`, `WireClipWindows`
+  (NR$18-$1C), `WireCopper` (NR$60-$62).
+- Peripherals: `WirePeripheral1/2/3` (NR$0A/$06/$09), `WireJoystickMode`,
+  `WireRTC`, `WireUART`, `WireKeymap`, plus reserved-bit masks.
+- Deliberately not wired here: the zxnDMA (port $6B, wired via
+  `ULA.SetNextDMA`) and the Pi accelerator registers (default storage).
+
+## Memory: MMU and the overlay mux (`pkg/memory`)
+
+Diagram: [memory-decode.drawio](diagrams/memory-decode.drawio).
+
+The Next view of memory is 8 slots of 8K over a 2 MB RAM array (banks
+0..111 allocated for ModelNext), with classic 16K paging still live
+underneath. Read dispatch mirrors the FPGA's final memory mux, highest
+priority first: FPGA bootrom, divMMC overlay, Multiface overlay, Alt-ROM
+redirect, config-mode RAM window, Layer 2 read paging, 8K MMU override,
+then the classic path (Beta ROM override, 16K page maps). Writes mirror
+the order with documented differences (the bootrom only masks reads
+while config mode is active; Alt-ROM bit 6 splits read/write redirect).
+
+Coexistence rule: classic port writes ($7FFD/$1FFD/$DFFD) re-sync the 8K
+slot table for the pages they touch and clear those slots' MMU override;
+`SetMMU` sets the override. Last writer wins, exactly as on hardware.
+Cold RAM zero-fills (matching SDRAM and the reference), with an optional
+pseudo-random fill behind an env var for the uninitialised-read
+detector.
+
+Contention: the classic pattern applies at 3.5 MHz only. At any turbo
+speed the FPGA does not assert contention, and neither does the
+emulator. NR$08 bit 1 disables RAM contention outright.
+
+## Boot chain
+
+Diagram: [next-boot-chain.drawio](diagrams/next-boot-chain.drawio).
+
+The faithful path (default, and the only desktop path):
+
+1. Power-on arms the FPGA bootrom (`tbblue_loader.rom`, GPLv3,
+   embedded) mirrored over $0000-$3FFF, and sets config mode.
+2. The bootrom reads `TBBLUE.FW` from the SD card over SPI, copies it to
+   $6000, and jumps. SPACE during the splash opens the firmware config
+   menu, which can boot any machine personality.
+3. The firmware streams personality ROMs through the config-mode RAM
+   window (NR$04 selects the target page; bootrom masks reads but writes
+   pass through), seeds NR$05-$09/$80-$83, then writes NR$03. The first
+   NR$03 write clears the bootrom mask and sets the machine type.
+4. A soft reset (NR$02 bit 0) lands in NextZXOS. NR$02's reset_type is a
+   3-bit shift-history register, so reads return $00 → $02 → $01 across
+   the boot; NextZXOS uses that to distinguish its staging pass.
+   Soft reset preserves NR$03, resets paging and the MMU, re-arms the
+   divMMC entry points, and re-arms the bootrom only when config mode is
+   active (that is what makes the config-menu machine selection work).
+
+Licensing shape: only the GPLv3 loader is embedded. `enNextZX.rom`,
+`enNxtmmc.rom` and the SD content are user-installed
+(`pkg/next/install`, with an official-distro downloader) or injected in
+the browser (`InjectROM` via `zxRegisterROM`).
+
+Browser accelerators (opt-in via `go.env` in GoEmulator.js, never core
+defaults):
+
+- Direct-core boot (`ZX_GO_NO_FPGA_BOOTROM=1` +
+  `ZX_GO_NEXT_DIRECT_BOOT=1`): resets the CPU straight into the NextZXOS
+  ROM with the post-firmware NextReg personality seeded from
+  `cmd/zx_go/next_directboot.go`. The seed table was captured from a
+  live boot and is coupled to the SD distro version; the re-verification
+  procedure lives in `packages/emulator-core/README.md`.
+- Fastboot (`cmd/zx_go/fastboot.go`, `zxFastBoot()` export): pure time
+  compression. Every instruction still executes; the page just runs many
+  frames per displayed frame and discards the audio until PC reaches the
+  NextZXOS menu wait loop.
+
+## Video pipeline
+
+Diagram: [next-video-pipeline.drawio](diagrams/next-video-pipeline.drawio).
+
+Per frame the ULA renders its classic base image, then for each active
+scanline steps the Copper and calls the compositor. The pieces:
+
+- Layer 2 (`pkg/next/layer2`): framebuffer over three consecutive 16K
+  banks. 256×192 8bpp row-major, 320×256 8bpp and 640×256 4bpp
+  column-major (NR$70), 9-bit X scroll, palette offset added per the
+  VHDL, clip window. The address generation and pixel fetch are verbatim
+  ports of layer2.vhd. Port $123B additionally maps Layer 2 banks into
+  CPU space for writing.
+- Tilemap (`pkg/next/tilemap`): 40/80×32 tiles, 4bpp, optional per-tile
+  attributes (palette offset, mirror X/Y, rotate, priority), 1bpp text
+  mode, 512-tile mode, pixel scroll with torus wrap, clip. Bases from
+  NR$6E/$6F select bank 5 or 7.
+- Sprites (`pkg/next/sprite`): 128 slots, 16×16 in 4bpp or 8bpp over a
+  16K shared pattern RAM, mirror/rotate/scale 1-8×, relative sprites in
+  composite and unified anchor groups, the $303B status port (collision
+  bit, clear-on-read), attribute streaming via ports $57/$5B and the
+  auto-increment NextRegs $75-$79. The per-line bandwidth limit is not
+  modelled (status bit 1 reads 0).
+- LoRes/Radastan (`pkg/next/lores`): 128×96 in 8-bit or 4-bit, a
+  line-by-line transcription of lores.vhd.
+- Palettes (`pkg/next/palette`): 9-bit RGB333 entries, 256 × 8 banks
+  (first/second per layer), the two-byte NR$44 protocol, per-entry
+  Layer 2 priority bit, ULANext format (NR$42).
+- Compositor (`pkg/next/compositor`): per-scanline composition in the
+  NR$15 priority order (SLU/LSU/SUL/LUS/USL/ULS plus two additive blend
+  modes), global transparency NR$14, sprite transparency NR$4B, tilemap
+  transparency nibble NR$4C, the SUL per-pixel stencil, Layer 2
+  priority-bit promotion, ULA+tilemap combine, and the NR$4A fallback
+  colour where every layer is transparent. `mixer.go` is a fully
+  faithful port of the FPGA video mixer, golden-tested; the scanline
+  painter is the fast path and approximates the additive blends (see
+  known-gaps.md). Hi-res Layer 2 and 80-column tilemap take dedicated
+  wide render paths (640px), and border passes composite tilemap and
+  sprites over the border area.
+- Copper (`pkg/next/copper`): 1024 × 16-bit instruction store, MOVE /
+  WAIT / NOOP / HALT, four start modes (NR$62), write cursor with the
+  hi/lo pairing rules. Execution is scanline-quantised: the ULA steps it
+  before each row with an end-of-line hpos so WAITs release on the
+  correct scanline and threshold. StartOnVBL restarts at the frame wrap.
+
+Raster feedback: `ULA.BeamPosition()` derives (line, hpos) from the
+shared T-state counter, wired to NR$1E/$1F, so DI'd raster-polling code
+(NextGuide) works.
+
+## Interrupts
+
+- Frame INT: narrow pulse with VHDL-derived assert T-state and width per
+  machine timing and 50/60 Hz (`pkg/next/inttiming.go`), scaled with the
+  turbo multiplier.
+- Line INT: NR$22/$23 program a 9-bit scanline; the wire layer converts
+  it to a T-state offset for the CPU.
+- IM2 daisy-chain (`pkg/next/im2.go`): a port of the FPGA's
+  peripherals.vhd chain of 14 devices (line, UART RX/TX, 8 CTC channels,
+  ULA frame INT), priority = vector index, golden-tested. The CTC
+  (`pkg/next/ctc`) is a cycle-accurate ctc_chan.vhd model.
+- Stackless NMI (NR$C0 bit 3 + NR$C2/$C3 return address) is wired into
+  the CPU.
+
+## DMA (`pkg/next/dma`)
+
+The zxnDMA on port $6B speaks the Z80-DMA WR-group protocol: variable
+length register groups decoded by a pending-follow-byte state machine,
+WR6 commands (RESET/LOAD/CONTINUE/ENABLE/READ MASK...), read-back
+sequence and status byte per dma.vhd, and the prescaler for
+sampled-audio transfers. Continuous mode stalls the CPU by charging
+cycles; burst mode interleaves with CPU execution. Not modelled:
+interrupt/match logic and DMA-vs-CPU bus contention.
+
+## Storage: divMMC, SD, esxDOS, .NEX
+
+- divMMC (`pkg/next/divmmc`): the automap state machine with all trigger
+  variants (instant/delayed, ROM3-gated), entry-point registers
+  NR$B8-$BB, the $3Dxx trap, $1FF8-$1FFF page-out after fetch, CONMEM
+  and sticky MAPRAM via port $E3, 128K divMMC RAM, RETN page-out. SPI to
+  the card through ports $E7/$EB. Includes two documented pragmatic
+  emulations of firmware-installed stubs (the $2009 FRAMES bump and the
+  bank-1 stub write-protect).
+- SD card (`pkg/next/sdcard`): a protocol-accurate SPI-mode card:
+  command framing, CMD0/8/9/10/12/13/16/17/18/24/25/32/33/38/55/58/59,
+  ACMD41/13/51, CSD v1 (SDSC) and v2 (SDHC) paired with the OCR CCS bit,
+  real CRC16 over data blocks, multi-block streams that survive CS
+  toggles, and slot-0-only CS decode. Backing sources: an in-memory
+  image (`ImageSource`, with `--sd-writeback` persistence) or a FAT32
+  image built from a host directory tree (`BuildFAT32`, VFAT long names
+  with ~N aliasing, the format NextZXOS actually boots).
+  `AddFileToFAT32`/`WriteFileToFAT32` insert or replace files in an
+  existing image (this is what `zxPutFile` and .NEX import use).
+- esxDOS (`pkg/next/esxdos`): the RST 8 API implemented as a pre-fetch
+  hook at PC $0008, gated on the divMMC overlay being paged in. Handlers
+  for the file API (F_OPEN...F_READDIR), M_GETHANDLE, M_DRVAPI,
+  M_GETDATE, backed by a host-directory mount or the card.
+- .NEX loader (`pkg/next/nex`): parses the V1.2 container (header,
+  palette, loading screens, banks in the canonical load order).
+  Bank/SP/PC application is the caller's job; in production the file is
+  written onto the SD card and NextZXOS's own loader runs it via a typed
+  menu macro (`nexload_macro.go`), which keeps loading faithful.
+
+## Peripheral blocks
+
+- RTC: a DS1307 on a bit-banged i2c bus (ports $103B/$113B), clock
+  registers derived from host time, 56-byte NVRAM persisted across runs.
+- UART: NR$A8/$A9 register interface with FIFOs and an AT-command
+  responder. Real networking is out of scope by decision.
+- DACs: four 8-bit channels on the classic DAC ports, event-timed into
+  the mixer. Turbosound: three AY chips (see chips.md).
+- Keymap (NR$28/$29/$2B) and the joystick I/O-mode register (NR$0B,
+  register modelled, pin-repurposing behaviour out of scope).
+
+## Working on this area
+
+- Adding a NextReg: follow CONTRIBUTING.md (handler through the
+  dispatcher, wiring in wire.go, subsystem test, harness test when
+  cross-subsystem). Find the VHDL lines first and cite them.
+- Never trust a reference emulator for read-back shapes; verify against
+  the VHDL (`--next-nrdiff` has a documented caveat about this).
+- After changing engine behaviour consumed by the browser, bump
+  `ENGINE_REV` in GoEmulator.js (repo convention, see the zxcode
+  CLAUDE.md) and re-run the boot tests listed in
+  `packages/emulator-core/README.md` if the SD distro or boot path is
+  involved.
+- The do-not-regress invariants live at the bottom of `ROADMAP.md`. Read
+  them before touching boot, SD, or reset code.

@@ -257,6 +257,7 @@ Wondering how zx_go stacks up against **CSpect**, **ZEsarUX**, and **MAME** (`tb
 
 | Doc | What's in it |
 | --- | --- |
+| [Architecture docs](docs/architecture/README.md) | Developer documentation: architecture, code organisation, implementation patterns, chip emulation, the Next FPGA internals, known gaps — with Draw.io diagrams. |
 | [User manual](docs/manual.md) | Day-to-day use: machines, loading, saving, peripherals, sound, shortcuts, troubleshooting. |
 | [Spectrum Next](docs/spectrum-next.md) | ROM install, SD-card setup, boot status, `.NEX`, licensing. |
 | [ZX80 / ZX81](docs/zx80-zx81.md) | The CPU-generated-display machines in detail. |

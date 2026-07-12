@@ -138,6 +138,14 @@ should land all the test, doc, and code changes for that fix.
 **No co-authored-by trailers.** This repo doesn't attribute commits
 to AI tooling.
 
+**Architecture docs ship with the change.** `docs/architecture/` holds
+the developer documentation (architecture, patterns, chip emulation,
+Next FPGA internals, known gaps) plus Draw.io diagrams. A change that
+alters architecture, wiring, the wasm export surface, or a known gap is
+incomplete without the matching doc/diagram update — the update map is
+in `docs/architecture/README.md`. This applies to AI agents as much as
+to people.
+
 ## Adding a ULA / hardware test
 
 The harness lives in `pkg/testharness`. Most existing tests follow
