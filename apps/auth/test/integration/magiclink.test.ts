@@ -134,7 +134,17 @@ describe("login page", () => {
         expect(res.headers.get("content-security-policy")).toContain("form-action 'self'");
         expect(res.body).toContain(`action="login/email"`);
         expect(res.body).toContain(`value="${AUTH_REDIRECT}projects/x"`);
-        expect(res.body).not.toContain("<script");
+        // Only the shared external script — nothing inline (the CSP allows
+        // script-src 'self' only).
+        expect(res.body).toContain(`<script src="form.js" defer></script>`);
+        expect(res.body).not.toMatch(/<script(?![^>]*\bsrc=)/);
+    });
+
+    it("serves the shared form script the pages reference", async () => {
+        const res = await get("/form.js");
+        expect(res.status).toBe(200);
+        expect(res.headers.get("content-type")).toContain("javascript");
+        expect(res.body).toContain("zx-busy");
     });
 
     it("drops a redirect_url outside AuthRedirect", async () => {

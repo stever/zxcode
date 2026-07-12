@@ -1,7 +1,10 @@
-// Server-rendered pages for the magic-link and OTP flows: plain HTML, no
-// JavaScript, inline styles only. In production the proxy's CSP does not
-// cover /auth/*, so each page carries its own conservative policy; the dev
-// proxy's site-wide CSP also permits inline styles.
+// Server-rendered pages for the magic-link and OTP flows: plain HTML with
+// inline styles, plus one shared same-origin script (FORM_SCRIPT, served at
+// /form.js) that disables a form's button on submit. In production the
+// proxy's CSP does not cover /auth/*, so each page carries its own
+// conservative policy; in dev the proxy's site-wide CSP applies on top,
+// which is why the script is an external file — both policies allow
+// script-src 'self', and no inline-script hash needs keeping in sync.
 //
 // The look mirrors the @zxplay/ui theme (packages/ui/theme.scss and the nav's
 // brand mark in Nav.scss): the ZX token values are copied here because the
@@ -12,7 +15,25 @@ import type { Response } from "express";
 import { config } from "./config.js";
 
 const PAGE_CSP =
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'";
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'";
+
+// Disables a submitting form's button and shows the spinner, guarding
+// against double submits. pageshow re-arms buttons when a back/forward
+// navigation restores the page from the bfcache.
+export const FORM_SCRIPT = `addEventListener("submit", function (event) {
+    var button = event.target.querySelector("button");
+    if (button) {
+        button.disabled = true;
+        button.classList.add("zx-busy");
+    }
+});
+addEventListener("pageshow", function () {
+    document.querySelectorAll("button.zx-busy").forEach(function (button) {
+        button.disabled = false;
+        button.classList.remove("zx-busy");
+    });
+});
+`;
 
 function escapeHtml(value: string): string {
     return value
@@ -41,6 +62,7 @@ function page(title: string, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <base href="${escapeHtml(publicBase())}">
 <title>${escapeHtml(title)} · ZX Play</title>
+<script src="form.js" defer></script>
 <style>
 :root {
     --zx-ground: #14110F;
@@ -174,6 +196,32 @@ button.zx-danger {
 button.zx-danger:hover {
     background: #E8404A;
 }
+button:disabled {
+    opacity: 0.65;
+    cursor: default;
+}
+button.zx-busy::after {
+    content: "";
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    margin-left: 0.5em;
+    vertical-align: -0.1em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: zx-spin 0.7s linear infinite;
+}
+@keyframes zx-spin {
+    to { transform: rotate(360deg); }
+}
+.notice {
+    border: 1px solid var(--zx-line-2);
+    border-left: 3px solid var(--zx-cyan);
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.85rem;
+}
 .error {
     color: var(--zx-red);
 }
@@ -235,6 +283,7 @@ export function loginPage(redirectUrl: string, error?: string): string {
         "Sign in",
         `<h1>Sign in</h1>
 <p>Enter your email address and we&#39;ll send you a sign-in link. No password needed.</p>
+<p class="notice">Had an account here before? Signing in has changed: we no longer use a third-party identity provider. Enter the email address registered to your account and your sign-in link will be sent there.</p>
 ${errorHtml}
 <form method="post" action="login/email">
 <input type="email" name="email" placeholder="you@example.com" required autofocus>

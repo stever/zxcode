@@ -162,7 +162,8 @@ describe("enrolment", () => {
         expect(match).toBeTruthy();
         otpSecret = match?.[1] ?? "";
         expect(res.body).toContain("<svg");
-        expect(res.body).not.toContain("<script");
+        // Only the shared external script — nothing inline.
+        expect(res.body).not.toMatch(/<script(?![^>]*\bsrc=)/);
     });
 
     it("rejects a wrong confirmation code and keeps the same secret", async () => {

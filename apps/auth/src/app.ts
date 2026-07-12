@@ -35,6 +35,7 @@ import { sendMagicLink } from "./mailer.js";
 import { allow } from "./ratelimit.js";
 import {
     checkEmailPage,
+    FORM_SCRIPT,
     linkInvalidPage,
     loginPage,
     otpChallengePage,
@@ -200,6 +201,12 @@ export function createApp(): express.Express {
         res.type("text/plain").send("OK");
     });
 
+    // The pages' shared script (see pages.ts): their CSP allows same-origin
+    // scripts only, so it is served as a real file rather than inlined.
+    app.get("/form.js", (_req, res) => {
+        res.type("application/javascript").send(FORM_SCRIPT);
+    });
+
     app.get("/", handleLogin);
     app.get("/login", handleLogin);
 
@@ -223,7 +230,11 @@ export function createApp(): express.Express {
             allow(`ip:${req.ip}`, IP_RATE_LIMIT, RATE_WINDOW_MS);
         if (withinLimits) {
             const rawToken = await issueToken(email, redirect);
-            await sendMagicLink(email, magicLinkUrl(rawToken));
+            // The SMTP round-trip happens after the response; the user sees
+            // the check-your-email page immediately either way.
+            sendMagicLink(email, magicLinkUrl(rawToken)).catch((err) => {
+                console.error(`magic link send to ${email} failed:`, err);
+            });
         } else {
             console.log(`rate limit hit for ${email} (${req.ip})`);
         }
