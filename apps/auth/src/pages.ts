@@ -283,7 +283,7 @@ export function loginPage(redirectUrl: string, error?: string): string {
         "Sign in",
         `<h1>Sign in</h1>
 <p>Enter your email address and we&#39;ll send you a sign-in link. No password needed.</p>
-<p class="notice">Had an account here before? Signing in has changed: we no longer use a third-party identity provider. Enter the email address registered to your account and your sign-in link will be sent there.</p>
+<p class="notice">Signing in has changed: we no longer use a third-party identity provider. Enter the email address registered to your account and your sign-in link will be sent there.</p>
 ${errorHtml}
 <form method="post" action="login/email">
 <input type="email" name="email" placeholder="you@example.com" required autofocus>
