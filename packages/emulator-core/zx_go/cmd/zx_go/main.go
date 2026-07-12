@@ -1350,7 +1350,14 @@ func tapeTrapROMActive(mem *memory.Memory) bool {
 	case roms.ModelPlus2A, roms.ModelPlus3:
 		return mem.GetROMBank() == 3
 	default:
-		return false // Next / ZX8x have no classic LD-BYTES tape loader
+		// Next / ZX8x: no classic LD-BYTES flow to trap. NextZXOS ROM3
+		// carries the LD-BYTES bytes at $0556 (byte-identical to the 48
+		// ROM) but nothing in any Next ROM calls that entry — its rewritten
+		// LOAD path enters with a different register contract, and PC passes
+		// $0556 during unrelated OS work — so the classic trap would consume
+		// tape blocks on phantom entries. Tape-on-Next needs NextZXOS's own
+		// .tapein file emulation instead (unproven in zx_go so far).
+		return false
 	}
 }
 
@@ -1375,9 +1382,11 @@ func installTapeTrap(emu *emulator) {
 			if tp != nil {
 				blk, more = tp.CurrentBlock(), tp.HasMoreBlocks()
 			}
-			fmt.Fprintf(os.Stderr, "[tapetrap] @0556 model=%s bank=%d active=%v tp=%v block=%d more=%v A=%02X carry=%v\n",
+			fmt.Fprintf(os.Stderr, "[tapetrap] @0556 model=%s bank=%d active=%v tp=%v block=%d more=%v A=%02X A'=%02X carry=%v carry'=%v IX=%04X DE=%04X\n",
 				roms.GetModelName(emu.mem.GetCurrentModel()), emu.mem.GetROMBank(),
-				tapeTrapROMActive(emu.mem), tp != nil, blk, more, emu.cpu.A, emu.cpu.F&z80.FLAG_C != 0)
+				tapeTrapROMActive(emu.mem), tp != nil, blk, more, emu.cpu.A, emu.cpu.A_,
+				emu.cpu.F&z80.FLAG_C != 0, emu.cpu.F_&z80.FLAG_C != 0,
+				emu.cpu.IX, uint16(emu.cpu.D)<<8|uint16(emu.cpu.E))
 		}
 		// Fire only when the 48 BASIC ROM — which holds LD-BYTES at $0556 — is
 		// the ROM currently paged at $0000. That's always true on the 48K; on
