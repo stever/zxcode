@@ -206,6 +206,8 @@
       "assetHint": "Binary asset. Reference it from your code by its path (e.g. INCBIN \"folder/name\") and it is staged under your source's directory at compile time."
     },
     "sprites": {
+      "undo": "Undo (Ctrl+Z)",
+      "redo": "Redo (Ctrl+Y)",
       "draw": "Draw",
       "erase": "Erase (transparent)",
       "flipHorizontal": "Flip horizontally",

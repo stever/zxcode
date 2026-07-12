@@ -16,6 +16,8 @@ import { useTranslation } from "@zxplay/i18n";
 
 // Editor pixels per sprite pixel on the drawing canvas.
 const ZOOM = 24;
+// Undo history depth (snapshots of the whole file, one per committed edit).
+const MAX_HISTORY = 100;
 const CANVAS_SIZE = SPRITE_SIZE * ZOOM;
 // Checkerboard shades marking transparent ($E3) pixels.
 const CHECKER_DARK = "#2e2e2e";
@@ -27,44 +29,11 @@ function base64Length(byteLength) {
   return 4 * Math.ceil(byteLength / 3);
 }
 
-// A pattern-strip thumbnail: the 16x16 pattern rendered 1:1 and scaled up
-// by CSS (image-rendering: pixelated).
-function PatternThumb({ bytes, index, rgb, selected, version, onSelect }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const ctx = ref.current.getContext("2d");
-    const image = ctx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
-    const base = index * SPRITE_BYTES;
-    for (let i = 0; i < SPRITE_BYTES; i++) {
-      const colour = bytes[base + i];
-      const o = i * 4;
-      if (colour === TRANSPARENT_INDEX) {
-        image.data[o] = 0x1a;
-        image.data[o + 1] = 0x1a;
-        image.data[o + 2] = 0x1a;
-      } else {
-        image.data[o] = rgb[colour][0];
-        image.data[o + 1] = rgb[colour][1];
-        image.data[o + 2] = rgb[colour][2];
-      }
-      image.data[o + 3] = 0xff;
-    }
-    ctx.putImageData(image, 0, 0);
-  }, [index, version, rgb]);
-
-  return (
-    <canvas
-      ref={ref}
-      width={SPRITE_SIZE}
-      height={SPRITE_SIZE}
-      className={
-        selected ? "sprite-pattern-thumb selected" : "sprite-pattern-thumb"
-      }
-      onClick={onSelect}
-    />
-  );
-}
+// NOTE: the pattern bytes must never travel through React props. The file
+// can be 192KB, and React's development-build instrumentation serialises
+// changed props element by element — a Uint8Array prop swapped by
+// undo/add/delete froze the page for tens of seconds on large files. The
+// thumbnails are plain canvases the editor paints imperatively instead.
 
 // Pixel editor for Next .spr files (16x16 8-bit patterns, default palette).
 // The pattern bytes live in a ref so drag-painting redraws the canvas
@@ -82,6 +51,17 @@ export function SpriteEditor({ fileId, content }) {
   // external and reloads the pattern bytes.
   const lastEmittedRef = useRef(null);
   const strokeRef = useRef(false);
+  // Undo/redo: snapshots of the file bytes (plus the selected pattern) at
+  // each committed edit; index points at the current state. External
+  // content changes reset it — CodeMirror's history doesn't cross reverts
+  // or reloads either.
+  const historyRef = useRef(null);
+  // Thumbnail canvases by pattern index, painted imperatively (see the
+  // note above). Strokes mark just their pattern dirty; whole-file changes
+  // (undo/redo, add/delete, reload) mark all.
+  const thumbCanvasesRef = useRef(new Map());
+  const dirtyThumbsRef = useRef(new Set());
+  const allThumbsDirtyRef = useRef(true);
 
   const [pattern, setPattern] = useState(0);
   const [selectedColour, setSelectedColour] = useState(0xff);
@@ -102,15 +82,26 @@ export function SpriteEditor({ fileId, content }) {
   if (bytesRef.current === null) {
     bytesRef.current = base64ToBytes(content || "");
     lastEmittedRef.current = content || "";
+    historyRef.current = {
+      stack: [{ bytes: bytesRef.current.slice(), pattern: 0 }],
+      index: 0,
+    };
   }
 
   useEffect(() => {
     if ((content || "") === lastEmittedRef.current) return;
     bytesRef.current = base64ToBytes(content || "");
     lastEmittedRef.current = content || "";
-    setPattern((p) =>
-      Math.max(0, Math.min(p, spritePatternCount(bytesRef.current.length) - 1))
+    const clamped = Math.max(
+      0,
+      Math.min(pattern, spritePatternCount(bytesRef.current.length) - 1)
     );
+    historyRef.current = {
+      stack: [{ bytes: bytesRef.current.slice(), pattern: clamped }],
+      index: 0,
+    };
+    allThumbsDirtyRef.current = true;
+    setPattern(clamped);
     setVersion((v) => v + 1);
   }, [content]);
 
@@ -149,12 +140,125 @@ export function SpriteEditor({ fileId, content }) {
 
   useEffect(drawCanvas, [pattern, version]);
 
-  const commit = () => {
+  // A strip thumbnail: the 16x16 pattern rendered 1:1, scaled up by CSS.
+  const drawThumb = (index) => {
+    const canvas = thumbCanvasesRef.current.get(index);
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const image = ctx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
+    const bytes = bytesRef.current;
+    const base = index * SPRITE_BYTES;
+    for (let i = 0; i < SPRITE_BYTES; i++) {
+      const colour = bytes[base + i];
+      const o = i * 4;
+      if (colour === TRANSPARENT_INDEX) {
+        image.data[o] = 0x1a;
+        image.data[o + 1] = 0x1a;
+        image.data[o + 2] = 0x1a;
+      } else {
+        image.data[o] = rgb[colour][0];
+        image.data[o + 1] = rgb[colour][1];
+        image.data[o + 2] = rgb[colour][2];
+      }
+      image.data[o + 3] = 0xff;
+    }
+    ctx.putImageData(image, 0, 0);
+  };
+
+  // Repaint dirty thumbnails after each committed change. Ref callbacks run
+  // before effects in the same React commit, so canvases added by a pattern
+  // count change are already registered here.
+  useEffect(() => {
+    if (allThumbsDirtyRef.current) {
+      for (let i = 0; i < count; i++) drawThumb(i);
+      allThumbsDirtyRef.current = false;
+    } else {
+      for (const i of dirtyThumbsRef.current) {
+        if (i < count) drawThumb(i);
+      }
+    }
+    dirtyThumbsRef.current.clear();
+  }, [version, count]);
+
+  // Push the current bytes to the store (and bump the thumbnails).
+  const emit = () => {
     const b64 = bytesToBase64(bytesRef.current);
     lastEmittedRef.current = b64;
     dispatch(setFileContent(fileId, b64));
     setVersion((v) => v + 1);
   };
+
+  // A committed edit: emit it and snapshot it for undo. selectedPattern is
+  // the pattern the edit leaves selected (pattern add/delete pass it
+  // explicitly because their setPattern hasn't landed yet).
+  const commit = (selectedPattern = pattern) => {
+    emit();
+    const h = historyRef.current;
+    h.stack = h.stack.slice(0, h.index + 1);
+    h.stack.push({ bytes: bytesRef.current.slice(), pattern: selectedPattern });
+    if (h.stack.length > MAX_HISTORY) {
+      h.stack.shift();
+    }
+    h.index = h.stack.length - 1;
+  };
+
+  const restore = (entry) => {
+    bytesRef.current = entry.bytes.slice();
+    allThumbsDirtyRef.current = true;
+    setPattern(
+      Math.max(
+        0,
+        Math.min(entry.pattern, spritePatternCount(entry.bytes.length) - 1)
+      )
+    );
+    emit();
+  };
+
+  const undo = () => {
+    const h = historyRef.current;
+    if (h.index === 0) return;
+    h.index--;
+    restore(h.stack[h.index]);
+  };
+
+  const redo = () => {
+    const h = historyRef.current;
+    if (h.index >= h.stack.length - 1) return;
+    h.index++;
+    restore(h.stack[h.index]);
+  };
+
+  // Ctrl/Cmd+Z / Shift+Ctrl+Z / Ctrl+Y while the editor is open, unless the
+  // keystroke belongs to a focused text field elsewhere on the page. The
+  // handlers go through refs so the listener binds once.
+  const undoRef = useRef(null);
+  const redoRef = useRef(null);
+  undoRef.current = undo;
+  redoRef.current = redo;
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const target = e.target;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      if (key === "y" || e.shiftKey) {
+        redoRef.current();
+      } else {
+        undoRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Canvas-relative event position -> sprite pixel, or null outside.
   const pixelAt = (e) => {
@@ -172,6 +276,7 @@ export function SpriteEditor({ fileId, content }) {
     const i = pattern * SPRITE_BYTES + p.y * SPRITE_SIZE + p.x;
     if (bytesRef.current[i] !== value) {
       bytesRef.current[i] = value;
+      dirtyThumbsRef.current.add(pattern);
       drawCanvas();
     }
   };
@@ -215,6 +320,7 @@ export function SpriteEditor({ fileId, content }) {
       (pattern + 1) * SPRITE_BYTES
     );
     fn(view);
+    dirtyThumbsRef.current.add(pattern);
     commit();
   };
 
@@ -247,8 +353,9 @@ export function SpriteEditor({ fileId, content }) {
     grown.set(bytesRef.current);
     grown.fill(TRANSPARENT_INDEX, bytesRef.current.length);
     bytesRef.current = grown;
+    allThumbsDirtyRef.current = true;
     setPattern(count);
-    commit();
+    commit(count);
   };
 
   const deletePattern = () => {
@@ -260,15 +367,36 @@ export function SpriteEditor({ fileId, content }) {
       pattern * SPRITE_BYTES
     );
     bytesRef.current = shrunk;
-    setPattern(Math.min(pattern, count - 2));
-    commit();
+    allThumbsDirtyRef.current = true;
+    const next = Math.min(pattern, count - 2);
+    setPattern(next);
+    commit(next);
   };
 
   if (count === 0) return null;
 
+  const canUndo = historyRef.current.index > 0;
+  const canRedo = historyRef.current.index < historyRef.current.stack.length - 1;
+
   return (
     <div className="sprite-editor">
       <div className="sprite-editor-toolbar">
+        <div className="sprite-editor-toolbar-group">
+          <Button
+            icon="pi pi-undo"
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.undo")}
+            disabled={!canUndo}
+            onClick={undo}
+          />
+          <Button
+            icon="pi pi-undo sprite-editor-redo-icon"
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.redo")}
+            disabled={!canRedo}
+            onClick={redo}
+          />
+        </div>
         <div className="sprite-editor-toolbar-group">
           <Button
             icon="pi pi-pencil"
@@ -365,14 +493,23 @@ export function SpriteEditor({ fileId, content }) {
       </div>
       <div className="sprite-pattern-strip">
         {Array.from({ length: count }, (_, index) => (
-          <PatternThumb
+          <canvas
             key={index}
-            bytes={bytesRef.current}
-            index={index}
-            rgb={rgb}
-            selected={index === pattern}
-            version={version}
-            onSelect={() => setPattern(index)}
+            width={SPRITE_SIZE}
+            height={SPRITE_SIZE}
+            className={
+              index === pattern
+                ? "sprite-pattern-thumb selected"
+                : "sprite-pattern-thumb"
+            }
+            ref={(el) => {
+              if (el) {
+                thumbCanvasesRef.current.set(index, el);
+              } else {
+                thumbCanvasesRef.current.delete(index);
+              }
+            }}
+            onClick={() => setPattern(index)}
           />
         ))}
         <Button

@@ -388,6 +388,11 @@ code {
     opacity: 0.7;
 }
 
+/* Redo is the undo arrow mirrored (primeicons has no redo glyph). */
+.sprite-editor-redo-icon {
+    transform: scaleX(-1);
+}
+
 .sprite-editor-main {
     display: flex;
     flex-wrap: wrap;
