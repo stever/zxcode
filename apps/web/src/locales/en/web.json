@@ -208,8 +208,11 @@
     "sprites": {
       "undo": "Undo (Ctrl+Z)",
       "redo": "Redo (Ctrl+Y)",
-      "draw": "Draw",
+      "draw": "Draw (hold Shift to erase)",
       "erase": "Erase (transparent)",
+      "fill": "Fill (hold Shift to fill transparent)",
+      "rotate": "Rotate 90°",
+      "shift": "Shift pixels (Shift+arrows: 8px, Ctrl+Shift+arrows: 1px)",
       "flipHorizontal": "Flip horizontally",
       "flipVertical": "Flip vertically",
       "clear": "Clear sprite",

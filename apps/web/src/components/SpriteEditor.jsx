@@ -237,38 +237,6 @@ export function SpriteEditor({ fileId, content }) {
     restore(h.stack[h.index]);
   };
 
-  // Ctrl/Cmd+Z / Shift+Ctrl+Z / Ctrl+Y while the editor is open, unless the
-  // keystroke belongs to a focused text field elsewhere on the page. The
-  // handlers go through refs so the listener binds once.
-  const undoRef = useRef(null);
-  const redoRef = useRef(null);
-  undoRef.current = undo;
-  redoRef.current = redo;
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const key = e.key.toLowerCase();
-      if (key !== "z" && key !== "y") return;
-      const target = e.target;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      e.preventDefault();
-      if (key === "y" || e.shiftKey) {
-        redoRef.current();
-      } else {
-        undoRef.current();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
   // Canvas-relative event position -> sprite pixel, or null outside.
   const pixelAt = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -281,13 +249,38 @@ export function SpriteEditor({ fileId, content }) {
   const paintAt = (e) => {
     const p = pixelAt(e);
     if (!p) return;
-    const value = tool === "erase" ? TRANSPARENT_INDEX : selectedColour;
+    // Holding Shift erases regardless of the active tool (zx-tools habit).
+    const value =
+      tool === "erase" || e.shiftKey ? TRANSPARENT_INDEX : selectedColour;
     const i = pattern * SPRITE_BYTES + p.y * SPRITE_SIZE + p.x;
     if (bytesRef.current[i] !== value) {
       bytesRef.current[i] = value;
       dirtyThumbsRef.current.add(pattern);
       drawCanvas();
     }
+  };
+
+  // 4-way flood fill from the clicked pixel; Shift fills with transparent.
+  const floodFillAt = (e) => {
+    const p = pixelAt(e);
+    if (!p) return;
+    const bytes = bytesRef.current;
+    const base = pattern * SPRITE_BYTES;
+    const from = bytes[base + p.y * SPRITE_SIZE + p.x];
+    const to = e.shiftKey ? TRANSPARENT_INDEX : selectedColour;
+    if (from === to) return;
+    const stack = [[p.x, p.y]];
+    while (stack.length) {
+      const [x, y] = stack.pop();
+      if (x < 0 || x >= SPRITE_SIZE || y < 0 || y >= SPRITE_SIZE) continue;
+      const i = base + y * SPRITE_SIZE + x;
+      if (bytes[i] !== from) continue;
+      bytes[i] = to;
+      stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+    }
+    dirtyThumbsRef.current.add(pattern);
+    drawCanvas();
+    commit();
   };
 
   const handlePointerDown = (e) => {
@@ -307,6 +300,10 @@ export function SpriteEditor({ fileId, content }) {
       return;
     }
     if (e.button !== 0) return;
+    if (tool === "fill") {
+      floodFillAt(e);
+      return;
+    }
     e.currentTarget.setPointerCapture(e.pointerId);
     strokeRef.current = true;
     paintAt(e);
@@ -352,6 +349,82 @@ export function SpriteEditor({ fileId, content }) {
 
   const clearPattern = () =>
     transformPattern((view) => view.fill(TRANSPARENT_INDEX));
+
+  // 90° clockwise: dst(x, y) = src(y, 15 - x).
+  const rotatePattern = () =>
+    transformPattern((view) => {
+      const src = view.slice();
+      for (let y = 0; y < SPRITE_SIZE; y++) {
+        for (let x = 0; x < SPRITE_SIZE; x++) {
+          view[y * SPRITE_SIZE + x] =
+            src[(SPRITE_SIZE - 1 - x) * SPRITE_SIZE + y];
+        }
+      }
+    });
+
+  // Move the pattern with wraparound (zx-tools' pan).
+  const shiftPattern = (dx, dy) =>
+    transformPattern((view) => {
+      const src = view.slice();
+      for (let y = 0; y < SPRITE_SIZE; y++) {
+        for (let x = 0; x < SPRITE_SIZE; x++) {
+          const sx = (x - dx + SPRITE_SIZE) % SPRITE_SIZE;
+          const sy = (y - dy + SPRITE_SIZE) % SPRITE_SIZE;
+          view[y * SPRITE_SIZE + x] = src[sy * SPRITE_SIZE + sx];
+        }
+      }
+    });
+
+  // Keyboard: Ctrl/Cmd+Z / Shift+Ctrl+Z / Ctrl+Y undo/redo, Shift+arrows
+  // shift the pattern 8px, Ctrl+Shift+arrows 1px (zx-tools' bindings) —
+  // while the editor is open, unless the keystroke belongs to a focused
+  // text field elsewhere on the page. The handlers go through refs so the
+  // listener binds once; the assignments must sit BELOW the handlers they
+  // capture (these are vars after transpilation, so a forward reference
+  // silently reads undefined).
+  const undoRef = useRef(null);
+  const redoRef = useRef(null);
+  const shiftRef = useRef(null);
+  undoRef.current = undo;
+  redoRef.current = redo;
+  shiftRef.current = shiftPattern;
+  useEffect(() => {
+    const ARROWS = {
+      arrowleft: [-1, 0],
+      arrowright: [1, 0],
+      arrowup: [0, -1],
+      arrowdown: [0, 1],
+    };
+    const onKeyDown = (e) => {
+      const target = e.target;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (key === "z" || key === "y")) {
+        e.preventDefault();
+        if (key === "y" || e.shiftKey) {
+          redoRef.current();
+        } else {
+          undoRef.current();
+        }
+        return;
+      }
+      if (e.shiftKey && !e.altKey && ARROWS[key]) {
+        e.preventDefault();
+        const [dx, dy] = ARROWS[key];
+        const step = e.ctrlKey || e.metaKey ? 1 : 8;
+        shiftRef.current(dx * step, dy * step);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const canAddPattern =
     base64Length(
@@ -422,8 +495,20 @@ export function SpriteEditor({ fileId, content }) {
             title={t("editor.sprites.erase")}
             onClick={() => setTool("erase")}
           />
+          <Button
+            icon="pi pi-circle-fill"
+            className={`p-button-sm ${tool === "fill" ? "" : "p-button-outlined"}`}
+            title={t("editor.sprites.fill")}
+            onClick={() => setTool("fill")}
+          />
         </div>
         <div className="sprite-editor-toolbar-group">
+          <Button
+            icon="pi pi-refresh"
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.rotate")}
+            onClick={rotatePattern}
+          />
           <Button
             icon="pi pi-arrows-h"
             className="p-button-sm p-button-outlined"
@@ -441,6 +526,32 @@ export function SpriteEditor({ fileId, content }) {
             className="p-button-sm p-button-outlined"
             title={t("editor.sprites.clear")}
             onClick={clearPattern}
+          />
+        </div>
+        <div className="sprite-editor-toolbar-group">
+          <Button
+            icon="pi pi-arrow-left"
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.shift")}
+            onClick={() => shiftPattern(-1, 0)}
+          />
+          <Button
+            icon="pi pi-arrow-right"
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.shift")}
+            onClick={() => shiftPattern(1, 0)}
+          />
+          <Button
+            icon="pi pi-arrow-up"
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.shift")}
+            onClick={() => shiftPattern(0, -1)}
+          />
+          <Button
+            icon="pi pi-arrow-down"
+            className="p-button-sm p-button-outlined"
+            title={t("editor.sprites.shift")}
+            onClick={() => shiftPattern(0, 1)}
           />
         </div>
         <span className="sprite-editor-hint">{t("editor.sprites.pickHint")}</span>
