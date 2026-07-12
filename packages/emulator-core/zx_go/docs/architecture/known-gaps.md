@@ -25,7 +25,8 @@ Status vocabulary:
 | Sprite per-scanline bandwidth limit not modelled; $303B bit 1 (max per line) always reads 0 | deferred | `pkg/next/sprite/doc.go` |
 | Compositor blend modes 6/7 approximated as SLU in the scanline painter (the faithful mixer exists in `mixer.go` but the painter has not migrated onto it); tilemap `tm_below` per-pixel bit approximated | deferred | `pkg/next/compositor/compositor.go` |
 | Hi-res Layer 2 shows visible rows 0..239; the bottom 16 of the 256-line modes are cropped (off-window overscan) | documented simplification | `pkg/ula/ula.go` (renderHiResLayer2), ROADMAP |
-| ULA inner screen does not honour a copper-changeable Next ULA palette (classic palette only) | deferred (separate feature, not a timing bug) | `pkg/ula/ula.go` |
+| ULA inner screen does not honour a redefined Next ULA palette for COLOUR (classic palette only). TRANSPARENCY is honoured: entries redefined to the NR$14 value make their classic colour transparent (compositor value-driven set, pinned by the ported Level2Order test) | partially closed; colour redefinition deferred | `pkg/ula/ula.go`, `pkg/next/compositor/compositor.go` |
+| Sprites composite 8 rows lower than the hardware paper position (the 256-line sprite frame is aligned to the 240-line canvas origin; the canvas draws 24 border lines where hardware shows 32) | canvas simplification, constant offset | `pkg/next/compositor/compositor.go`; observed via the ported Level2Order test |
 | Turbo-speed video timing: pkg/ula scanline/border tracking ignores the speed multiplier, so border effects are wrong above 3.5 MHz | deferred | `pkg/memory/memory.go` comment |
 
 ### NextReg / ports (see VHDL_CONFORMANCE.md for the full matrix)

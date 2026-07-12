@@ -94,6 +94,9 @@ func newNext() (*Harness, error) {
 	comp := compositor.New(pal, l2)
 	comp.SetSprites(sprites)
 	comp.SetPrioritySource(prio)
+	// Same as the production wiring (cmd/zx_go/next.go): the classic
+	// ULA palette lets the compositor resolve ULA transparency.
+	comp.SetULAPalette(u.Palette())
 	u.SetNextCompositor(comp)
 	u.SetNextSpritePort(sprites) // port $303B select (write) / status (read); $5B/$57 upload
 	u.SetNextDMA(dmaEngine)

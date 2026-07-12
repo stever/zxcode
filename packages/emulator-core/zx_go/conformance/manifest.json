@@ -320,14 +320,26 @@
     },
     {
       "id": "ext-327tests",
-      "title": "Threetwosevensixseven/ZXSpectrumNextTests — paging, DMA, layer order",
+      "title": "Threetwosevensixseven/ZXSpectrumNextTests — all five tests",
       "area": "Next acceptance",
       "kind": "external",
-      "status": "partial",
       "roadmap": "ZX Play #140",
       "link": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests",
       "detail": "327tests.html",
-      "notes": "Five Zeus-built .nex feature tests — see the breakdown page. DMACopy (4 build variants) is live; the other four await upstream .nex builds."
+      "notes": "All five tests pass (16 builds: upstream DMA binaries + sjasmplus ports of the Zeus-only sources). Found and pinned two emulator gaps en route: the palette power-on identity default and ULA-palette transparency.",
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+        "tests": [
+          "TestExt327DMAFill",
+          "TestExt327DMACopy",
+          "TestExt327LDIRFill",
+          "TestExt327LDIRCopy",
+          "TestExt327MMUPaging",
+          "TestExt327DFFDPaging",
+          "TestExt327Level2Order",
+          "TestExt327ULAScreenPaging"
+        ]
+      }
     }
   ],
   "suites": [
@@ -672,7 +684,7 @@
       "title": "Threetwosevensixseven/ZXSpectrumNextTests — test inventory",
       "page": "327tests.html",
       "link": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests",
-      "description": "Five Zeus-built .nex feature tests (MIT). Small but targeted: paging equivalences, DMA vs LDIR, and layer ordering.",
+      "description": "Five feature tests (MIT). The DMA builds are upstream binaries; the other four are sjasmplus ports of the upstream Zeus sources (pkg/testharness/testdata/ext327/src), each header documenting its deviations. All pass.",
       "groups": [
         {
           "name": "Tests",
@@ -680,17 +692,35 @@
             {
               "name": "MMUPaging",
               "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/MMUPaging.asm",
-              "notes": "Top-16K paging via port $7FFD vs the Next MMU registers. Zeus source only — no prebuilt .nex upstream"
+              "notes": "Both variants: bank markers via $7FFD vs the MMU, including the FPGA rule that classic paging-port writes reset MMU slots 0/1 to ROM (paging golden)",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestExt327MMUPaging"
+                ]
+              }
             },
             {
               "name": "DFFDPaging",
               "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DFFDPaging.asm",
-              "notes": "Port $DFFD high-bank extension paging. Zeus source only — no prebuilt .nex upstream"
+              "notes": "$DFFD metabanks composing with $7FFD and the MMU; NR$56/$57 read-backs asserted for all 8 checkpoints",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestExt327DFFDPaging"
+                ]
+              }
             },
             {
               "name": "ULAScreenPaging",
               "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/ULAScreenPaging.asm",
-              "notes": "Screen-page selection behaviour. Zeus source only — no prebuilt .nex upstream"
+              "notes": "Main/shadow ULA screen via $7FFD bit 3 on 128K paging and inside both +3 special all-RAM configs (the 4/5/6/7 build survives its own paging switch from bank 6)",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestExt327ULAScreenPaging"
+                ]
+              }
             },
             {
               "name": "DMACopy",
@@ -709,7 +739,13 @@
             {
               "name": "Level2Order",
               "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/Level2Order.asm",
-              "notes": "All six sprite / Layer 2 / ULA priority orderings"
+              "notes": "All six NR$15 orderings pixel-asserted (layer wins per region, ULA-palette transparency, sprite relations). Exposed two emulator fixes: the palette power-on identity default and value-driven ULA transparency",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestExt327Level2Order"
+                ]
+              }
             }
           ]
         }

@@ -88,6 +88,16 @@ type Compositor struct {
 	ulaPaletteSet  bool
 	ulaTransActive bool
 	ulaTransRGBA   [4]byte
+	// ulaTransColours is the value-driven generalisation: the classic
+	// RGBA of every ULA-palette index (0..31) whose 9-bit entry
+	// projects to the NR$14 transparency value. A program that
+	// REDEFINES a ULA palette entry to the transparency colour (NR$40/
+	// $41) makes the classic colour that entry renders as transparent —
+	// pinned by the ported Level2Order conformance test (paper stripes
+	// reveal Layer 2). Empty with the default palette + default NR$14,
+	// so the verified compositing is unchanged. Rebuilt at the top of
+	// each frame (palette writes don't notify the compositor).
+	ulaTransColours [][4]byte
 
 	// Pre-allocated per-scanline scratch buffers — hoisted out
 	// of ComposeScanline so 192 calls per frame don't churn the
@@ -376,12 +386,40 @@ func (c *Compositor) FallbackRGBA() [4]byte { return c.fallback }
 // fallback are no-ops for the default $E3.
 func (c *Compositor) recomputeULATrans() {
 	c.ulaTransActive = false
-	if !c.ulaPaletteSet || c.transparency >= 16 {
+	if c.ulaPaletteSet && c.transparency < 16 {
+		p := c.ulaPalette[c.transparency]
+		c.ulaTransActive = true
+		c.ulaTransRGBA = [4]byte{p.R, p.G, p.B, p.A}
+	}
+	// Value-driven set: ULA palette entries redefined to the NR$14
+	// value make their classic render colour transparent. Index 0..31
+	// covers ink (0-15) and paper (16-31); both halves render with the
+	// same 16 classic colours, hence idx&15.
+	c.ulaTransColours = c.ulaTransColours[:0]
+	if !c.ulaPaletteSet || c.pal == nil {
 		return
 	}
-	p := c.ulaPalette[c.transparency]
-	c.ulaTransActive = true
-	c.ulaTransRGBA = [4]byte{p.R, p.G, p.B, p.A}
+	ulaPal := c.pal.PaletteForLayer(palette.LayerULA)
+	if ulaPal == nil {
+		return
+	}
+	for idx := 0; idx < 32; idx++ {
+		if byte(ulaPal.Get(byte(idx))>>1) != c.transparency {
+			continue
+		}
+		p := c.ulaPalette[idx&15]
+		rgba := [4]byte{p.R, p.G, p.B, p.A}
+		dup := false
+		for _, have := range c.ulaTransColours {
+			if have == rgba {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			c.ulaTransColours = append(c.ulaTransColours, rgba)
+		}
+	}
 }
 
 // Transparency returns the currently-installed transparency index.
@@ -404,6 +442,11 @@ func (c *Compositor) Transparency() byte { return c.transparency }
 func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 	if len(dst) < Width*4 {
 		return
+	}
+	// Palette writes don't notify the compositor, so refresh the
+	// value-driven ULA transparency set once per frame.
+	if y == 0 {
+		c.recomputeULATrans()
 	}
 	// Determine which layers contribute this frame.
 	// A hi-res Layer 2 (NR$70 resolution 1/2) is 320/640 px wide and is
@@ -517,9 +560,18 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 	// always false, so paintBase/paintULAStencil collapse to paintULA and
 	// the verified compositing is unchanged.
 	ulaTransparentAt := func(off int) bool {
-		return c.ulaTransActive &&
+		if c.ulaTransActive &&
 			ulaRGBA[off+0] == c.ulaTransRGBA[0] && ulaRGBA[off+1] == c.ulaTransRGBA[1] &&
-			ulaRGBA[off+2] == c.ulaTransRGBA[2] && ulaRGBA[off+3] == c.ulaTransRGBA[3]
+			ulaRGBA[off+2] == c.ulaTransRGBA[2] && ulaRGBA[off+3] == c.ulaTransRGBA[3] {
+			return true
+		}
+		for _, tc := range c.ulaTransColours {
+			if ulaRGBA[off+0] == tc[0] && ulaRGBA[off+1] == tc[1] &&
+				ulaRGBA[off+2] == tc[2] && ulaRGBA[off+3] == tc[3] {
+				return true
+			}
+		}
+		return false
 	}
 	// paintBase lays the ULA down as the bottom layer, substituting the
 	// NR$4A fallback colour where the ULA pixel is transparent — so a

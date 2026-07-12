@@ -27,8 +27,24 @@ type Palette struct {
 	priority [256]byte
 }
 
-// New returns a fresh Palette with every entry at 0 (black).
-func New() *Palette { return &Palette{} }
+// New returns a fresh Palette seeded with the hardware's power-on
+// default: the RGB332 identity map, where each 9-bit entry is the
+// 8-bit index with the low blue bit set to the OR of the two blue
+// bits (the FPGA initialises the palette BRAMs this way, so a program
+// that never writes a palette still gets sensible colours — pinned by
+// the ported Level2Order conformance test, whose Layer 2 never
+// touches the palette).
+func New() *Palette {
+	p := &Palette{}
+	for i := 0; i < 256; i++ {
+		lo := uint16(0)
+		if i&0x03 != 0 {
+			lo = 1
+		}
+		p.entries[i] = uint16(i)<<1 | lo
+	}
+	return p
+}
 
 // Set writes a 9-bit value to the given index. Only the low 9 bits
 // of val are kept.

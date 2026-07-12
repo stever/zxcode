@@ -1971,6 +1971,11 @@ func (m *Memory) selectROM(source string) {
 			m.memoryPageReadMap[0] = 16 // ROM 0
 		}
 	}
+	// This full sync DELIBERATELY clears any MMU override on slots
+	// 0/1: the FPGA resets MMU0/1 to ROM on classic paging-port
+	// writes (paging_golden.txt "MMU 0 5 / W7FFD 0 -> MAP $0000 ROM",
+	// captured from zxnext.vhd under GHDL). The ported MMUPaging
+	// conformance test observes the same reversion.
 	m.syncMMUFromPage(0)
 	if m.bankTracer != nil && m.memoryPageReadMap[0] != prev {
 		if m.memoryPageReadMap[0] >= 16 {
