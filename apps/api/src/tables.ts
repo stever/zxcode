@@ -516,9 +516,9 @@ export const tables: Record<string, TableConfig> = {
     user_otp: {
         prismaModel: "user_otp",
         pk: ["user_id"],
-        columns: ["user_id", "secret", "created", "enabled"],
+        columns: ["user_id", "secret", "created", "enabled", "last_used_step"],
         jsonColumns: [],
-        nullableColumns: ["enabled"],
+        nullableColumns: ["enabled", "last_used_step"],
         relations: {
             user: { table: "user", prismaField: "user", kind: "one" },
         },

@@ -21,10 +21,14 @@ let mailer: typeof import("../../src/mailer.js");
 let ratelimit: typeof import("../../src/ratelimit.js");
 let totp: typeof import("../../src/totp.js");
 
-// State threaded through the ordered flow below.
+// State threaded through the ordered flow below. TOTP steps are single-use
+// (RFC 6238 one-time use), so tests record the exact codes they spend:
+// replaying them must fail, and later tests need codes from fresh steps.
 let sessionCookie = "";
 let otpSecret = "";
 let recoveryCodes: string[] = [];
+let enrolCode = "";
+let loginCode = "";
 
 async function adminGql<T>(
     query: string,
@@ -172,12 +176,24 @@ describe("enrolment", () => {
         expect(res.body).toContain(otpSecret);
     });
 
-    it("enables on the current code and hands out recovery codes once", async () => {
-        const res = await post("/otp/enable", { code: currentCode() }, sessionCookie);
+    it("enables on the current code, revoking every other session", async () => {
+        // A second session established while enrolment is still pending: it
+        // must not survive 2FA being turned on.
+        const other = await followMagicLink();
+        expect(other.status).toBe(302);
+        const otherCookie = `access_token=${cookieValue(other.headers, "access_token")}`;
+        expect((await get("/me", otherCookie)).status).toBe(200);
+
+        enrolCode = currentCode();
+        const res = await post("/otp/enable", { code: enrolCode }, sessionCookie);
         expect(res.status).toBe(200);
         recoveryCodes = [...res.body.matchAll(/<div>([A-Z2-7]{4}-[A-Z2-7]{4})<\/div>/g)]
             .map((m) => m[1] as string);
         expect(recoveryCodes.length).toBe(10);
+
+        // The enabling session survives; the other one is revoked.
+        expect((await get("/me", sessionCookie)).status).toBe(200);
+        expect((await get("/me", otherCookie)).status).toBe(401);
 
         const status = await get("/otp", sessionCookie);
         expect(status.body).toContain("10 unused recovery codes");
@@ -202,13 +218,29 @@ describe("login challenge", () => {
         expect(res.body).toContain("try the current one");
     });
 
-    it("accepts the current authenticator code", async () => {
-        const res = await post("/otp/login", { code: currentCode() }, challengeCookie);
+    it("rejects the enrolment code replayed at the challenge", async () => {
+        // Its time step was spent when 2FA was enabled.
+        const res = await post("/otp/login", { code: enrolCode }, challengeCookie);
+        expect(res.status).toBe(400);
+    });
+
+    it("accepts a fresh authenticator code", async () => {
+        // The next step's code: inside the ±1 verification window, but a
+        // step that no earlier test has spent.
+        loginCode = totp.totpAt(otpSecret, Date.now() + 30_000);
+        const res = await post("/otp/login", { code: loginCode }, challengeCookie);
         expect(res.status).toBe(302);
         expect(res.headers.get("location")).toBe(AUTH_REDIRECT);
         const jwt = cookieValue(res.headers, "access_token");
         expect(jwt).toBeTruthy();
         expect((await get("/me", `access_token=${jwt}`)).status).toBe(200);
+    });
+
+    it("rejects the just-used code on a fresh challenge (replay)", async () => {
+        const res = await followMagicLink();
+        const cookie = `otp_challenge=${cookieValue(res.headers, "otp_challenge")}`;
+        const replayed = await post("/otp/login", { code: loginCode }, cookie);
+        expect(replayed.status).toBe(400);
     });
 
     it("rejects a request with no challenge cookie", async () => {
@@ -241,6 +273,18 @@ describe("disable", () => {
     });
 
     it("turns OTP off with a valid code, and links log straight in again", async () => {
+        // Earlier tests spent the steps around now; free them again so the
+        // current code is accepted (fixture reset, not a consumer document).
+        const { userId } = JSON.parse(
+            (await get("/me", sessionCookie)).body,
+        ) as { userId: string };
+        await adminGql(
+            `mutation ($user_id: uuid!, $step: Int!) {
+                update_user_otp(where: {user_id: {_eq: $user_id}}, _set: {last_used_step: $step}) { affected_rows }
+            }`,
+            { user_id: userId, step: 1 },
+        );
+
         const res = await post("/otp/disable", { code: currentCode() }, sessionCookie);
         expect(res.status).toBe(302);
 

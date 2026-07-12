@@ -70,21 +70,32 @@ export function totpAt(base32Secret: string, unixMillis: number): string {
     return hotp(base32Decode(base32Secret), counter);
 }
 
-export function verifyTotp(
+// Returns the matched time-step counter, or null when the code doesn't
+// verify. RFC 6238 §5.2 one-time use: callers record the accepted step
+// (user_otp.last_used_step) and reject any step at or below it.
+export function matchTotpStep(
     code: string,
     base32Secret: string,
     unixMillis = Date.now(),
-): boolean {
+): number | null {
     const trimmed = code.replace(/\s/g, "");
-    if (!/^\d{6}$/.test(trimmed)) return false;
+    if (!/^\d{6}$/.test(trimmed)) return null;
     const key = base32Decode(base32Secret);
     const counter = Math.floor(unixMillis / 1000 / TOTP_PERIOD_SECONDS);
     const given = Buffer.from(trimmed);
     for (let step = -VERIFY_WINDOW_STEPS; step <= VERIFY_WINDOW_STEPS; step++) {
         const expected = Buffer.from(hotp(key, counter + step));
-        if (timingSafeEqual(given, expected)) return true;
+        if (timingSafeEqual(given, expected)) return counter + step;
     }
-    return false;
+    return null;
+}
+
+export function verifyTotp(
+    code: string,
+    base32Secret: string,
+    unixMillis = Date.now(),
+): boolean {
+    return matchTotpStep(code, base32Secret, unixMillis) !== null;
 }
 
 // The otpauth:// URI encoded into the enrolment QR code.

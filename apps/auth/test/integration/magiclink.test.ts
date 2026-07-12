@@ -132,6 +132,8 @@ describe("login page", () => {
         const res = await get(`/login?redirect_url=${AUTH_REDIRECT}projects/x`);
         expect(res.status).toBe(200);
         expect(res.headers.get("content-security-policy")).toContain("form-action 'self'");
+        // Auth pages must never be cached: some embed OTP secrets.
+        expect(res.headers.get("cache-control")).toBe("no-store");
         expect(res.body).toContain(`action="login/email"`);
         expect(res.body).toContain(`value="${AUTH_REDIRECT}projects/x"`);
         // Only the shared external script — nothing inline (the CSP allows

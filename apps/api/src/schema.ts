@@ -136,6 +136,7 @@ attach("Mutation", {
 
     insert_session_one: makeInsertOneResolver("session") as Resolver,
     update_session_by_pk: makeUpdateByPkResolver("session") as Resolver,
+    delete_session: makeDeleteManyResolver("session") as Resolver,
 
     insert_login_token_one: makeInsertOneResolver("login_token") as Resolver,
     update_login_token: makeUpdateManyResolver("login_token") as Resolver,

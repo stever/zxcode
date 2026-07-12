@@ -130,14 +130,15 @@ describe("dev auto-login flow", () => {
         expect((await get("/me", tampered)).status).toBe(401);
     });
 
-    it("logout clears cookies and redirects", async () => {
+    it("logout clears cookies and revokes the session server-side", async () => {
         const res = await get("/logout", authCookie);
         expect(res.status).toBe(302);
         expect(res.headers.get("location")).toBe(AUTH_REDIRECT);
         const cleared = res.headers.getSetCookie().find((c) => c.startsWith("access_token="));
         expect(cleared).toContain("Expires=Thu, 01 Jan 1970");
-        // The session row is still live server-side (parity with .NET, which
-        // only cleared cookies), so re-login for later tests is fine.
+        // The session row is deleted, so a captured cookie stops working at
+        // logout rather than at expiry.
+        expect((await get("/me", authCookie)).status).toBe(401);
     });
 });
 

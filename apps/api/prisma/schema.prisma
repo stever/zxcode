@@ -158,10 +158,13 @@ model login_token {
 // enabled NULL is a pending enrolment awaiting its first valid code; enabled
 // set means magic-link logins must pass the OTP challenge.
 model user_otp {
-  user_id String    @id @db.Uuid
-  secret  String    @db.VarChar(64)
-  created DateTime  @db.Timestamptz(6)
-  enabled DateTime? @db.Timestamptz(6)
+  user_id        String    @id @db.Uuid
+  secret         String    @db.VarChar(64)
+  created        DateTime  @db.Timestamptz(6)
+  enabled        DateTime? @db.Timestamptz(6)
+  // RFC 6238 one-time use: last accepted TOTP time step; codes at or below
+  // it are replays and rejected.
+  last_used_step Int?
 
   user user @relation(fields: [user_id], references: [user_id], onUpdate: Cascade, onDelete: Cascade, map: "user_otp_user_id_fkey")
 }

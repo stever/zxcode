@@ -285,7 +285,7 @@ export function loginPage(redirectUrl: string, error?: string): string {
 <p>Enter your email address and we&#39;ll send you a sign-in link. No password needed.</p>
 <p class="notice">Signing in has changed: we no longer use a third-party identity provider. Enter the email address registered to your account and your sign-in link will be sent there.</p>
 ${errorHtml}
-<form method="post" action="login/email">
+<form method="" action="login/email">
 <input type="email" name="email" placeholder="you@example.com" required autofocus>
 <input type="hidden" name="redirect_url" value="${escapeHtml(redirectUrl)}">
 <button type="submit">Email me a link</button>
@@ -387,8 +387,11 @@ ${errorHtml}
 }
 
 export function sendPage(res: Response, status: number, html: string): void {
+    // no-store: the OTP setup and recovery-codes pages embed long-lived
+    // secrets in the HTML; nothing here should survive in any cache.
     res.status(status)
         .header("Content-Security-Policy", PAGE_CSP)
+        .header("Cache-Control", "no-store")
         .type("text/html")
         .send(html);
 }

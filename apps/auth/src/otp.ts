@@ -13,16 +13,36 @@ export const RECOVERY_CODE_COUNT = 10;
 export interface UserOtp {
     secret: string;
     enabled: string | null;
+    last_used_step: number | null;
 }
 
 export async function getUserOtp(userId: string): Promise<UserOtp | null> {
     const data = await gql<{ user_otp: UserOtp[] }>(
         `query GetUserOtp($user_id: uuid!) {
-            user_otp(where: {user_id: {_eq: $user_id}}) { secret enabled }
+            user_otp(where: {user_id: {_eq: $user_id}}) { secret enabled last_used_step }
         }`,
         { user_id: userId },
     );
     return data.user_otp[0] ?? null;
+}
+
+// RFC 6238 one-time use: atomically claims a TOTP time step, mirroring the
+// recovery codes' conditional UPDATE. False when that step — or a later
+// one — was already accepted, so a replayed code fails even when two
+// requests race.
+export async function consumeTotpStep(
+    userId: string,
+    step: number,
+): Promise<boolean> {
+    const data = await gql<{ update_user_otp: { affected_rows: number } }>(
+        `mutation ConsumeTotpStep($user_id: uuid!, $step: Int!) {
+            update_user_otp(where: {user_id: {_eq: $user_id}, _or: [{last_used_step: {_is_null: true}}, {last_used_step: {_lt: $step}}]}, _set: {last_used_step: $step}) {
+                affected_rows
+            }
+        }`,
+        { user_id: userId, step },
+    );
+    return data.update_user_otp.affected_rows === 1;
 }
 
 // Issue a fresh pending secret, replacing any earlier unconfirmed one. The

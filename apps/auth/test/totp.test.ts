@@ -4,6 +4,7 @@ import {
     base32Encode,
     generateTotpSecret,
     hotp,
+    matchTotpStep,
     otpauthUri,
     totpAt,
     verifyTotp,
@@ -72,6 +73,18 @@ describe("totp", () => {
         expect(verifyTotp("081804", RFC_SECRET_BASE32, now)).toBe(true);
         expect(verifyTotp(totpAt(RFC_SECRET_BASE32, now + 30_000), RFC_SECRET_BASE32, now)).toBe(true);
         expect(verifyTotp(totpAt(RFC_SECRET_BASE32, now + 90_000), RFC_SECRET_BASE32, now)).toBe(false);
+    });
+
+    it("matchTotpStep returns the matched time-step counter", () => {
+        const now = 1111111111 * 1000;
+        const step = Math.floor(1111111111 / 30);
+        expect(matchTotpStep("050471", RFC_SECRET_BASE32, now)).toBe(step);
+        // 1111111109 is the previous 30s step.
+        expect(matchTotpStep("081804", RFC_SECRET_BASE32, now)).toBe(step - 1);
+        expect(
+            matchTotpStep(totpAt(RFC_SECRET_BASE32, now + 30_000), RFC_SECRET_BASE32, now),
+        ).toBe(step + 1);
+        expect(matchTotpStep("000000", RFC_SECRET_BASE32, now)).toBeNull();
     });
 
     it("tolerates spaces and rejects malformed codes", () => {

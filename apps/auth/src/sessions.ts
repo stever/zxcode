@@ -64,3 +64,28 @@ export async function getSession(authToken: string): Promise<Session | null> {
     );
     return session;
 }
+
+// Logout revokes the row, so a captured cookie stops working immediately
+// rather than at expiry.
+export async function deleteSession(authToken: string): Promise<void> {
+    await gql(
+        `mutation DeleteSession($auth_token: String!) {
+            delete_session(where: {auth_token: {_eq: $auth_token}}) { affected_rows }
+        }`,
+        { auth_token: authToken },
+    );
+}
+
+// Ends every session but the caller's own — run when OTP is enabled, so a
+// pre-2FA hijacked session doesn't survive the user turning 2FA on.
+export async function deleteOtherSessions(
+    userId: string,
+    keepAuthToken: string,
+): Promise<void> {
+    await gql(
+        `mutation DeleteOtherSessions($user_id: uuid!, $auth_token: String!) {
+            delete_session(where: {user_id: {_eq: $user_id}, auth_token: {_neq: $auth_token}}) { affected_rows }
+        }`,
+        { user_id: userId, auth_token: keepAuthToken },
+    );
+}

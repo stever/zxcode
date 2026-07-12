@@ -23,6 +23,7 @@ import {
 import { consumeToken, issueToken } from "./logintokens.js";
 import {
     consumeRecoveryCode,
+    consumeTotpStep,
     createPendingOtp,
     deleteOtp,
     enableOtp,
@@ -30,7 +31,8 @@ import {
     replaceRecoveryCodes,
     unusedRecoveryCodeCount,
 } from "./otp.js";
-import { otpauthUri, verifyTotp } from "./totp.js";
+import { matchTotpStep, otpauthUri } from "./totp.js";
+import { deleteOtherSessions, deleteSession } from "./sessions.js";
 import { sendMagicLink } from "./mailer.js";
 import { allow } from "./ratelimit.js";
 import {
@@ -153,14 +155,17 @@ async function requireSession(
 }
 
 // Six digits reads as an authenticator code; anything else is tried as a
-// recovery code.
+// recovery code. Both are single-use: the recovery code by its consumed
+// flag, the TOTP code by claiming its time step (RFC 6238 §5.2), so a
+// replayed code fails within its verification window.
 async function verifyOtpCode(
     userId: string,
     secret: string,
     code: string,
 ): Promise<boolean> {
     if (/^\d{6}$/.test(code.replace(/\s/g, ""))) {
-        return verifyTotp(code, secret);
+        const step = matchTotpStep(code, secret);
+        return step !== null && (await consumeTotpStep(userId, step));
     }
     return consumeRecoveryCode(userId, code);
 }
@@ -193,7 +198,10 @@ async function handleLogin(req: Request, res: Response): Promise<void> {
 export function createApp(): express.Express {
     const app = express();
     app.disable("x-powered-by");
-    app.set("trust proxy", true);
+    // One hop: Caddy is the only proxy in front, so req.ip is the address
+    // Caddy itself recorded. `true` would trust the whole X-Forwarded-For
+    // chain, letting clients spoof a fresh IP per request past the rate limit.
+    app.set("trust proxy", 1);
     app.use(corsMiddleware);
     app.use(express.urlencoded({ extended: false }));
 
@@ -353,10 +361,10 @@ export function createApp(): express.Express {
             res.redirect(publicUrl("otp"));
             return;
         }
-        if (
-            !allow(`otp:${userId}`, OTP_ATTEMPT_LIMIT, RATE_WINDOW_MS) ||
-            !verifyTotp(code, otp.secret)
-        ) {
+        const step = allow(`otp:${userId}`, OTP_ATTEMPT_LIMIT, RATE_WINDOW_MS)
+            ? matchTotpStep(code, otp.secret)
+            : null;
+        if (step === null) {
             const user = await getUserById(userId);
             const account = user?.email_address ?? user?.username ?? "account";
             sendPage(
@@ -371,6 +379,11 @@ export function createApp(): express.Express {
             return;
         }
         await enableOtp(userId);
+        // The confirmation code's step is spent, so it can't be replayed at
+        // the first login challenge — and enabling 2FA is the moment a user
+        // reacts to a suspected compromise, so every other session ends.
+        await consumeTotpStep(userId, step);
+        await deleteOtherSessions(userId, auth.authToken);
         const codes = await replaceRecoveryCodes(userId);
         sendPage(res, 200, otpRecoveryCodesPage(codes));
     });
@@ -437,6 +450,9 @@ export function createApp(): express.Express {
             res.status(401).end();
             return;
         }
+        // Revoke server-side too: the cookie's session token must stop
+        // working at logout, not at expiry.
+        await deleteSession(auth.authToken);
         deleteAuthCookies(res);
         res.redirect(safeReturnUrl(redirect));
     });

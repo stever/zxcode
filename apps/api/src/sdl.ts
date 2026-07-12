@@ -524,6 +524,10 @@ input session_pk_columns_input {
   session_id: uuid!
 }
 
+type session_mutation_response {
+  affected_rows: Int!
+}
+
 type login_token {
   login_token_id: uuid!
   email: String!
@@ -570,6 +574,7 @@ type user_otp {
   secret: String!
   created: timestamptz!
   enabled: timestamptz
+  last_used_step: Int
 }
 
 input user_otp_bool_exp {
@@ -578,6 +583,7 @@ input user_otp_bool_exp {
   _not: user_otp_bool_exp
   user_id: uuid_comparison_exp
   enabled: timestamptz_comparison_exp
+  last_used_step: Int_comparison_exp
 }
 
 input user_otp_insert_input {
@@ -588,6 +594,7 @@ input user_otp_insert_input {
 
 input user_otp_set_input {
   enabled: timestamptz
+  last_used_step: Int
 }
 
 type user_otp_mutation_response {
@@ -727,6 +734,7 @@ type Mutation {
 
   insert_session_one(object: session_insert_input!): session
   update_session_by_pk(pk_columns: session_pk_columns_input!, _set: session_set_input): session
+  delete_session(where: session_bool_exp!): session_mutation_response
 
   insert_login_token_one(object: login_token_insert_input!): login_token
   update_login_token(where: login_token_bool_exp!, _set: login_token_set_input): login_token_mutation_response

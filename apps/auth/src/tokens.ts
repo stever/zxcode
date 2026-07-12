@@ -94,8 +94,13 @@ export async function readOtpChallenge(jwt: string): Promise<OtpChallenge | null
 // actually handles.
 export async function readSessionCookie(jwt: string): Promise<string | null> {
     try {
+        const { issuer, audience } = config.jwt.sessionToken;
+        // Audience pins the token type: an OTP-challenge token (same key,
+        // different audience) can never verify as a session cookie.
         const { payload } = await jwtVerify(jwt, sessionKey, {
             algorithms: ["HS256"],
+            issuer,
+            audience,
         });
         const props = payload.props as { auth?: unknown } | undefined;
         return typeof props?.auth === "string" ? props.auth : null;

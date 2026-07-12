@@ -1073,6 +1073,65 @@ describe("admin role (apps/auth documents)", () => {
         expect(touched.update_session_by_pk).not.toBeNull();
     });
 
+    it("DeleteSession / DeleteOtherSessions (logout and OTP-enable revocation)", async () => {
+        const now = new Date();
+        const createDoc = `mutation CreateSession($user_id: uuid!, $auth_token: String!, $created: timestamptz!, $expires: timestamptz!) {
+            insert_session_one(object: {user_id: $user_id, auth_token: $auth_token, created: $created, expires: $expires}) {
+                session_id
+            }
+        }`;
+        for (const token of ["revoke-me", "keep-me", "other-1", "other-2"]) {
+            await data(
+                createDoc,
+                {
+                    user_id: bob.id,
+                    auth_token: token,
+                    created: now.toISOString(),
+                    expires: new Date(now.getTime() + 3600_000).toISOString(),
+                },
+                { admin: true },
+            );
+        }
+
+        const deleted = await data(
+            `mutation DeleteSession($auth_token: String!) {
+                delete_session(where: {auth_token: {_eq: $auth_token}}) { affected_rows }
+            }`,
+            { auth_token: "revoke-me" },
+            { admin: true },
+        );
+        expect((deleted.delete_session as { affected_rows: number }).affected_rows).toBe(1);
+
+        const others = await data(
+            `mutation DeleteOtherSessions($user_id: uuid!, $auth_token: String!) {
+                delete_session(where: {user_id: {_eq: $user_id}, auth_token: {_neq: $auth_token}}) { affected_rows }
+            }`,
+            { user_id: bob.id, auth_token: "keep-me" },
+            { admin: true },
+        );
+        // other-1, other-2 and the earlier test's session-token-1 go;
+        // keep-me survives.
+        expect((others.delete_session as { affected_rows: number }).affected_rows).toBe(3);
+
+        const remaining = await data(
+            `query GetSession($auth_token: String!) {
+                session(where: {auth_token: {_eq: $auth_token}}) { session_id }
+            }`,
+            { auth_token: "keep-me" },
+            { admin: true },
+        );
+        expect((remaining.session as unknown[]).length).toBe(1);
+    });
+
+    it("delete_session is admin-only", async () => {
+        const asUser = await gql(
+            `mutation { delete_session(where: {auth_token: {_eq: "keep-me"}}) { affected_rows } }`,
+            {},
+            { token: bob.token },
+        );
+        expect(asUser.errors?.[0]?.message).toMatch(/session/);
+    });
+
     it("UpdateUserEmail returns affected_rows", async () => {
         const result = await data(
             `mutation UpdateUserEmail($username: String!, $email_address: String) {
@@ -1194,14 +1253,35 @@ describe("admin role (apps/auth documents)", () => {
 
         const pending = await data(
             `query GetUserOtp($user_id: uuid!) {
-                user_otp(where: {user_id: {_eq: $user_id}}) { secret enabled }
+                user_otp(where: {user_id: {_eq: $user_id}}) { secret enabled last_used_step }
             }`,
             { user_id: bob.id },
             { admin: true },
         );
-        const rows = pending.user_otp as Array<{ secret: string; enabled: string | null }>;
+        const rows = pending.user_otp as Array<{
+            secret: string;
+            enabled: string | null;
+            last_used_step: number | null;
+        }>;
         expect(rows[0]?.secret).toBe("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
         expect(rows[0]?.enabled).toBeNull();
+        expect(rows[0]?.last_used_step).toBeNull();
+
+        // TOTP one-time use: a step claims once, replays and older steps
+        // are rejected, a newer step claims again.
+        const stepDoc = `mutation ConsumeTotpStep($user_id: uuid!, $step: Int!) {
+            update_user_otp(where: {user_id: {_eq: $user_id}, _or: [{last_used_step: {_is_null: true}}, {last_used_step: {_lt: $step}}]}, _set: {last_used_step: $step}) {
+                affected_rows
+            }
+        }`;
+        const claim = async (step: number): Promise<number> => {
+            const result = await data(stepDoc, { user_id: bob.id, step }, { admin: true });
+            return (result.update_user_otp as { affected_rows: number }).affected_rows;
+        };
+        expect(await claim(59_000_000)).toBe(1);
+        expect(await claim(59_000_000)).toBe(0);
+        expect(await claim(58_999_999)).toBe(0);
+        expect(await claim(59_000_001)).toBe(1);
 
         const enabled = await data(
             `mutation EnableUserOtp($user_id: uuid!, $now: timestamptz!) {
