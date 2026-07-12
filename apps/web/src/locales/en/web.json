@@ -233,6 +233,11 @@
       "patternLabel": "Sprite {{index}} of {{count}}",
       "transparent": "Transparent",
       "pickHint": "Right-click the canvas to pick up a colour.",
+      "animate": "Animation preview",
+      "animFrom": "From",
+      "animFrames": "Frames",
+      "animFps": "FPS",
+      "animBounce": "Bounce",
       "paletteDefault": "Default palette",
       "palettePick": "Render through a project .pal file"
     },

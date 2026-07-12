@@ -244,11 +244,9 @@ export function SpriteEditor({ fileId, content, tile = false }) {
     setVersion((v) => v + 1);
   }, [palette, palOffset]);
 
-  // A strip thumbnail: the 16x16 pattern rendered 1:1, scaled up by CSS.
-  const drawThumb = (index) => {
-    const canvas = thumbCanvasesRef.current.get(index);
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+  // Paint a pattern 1:1 into a size x size canvas context (thumbnails and
+  // the animation preview share this).
+  const paintPatternTo = (ctx, index) => {
     const image = ctx.createImageData(size, size);
     const bytes = bytesRef.current;
     const base = index * pixels;
@@ -268,6 +266,13 @@ export function SpriteEditor({ fileId, content, tile = false }) {
       image.data[o + 3] = 0xff;
     }
     ctx.putImageData(image, 0, 0);
+  };
+
+  // A strip thumbnail: the pattern rendered 1:1, scaled up by CSS.
+  const drawThumb = (index) => {
+    const canvas = thumbCanvasesRef.current.get(index);
+    if (!canvas) return;
+    paintPatternTo(canvas.getContext("2d"), index);
   };
 
   // Repaint dirty thumbnails after each committed change. Ref callbacks run
@@ -572,6 +577,47 @@ export function SpriteEditor({ fileId, content, tile = false }) {
   const otherGridPixels =
     size === SPRITE_SIZE ? TILE_PIXELS : SPRITE_BYTES;
   const canToggleGrid = bytesRef.current.length % otherGridPixels === 0;
+
+  // Animation preview: cycles a frame range onto its own canvas via
+  // requestAnimationFrame, reading bytesRef live so edits show while it
+  // plays. Display-only; never touches file content or history.
+  const animCanvasRef = useRef(null);
+  const [animOn, setAnimOn] = useState(false);
+  const [animFrom, setAnimFrom] = useState(1);
+  const [animCount, setAnimCount] = useState(4);
+  const [animFps, setAnimFps] = useState(10);
+  const [animBounce, setAnimBounce] = useState(false);
+  const paintPatternToRef = useRef(null);
+  paintPatternToRef.current = paintPatternTo;
+  useEffect(() => {
+    if (!animOn) return;
+    const canvas = animCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let raf;
+    let last = 0;
+    let step = 0;
+    const draw = (ts) => {
+      raf = requestAnimationFrame(draw);
+      if (ts - last < 1000 / Math.max(1, Math.min(60, animFps))) return;
+      last = ts;
+      const total = bytesRef.current.length / pixels;
+      const from = Math.max(0, Math.min(animFrom - 1, total - 1));
+      const n = Math.max(1, Math.min(animCount, total - from));
+      let frame;
+      if (animBounce && n > 1) {
+        const cycle = 2 * n - 2;
+        const k = step % cycle;
+        frame = from + (k < n ? k : cycle - k);
+      } else {
+        frame = from + (step % n);
+      }
+      step++;
+      paintPatternToRef.current(ctx, frame);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [animOn, animFrom, animCount, animFps, animBounce, size]);
 
   // Copy the packed pattern data (never the +3DOS header) to the system
   // clipboard as assembly db rows or BASIC DATA lines.
@@ -996,6 +1042,72 @@ export function SpriteEditor({ fileId, content, tile = false }) {
                 }}
               />
             ))}
+          </div>
+          <div className="sprite-anim">
+            <div className="sprite-anim-header">
+              <Button
+                icon={animOn ? "pi pi-pause" : "pi pi-play"}
+                className="p-button-sm p-button-outlined"
+                title={t("editor.sprites.animate")}
+                onClick={() => setAnimOn(!animOn)}
+              />
+              {animOn && (
+                <canvas
+                  ref={animCanvasRef}
+                  width={size}
+                  height={size}
+                  className="sprite-anim-canvas"
+                />
+              )}
+            </div>
+            {animOn && (
+              <div className="sprite-anim-controls">
+                <label>
+                  {t("editor.sprites.animFrom")}
+                  <input
+                    type="number"
+                    min={1}
+                    max={count}
+                    value={animFrom}
+                    onChange={(e) =>
+                      setAnimFrom(Math.max(1, parseInt(e.target.value, 10) || 1))
+                    }
+                  />
+                </label>
+                <label>
+                  {t("editor.sprites.animFrames")}
+                  <input
+                    type="number"
+                    min={1}
+                    max={count}
+                    value={animCount}
+                    onChange={(e) =>
+                      setAnimCount(Math.max(1, parseInt(e.target.value, 10) || 1))
+                    }
+                  />
+                </label>
+                <label>
+                  {t("editor.sprites.animFps")}
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={animFps}
+                    onChange={(e) =>
+                      setAnimFps(Math.max(1, parseInt(e.target.value, 10) || 1))
+                    }
+                  />
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={animBounce}
+                    onChange={(e) => setAnimBounce(e.target.checked)}
+                  />
+                  {t("editor.sprites.animBounce")}
+                </label>
+              </div>
+            )}
           </div>
         </div>
       </div>

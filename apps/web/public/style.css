@@ -521,6 +521,52 @@ code {
     max-width: 288px;
 }
 
+/* Animation preview inside the sprite editor's side column. */
+.sprite-anim {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sprite-anim-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sprite-anim-canvas {
+    width: 96px;
+    height: 96px;
+    image-rendering: pixelated;
+    border: 1px solid #3f3f3f;
+    border-radius: 2px;
+    background-color: #1a1a1a;
+}
+
+.sprite-anim-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 4px;
+    font-size: 0.8rem;
+}
+
+.sprite-anim-controls label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sprite-anim-controls input[type="number"] {
+    width: 52px;
+    background-color: #2a2a2a;
+    color: #cccccc;
+    border: 1px solid #3f3f3f;
+    border-radius: 2px;
+    padding: 2px 4px;
+}
+
 .editor-toolbar {
     display: flex;
     flex-wrap: wrap;
