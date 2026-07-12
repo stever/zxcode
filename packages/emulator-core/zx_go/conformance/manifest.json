@@ -205,11 +205,11 @@
       "title": "Threetwosevensixseven/ZXSpectrumNextTests — paging, DMA, layer order",
       "area": "Next acceptance",
       "kind": "external",
-      "status": "planned",
-      "roadmap": "ZX Play #137",
+      "status": "partial",
+      "roadmap": "ZX Play #140",
       "link": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests",
       "detail": "327tests.html",
-      "notes": "Five Zeus-built .nex feature tests — see the breakdown page."
+      "notes": "Five Zeus-built .nex feature tests — see the breakdown page. DMACopy (4 build variants) is live; the other four await upstream .nex builds."
     }
   ],
   "suites": [
@@ -307,10 +307,10 @@
         {
           "name": "Tests",
           "tests": [
-            { "name": "MMUPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/MMUPaging.asm", "notes": "Top-16K paging via port $7FFD vs the Next MMU registers" },
-            { "name": "DFFDPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DFFDPaging.asm", "notes": "Port $DFFD high-bank extension paging" },
-            { "name": "ULAScreenPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/ULAScreenPaging.asm", "notes": "Screen-page selection behaviour" },
-            { "name": "DMACopy", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DMACopy.asm", "notes": "DMA screen fill/copy vs LDIR (ships DMAFill/DMACopy/LDIRFill/LDIRCopy .nex builds)" },
+            { "name": "MMUPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/MMUPaging.asm", "notes": "Top-16K paging via port $7FFD vs the Next MMU registers. Zeus source only — no prebuilt .nex upstream" },
+            { "name": "DFFDPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DFFDPaging.asm", "notes": "Port $DFFD high-bank extension paging. Zeus source only — no prebuilt .nex upstream" },
+            { "name": "ULAScreenPaging", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/ULAScreenPaging.asm", "notes": "Screen-page selection behaviour. Zeus source only — no prebuilt .nex upstream" },
+            { "name": "DMACopy", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DMACopy.asm", "runner": { "package": "github.com/conorarmstrong/zx_go/pkg/testharness", "tests": ["TestExt327DMAFill", "TestExt327DMACopy", "TestExt327LDIRFill", "TestExt327LDIRCopy"] }, "notes": "All four build variants vendored (pkg/testharness/testdata/ext327) and asserted at memory level: zxnDMA fill/copy must be byte-identical to the LDIR ground truth, with each mode's border/attr signature" },
             { "name": "Level2Order", "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/Level2Order.asm", "notes": "All six sprite / Layer 2 / ULA priority orderings" }
           ]
         }
