@@ -91,7 +91,7 @@ drift. Highlights:
   drift).
 - Peripherals: `WirePeripheral1/2/3` (NR$0A/$06/$09), `WireJoystickMode`,
   `WireRTC`, `WireUART`, `WireKeymap`, plus reserved-bit masks.
-- Deliberately not wired here: the zxnDMA (port $6B, wired via
+- Deliberately not wired here: the zxnDMA (ports $6B/$0B, wired via
   `ULA.SetNextDMA`) and the Pi accelerator registers (default storage).
 
 ## Memory: MMU and the overlay mux (`pkg/memory`)
@@ -300,22 +300,33 @@ shared T-state counter, wired to NR$1E/$1F, so DI'd raster-polling code
 
 ## DMA (`pkg/next/dma`)
 
-The zxnDMA on port $6B speaks the Z80-DMA WR-group protocol: variable
-length register groups decoded by a pending-follow-byte state machine,
-WR6 commands (RESET/LOAD/CONTINUE/ENABLE/DISABLE/READ MASK/INITIATE
-READ SEQUENCE/READ STATUS/REINIT STATUS), the read-back state machine
-mirroring dma.vhd's reg_rd_seq_s (each read returns the aimed register
-and advances to the next masked one; $A7/$BB aim at the first masked
-register, $BF at status), and the status byte
-"00"&endofblock_n&"1101"&atleastone. The prescaler delay is
-turbo-scaled per dma.vhd's timer (prescaler*4^turbo/2 CPU T-states per
-byte). Continuous mode stalls the CPU by charging cycles; burst+
-prescaler mode interleaves with CPU execution via a per-instruction
-Step paced on the MONOTONIC reference clock (the raw per-frame T-state
-counter wraps), and an auto-restart block reloads and repeats until
-DISABLE. Not modelled: interrupt/match logic and DMA-vs-CPU bus
-contention; read/write cycle lengths are charged in CPU T-states as a
-model convention.
+The zxnDMA on ports $6B (zxnDMA mode) and $0B (Z80-DMA compatibility,
+the legacy MB-02/Datagear decode) speaks the Z80-DMA WR-group protocol:
+variable length register groups decoded by a pending-follow-byte state
+machine, WR6 commands (RESET/LOAD/CONTINUE/ENABLE/DISABLE/READ
+MASK/INITIATE READ SEQUENCE/READ STATUS/REINIT STATUS), the read-back
+state machine mirroring dma.vhd's reg_rd_seq_s (each read returns the
+aimed register and advances to the next masked one; $A7/$BB aim at the
+first masked register, $BF at status), and the status byte
+"00"&endofblock_n&"1101"&atleastone. Both ports reach the one
+controller (ULA.dmaClaims); each access latches dma_mode from the port
+used (zxnext.vhd:1811-1819), and the mode seeds the byte counter 0 / -1
+at LOAD/CONTINUE/auto-restart — so a Zilog-mode block of length N moves
+N+1 bytes, the genuine Zilog convention. LOAD latches the
+source/destination pointers by the direction in force at LOAD
+(dma.vhd:646-663) and a later direction flip transfers with the stale
+roles (per-byte stepping, memory-vs-IO cycle type and port A/B
+read-back follow the live direction bit) — the Misc/ZilogDMA
+border-text behaviour. The prescaler delay is turbo-scaled per
+dma.vhd's timer (prescaler*4^turbo/2 CPU T-states per byte). Continuous
+mode stalls the CPU by charging cycles; burst+ prescaler mode
+interleaves with CPU execution via a per-instruction Step paced on the
+MONOTONIC reference clock (the raw per-frame T-state counter wraps),
+and an auto-restart block reloads and repeats until DISABLE. Not
+modelled: interrupt/match logic and DMA-vs-CPU bus contention;
+read/write cycle lengths are charged in CPU T-states as a model
+convention, and a continuous transfer's port writes all land at one
+raster instant (known-gaps.md).
 
 ## Storage: divMMC, SD, esxDOS, .NEX
 

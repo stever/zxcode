@@ -69,6 +69,15 @@ func newNext() (*Harness, error) {
 	u := ula.New(mem, kbd)
 	cpu := z80.New(mem, u)
 	cpu.Variant = z80.VariantZ80N
+	// Same narrow frame-INT pulse the desktop Next configures
+	// (cmd/zx_go/next.go: spec-faithful timing.md §1c model). Without it
+	// the harness Next fell back to the legacy held-INT, and a guest
+	// doing EI mid-frame took a stale frame INT the FPGA's narrow pulse
+	// would have withdrawn long before (Misc/ZilogDMA's first pass).
+	if assert, pulse, ok := next.FrameIntTimingForModel(roms.ModelNext, false); ok {
+		cpu.IntAssertTstate = uint64(assert)
+		cpu.IntPulseTstates = uint64(pulse)
+	}
 
 	disp := nextregs.New()
 	ayEngine := ay.NewEngine()

@@ -166,6 +166,17 @@ Pinned since (base/Copper + base/DMA conformance work):
   859-886/895-1133/902, auto-restart FINISH_DMA loop (:469-489), turbo-
   scaled prescaler timer (:250-255/424) — `pkg/next/dma` unit tests +
   the GHDL golden + TestNexttestsDMA.
+- ✅ Zilog-DMA compatibility port $0B: both ports decode to the one
+  controller on the low address byte (zxnext.vhd:2544/2558/2643), each
+  access latches dma_mode from the port used (:1811-1819), and the mode
+  seeds the byte counter 0 / -1 at LOAD/CONTINUE/auto-restart
+  (dma.vhd:482-486/664-677 — length N moves N+1 bytes in Zilog mode).
+  LOAD latches src/dst by the direction in force at LOAD (:646-663);
+  per-byte stepping, memory-vs-IO cycle type and port A/B read-back all
+  follow the live direction bit (:350-396/997-1030) — so a direction
+  flip after LOAD transfers with the stale roles, exactly the FPGA's
+  Misc/ZilogDMA border-text behaviour — TestNexttestsZilogDMA against
+  the core-3.1.5 board photo.
 
 Pinned since (Sprites group conformance work):
 - ✅ Sprite transparency = raw pattern value vs NR$4B (8bpp full byte,

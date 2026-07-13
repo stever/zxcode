@@ -282,8 +282,9 @@ type ULA struct {
 	// nextI2C receives port $103B/$113B SCL/SDA bit-bang traffic
 	// (the DS1307 RTC bus). nil on classic models.
 	nextI2C NextI2C
-	// nextDMA receives port 0x6B writes (zxnDMA command stream).
-	// Wired only for ModelNext.
+	// nextDMA receives port 0x6B / 0x0B traffic (zxnDMA command
+	// stream; $0B is the Zilog-compat decode). Wired only for
+	// ModelNext.
 	nextDMA NextDMA
 
 	// nextSprite receives port $303B traffic: a write selects the
@@ -394,13 +395,36 @@ type NextSpritePort interface {
 	ReadStatus() byte
 }
 
-// NextDMA is the contract for port 0x6B (zxnDMA command stream).
-// pkg/next/dma.DMA satisfies it: WriteCommand consumes the WR-register byte
-// stream; ReadCommand returns the next register in the read-mask sequence (an
-// IO read of port 0x6B).
+// NextDMA is the contract for ports 0x6B (zxnDMA mode) and 0x0B (Z80-DMA
+// compatibility mode) — one controller behind both decodes
+// (zxnext.vhd:2643). pkg/next/dma.DMA satisfies it: WriteCommand consumes
+// the WR-register byte stream; ReadCommand returns the next register in
+// the read-mask sequence (an IO read of the port); SetZilogMode latches
+// which port the access used, as the FPGA does on every DMA read or write
+// (zxnext.vhd:1811-1819).
 type NextDMA interface {
 	WriteCommand(val byte)
 	ReadCommand() byte
+	SetZilogMode(z bool)
+}
+
+// dmaClaims reports whether the Spectrum Next DMA claims IO address addr
+// (low byte 0x6B or 0x0B — both decoded on the low 8 bits only,
+// zxnext.vhd:2544/2558), latching the controller's Zilog-compatibility
+// mode from the port used before the access proceeds.
+func (u *ULA) dmaClaims(addr uint16) bool {
+	if u.nextDMA == nil {
+		return false
+	}
+	switch addr & 0xFF {
+	case 0x6B:
+		u.nextDMA.SetZilogMode(false)
+		return true
+	case 0x0B:
+		u.nextDMA.SetZilogMode(true)
+		return true
+	}
+	return false
 }
 
 // NextI2C is the contract for the Spectrum Next's bit-banged i2c bus
@@ -550,8 +574,9 @@ func (u *ULA) SetNextCompositor(c NextCompositor) { u.nextCompositor = c }
 // u.palette[NR$14], which is the colour a transparent ULA pixel carries.
 func (u *ULA) Palette() [16]color.RGBA { return u.palette }
 
-// SetNextDMA installs the Spectrum Next zxnDMA controller. Port
-// 0x6B writes are forwarded as command bytes. Passing nil unhooks.
+// SetNextDMA installs the Spectrum Next zxnDMA controller. Port 0x6B /
+// 0x0B writes are forwarded as command bytes (the port latching the
+// controller's Zilog-compat mode). Passing nil unhooks.
 func (u *ULA) SetNextDMA(d NextDMA) { u.nextDMA = d }
 
 // SetNextSpritePort installs the sprite engine's $303B select/status
@@ -1402,9 +1427,10 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 		return u.beta.ReadPort(addr), true
 	}
 
-	// Port 0x6B: zxnDMA register read-back (status / byte counter / port
-	// addresses, selected by the read mask). Decoded on the low 8 bits.
-	if u.nextDMA != nil && (addr&0xFF) == 0x6B {
+	// Ports 0x6B / 0x0B: zxnDMA register read-back (status / byte counter /
+	// port addresses, selected by the read mask). Decoded on the low 8 bits;
+	// $0B is the Zilog-compatibility decode.
+	if u.dmaClaims(addr) {
 		return u.nextDMA.ReadCommand(), true
 	}
 
@@ -1766,8 +1792,9 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 		}
 	}
 
-	// Port 0x6B: zxnDMA command stream. Decoded on low 8 bits only.
-	if u.nextDMA != nil && (addr&0xFF) == 0x6B {
+	// Ports 0x6B / 0x0B: zxnDMA command stream. Decoded on low 8 bits only;
+	// $0B selects the Zilog-DMA compatibility mode.
+	if u.dmaClaims(addr) {
 		u.nextDMA.WriteCommand(val)
 		return
 	}

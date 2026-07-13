@@ -527,6 +527,208 @@ func TestNexttestsDMA(t *testing.T) {
 	}
 }
 
+// --- Misc/ZilogDMA: the port-$0B Z80-DMA-compatibility decode -----------
+
+// TestNexttestsZilogDMA runs Misc/ZilogDMA, which programs the DMA "in
+// Zilog DMA compatible way" through port $0B (the legacy MB-02/Datagear
+// decode): every block length is written as N expecting N+1 bytes moved
+// (the Zilog convention), fixed-address destinations are LOADed with the
+// direction temporarily flipped, and the CONTINUE short-init reuses live
+// pointers. On the Next both ports reach the zxnDMA; the accessed port
+// latches dma_mode (zxnext.vhd:1811-1819), which seeds the byte counter
+// -1 instead of 0 at LOAD/CONTINUE/auto-restart (dma.vhd:482-486) — the
+// whole observable difference between the modes.
+//
+// Every expectation below is pinned to the core-3.1.5 board photo
+// (board_3.1.5_hdmi50Hz.jpg upstream) and the upstream ReadMe's
+// "TBBLue zxnDMA core 3.1.5" section:
+//
+//   - hex row 7 "3A3A1A03042A1A1A03D1041A1A03D508": unrequested read +
+//     $BF status (3A 3A), then the masked read sequence after the first
+//     4-byte transfer (1A 03 04 2A — counter reads 3 for a length-3
+//     Zilog transfer that moved 4 bytes) + wrap (1A), after the
+//     short-init MSB transfer (1A 03 D1 04, wrap 1A) and after the
+//     CONTINUE transfer (1A 03 D5 08).
+//   - hex row 13 "1A1A6500FE 1A 1A650B0097FE00": the post-border-block
+//     state — counter $0B65 = 2917 for the 2918-byte flashing blocks,
+//     port A parked on the fixed source $9700, port B on $00FE.
+//   - the A->B / B->A attribute matrices all green (IO rows yellow),
+//     with the Zilog +1 filling each 4-cell area exactly; the m0
+//     single-cell columns; the 10-wide "Short init (4+4+2)" area (the
+//     +2 tail is the Zilog CONTINUE seed on a length-1 reprogram) and
+//     the 4+4 "Short cont" row.
+//   - the border timing bands: both flashing blocks transfer 2918 bytes
+//     to port $FE at 2T+2T cycle timing = 4T/byte ≈ 51 scanlines — the
+//     ReadMe's "*4T: 6.5 rows" desired outcome — separated by the
+//     white/green/yellow mainline stripes, blue after completion, and
+//     the port-$0B nibble painting the top border black.
+//
+// Knowingly diverging surface: the top-border "DMA"-text transfer (a
+// B->A LOAD latching src=$00FE/dst=BorderTextGfx, then flipped to A->B —
+// noise on the 3.1.5 photo). The pointer latching IS modelled (the same
+// stale-role transfer runs, read back on hex row 13's first pass state),
+// but a synchronous continuous-mode transfer stamps all its border
+// writes at one raster instant, so the ~24-line noise band collapses to
+// its final byte instead of painting stripes (known-gaps.md, zxnDMA
+// row). The flashing blocks are immune: their fixed source repeats ONE
+// value, so start-to-white band geometry renders exactly.
+//
+// First run caught two real model gaps: LOAD previously latched
+// port-identity pointers (re-deriving roles at ENABLE, so the
+// flip-direction border transfer read the WRONG endpoint), and the
+// harness Next machine still used the legacy held-frame-INT model, which
+// delivered a stale mid-frame INT at the test's first EI+HALT and let
+// the next frame INT preempt the flashing blocks (hex row 13 read the
+// border-text state).
+func TestNexttestsZilogDMA(t *testing.T) {
+	h := runNexttestsSNX(t, "zilogDMA.snx", 240)
+
+	text := h.ScreenText()
+	if !strings.Contains(text, "3A3A1A03042A1A1A03D1041A1A03D508") {
+		t.Errorf("Zilog-mode read-back stream missing or wrong; row = %q",
+			screenLine(text, "3A"))
+	}
+	if line := screenLine(text, "1A1A65"); !strings.Contains(line, "1A1A6500FE") ||
+		!strings.Contains(line, "1A650B0097FE00") {
+		t.Errorf("post-border-block read-back missing or wrong; row = %q", line)
+	}
+	if !strings.Contains(text, "DMA port: $0B") {
+		t.Errorf("test is not on port $0B; port row = %q", screenLine(text, "DMA port"))
+	}
+
+	// The attribute verdict map. Layout per the upstream Main.asm screen
+	// init: mode rows frame the test areas in ATTR_NO_DMA=$22 at cols
+	// 5-10 / 17-22 / 29-31; the 4 transferred bytes land at cols 6-9,
+	// 18-21 (decrementing destinations fill right-to-left) and col 30
+	// (fixed). Source pattern bright,bright,plain,bright ($54/$14);
+	// IO-source rows read the AY register preloaded with ATTR_IO=$56
+	// ("IO is yellow colour when OK"). Row background alternates the
+	// $28/$38 cyan/white stripes of the screen init.
+	rep := strings.Repeat
+	const (
+		mP = "54541454" // via incrementing source
+		mM = "54145454" // via decrementing source (order reversed)
+		m0 = "54545454" // via fixed source (one byte repeated)
+		io = "56565656" // via IO source
+	)
+	modeRow := func(base, viaP, viaM, fixed string) string {
+		return rep(base, 5) + "22" + viaP + "22" + rep(base, 6) + "22" + viaM + "22" + rep(base, 6) + "22" + fixed + "22"
+	}
+	hexRow := rep("28286868", 8) // hex read-back rows: cyan, alternating bright
+	wantRows := [24]string{
+		0: rep("38", 32),
+		1: modeRow("28", mP, mM, "54"), // m+ source
+		2: modeRow("38", mM, mP, "54"), // m- source reverses delivery
+		3: modeRow("28", m0, m0, "54"), // m0 source repeats its byte
+		4: modeRow("38", io, io, "56"), // IO source: yellow
+		5: rep("2F", 32),
+		// Short init 4+4+2: one 10-byte area, two bright at start, one
+		// at end — the Zilog CONTINUE moved 2 bytes where zxn moves 1.
+		6:  rep("38", 12) + "22" + "5454" + rep("14", 7) + "54" + "22" + rep("38", 8),
+		7:  hexRow,
+		8:  rep("38", 32),
+		9:  modeRow("28", mP, mM, "54"), // B -> A direction, same matrix
+		10: modeRow("38", mM, mP, "54"),
+		11: modeRow("28", m0, m0, "54"),
+		12: modeRow("38", io, io, "56"),
+		// Second hex row is 28 characters (22 hex + spacing), so the
+		// last two character pairs keep the plain stripe attribute.
+		13: hexRow[:56] + rep("28", 4),
+		// Short cont 4+4: two 4-byte areas with a gap column.
+		14: rep("38", 12) + "22" + mP + "22" + mM + "22" + rep("38", 9),
+		15: rep("79", 32), // blocks info area: bright white on blue
+		16: "38" + rep("28", 14) + rep("38", 17),
+		17: rep("38", 32),
+		18: rep("38", 32),
+		19: rep("79", 32),
+		20: rep("38", 32),
+		21: rep("79", 32),
+		22: rep("79", 32),
+		23: rep("28", 32),
+	}
+	for row := 0; row < 24; row++ {
+		got := ""
+		for col := 0; col < 32; col++ {
+			got += fmt.Sprintf("%02X", h.Memory(uint16(0x5800+row*32+col)))
+		}
+		if got != wantRows[row] {
+			t.Errorf("attr row %d:\n got %s\nwant %s", row, got, wantRows[row])
+		}
+	}
+
+	// Border timing bands, sampled down a left-border column of the
+	// rendered frame. Steady state per frame: the IM2 handler paints the
+	// port-$0B high nibble (black), the mainline runs flashing block 1
+	// (2918 bytes x 4T = 11672T ~= 51 lines of the fill colour), BORDER
+	// WHITE + short wait, GREEN + longer wait, YELLOW, block 2 (same
+	// geometry — proving the D6=0 re-init kept the 2T+2T timing), WHITE,
+	// then BLUE until the next frame INT. The fill colour cycles per
+	// frame ((a+1)&7 in the IM2 handler), so the assertion is structural:
+	// both blocks identical colour and ~51 lines, stripes in order.
+	img := h.ScreenImage()
+	type band struct {
+		rgb  string
+		rows int
+	}
+	var bands []band
+	x := img.Bounds().Min.X + 4
+	for y := img.Bounds().Min.Y; y < img.Bounds().Max.Y; y++ {
+		c := img.RGBAAt(x, y)
+		rgb := fmt.Sprintf("%02X%02X%02X", c.R, c.G, c.B)
+		if len(bands) == 0 || bands[len(bands)-1].rgb != rgb {
+			bands = append(bands, band{rgb: rgb})
+		}
+		bands[len(bands)-1].rows++
+	}
+	const (
+		black  = "000000"
+		green  = "00B600"
+		yellow = "B6B600"
+		white  = "B6B6B6"
+		blue   = "0000B6"
+	)
+	structure := []struct {
+		rgb      string // "" = the flashing-block fill colour (any, but equal)
+		min, max int
+	}{
+		{black, 18, 24}, // top border: IM2 paints port nibble ($0B -> 0)
+		{"", 49, 53},    // flashing block 1: 2918 x 4T
+		{white, 1, 2},
+		{green, 5, 7},
+		{yellow, 1, 2},
+		{"", 49, 53}, // flashing block 2: same timing
+		{white, 1, 2},
+		{blue, 100, 240}, // completed: blue for the rest of the frame
+	}
+	if len(bands) != len(structure) {
+		t.Fatalf("border column has %d bands, want %d: %v", len(bands), len(structure), bands)
+	}
+	var fill string
+	for i, want := range structure {
+		got := bands[i]
+		if got.rows < want.min || got.rows > want.max {
+			t.Errorf("border band %d (%s): %d rows, want %d-%d", i, got.rgb, got.rows, want.min, want.max)
+		}
+		switch {
+		case want.rgb != "":
+			if got.rgb != want.rgb {
+				t.Errorf("border band %d: colour %s, want %s", i, got.rgb, want.rgb)
+			}
+		case fill == "":
+			fill = got.rgb
+			if fill == black || fill == blue {
+				t.Errorf("flashing-block fill %s would be invisible against the frame stripes", fill)
+			}
+		case got.rgb != fill:
+			t.Errorf("flashing block colours differ (%s vs %s): an interrupt split the blocks", fill, got.rgb)
+		}
+	}
+
+	if got := h.ULA().BorderColour; got != 1 {
+		t.Errorf("border = %d, want 1 (blue = pass completed)", got)
+	}
+}
+
 // --- base/NextReg_defaults: the per-register NextReg availability +
 // default-value audit ---------------------------------------------------
 //

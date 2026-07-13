@@ -312,11 +312,49 @@
       "title": "MrKWatkins/ZXSpectrumNextTests — Z80N, sprites, Layer 2, mixing, Copper, DMA, ULA, interrupts, timing",
       "area": "Next acceptance",
       "kind": "external",
-      "status": "partial",
       "roadmap": "ZX Play #139",
       "link": "https://github.com/MrKWatkins/ZXSpectrumNextTests",
       "detail": "nexttests.html",
-      "notes": "Community acceptance suite with real-hardware reference screenshots. 35 tests in 8 groups — see the breakdown page. The .snx blocker is resolved (.snx = 48K SNA); classic tests plus the Z80N groups are live, the remaining Next-side tests are being wired group by group."
+      "notes": "Community acceptance suite with real-hardware reference screenshots. 35 tests in 8 groups, all wired — see the breakdown page. DmaInteractive is manual-only (a free-form WR-register editor judged against real Zilog hardware photos; its port-$0B finding is covered by the ZilogDMA runner).",
+      "runner": {
+        "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+        "tests": [
+          "TestNexttestsZ80N",
+          "TestNexttestsZ80Nc2",
+          "TestNexttestsNextRegDefaults",
+          "TestNexttestsCopper",
+          "TestNexttestsDMA",
+          "TestNexttestsZilogDMA",
+          "TestNexttestsGraphicsLayer2Colours",
+          "TestNexttestsGraphicsLayer2Port",
+          "TestNexttestsGraphicsLayer2Scroll",
+          "TestNexttestsGraphicsLayersMixingHiCol",
+          "TestNexttestsGraphicsLayersMixingHiRes",
+          "TestNexttestsGraphicsLayersMixingLoRes",
+          "TestNexttestsGraphicsLightenDarken",
+          "TestNexttestsGraphicsNextReg0x69",
+          "TestNexttestsSpritesTransparency",
+          "TestNexttestsSpritesRelative",
+          "TestNexttestsSpritesBigSprite",
+          "TestNexttestsSpritesBigSprite4b",
+          "TestNexttestsSpritesScanlineDelay",
+          "TestNexttestsULADefaultTransparency",
+          "TestNexttestsULABorderTransparencyFallback",
+          "TestNexttestsULAChangePaletteTransparency",
+          "TestNexttestsULAChangePaletteTransparencyV2",
+          "TestNexttestsULAChangePaletteTransparencyV3",
+          "TestNexttestsULAClassicPaletized",
+          "TestNexttestsULAScroll",
+          "TestNexttestsDIHalt",
+          "TestNexttestsChanging8kBank",
+          "TestNexttestsScanlineIRQ",
+          "TestNexttestsZ80BlockFlags",
+          "TestNexttestsCcfScfStability",
+          "TestNexttestsZ80IntSkipBasics",
+          "TestNexttestsZ80IntSkipInhibition",
+          "TestNexttestsULAvsSJS"
+        ]
+      }
     },
     {
       "id": "ext-327tests",
@@ -791,12 +829,16 @@
             {
               "name": "ZilogDMA",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/ZilogDMA",
-              "notes": "Zilog-DMA-mode behaviour"
+              "notes": "Zilog-DMA-mode behaviour through port $0B: the -1 counter seed (length N moves N+1 bytes), LOAD-latched source/destination roles surviving a direction flip, CONTINUE short-inits and the 4T/byte border timing bands — pinned to the core-3.1.5 board photo. Drove wiring port $0B (the dma_mode latch), the LOAD-latched src/dst pointer model and the harness Next's narrow frame-INT pulse",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": ["TestNexttestsZilogDMA"]
+              }
             },
             {
               "name": "DmaInteractive",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/DmaInteractive",
-              "notes": "Interactive; includes real Zilog hardware photos — manual comparison rather than CI. Status re-confirmed 2026-07-13 with a hand-run: boots, full UI + byte-stream parser work (commit/LOAD/FORCE-RDY/ENABLE all recognized), but it is a free-form WR-register editor with grey-+2 Zilog photos as ground truth — no self-verdicting surface to pin. The run surfaced one real finding: its DEFAULT port $0B (Zilog-compatibility decode) is unclaimed in zx_go (only $6B is wired) — catalogued in known-gaps.md",
+              "notes": "Interactive; includes real Zilog hardware photos — manual comparison rather than CI. Status re-confirmed 2026-07-13 with a hand-run: boots, full UI + byte-stream parser work (commit/LOAD/FORCE-RDY/ENABLE all recognized), but it is a free-form WR-register editor with grey-+2 Zilog photos as ground truth — no self-verdicting surface to pin. The run surfaced one real finding — its DEFAULT port $0B (Zilog-compatibility decode) was unclaimed in zx_go — since closed: port $0B is wired and covered by the Misc/ZilogDMA runner",
               "status": "manual"
             }
           ]

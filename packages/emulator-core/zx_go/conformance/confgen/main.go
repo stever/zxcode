@@ -449,7 +449,7 @@ func renderIndex(outDir string, m *manifest, gaps []mdTable, st stamp) error {
 	return tmpl.ExecuteTemplate(f, "index", indexData{
 		stamp:  st,
 		Counts: counts,
-		Order:  []string{"pass", "known-gap", "partial", "skip", "not run", "planned", "fail"},
+		Order:  []string{"pass", "known-gap", "partial", "manual", "skip", "not run", "planned", "fail"},
 		Areas:  areas,
 		Gaps:   gaps,
 	})
@@ -491,6 +491,8 @@ var tmpl = template.Must(template.New("").Funcs(template.FuncMap{
 			return "skip"
 		case "planned":
 			return "planned"
+		case "manual":
+			return "manual"
 		default:
 			return "other"
 		}
@@ -513,6 +515,7 @@ th { background: #8881; }
 .pass { background: #2a4; color: #fff; } .fail { background: #c33; color: #fff; }
 .skip { background: #888; color: #fff; } .planned { background: #46c; color: #fff; }
 .other { background: #a80; color: #fff; }
+.manual { background: #75a; color: #fff; }
 .summary span { margin-right: 1rem; }
 footer { margin-top: 3rem; font-size: 0.85em; opacity: 0.7; }
 .muted { opacity: 0.75; font-size: 0.9em; }

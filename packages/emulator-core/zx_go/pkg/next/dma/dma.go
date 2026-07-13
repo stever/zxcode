@@ -1,8 +1,15 @@
 // Package dma implements the Spectrum Next's zxnDMA controller driven
-// through its Z80-DMA-compatible command protocol on I/O port 0x6B.
+// through its Z80-DMA-compatible command protocol on I/O ports 0x6B
+// (zxnDMA mode) and 0x0B (Z80-DMA compatibility mode — the legacy
+// MB-02/Datagear decode). Both ports reach the same controller; the
+// port used by each access latches the mode (zxnext.vhd:1811-1819),
+// which only changes the byte-counter seed at LOAD / CONTINUE /
+// auto-restart: 0 in zxnDMA mode, -1 in Z80 mode (dma.vhd:482-486 /
+// 664-677), so a Z80-mode block moves blockLen+1 bytes like a genuine
+// Zilog DMA.
 //
-// The controller is programmed by a stream of bytes written to port
-// 0x6B. Each byte is either a base register byte (WR0..WR6) — whose bit
+// The controller is programmed by a stream of bytes written to the
+// port. Each byte is either a base register byte (WR0..WR6) — whose bit
 // pattern both selects the register group and flags which extra
 // "follow" bytes come next — or one of those announced follow bytes, or
 // (for WR6) a command byte: RESET / LOAD / ENABLE / .... A memory
@@ -84,11 +91,32 @@ type DMA struct {
 	bIsIO      bool   // WR2 D3: port B is an IO endpoint (else memory)
 	loaded     bool   // a LOAD command has latched the addresses
 
-	// Internal counters the chip exposes via the read mask. LOAD copies the
-	// start addresses into curA/curB and zeroes counter; a transfer advances
-	// them; Continue zeroes the counter without touching the pointers.
-	curA, curB uint16
-	counter    uint16
+	// zilogMode mirrors the top-level dma_mode latch (zxnext.vhd:1811-1819):
+	// every DMA port access sets it from the port used — $0B = Z80-DMA
+	// compatibility mode, $6B = zxnDMA mode. Machine reset clears it (fresh
+	// construction); the $C3 RESET command does NOT (it lives outside the
+	// z80dma entity).
+	zilogMode bool
+
+	// Internal pointers the chip exposes via the read mask, held as the
+	// FPGA holds them: dma_src_s / dma_dest_s, latched from the port A/B
+	// start addresses BY THE DIRECTION IN FORCE AT LOAD (dma.vhd:646-663)
+	// and never re-derived at ENABLE. A direction flip between LOAD and
+	// ENABLE therefore transfers with the stale source/destination roles
+	// — the Misc/ZilogDMA border-text quirk, where a B->A LOAD latches the
+	// IO port as source and the flip to A->B then memory-reads from the
+	// port number and IO-writes to the buffer address. CONTINUE keeps the
+	// pointers; auto-restart re-derives them per the live direction
+	// (dma.vhd:473-480). Per-byte address stepping and the memory-vs-IO
+	// cycle type also follow the LIVE direction bit (dma.vhd:350-396).
+	curSrc, curDst uint16
+
+	// counter is dma_counter_s: incremented per byte, compared against the
+	// block length. LOAD / CONTINUE / auto-restart seed it 0 in zxnDMA mode
+	// or -1 in Z80 mode — the -1 seed is what makes a Z80-mode block one
+	// byte longer. Held as int so the -1 seed is explicit; read-back
+	// truncates to uint16 (-1 reads $FFFF, exactly the FPGA's all-ones).
+	counter int
 
 	// Timing: per-port cycle length (2..4) and the zxnDMA fixed-time
 	// prescaler, plus the transfer mode (continuous/burst).
@@ -197,8 +225,25 @@ func (d *DMA) SetClock(clock func() uint64) { d.clock = clock }
 // the prescaler delay. Optional — without it the reset speed 0 is assumed.
 func (d *DMA) SetTurbo(turbo func() byte) { d.turbo = turbo }
 
-// WriteCommand accepts one byte of the port-0x6B command stream. Wired
-// via ULA.SetNextDMA / the routing in ULA.WritePort.
+// SetZilogMode latches the dma_mode select. The ULA calls it on every
+// DMA port access with "was this port $0B" — mirroring the FPGA, which
+// latches port_0b_lsb whenever the DMA is read or written
+// (zxnext.vhd:1811-1819). The latched mode is consumed at LOAD /
+// CONTINUE / auto-restart time (the counter seed), not per byte.
+func (d *DMA) SetZilogMode(z bool) { d.zilogMode = z }
+
+// counterSeed is the LOAD/CONTINUE/auto-restart byte-counter seed:
+// dma.vhd:482-486 — all-zeros in zxnDMA mode, all-ones (-1) in Z80-DMA
+// compatibility mode ("z80 dma loads -1").
+func (d *DMA) counterSeed() int {
+	if d.zilogMode {
+		return -1
+	}
+	return 0
+}
+
+// WriteCommand accepts one byte of the port-0x6B/0x0B command stream.
+// Wired via ULA.SetNextDMA / the routing in ULA.WritePort.
 func (d *DMA) WriteCommand(val byte) {
 	if dmaTrace {
 		dmaLog(val)
@@ -346,19 +391,26 @@ func (d *DMA) interruptControl() func(byte) {
 // command executes a WR6 command byte.
 func (d *DMA) command(val byte) {
 	switch val {
-	case 0xC3: // RESET — clear configuration + state machine (keep the buses)
+	case 0xC3: // RESET — clear configuration + state machine (keep the buses
+		// and the mode latch: dma_mode lives outside the z80dma entity)
 		*d = DMA{mem: d.mem, io: d.io, cycleSink: d.cycleSink, clock: d.clock,
-			turbo: d.turbo, aCycleLen: 2, bCycleLen: 2, readMask: 0x7F}
-	case 0xCF: // LOAD — latch the start addresses into the internal pointers
+			turbo: d.turbo, zilogMode: d.zilogMode,
+			aCycleLen: 2, bCycleLen: 2, readMask: 0x7F}
+	case 0xCF: // LOAD — latch the start addresses into the source/destination
+		// pointers per the direction in force NOW (dma.vhd:646-663). A later
+		// direction flip does not re-latch them.
 		d.loaded = true
-		d.curA = d.portAStart
-		d.curB = d.portBStart
-		d.counter = 0
+		if d.aToB {
+			d.curSrc, d.curDst = d.portAStart, d.portBStart
+		} else {
+			d.curSrc, d.curDst = d.portBStart, d.portAStart
+		}
+		d.counter = d.counterSeed()
 		d.endOfBlock = false // dma.vhd:654: LOAD clears status_endofblock_n='1'
-	case 0xD3: // CONTINUE — zero the byte counter; a following ENABLE repeats
+	case 0xD3: // CONTINUE — reseed the byte counter; a following ENABLE repeats
 		// the block from the CURRENT pointers (not the start addresses).
 		d.loaded = true
-		d.counter = 0
+		d.counter = d.counterSeed()
 		d.endOfBlock = false // dma.vhd:671: Continue clears status_endofblock_n='1'
 	case 0x87: // ENABLE — run the configured transfer
 		if d.loaded {
@@ -393,7 +445,7 @@ func (d *DMA) command(val byte) {
 // Trigger runs the configured transfer to completion from the current internal
 // pointers. Block length 0 means 65536 per the zxnDMA convention. Each byte is
 // read from the source endpoint (memory or IO) and written to the destination
-// endpoint, advancing each port's pointer per its address mode. On end of block
+// endpoint, advancing each pointer per its port's address mode. On end of block
 // the DMA either auto-restarts (reload start addresses, stay armed) or clears
 // its loaded flag.
 func (d *DMA) Trigger() {
@@ -402,10 +454,16 @@ func (d *DMA) Trigger() {
 		length = 65536
 	}
 	if dmaTrace {
-		fmt.Fprintf(os.Stderr, "DMA xfer A=%04X B=%04X len=%d aIO=%v bIO=%v mode=%d presc=%d\n",
-			d.curA, d.curB, length, d.aIsIO, d.bIsIO, d.mode, d.prescaler)
+		var now uint64
+		if d.clock != nil {
+			now = d.clock()
+		}
+		fmt.Fprintf(os.Stderr, "DMA xfer src=%04X dst=%04X len=%d aIO=%v bIO=%v mode=%d presc=%d clk=%d\n",
+			d.curSrc, d.curDst, length, d.aIsIO, d.bIsIO, d.mode, d.prescaler, now)
 	}
-	moved := length - int(d.counter)
+	// The FPGA loop runs while counter < blockLen, post-increment
+	// (dma.vhd:426/454) — so the Z80-mode -1 seed moves one extra byte.
+	moved := length - d.counter
 	d.lastDuration = uint64(moved) * d.perByteCycles()
 
 	// Burst mode with a fixed-time prescaler interleaves with the CPU: defer
@@ -419,11 +477,8 @@ func (d *DMA) Trigger() {
 		return
 	}
 
-	srcIsA := d.aToB // port A is the source when transferring A -> B
 	for remaining := moved; remaining > 0; remaining-- {
-		b := d.portRead(srcIsA)
-		d.portWrite(!srcIsA, b)
-		d.counter++
+		d.moveByte()
 	}
 	// Continuous mode stalls the CPU for the whole transfer; charge the time
 	// to the CPU clock. Burst mode lets the CPU run, so it is not charged.
@@ -441,9 +496,14 @@ func (d *DMA) Trigger() {
 func (d *DMA) finishBlock() {
 	d.endOfBlock = true
 	if d.autoRestart {
-		d.curA = d.portAStart
-		d.curB = d.portBStart
-		d.counter = 0
+		// FINISH_DMA re-derives the pointers per the LIVE direction
+		// (dma.vhd:473-486), unlike LOAD's once-latched roles.
+		if d.aToB {
+			d.curSrc, d.curDst = d.portAStart, d.portBStart
+		} else {
+			d.curSrc, d.curDst = d.portBStart, d.portAStart
+		}
+		d.counter = d.counterSeed()
 	} else {
 		d.loaded = false
 		d.atLeastOne = false // FSM back to IDLE clears status_atleastone (dma.vhd:265)
@@ -465,24 +525,24 @@ func (d *DMA) Step(now uint64) {
 		return
 	}
 	per := d.perByteClockUnits()
-	srcIsA := d.aToB
 	for d.remaining > 0 && now >= d.nextDue {
-		b := d.portRead(srcIsA)
-		d.portWrite(!srcIsA, b)
-		d.counter++
+		d.moveByte()
 		d.remaining--
 		d.nextDue += per
 		d.atLeastOne = true // status_atleastone, set per byte (dma.vhd:412)
 		if d.remaining == 0 && d.autoRestart {
 			d.endOfBlock = true // FINISH_DMA latches it even on restart (dma.vhd:471)
-			d.curA = d.portAStart
-			d.curB = d.portBStart
-			d.counter = 0
+			if d.aToB {
+				d.curSrc, d.curDst = d.portAStart, d.portBStart
+			} else {
+				d.curSrc, d.curDst = d.portBStart, d.portAStart
+			}
+			d.counter = d.counterSeed()
 			length := int(d.blockLen)
 			if length == 0 {
 				length = 65536
 			}
-			d.remaining = length
+			d.remaining = length - d.counter
 		}
 	}
 	if d.remaining == 0 {
@@ -491,29 +551,22 @@ func (d *DMA) Step(now uint64) {
 	}
 }
 
-// portRead reads one byte from port A (a=true) or port B, from memory or IO per
-// that port's configuration, then advances the port's pointer.
-func (d *DMA) portRead(a bool) byte {
-	if a {
-		v := d.endpointRead(d.aIsIO, d.curA)
-		d.curA = stepAddr(d.curA, d.aMode)
-		return v
+// moveByte transfers one byte from curSrc to curDst and advances both
+// pointers. Which PORT (A or B) plays source is the LIVE direction bit —
+// the source uses port A's mode/IO-ness when transferring A->B, port B's
+// otherwise, regardless of which start address LOAD latched into curSrc
+// (dma.vhd:350-396: the mreq/step decisions all test R0_dir_AtoB_s live).
+func (d *DMA) moveByte() {
+	srcMode, srcIsIO := d.aMode, d.aIsIO
+	dstMode, dstIsIO := d.bMode, d.bIsIO
+	if !d.aToB { // port B is the source
+		srcMode, srcIsIO, dstMode, dstIsIO = d.bMode, d.bIsIO, d.aMode, d.aIsIO
 	}
-	v := d.endpointRead(d.bIsIO, d.curB)
-	d.curB = stepAddr(d.curB, d.bMode)
-	return v
-}
-
-// portWrite writes one byte to port A (a=true) or port B, then advances its
-// pointer.
-func (d *DMA) portWrite(a bool, val byte) {
-	if a {
-		d.endpointWrite(d.aIsIO, d.curA, val)
-		d.curA = stepAddr(d.curA, d.aMode)
-		return
-	}
-	d.endpointWrite(d.bIsIO, d.curB, val)
-	d.curB = stepAddr(d.curB, d.bMode)
+	v := d.endpointRead(srcIsIO, d.curSrc)
+	d.curSrc = stepAddr(d.curSrc, srcMode)
+	d.endpointWrite(dstIsIO, d.curDst, v)
+	d.curDst = stepAddr(d.curDst, dstMode)
+	d.counter++
 }
 
 func (d *DMA) endpointRead(isIO bool, addr uint16) byte {
@@ -608,10 +661,24 @@ func (d *DMA) Length() uint16      { return d.blockLen }
 
 // ByteCounter / CurrentA / CurrentB expose the chip's internal counters (the
 // values the read mask returns): bytes transferred in the current operation and
-// the live port A / port B pointers.
-func (d *DMA) ByteCounter() uint16 { return d.counter }
-func (d *DMA) CurrentA() uint16    { return d.curA }
-func (d *DMA) CurrentB() uint16    { return d.curB }
+// the live port A / port B pointers. The FPGA stores (src, dst) and maps them
+// to port A / port B through the live direction bit on read-back
+// (dma.vhd:997-1001 etc.), so these do the same.
+func (d *DMA) ByteCounter() uint16 { return uint16(d.counter) }
+
+func (d *DMA) CurrentA() uint16 {
+	if d.aToB {
+		return d.curSrc
+	}
+	return d.curDst
+}
+
+func (d *DMA) CurrentB() uint16 {
+	if d.aToB {
+		return d.curDst
+	}
+	return d.curSrc
+}
 
 // Duration returns the T-state cost of the most recent transfer (per-byte cycle
 // cost × bytes moved). The emulator charges this to the CPU clock so a
@@ -662,17 +729,17 @@ func (d *DMA) nextMaskedReg(cur int) int {
 func (d *DMA) regValue(reg int) byte {
 	switch reg {
 	case 1:
-		return byte(d.counter)
+		return byte(uint16(d.counter))
 	case 2:
-		return byte(d.counter >> 8)
+		return byte(uint16(d.counter) >> 8)
 	case 3:
-		return byte(d.curA)
+		return byte(d.CurrentA())
 	case 4:
-		return byte(d.curA >> 8)
+		return byte(d.CurrentA() >> 8)
 	case 5:
-		return byte(d.curB)
+		return byte(d.CurrentB())
 	case 6:
-		return byte(d.curB >> 8)
+		return byte(d.CurrentB() >> 8)
 	default: // 0 = status byte
 		return d.statusByte()
 	}
