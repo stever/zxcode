@@ -18,7 +18,9 @@ it off only when a test pins it to the VHDL value. A green row = that aspect is
 conformant. The boot is the integration test that the rows are *complete*.
 
 Status legend: ✅ test pins it to VHDL · ⚠️ partial / value differs / untested ·
-❌ gap (VHDL feature with no faithful impl) · — n/a.
+❌ gap (VHDL feature with no faithful impl) · ⚙️ architectural precision limit
+(deliberate simplification; a faithful impl needs a render/timing rearchitecture,
+not just a test — enumerated in Axis 10) · — n/a.
 
 How a gap was already found by this method: `NR$6E/$6F` reset default. We had a
 test for the bit-6 **write** mask (iter 205) but never for the **reset value**.
@@ -151,6 +153,8 @@ or the SPI / CSD command set to the VHDL.
 
 ## Axis 9 — Video (ULA/L2/tilemap/sprite/lores/palette/copper)
 Broad render edge tests (iters 204-217). Not boot-critical (boot stalls pre-render).
+The ✅ rows below are green at LINE granularity; the sub-line copper/palette
+detail they collapse is the ⚙️ row in Axis 10, not an omission here.
 
 Pinned since (base/Copper + base/DMA conformance work):
 - ✅ ULA pixel/border palette-index composition per video/zxula.vhd:483-558
@@ -245,6 +249,30 @@ Pinned since (ULA group conformance work):
 - ✅ ZX48 personality pins ROM bank 3 semantics for 48K snapshots
   (zxnext.vhd:2983-2986 machine_type_48 → sram_rom3) — modelled as the
   .snx loader's launch state; NR$8E then reads the board's exact $0B.
+
+## Axis 10 — Cycle & sub-line timing faithfulness  (architectural)
+
+The FPGA aspects the render/timing architecture models NON-faithfully by design.
+On the matrix per its premise (enumerate EVERY aspect of the core), marked ⚙️:
+closing each is a render/timing rearchitecture, not a test to write. These were
+previously catalogued only in `known-gaps.md`, which let the per-axis tables
+read greener than the hardware truth. They are the tier most likely to sit
+between "matrix green" and a specific game running — so a game bisect that lands
+here means real architectural work, not a quick pin.
+
+| Aspect | VHDL / source | our model | status | notes |
+|--------|---------------|-----------|--------|-------|
+| Per-access memory contention (ULA holds the bus on $4000-$7FFF at 3.5 MHz) | ULA contention pattern | machine-wide OFF; lump T-state totals (`pkg/z80` MemContend) | ⚙️ | contention-timed multicolour / tape loaders diverge; Timing/Changing8kBank pins the ON/OFF-render-identical evidence — known-gaps "Per-access memory contention" |
+| Sub-line copper / palette colour changes | copper MOVE + palette BRAM visible on the NEXT pixel (zxnext.vhd:4919-4930) | line-granular replay (borderChange-style); two writes inside one pixel collapse to one | ⚙️ | ✅ at LINE granularity (Axis 9); sub-line detail is below the 7 MHz render floor — known-gaps copper / palette rows |
+| Turbo-speed video timing (> 3.5 MHz) | scanline / border advance scales with the speed multiplier | `pkg/ula` border/scanline tracking ignores SpeedMultiplier | ⚙️ | border effects wrong above 3.5 MHz — known-gaps "Turbo-speed video timing" |
+| Per-NR$03/$05 display geometry (48K 312×224/448hc vs the 128K 311×228 the Next runs) | machine-timing select | fixed 128K/+3 geometry; NR$03/$05 do not retune the frame or INT position | ⚙️ | Timing/Changing8kBank ~2% band-length delta — known-gaps "Next raster geometry" |
+| Mixed-frame Timex hi-res decimation + hi-res end-of-frame palette | per-pixel 512 half-pixel composite | native 512 only when hi-res is whole-frame-stable; mixed frames decimate; palette resolved at end-of-frame | ⚙️ | tracked as follow-up #154 — known-gaps ULA-modes row |
+
+**Closing this axis is the render/timing rearchitecture, not the enumeration
+punch-list.** Reaching ✅/⚠️-clear on Axes 1-9 is bounded work (composed
+read-backs, port $FF bit 6, the per-axis conformance tests); Axis 10 is the tier
+that a "matrix is green but the game still breaks" report cashes out on. Keep the
+two visibly separate so green on 1-9 is not mistaken for the finish line.
 
 ---
 
