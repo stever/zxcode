@@ -239,6 +239,24 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   strips per frame — everything on screen resolves through the same
   palette (one palette, one DAC; border white == paper white). Timex
   hi-res and the ULA-disabled fill keep the classic pre-render.
+  The row render also applies the ULA hardware scroll (NR$26/$27:
+  source pixel+attr = ((x+sx) mod 256, (y+sy) mod 192), zxula.vhd:199 /
+  :192-208) and the NR$1A clip window (outside the inclusive
+  display-space window → transparent; border exempt; zxula.vhd:562),
+  both pushed by `next.WireULAControl` / `WireClipWindows`. The NR$68
+  bit 2 fine-scroll-X half-pixel is stored but below render resolution.
+- Raster-stamped ULA-video state (`pkg/ula` ulaVideoLine): mid-frame
+  CPU writes to the ULANext decode state and the DISPLAYED ULA palette
+  select (NR$43 bit 1) are stamped with their raster line
+  (borderChanges-style) and replayed per row by the compositor pass —
+  the ULA/ClassicPaletized flip of the displayed palette at mid-screen
+  renders each half through its own palette, borders included. A
+  back-to-back Render with no CPU execution (the harness screenshot
+  path) keeps the executed frame's maps instead of rebuilding uniform
+  live state (the `stale` check on the monotonic reference clock).
+- NR$69 (Display Control) fans out like the FPGA: bit 7 → Layer 2
+  enable, bit 6 → shadow display, bits 5:0 → the Timex port-$FF mode
+  (zxnext.vhd:3924/:3658/:3617; `next.WireULAControl`).
 
 Raster feedback: `ULA.BeamPosition()` derives (line, hpos) from the
 shared T-state counter, wired to NR$1E/$1F, so DI'd raster-polling code

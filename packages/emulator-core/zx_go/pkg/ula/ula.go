@@ -94,6 +94,45 @@ type ULA struct {
 	ulaNextEnabled bool
 	ulaNextFormat  byte
 
+	// ulaPalSecond mirrors NR$43 bit 1 — which ULA palette (first or
+	// second) the display resolves through. Kept here (not just in the
+	// palette bank) so mid-frame flips raster-stamp like border changes.
+	ulaPalSecond bool
+
+	// ULA hardware scroll (NR$26 X / NR$27 Y, zxnext.vhd:5304-5307) and
+	// the NR$68 bit 2 fine-scroll-X half-pixel bit. Applied by
+	// renderNextULARow per video/zxula.vhd:192-208 (py = vc + scroll_y
+	// folded mod 192) and :199 (px = char column + scroll_x, sub-char
+	// bits from scroll_x with the neighbour char fetched mod 32 — i.e.
+	// source x = (x + scroll_x) mod 256). The fine bit is a HALF-pixel
+	// shift on the 14 MHz video bus — below this renderer's 7 MHz pixel
+	// resolution, so it is stored but not rendered (known-gaps.md).
+	ulaScrollX, ulaScrollY byte
+	ulaFineScrollX         bool
+
+	// ULA clip window (NR$1A, zxula.vhd:562): paper pixels outside the
+	// inclusive [x1,x2]×[y1,y2] display-space window are transparent
+	// (lower layers / NR$4A fallback show). The border is never clipped.
+	ulaClipX1, ulaClipX2, ulaClipY1, ulaClipY2 byte
+
+	// ulaVideoChanges raster-stamps mid-frame changes to the ULANext
+	// decode state / displayed-palette select, the same machinery as
+	// borderChanges: Render folds them into the per-display-line
+	// ulaVideoLine map that the Next render passes consume. The
+	// MrKWatkins ULA/ClassicPaletized test flips the displayed ULA
+	// palette at mid-screen by CPU raster timing — without the stamp
+	// the whole frame rendered through the frame-final palette.
+	ulaVideoChanges    []ulaVideoChange
+	frameStartULAVideo ulaVideoState
+	ulaVideoLine       [TotalHeight]ulaVideoState
+
+	// lastRenderRefT detects a back-to-back Render with no CPU execution
+	// in between (the harness's screenshot path) so the raster maps built
+	// from the executed frame's change lists are kept instead of being
+	// rebuilt as uniform live state. See the `stale` logic in Render.
+	lastRenderRefT    uint64
+	lastRenderRefSeen bool
+
 	// borderLineColours is the per-display-line border colour map built by
 	// Render each frame (port-$FE change list applied). Kept on the ULA so
 	// the Next compositor pass can re-resolve border pixels through the
@@ -385,6 +424,13 @@ type nextULAPaletteResolver interface {
 	ULARGBA(idx byte) (r, g, b byte, transparent bool)
 }
 
+// nextULAPaletteSelector is the optional compositor contract for switching
+// which ULA palette (first/second) ULARGBA resolves through. Used by the
+// applyNextCompositor replay of raster-stamped NR$43 bit-1 flips.
+type nextULAPaletteSelector interface {
+	SetULAActivePalette(second bool)
+}
+
 // NextDAC is the contract for the four Spectrum Next DAC channels.
 // pkg/next/dac.Bank satisfies it via WritePort (which returns
 // "handled?" so the ULA's port dispatcher knows whether to fall
@@ -582,6 +628,22 @@ type borderChange struct {
 	colour   byte
 }
 
+// ulaVideoState is the raster-stampable slice of ULA-video decode state:
+// the ULANext enable/format (NR$43 bit 0 / NR$42) and the displayed ULA
+// palette select (NR$43 bit 1). One value applies per display line.
+type ulaVideoState struct {
+	ulaNextEnabled bool
+	ulaNextFormat  byte
+	ulaPalSecond   bool
+}
+
+// ulaVideoChange records a mid-frame ulaVideoState transition at the
+// frame scanline it was written, borderChange-style.
+type ulaVideoChange struct {
+	scanline int
+	state    ulaVideoState
+}
+
 // audioEvent records a single speaker-bit toggle within a frame, with
 // the T-state offset (0..tstatesPerFrame) at which it happened.
 type audioEvent struct {
@@ -595,6 +657,11 @@ func New(mem *memory.Memory, kbd *keyboard.Keyboard) *ULA {
 		mem: mem,
 		kbd: kbd,
 		img: image.NewRGBA(image.Rect(0, 0, TotalWidth, TotalHeight)),
+		// ULA clip window reset default = the full paper
+		// (zxnext.vhd:4971-4976 {00,FF,00,BF}); the NextReg wiring
+		// re-pushes this, but a bare ULA must not clip anything.
+		ulaClipX2: 0xFF,
+		ulaClipY2: 0xBF,
 	}
 	// Bound the DC-blocked audio to the speaker's physical amplitude so an
 	// isolated speaker toggle clicks at the level, not the high-pass's 2x
@@ -657,10 +724,71 @@ func (u *ULA) SetULAOutputDisabled(disabled bool) { u.ulaOutputDisabled = disabl
 
 // SetULANext mirrors the ULANext attribute-decode state: NR$43 bit 0
 // (enable) and NR$42 (ink colour mask). Pushed by the Next wiring
-// (pkg/next.WirePalette).
+// (pkg/next.WirePalette). Mid-frame changes are raster-stamped so each
+// display row renders with the state active at its raster line.
 func (u *ULA) SetULANext(enabled bool, format byte) {
+	if u.ulaNextEnabled == enabled && u.ulaNextFormat == format {
+		return
+	}
 	u.ulaNextEnabled = enabled
 	u.ulaNextFormat = format
+	u.recordULAVideoChange()
+}
+
+// SetULAPaletteSecond mirrors NR$43 bit 1 — the displayed ULA palette.
+// Raster-stamped like SetULANext: the MrKWatkins ULA/ClassicPaletized
+// test flips it at mid-screen every frame, expecting the top half of
+// the paper through the first palette and the bottom through the
+// second. Satisfies pkg/next.ULAPaletteSelectSink.
+func (u *ULA) SetULAPaletteSecond(second bool) {
+	if u.ulaPalSecond == second {
+		return
+	}
+	u.ulaPalSecond = second
+	u.recordULAVideoChange()
+}
+
+// recordULAVideoChange appends the CURRENT live ulaVideoState to the
+// frame's change log, stamped with the same scanline clock the border
+// change list uses.
+func (u *ULA) recordULAVideoChange() {
+	scanline := 0
+	if u.mem != nil && u.mem.TStates != nil {
+		scanline = int(*u.mem.TStates) / TStatesPerLineFor(u.mem.GetCurrentModel())
+	}
+	u.ulaVideoChanges = append(u.ulaVideoChanges, ulaVideoChange{
+		scanline: scanline,
+		state:    ulaVideoState{u.ulaNextEnabled, u.ulaNextFormat, u.ulaPalSecond},
+	})
+}
+
+// SetULAScroll mirrors the NR$26/$27 ULA X/Y hardware scroll registers
+// (zxnext.vhd:5304-5307). Pushed by pkg/next.WireULAControl; consumed
+// by renderNextULARow. Satisfies part of pkg/next.ULAVideoSink.
+func (u *ULA) SetULAScroll(x, y byte) {
+	u.ulaScrollX = x
+	u.ulaScrollY = y
+}
+
+// SetULAFineScrollX mirrors NR$68 bit 2, the ULA half-pixel X scroll
+// (zxnext.vhd:5449). Stored only: the shift is half a 7 MHz pixel on
+// the FPGA's 14 MHz video bus, below this renderer's resolution
+// (catalogued in known-gaps.md).
+func (u *ULA) SetULAFineScrollX(on bool) { u.ulaFineScrollX = on }
+
+// SetULAClipWindow mirrors the NR$1A ULA clip window. Coordinates are
+// display-space paper pixels, inclusive on all four edges
+// (zxula.vhd:562); the border is never clipped. Pushed by
+// pkg/next.WireClipWindows.
+func (u *ULA) SetULAClipWindow(x1, x2, y1, y2 byte) {
+	u.ulaClipX1, u.ulaClipX2, u.ulaClipY1, u.ulaClipY2 = x1, x2, y1, y2
+}
+
+// SetTimexVideoMode mirrors NR$69 bits 5:0, the port-$FF Timex video
+// mode alias (zxnext.vhd:3617-3618 — nr_69_we writes port_ff_reg(5:0)).
+// Bits 7:6 of the live port-$FF state are preserved.
+func (u *ULA) SetTimexVideoMode(v byte) {
+	u.timexVideoMode = u.timexVideoMode&0xC0 | v&0x3F
 }
 
 // ulaDisabledFill is the colour painted across the frame when the ULA output
@@ -683,16 +811,40 @@ func (u *ULA) Render() *image.RGBA {
 	// and push to the audio system, then reset the per-frame state.
 	u.flushAudioFrame()
 
-	u.flashCount++
-	if u.flashCount >= FlashFrames {
-		u.flash = !u.flash
-		u.flashCount = 0
+	// A "stale" render is a second Render with NO CPU execution since the
+	// last one — the test harness's screenshot path (ScreenImage calls
+	// Render after RunFrames already rendered the frame). The per-frame
+	// raster maps (border stripes, ULA-video state) were folded from
+	// change lists the executed frame produced and the lists are now
+	// empty, so rebuilding them here would erase every CPU-raster-timed
+	// effect (the MrKWatkins ULA/ClassicPaletized rainbow + mid-frame
+	// palette flip rendered uniform). Detected via the monotonic
+	// reference clock (Next only; nil elsewhere = never stale): an
+	// executed frame always advances it, a back-to-back Render doesn't.
+	stale := false
+	if u.mem != nil && u.mem.RefTstates != nil {
+		cur := u.mem.RefTstates()
+		if u.lastRenderRefSeen && cur == u.lastRenderRefT {
+			stale = true
+		}
+		u.lastRenderRefT = cur
+		u.lastRenderRefSeen = true
+	}
+
+	if !stale {
+		u.flashCount++
+		if u.flashCount >= FlashFrames {
+			u.flash = !u.flash
+			u.flashCount = 0
+		}
 	}
 
 	// Build per-scanline border colour map from recorded changes.
 	// Each display scanline (0-239) maps to a border colour.
 	var borderPerLine [TotalHeight]byte
-	if len(u.borderChanges) > 0 {
+	if stale {
+		borderPerLine = u.borderLineColours
+	} else if len(u.borderChanges) > 0 {
 		// Start with the colour that was active before the first change in
 		// this frame (frameStartBorderColour, not the live BorderColour,
 		// which this frame's writes have already advanced past).
@@ -716,13 +868,38 @@ func (u *ULA) Render() *image.RGBA {
 			borderPerLine[line] = u.BorderColour
 		}
 	}
-	u.borderChanges = u.borderChanges[:0] // Clear for next frame
-	// Snapshot the now-current border colour as the baseline for the next
-	// frame's render (see frameStartBorderColour).
-	u.frameStartBorderColour = u.BorderColour
-	// Keep the per-line border map for the Next compositor pass, which
-	// re-resolves border pixels through the live ULA palette.
-	u.borderLineColours = borderPerLine
+	if !stale {
+		u.borderChanges = u.borderChanges[:0] // Clear for next frame
+		// Snapshot the now-current border colour as the baseline for the next
+		// frame's render (see frameStartBorderColour).
+		u.frameStartBorderColour = u.BorderColour
+		// Keep the per-line border map for the Next compositor pass, which
+		// re-resolves border pixels through the live ULA palette.
+		u.borderLineColours = borderPerLine
+
+		// Fold the raster-stamped ULA-video changes (ULANext decode,
+		// displayed-palette select) into the per-display-line state map the
+		// Next render passes consume — the same fold as borderPerLine.
+		liveVideo := ulaVideoState{u.ulaNextEnabled, u.ulaNextFormat, u.ulaPalSecond}
+		if len(u.ulaVideoChanges) > 0 {
+			cur := u.frameStartULAVideo
+			idx := 0
+			for line := 0; line < TotalHeight; line++ {
+				frameScanline := line + (64 - BorderTop)
+				for idx < len(u.ulaVideoChanges) && u.ulaVideoChanges[idx].scanline <= frameScanline {
+					cur = u.ulaVideoChanges[idx].state
+					idx++
+				}
+				u.ulaVideoLine[line] = cur
+			}
+			u.ulaVideoChanges = u.ulaVideoChanges[:0]
+		} else {
+			for line := range u.ulaVideoLine {
+				u.ulaVideoLine[line] = liveVideo
+			}
+		}
+		u.frameStartULAVideo = liveVideo
+	}
 
 	// NextReg $68 bit 7 ("Disable ULA output"): the ULA layer paints
 	// nothing. Fill the whole frame with the disabled fill (the NR$4A
@@ -858,7 +1035,8 @@ func (u *ULA) renderNextFullHeight() *image.RGBA {
 	// so the strips match the in-frame border (one palette, one DAC).
 	bc := u.palette[u.BorderColour&0x0F]
 	if res, ok := u.liveULAResolver(); ok {
-		c := u.nextBorderColourRGBA(u.BorderColour, res)
+		c := u.nextBorderColourRGBA(u.BorderColour, res,
+			ulaVideoState{u.ulaNextEnabled, u.ulaNextFormat, u.ulaPalSecond})
 		bc = color.RGBA{R: c[0], G: c[1], B: c[2], A: c[3]}
 	}
 	rowFull := make([]byte, TotalWidth*4)
@@ -1703,6 +1881,29 @@ func (u *ULA) applyNextCompositor() {
 	const leftTailPx = 20
 	var leftCarry [leftTailPx][4]byte
 	leftCarryValid := false
+	// Displayed-ULA-palette replay: push each row's raster-stamped
+	// palette select (NR$43 bit 1) into the compositor's bank before
+	// rendering the row, so a CPU flipping the displayed palette
+	// mid-frame recolours from exactly its raster line. Pushed only on
+	// TRANSITIONS so a copper-driven live select (already applied at the
+	// bank by WirePalette) is not clobbered on every row; the live state
+	// is restored after the walk.
+	selector, _ := u.nextCompositor.(nextULAPaletteSelector)
+	selPushed := false
+	var selCur bool
+	pushSelect := func(second bool) {
+		if selector == nil || (selPushed && selCur == second) {
+			return
+		}
+		selector.SetULAActivePalette(second)
+		selPushed = true
+		selCur = second
+	}
+	defer func() {
+		if selPushed {
+			selector.SetULAActivePalette(u.ulaPalSecond)
+		}
+	}()
 	for y := 0; y < h; y++ {
 		// Run the Copper for this row BEFORE composing it so MOVEs
 		// affecting the compositor palette / Layer 2 are visible to this
@@ -1720,6 +1921,8 @@ func (u *ULA) applyNextCompositor() {
 		}
 		rowStart := (BorderTop+y)*u.img.Stride + BorderLeft*4
 		if liveULA {
+			st := u.ulaVideoLine[BorderTop+y]
+			pushSelect(st.ulaPalSecond)
 			// Left border: carried tail pixels first, then the 12 pixels
 			// that belong to this line's own hcount 0..11.
 			for bx := 0; bx < leftTailPx; bx++ {
@@ -1735,7 +1938,7 @@ func (u *ULA) applyNextCompositor() {
 				}
 				u.paintImagePixel(y, bx, u.nextBorderRGBA(BorderTop+y, resolver))
 			}
-			u.renderNextULARow(y, ulaScan, resolver, paced, pixelCycle)
+			u.renderNextULARow(y, ulaScan, resolver, paced, pixelCycle, st)
 		} else {
 			copy(ulaScan, u.img.Pix[rowStart:rowStart+w*4])
 		}
@@ -1791,6 +1994,7 @@ func (u *ULA) applyNextCompositor() {
 				imgRow = v - (frameLines - BorderTop) // top border, end of sweep
 			}
 			if imgRow >= 0 {
+				pushSelect(u.ulaVideoLine[imgRow].ulaPalSecond)
 				c := u.nextBorderRGBA(imgRow, resolver)
 				off := imgRow * u.img.Stride
 				for x := 0; x < TotalWidth; x++ {
@@ -1891,9 +2095,10 @@ func ulaNextPaperShift(format byte) int {
 }
 
 // nextBorderRGBA resolves image row imgRow's (0..TotalHeight-1) border
-// colour through the LIVE Next ULA palette via nextBorderColourRGBA.
+// colour through the LIVE Next ULA palette via nextBorderColourRGBA,
+// using the raster-stamped ULA-video state for that row.
 func (u *ULA) nextBorderRGBA(imgRow int, res nextULAPaletteResolver) [4]byte {
-	return u.nextBorderColourRGBA(u.borderLineColours[imgRow], res)
+	return u.nextBorderColourRGBA(u.borderLineColours[imgRow], res, u.ulaVideoLine[imgRow])
 }
 
 // nextBorderColourRGBA resolves a port-$FE border colour through the LIVE
@@ -1902,12 +2107,12 @@ func (u *ULA) nextBorderRGBA(imgRow int, res nextULAPaletteResolver) [4]byte {
 // — border pixels take the standard paper path, bright 0). A transparent
 // entry (== NR$14) and the ULANext all-ink format $FF show the NR$4A
 // fallback.
-func (u *ULA) nextBorderColourRGBA(borderColour byte, res nextULAPaletteResolver) [4]byte {
+func (u *ULA) nextBorderColourRGBA(borderColour byte, res nextULAPaletteResolver, st ulaVideoState) [4]byte {
 	border := borderColour & 7
 	var r, g, b byte
 	var transparent bool
-	if u.ulaNextEnabled {
-		if u.ulaNextFormat == 0xFF {
+	if st.ulaNextEnabled {
+		if st.ulaNextFormat == 0xFF {
 			transparent = true
 		} else {
 			r, g, b, transparent = res.ULARGBA(128 + border)
@@ -1960,57 +2165,72 @@ func (u *ULA) paintImagePixel(y, x int, c [4]byte) {
 // copper is wired, execution interleaves per pixel so mid-scanline MOVEs
 // recolour from exactly their pixel onward.
 func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
-	paced nextCopperCyclePaced, pixelCycle func(int) int) {
+	paced nextCopperCyclePaced, pixelCycle func(int) int, st ulaVideoState) {
 	screenMem := u.mem.GetPage(u.mem.ScreenPage)
 	attrMem := screenMem[0x1800:]
 	fallback := u.ulaDisabledFill()
-	paperShift := ulaNextPaperShift(u.ulaNextFormat)
-	for cx := 0; cx < ScreenWidth/8; cx++ {
-		pixels := screenMem[screenAddrForRowCol(y, cx)]
-		attr := attrMem[(y>>3)*32+cx]
-		for bit := 0; bit < 8; bit++ {
-			x := cx*8 + bit
-			if paced != nil {
-				paced.RunToCycle(uint16(y), pixelCycle(x))
-			}
-			on := pixels&(0x80>>bit) != 0
-			var idx byte
-			background := false
-			if u.ulaNextEnabled {
-				if on {
-					idx = attr & u.ulaNextFormat
-				} else if paperShift == 0 {
-					background = true
-				} else {
-					idx = 128 | attr>>paperShift
-				}
+	paperShift := ulaNextPaperShift(st.ulaNextFormat)
+	// ULA Y hardware scroll (NR$27): source row = (y + scroll) mod 192 —
+	// zxula.vhd:192 (py_s = vc + scroll_y) folded back into 0..191 at
+	// :201-208. Attributes fetch through the same scrolled row (:222-223).
+	srcY := (y + int(u.ulaScrollY)) % ScreenHeight
+	attrRow := attrMem[(srcY>>3)*32:]
+	rowClipped := y < int(u.ulaClipY1) || y > int(u.ulaClipY2)
+	for x := 0; x < ScreenWidth; x++ {
+		if paced != nil {
+			paced.RunToCycle(uint16(y), pixelCycle(x))
+		}
+		// ULA X hardware scroll (NR$26): source column = (x + scroll)
+		// mod 256 — zxula.vhd:199 adds the scroll's char column mod 32
+		// and appends its low bits; the neighbouring char loads via
+		// px_1 (char+1 mod 32), so the wrap is a clean mod-256.
+		srcX := (x + int(u.ulaScrollX)) & 0xFF
+		pixels := screenMem[screenAddrForRowCol(srcY, srcX>>3)]
+		attr := attrRow[srcX>>3]
+		on := pixels&(0x80>>uint(srcX&7)) != 0
+		var idx byte
+		background := false
+		if st.ulaNextEnabled {
+			if on {
+				idx = attr & st.ulaNextFormat
+			} else if paperShift == 0 {
+				background = true
 			} else {
-				if u.flash && attr&0x80 != 0 {
-					on = !on
-				}
-				bright := (attr >> 6) & 1
-				if on {
-					idx = bright<<3 | attr&7
-				} else {
-					idx = 16 | bright<<3 | (attr>>3)&7
-				}
+				idx = 128 | attr>>paperShift
 			}
-			var r, g, b byte
-			var transparent bool
-			if background {
-				r, g, b = fallback.R, fallback.G, fallback.B
+		} else {
+			if u.flash && attr&0x80 != 0 {
+				on = !on
+			}
+			bright := (attr >> 6) & 1
+			if on {
+				idx = bright<<3 | attr&7
 			} else {
-				r, g, b, transparent = res.ULARGBA(idx)
+				idx = 16 | bright<<3 | (attr>>3)&7
 			}
-			off := x * 4
-			dst[off+0] = r
-			dst[off+1] = g
-			dst[off+2] = b
-			if transparent {
-				dst[off+3] = 0
-			} else {
-				dst[off+3] = 0xFF
-			}
+		}
+		var r, g, b byte
+		var transparent bool
+		switch {
+		case rowClipped || x < int(u.ulaClipX1) || x > int(u.ulaClipX2):
+			// NR$1A clip: a paper pixel outside the inclusive window is
+			// transparent — lower layers / NR$4A fallback show
+			// (zxula.vhd:562 o_ula_clipped → zxnext.vhd:7100).
+			r, g, b = fallback.R, fallback.G, fallback.B
+			transparent = true
+		case background:
+			r, g, b = fallback.R, fallback.G, fallback.B
+		default:
+			r, g, b, transparent = res.ULARGBA(idx)
+		}
+		off := x * 4
+		dst[off+0] = r
+		dst[off+1] = g
+		dst[off+2] = b
+		if transparent {
+			dst[off+3] = 0
+		} else {
+			dst[off+3] = 0xFF
 		}
 	}
 }

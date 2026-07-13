@@ -319,3 +319,26 @@ func TestNewBankULAFirstClassicDefault(t *testing.T) {
 		t.Errorf("sprites second[$72] low bit = %d, want 1 (identity)", got)
 	}
 }
+
+// TestULAClassicBrightMagentaDodgesTransparency pins the boot palette's
+// bright magenta: %111'001'111 ($1CF, NR$41 projection $E7), NOT the
+// pure %111'000'111 whose projection would equal the default NR$14
+// transparency colour $E3. The MrKWatkins ULA/DefaultTransparency test
+// is the adjudicator: its board photo shows a classic bright-magenta
+// paper OPAQUE over Layer 2, and the MAME 0.282 / CSpect 2.11.1 /
+// ZEsarUX 8.0 captures all render it as RGB (255,36,255).
+func TestULAClassicBrightMagentaDodgesTransparency(t *testing.T) {
+	ula := NewULAClassic()
+	for _, idx := range []byte{11, 27, 11 + 16*5} {
+		if got := ula.Get(idx); got != 0x1CF {
+			t.Errorf("entry %d = %#x, want $1CF", idx, got)
+		}
+		if got := byte(ula.Get(idx) >> 1); got == 0xE3 {
+			t.Errorf("entry %d projects to the default transparency $E3 — bright magenta would punch through", idx)
+		}
+		r, g, b := ula.RGB(idx)
+		if r != 255 || g != 36 || b != 255 {
+			t.Errorf("entry %d RGB = (%d,%d,%d), want (255,36,255)", idx, r, g, b)
+		}
+	}
+}

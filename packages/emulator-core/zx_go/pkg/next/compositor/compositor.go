@@ -416,6 +416,21 @@ func (c *Compositor) recomputeULATrans() {
 // Transparency returns the currently-installed transparency index.
 func (c *Compositor) Transparency() byte { return c.transparency }
 
+// SetULAActivePalette selects which ULA palette (first/second) ULARGBA
+// resolves through — NR$43 bit 1. pkg/ula's applyNextCompositor calls
+// this while replaying raster-stamped mid-frame flips (the MrKWatkins
+// ULA/ClassicPaletized test), and restores the live selection after.
+func (c *Compositor) SetULAActivePalette(second bool) {
+	if c.pal == nil {
+		return
+	}
+	var sel byte
+	if second {
+		sel = 1
+	}
+	c.pal.SetActive(palette.LayerULA, sel)
+}
+
 // ULARGBA resolves a ULA palette index (0..255) through the LIVE active ULA
 // palette — the FPGA feeds every ULA pixel (and border pixel) through the
 // palette SRAM, so NR$40/$41/$44 redefinitions (including copper MOVEs)

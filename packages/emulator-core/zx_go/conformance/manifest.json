@@ -604,33 +604,80 @@
           "tests": [
             {
               "name": "DefaultTransparency",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/DefaultTransparency"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/DefaultTransparency",
+              "notes": "Classic bright-magenta paper stays OPAQUE over Layer 2: whole paper + all four border regions asserted per pixel. Adjudicated the boot ULA palette's bright magenta to %111'001'111 ($E7 projection, dodging NR$14=$E3) — board photo + MAME 0.282 + CSpect 2.11.1 + ZEsarUX 8.0 all agree (255,36,255); fixed classicRGB333",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULADefaultTransparency"
+                ]
+              }
             },
             {
               "name": "BorderTransparencyFallback",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/BorderTransparencyFallback",
-              "notes": "NR$4A fallback colour"
+              "notes": "All three key-driven phases asserted whole-surface (border + both paper halves): ULANext entry-128=$AA=NR$14 fallback in border+paper, ink-mask 255 background fallback, and Enhanced-ULA-off immunity. ZEsarUX 8.0 is the good reference (upstream marks the CSpect capture BAD)",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULABorderTransparencyFallback"
+                ]
+              }
             },
             {
               "name": "ChangePaletteTransparency",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency",
+              "notes": "Every paper pixel asserted = Layer 2 identity-palette column (paper-7 entry 135 redefined to $E3), column 227 = NR$4A fallback cyan (L2's own $E3), border cyan via the transparent entry 135",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAChangePaletteTransparency"
+                ]
+              }
             },
             {
               "name": "ChangePaletteTransparency_v2",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v2"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v2",
+              "notes": "Ink-mask 15 variant: paper-3 entry 131 transparent, border resolves entry 135 redefined to green %000'100'00 — full paper + border asserted per pixel",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAChangePaletteTransparencyV2"
+                ]
+              }
             },
             {
               "name": "ChangePaletteTransparency_v3",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v3"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v3",
+              "notes": "ULANext OFF: redefining entry 128+7 must NOT affect the classic decode (white paper+border asserted whole-surface); the rainbow text via transparent INK-0 entry 0 asserted = Layer 2 columns",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAChangePaletteTransparencyV3"
+                ]
+              }
             },
             {
               "name": "ClassicPaletized",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ClassicPaletized",
-              "notes": "Next ULA palette on the classic screen — relates to the catalogued ULA-palette gap"
+              "notes": "Classic screen through the Next ULA palettes with CPU raster timing: the mid-screen NR$43 displayed-palette flip (raster-stamped replay, landing row asserted ~95), attr cells through both palettes (incl. the $E7 bright magenta), and the full deduped left-border rainbow sequence — classic colours through palette 1, custom gradient + 'green/light blue' edges through palette 2. Closed the ULA-palette-colour gap row",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAClassicPaletized"
+                ]
+              }
             },
             {
               "name": "UlaScroll",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/UlaScroll"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/UlaScroll",
+              "notes": "NR$26/$27 ULA hardware scroll (new wiring + render per zxula.vhd:192-208) cross-checked against live register read-back after interactive OPQA scrolling; NR$1A clip window [8,8]->[239,175] hides the marker rows (zxula.vhd:562, border exempt); NR$69 bit 6 shadow-display (bank 7 highlight switch) asserted. Timex 512/8x1 M-modes not asserted (classic Timex render path — see known-gaps)",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAScroll"
+                ]
+              }
             }
           ]
         },

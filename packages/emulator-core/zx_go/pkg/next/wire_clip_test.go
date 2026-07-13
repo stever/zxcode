@@ -20,7 +20,7 @@ import (
 
 func clipDisp() *nextregs.Dispatcher {
 	d := nextregs.New()
-	WireClipWindows(d, nil, nil, nil)
+	WireClipWindows(d, nil, nil, nil, nil)
 	return d
 }
 
@@ -96,7 +96,7 @@ func TestClipWindow_DispatcherResetRestoresDefaults(t *testing.T) {
 func TestClipWindow_Layer2PushesToLayer(t *testing.T) {
 	l2Layer := layer2.New(&tilemapBanks{})
 	d := nextregs.New()
-	WireClipWindows(d, nil, nil, l2Layer)
+	WireClipWindows(d, nil, nil, l2Layer, nil)
 
 	for _, v := range []byte{0, 255, 8, 191} { // x1, x2, y1, y2
 		d.WriteReg(0x18, v)

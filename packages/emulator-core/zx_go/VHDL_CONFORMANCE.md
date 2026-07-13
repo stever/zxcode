@@ -173,6 +173,34 @@ Pinned since (Sprites group conformance work):
   OR of the two blue bits (zxnext.vhd:7214) — `next.WireCompositor`
   expandRGB332, pinned by the sprite scenes' fallback-white paper.
 
+Pinned since (ULA group conformance work):
+- ✅ ULA hardware scroll NR$26/$27 (zxnext.vhd:5304-5307): source pixel =
+  ((x + scrollX) mod 256, (y + scrollY) mod 192) for pixels AND
+  attributes, per video/zxula.vhd:199 (px char sum, neighbour char mod
+  32) and :192/:201-208 (py fold) — `next.WireULAControl` +
+  `TestNextULARowHardwareScroll` + TestNexttestsULAScroll's read-back
+  cross-check. NR$68 bit 2 fine-scroll-X (zxnext.vhd:5449) stored; the
+  half-pixel shift is below the 7 MHz render resolution (known-gaps).
+- ✅ ULA clip window NR$1A (zxula.vhd:562): inclusive display-space
+  bounds, outside → transparent (fallback / lower layers), border
+  exempt — `TestNextULARowClipWindow` + TestNexttestsULAScroll.
+- ✅ Boot ULA palette bright magenta = %111'001'111 ($E7 projection —
+  dodges NR$14=$E3; witnesses: DefaultTransparency board photo, MAME
+  0.282, CSpect 2.11.1, ZEsarUX 8.0) —
+  `TestULAClassicBrightMagentaDodgesTransparency` +
+  TestNexttestsULADefaultTransparency.
+- ✅ ULA transparency compares palette bits 8:1 vs NR$14 per
+  zxnext.vhd:7100, incl. redefined entries and the ULANext border path
+  (entry 128+border) vs classic (16+border) — the ChangePaletteTransparency
+  trio + TestNexttestsULABorderTransparencyFallback.
+- ✅ Displayed-ULA-palette select (NR$43 bit 1) honoured at raster-line
+  granularity for mid-frame CPU flips (borderChange-style stamping) —
+  `TestULAPaletteSelectMidFrameReplay` + TestNexttestsULAClassicPaletized.
+- ✅ NR$69 write fan-out: bit 7 → Layer 2 enable (zxnext.vhd:3924),
+  bit 6 → shadow display ($7FFD bit 3, :3658), bits 5:0 → Timex
+  port-$FF mode (:3617) — `TestSpec_NR69_DisplayControlFanOut` +
+  TestNexttestsULAScroll's M-mode bank-7 switch.
+
 ---
 
 ## Method to complete the matrix

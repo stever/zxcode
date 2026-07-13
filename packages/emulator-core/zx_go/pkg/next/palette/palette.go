@@ -60,9 +60,17 @@ func New() *Palette {
 // the MrKWatkins NextReg_defaults real-board reference (core 3.1.5
 // photo): a fresh NR$41 read at index $70 returns $00 (black) and
 // index $71 reads $02 (blue %000_000_101 >> 1).
+//
+// Bright magenta (index 11) is NOT the pure %111'000'111: the boot
+// palette gives it a green LSB (%111'001'111, 8-bit projection $E7)
+// so a classic bright-magenta screen does not match the default
+// NR$14 = $E3 global transparency. Pinned by the MrKWatkins
+// ULA/DefaultTransparency test: its board photo shows the magenta
+// paper opaque over Layer 2, and the MAME 0.282 / CSpect 2.11.1 /
+// ZEsarUX 8.0 captures all render it as RGB (255,36,255).
 var classicRGB333 = [16]uint16{
 	0x000, 0x005, 0x140, 0x145, 0x028, 0x02D, 0x168, 0x16D,
-	0x000, 0x007, 0x1C0, 0x1C7, 0x038, 0x03F, 0x1F8, 0x1FF,
+	0x000, 0x007, 0x1C0, 0x1CF, 0x038, 0x03F, 0x1F8, 0x1FF,
 }
 
 // NewULAClassic returns a Palette seeded with the booted machine's

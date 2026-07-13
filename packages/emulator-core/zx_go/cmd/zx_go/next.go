@@ -1175,14 +1175,10 @@ func wireNextSubsystems(e *emulator) error {
 	// NR$4B (sprite transparency colour) is wired inside next.WireSprites:
 	// the sprite ENGINE owns the comparison (raw pattern value vs NR$4B,
 	// sprites.vhd:971), not the compositor.
-	// NR$68 ("ULA Control") bit 7 = Disable ULA output. When set, the ULA
-	// layer paints nothing (lower layers / NR$4A fallback show). Sonic
-	// disables the ULA for its Layer-2/tilemap title; without this its stale
-	// screen RAM rendered as a garbled background.
-	disp.SetOnWrite(0x68, func(d *nextregs.Dispatcher, val byte) {
-		d.Store(0x68, val)
-		u.SetULAOutputDisabled(val&0x80 != 0)
-	})
+	// NR$68 (ULA Control: output disable, fine scroll X), NR$26/$27 (ULA
+	// scroll) and NR$69 (Display Control) are wired by next.WireULAControl
+	// inside next.Wire — shared with the test harness so the two cannot
+	// drift.
 	u.SetNextDMA(dmaEngine)
 	// zxnDMA IO endpoints: a port configured as an IO endpoint (WR1/WR2 D3)
 	// transfers to/from a real port — sprite-image ($5B), Layer 2 ($253B),

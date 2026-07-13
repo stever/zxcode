@@ -591,14 +591,10 @@ func WireContentionDisable(d *nextregs.Dispatcher, mem *memory.Memory) {
 	})
 }
 
-// WireLayer2 installs the NextReg 0x12 / 0x13 / 0x69 OnWrite
+// WireLayer2 installs the NextReg 0x12 / 0x13 / 0x70 / scroll OnWrite
 // handlers. 0x12 / 0x13 select the active / shadow framebuffer
-// banks; 0x69 bit 7 enables Layer 2 rendering. Without 0x69 wired
-// guest software can't turn Layer 2 on, so the entire render
-// pipeline would be unreachable.
-//
-// Other bits of 0x69 carry Display-Control state (timing, etc.)
-// that we store but don't yet act on.
+// banks. NR$69 (Display Control — Layer 2 enable bit 7 among its ULA
+// bits) is owned by WireULAControl.
 func WireLayer2(d *nextregs.Dispatcher, l *layer2.Layer2) {
 	d.SetOnWrite(0x12, func(disp *nextregs.Dispatcher, val byte) {
 		l.SetActiveBank(val)
@@ -611,10 +607,6 @@ func WireLayer2(d *nextregs.Dispatcher, l *layer2.Layer2) {
 		// Per zxnext.vhd read NR$13 = '0' || shadow_bank(6:0).
 		// Bit 7 reserved.
 		disp.Store(0x13, val&0x7F)
-	})
-	d.SetOnWrite(0x69, func(disp *nextregs.Dispatcher, val byte) {
-		l.SetEnabled(val&0x80 != 0)
-		disp.Store(0x69, val)
 	})
 	d.SetOnWrite(0x70, func(disp *nextregs.Dispatcher, val byte) {
 		// Per zxnext.vhd:5475-5477 (read at :6114): bits 5:4 = Layer 2
@@ -802,6 +794,89 @@ type ULANextSink interface {
 	SetULANext(enabled bool, format byte)
 }
 
+// ULAPaletteSelectSink is the optional extension of ULANextSink for the
+// NR$43 bit 1 "displayed ULA palette" selection. The ULA raster-stamps
+// these pushes so a CPU flipping the displayed palette mid-frame (the
+// MrKWatkins ULA/ClassicPaletized test switches at mid-screen) renders
+// each row through the palette that was active at its raster line.
+type ULAPaletteSelectSink interface {
+	SetULAPaletteSecond(second bool)
+}
+
+// ULAVideoSink is the optional extension of ULANextSink for the
+// ULA-video control registers owned by WireULAControl / WireClipWindows:
+// NR$68 (output disable bit 7, fine-scroll-X bit 2), NR$26/$27 (ULA
+// X/Y hardware scroll), NR$1A (ULA clip window) and NR$69's Timex
+// port-$FF alias bits. pkg/ula.ULA satisfies it.
+type ULAVideoSink interface {
+	SetULAOutputDisabled(disabled bool)
+	SetULAScroll(x, y byte)
+	SetULAFineScrollX(on bool)
+	SetULAClipWindow(x1, x2, y1, y2 byte)
+	SetTimexVideoMode(v byte)
+}
+
+// WireULAControl installs the ULA-facing display-control registers,
+// shared by the production machine (cmd/zx_go) and the test harness so
+// the two cannot drift:
+//
+//   - NR$26 / NR$27 — ULA X/Y hardware scroll (zxnext.vhd:5304-5307
+//     nr_26_ula_scrollx / nr_27_ula_scrolly, reset $00 at :4987-4989),
+//     applied by the ULA render per video/zxula.vhd:192-208 (py = vc +
+//     scroll_y folded mod 192) and :199 (px char column + scroll_x).
+//   - NR$68 — bit 7 "Disable ULA output" (lower layers / NR$4A fallback
+//     show; Sonic's Layer-2 title relies on it), bit 2 the ULA
+//     fine-scroll-X half-pixel bit (zxnext.vhd:5449 nr_wr_dat(2)).
+//   - NR$69 (Display Control 1) — the FPGA fans a write out to three
+//     live registers (zxnext.vhd): bit 7 → port $123B Layer 2 enable
+//     (:3924), bit 6 → port $7FFD bit 3 shadow display (:3658), bits
+//     5:0 → port $FF Timex video mode (:3617). The read at :6096
+//     composes those live sources; our Store'd byte matches unless the
+//     guest writes the aliased ports directly afterwards.
+//
+// sink, l2 and mem may each be nil (the corresponding pushes are
+// skipped) so partial wirings in unit tests keep working.
+func WireULAControl(d *nextregs.Dispatcher, sink ULAVideoSink, l2 *layer2.Layer2, mem *memory.Memory) {
+	pushScroll := func(disp *nextregs.Dispatcher) {
+		if sink != nil {
+			sink.SetULAScroll(disp.Raw(0x26), disp.Raw(0x27))
+		}
+	}
+	d.SetOnWrite(0x26, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x26, val)
+		pushScroll(disp)
+	})
+	d.SetOnWrite(0x27, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x27, val)
+		pushScroll(disp)
+	})
+	d.SetOnWrite(0x68, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x68, val)
+		if sink != nil {
+			sink.SetULAOutputDisabled(val&0x80 != 0)
+			sink.SetULAFineScrollX(val&0x04 != 0)
+		}
+	})
+	d.SetOnWrite(0x69, func(disp *nextregs.Dispatcher, val byte) {
+		if l2 != nil {
+			l2.SetEnabled(val&0x80 != 0)
+		}
+		if mem != nil {
+			// Shadow display: port_7ffd_reg(3) ← bit 6. Display source
+			// only — classic $7FFD RAM paging is untouched.
+			if val&0x40 != 0 {
+				mem.ScreenPage = 7
+			} else {
+				mem.ScreenPage = 5
+			}
+		}
+		if sink != nil {
+			sink.SetTimexVideoMode(val & 0x3F)
+		}
+		disp.Store(0x69, val)
+	})
+}
+
 // WirePalette installs the NextReg 0x40 (index), 0x41 (8-bit
 // value with auto-increment), 0x42 (ULANext format), 0x43 (palette
 // select) and 0x44 (9-bit value, two-byte sequence) handlers.
@@ -816,6 +891,12 @@ func WirePalette(d *nextregs.Dispatcher, b *palette.Bank, ulaNext ULANextSink) {
 	pushULANext := func(disp *nextregs.Dispatcher) {
 		if ulaNext != nil {
 			ulaNext.SetULANext(disp.Raw(0x43)&0x01 != 0, disp.Raw(0x42))
+			// NR$43 bit 1 = displayed ULA palette. Pushed alongside so
+			// the ULA can raster-stamp mid-frame palette flips (see
+			// ULAPaletteSelectSink).
+			if sel, ok := ulaNext.(ULAPaletteSelectSink); ok {
+				sel.SetULAPaletteSecond(disp.Raw(0x43)&0x02 != 0)
+			}
 		}
 	}
 	pushULANext(d)
@@ -1005,7 +1086,9 @@ func Wire(opts WireOpts) {
 		WireTilemap(opts.Dispatcher, opts.Tilemap, opts.Palette)
 	}
 	WirePeripheralMasks(opts.Dispatcher)
-	WireClipWindows(opts.Dispatcher, opts.Tilemap, opts.Sprites, opts.Layer2)
+	ulaVideo, _ := opts.ULANext.(ULAVideoSink)
+	WireULAControl(opts.Dispatcher, ulaVideo, opts.Layer2, opts.Memory)
+	WireClipWindows(opts.Dispatcher, opts.Tilemap, opts.Sprites, opts.Layer2, ulaVideo)
 	opts.Memory.SpeedMultiplier = opts.CPU.SpeedMultiplier
 	opts.Memory.RefTstates = opts.CPU.RefTstates
 	applyTBBLUEFWBootDefaults(opts.Dispatcher)
@@ -1039,7 +1122,7 @@ func (c *clipWindow) reset() {
 // plus the NR$1C index reset/read-back, replacing the old single-byte
 // approximation. Reset defaults per zxnext.vhd 4959-4982: Layer2/sprite/ULA
 // = {00,FF,00,BF}; tilemap = {00,9F,00,FF}.
-func WireClipWindows(d *nextregs.Dispatcher, tmLayer *tilemap.Tilemap, sprites *sprite.Engine, l2Layer *layer2.Layer2) {
+func WireClipWindows(d *nextregs.Dispatcher, tmLayer *tilemap.Tilemap, sprites *sprite.Engine, l2Layer *layer2.Layer2, ulaSink ULAVideoSink) {
 	l2 := &clipWindow{def: [4]byte{0x00, 0xFF, 0x00, 0xBF}}
 	spr := &clipWindow{def: [4]byte{0x00, 0xFF, 0x00, 0xBF}}
 	ula := &clipWindow{def: [4]byte{0x00, 0xFF, 0x00, 0xBF}}
@@ -1075,11 +1158,21 @@ func WireClipWindows(d *nextregs.Dispatcher, tmLayer *tilemap.Tilemap, sprites *
 		}
 	}
 	pushL2()
+	// Push the ULA clip coords into the live ULA render so NR$1A actually
+	// clips (zxula.vhd:562 — a paper pixel outside the inclusive window is
+	// transparent; the border is never clipped). Without this the
+	// UlaScroll test's hidden stripe rows stayed visible.
+	pushULA := func() {
+		if ulaSink != nil {
+			ulaSink.SetULAClipWindow(ula.coord[0], ula.coord[1], ula.coord[2], ula.coord[3])
+		}
+	}
+	pushULA()
 	d.SetOnWrite(0x18, func(_ *nextregs.Dispatcher, v byte) { l2.write(v); pushL2() })
 	d.SetOnRead(0x18, func(_ *nextregs.Dispatcher) byte { return l2.read() })
 	d.SetOnWrite(0x19, func(_ *nextregs.Dispatcher, v byte) { spr.write(v); pushSpr() })
 	d.SetOnRead(0x19, func(_ *nextregs.Dispatcher) byte { return spr.read() })
-	d.SetOnWrite(0x1A, func(_ *nextregs.Dispatcher, v byte) { ula.write(v) })
+	d.SetOnWrite(0x1A, func(_ *nextregs.Dispatcher, v byte) { ula.write(v); pushULA() })
 	d.SetOnRead(0x1A, func(_ *nextregs.Dispatcher) byte { return ula.read() })
 	d.SetOnWrite(0x1B, func(_ *nextregs.Dispatcher, v byte) { tm.write(v); pushTM() })
 	d.SetOnRead(0x1B, func(_ *nextregs.Dispatcher) byte { return tm.read() })
@@ -1110,6 +1203,7 @@ func WireClipWindows(d *nextregs.Dispatcher, tmLayer *tilemap.Tilemap, sprites *
 		pushTM()
 		pushSpr()
 		pushL2()
+		pushULA()
 	})
 }
 

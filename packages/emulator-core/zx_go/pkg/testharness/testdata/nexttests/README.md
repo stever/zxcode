@@ -29,6 +29,13 @@ The Next-side tests ship as `.snx` snapshots — in practice standard
 | SpritBig.snx | Sprites/BigSprite | Unified ("big sprite") relatives, 8bpp: eight anchor mirror/rotate combinations transforming a 10-sprite body rigidly; invisible ninth big sprite; violet over-border sprite. TestNexttestsSpritesBigSprite pins every arm's colour bounding box per group |
 | SprBig4b.snx | Sprites/BigSprite4b | The 4bpp big-sprite variant: relative patterns crossing the N6 half boundary (4.5+0.5=5.0), palette-offset saturation, border pattern-display sprites + red square. Pixel-count/bbox/colour-set + sample pixels pinned per group |
 | SprDelay.snx | Sprites/ScanlineDelay | Copper-raster-timed sprite attribute changes (core 3.0.7+ WAIT_H=48 build): visibility/rotate+move/NR$4B/palette effects each landing on exactly one scanline, plus the 4/5-byte attribute records ("ooo1"/"o1") and the NR$09 sprite-index lockstep exercise ("11") — drove the dual NR$34/IO sprite indexes + tie |
+| DefTrans.snx | ULA/DefaultTransparency | Classic bright-magenta paper over Layer 2 must stay opaque — adjudicated the boot ULA palette's bright magenta to $E7 projection (%111'001'111), fixing classicRGB333 (vendored 2026-07-13, as the rest of the ULA group) |
+| TFalBUla.snx | ULA/BorderTransparencyFallback | NR$4A fallback in border + paper across three key-driven phases (ULANext transparency, full-ink mask, Enhanced-ULA off). ZEsarUX capture is the good reference; upstream marks CSpect's BAD |
+| CPalTran.snx | ULA/ChangePaletteTransparency | ULA paper-7 palette entry redefined to $E3 → paper transparent over Layer 2, border via the same entry, NR$4A fallback where Layer 2 is transparent too (column 227) |
+| CPalTrV2.snx | ULA/ChangePaletteTransparency_v2 | Ink-mask 15 variant: paper 3 transparent, border entry redefined to green — border follows entry 128+border, not the paper |
+| CPalTrV3.snx | ULA/ChangePaletteTransparency_v3 | ULANext OFF: entry 128+7 redefinition must not touch the classic decode; transparent INK-0 entry 0 gives rainbow text over Layer 2 |
+| Ula_Pal.snx | ULA/ClassicPaletized | Classic screen through both Next ULA palettes with CPU raster timing: mid-screen NR$43 displayed-palette flip + border rainbows — drove the raster-stamped ULA-video state replay |
+| UlaScrol.snx | ULA/UlaScroll | NR$26/$27 ULA hardware scroll + NR$1A clip window + NR$69 display modes (OPQA/H/R/M interactive) — drove the scroll/clip wiring and the NR$69 fan-out |
 
 The classic `ULAvsSJS.sna` (visual ULA timing) is also not yet wired;
 it needs screenshot comparison rather than screen-text OCR.
