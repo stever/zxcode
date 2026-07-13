@@ -41,8 +41,11 @@ PNGs, `--dump-state`, watchpoints, memory dumps, uninitialised-read
 detection, crash-detect heuristics, time-travel, snapshot-every, and
 trace channels. Env hooks reproduce browser behaviours headlessly
 (`ZX_GO_RUN_BAS_FILE` runs the same importAndRunBas path the Play page
-uses). This is the CI surface: the boot tests, screenshot oracles and
-soak tests all run through it.
+uses; `ZX_GO_RUN_NEX_FILE=path[@frame]` runs the same importAndRunNex
+.nexload path the GUI/browser .nex open uses — the runner behind the
+Next game-compatibility triage in docs/compatibility.md). This is the
+CI surface: the boot tests, screenshot oracles and soak tests all run
+through it.
 
 ## The wasm surface
 

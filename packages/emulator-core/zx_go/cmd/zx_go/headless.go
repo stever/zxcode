@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -1006,6 +1007,27 @@ func runHeadless(f *cliFlags) {
 						slog.Error("headless run-bas failed", "err", berr)
 					} else {
 						slog.Info("headless run-bas triggered", "frame", i, "path", path)
+					}
+				}
+			}
+			// ZX_GO_RUN_NEX_FILE=path[@frame]: invoke the real importAndRunNex
+			// flow (stage /zx.nex on the SD card + reboot + .nexload macro) at
+			// the given frame — reproduces the GUI/browser .nex open path
+			// headlessly. Synchronous (unlike the GUI's goroutine) so the
+			// macro is armed before the next frame runs.
+			if spec := os.Getenv("ZX_GO_RUN_NEX_FILE"); spec != "" {
+				path, at := spec, 3000
+				if k := strings.LastIndex(spec, "@"); k > 0 {
+					if v, aerr := strconv.Atoi(spec[k+1:]); aerr == nil {
+						path, at = spec[:k], v
+					}
+				}
+				if i == at {
+					if data, rerr := os.ReadFile(path); rerr != nil {
+						slog.Error("headless run-nex: read failed", "path", path, "err", rerr)
+					} else {
+						emu.importAndRunNex(filepath.Base(path), data)
+						slog.Info("headless run-nex triggered", "frame", i, "path", path)
 					}
 				}
 			}
