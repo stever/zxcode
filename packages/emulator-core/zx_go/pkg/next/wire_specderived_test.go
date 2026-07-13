@@ -398,7 +398,7 @@ func TestSpec_NR22_LineInterruptBitPositions(t *testing.T) {
 	_, _ = withConfigMode(t, false) // mem unused here; just need ROMs
 	cpu := newSpecTestCPU(t)
 	disp := nextregs.New()
-	WireLineInterrupt(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil)
 
 	// Bit 1 = line interrupt enable. Write $02 → bit 1 set →
 	// should enable line INT.
@@ -489,7 +489,7 @@ func TestSpec_NRC4_InterruptEnable0(t *testing.T) {
 	cpu := newSpecTestCPU(t)
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil)
 	WireInterruptEnable0(disp)
 
 	// Set line target via NR$23.
@@ -509,10 +509,37 @@ func TestSpec_NRC4_InterruptEnable0(t *testing.T) {
 			cpu.LineIntOffsetTstates)
 	}
 
-	// Storage byte mask check.
+	// Read composition per zxnext.vhd:6239 — nr_c4_int_en_0_expbus &
+	// "00000" & ula_int_en (bit 1 = line enable, bit 0 = NOT the
+	// shared frame-INT disable latch). $FF sets bit 7, enables the
+	// line INT and enables the ULA INT (bit 0 = 1 → disable = 0).
 	disp.WriteReg(0xC4, 0xFF)
-	if got := disp.Raw(0xC4); got != 0x83 {
-		t.Errorf("NR$C4=$FF stored=$%02X, want $83 (bits 7,1,0 retained)", got)
+	if got := disp.ReadReg(0xC4); got != 0x83 {
+		t.Errorf("NR$C4=$FF read=$%02X, want $83 (bit7 + line-en + ula-en)", got)
+	}
+
+	// Bit 0 aliases the shared frame-INT disable latch INVERTED
+	// (zxnext.vhd:3621: port_ff_reg(6) <= not nr_wr_dat(0)).
+	disp.WriteReg(0xC4, 0x00) // ULA INT enable = 0 → disable = 1
+	if !cpu.FrameIntDisabled {
+		t.Errorf("NR$C4=$00 (bit 0 clear): FrameIntDisabled=false, want true")
+	}
+	if got := disp.ReadReg(0x22) & 0x04; got == 0 {
+		t.Errorf("NR$C4=$00: NR$22 read bit 2 clear, want set (shared latch)")
+	}
+	if got := disp.ReadReg(0xC4) & 0x01; got != 0 {
+		t.Errorf("NR$C4=$00: NR$C4 read bit 0 = 1, want 0 (ULA INT disabled)")
+	}
+	disp.WriteReg(0xC4, 0x01) // re-enable
+	if cpu.FrameIntDisabled {
+		t.Errorf("NR$C4=$01 (bit 0 set): FrameIntDisabled=true, want false")
+	}
+
+	// The alias works the other way too: an NR$22 frame-disable shows
+	// up in NR$C4's read bit 0.
+	disp.WriteReg(0x22, 0x04)
+	if got := disp.ReadReg(0xC4) & 0x01; got != 0 {
+		t.Errorf("NR$22=$04: NR$C4 read bit 0 = 1, want 0 (shared latch)")
 	}
 }
 
@@ -1147,7 +1174,7 @@ func TestSpec_NR22_ReservedBits_ReadAsZero(t *testing.T) {
 	cpu := newSpecTestCPU(t)
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil)
 
 	disp.WriteReg(0x22, 0xFF)
 	got := disp.ReadReg(0x22)

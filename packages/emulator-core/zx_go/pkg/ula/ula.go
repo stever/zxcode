@@ -86,7 +86,16 @@ type ULA struct {
 	// timexVideoMode is the last value written to the Timex SCLD register
 	// (port $FF): bits 2:0 = display mode (110 = 512x192 8x1 hi-res), bits 5:3
 	// = hi-res ink/paper colour. 0 (the reset default) is the normal screen.
+	// Bit 6 is the ULA frame-INT disable latch — this byte IS the FPGA's
+	// port_ff_reg (zxnext.vhd:3609-3635), shared by three writers: a port
+	// $FF write (full byte), NR$69 (bits 5:0 only) and NR$22 bit 2 /
+	// NR$C4 bit 0 inverted (bit 6 only, via SetULAFrameIntDisable).
 	timexVideoMode byte
+	// frameIntDisableSink, when wired (ModelNext via pkg/next.Wire),
+	// receives every change to the bit-6 latch so the CPU's frame-INT
+	// generator mirror stays current. Nil on classic models: a plain
+	// 48K/128K has no SCLD, so port $FF bit 6 must not gate its INT.
+	frameIntDisableSink func(bool)
 	// timexModeChanged flags any CHANGE to the Timex mode since the last
 	// executed frame's render (CPU port/NR$69 writes between renders, or
 	// copper writes during the compose walk). timexMixedFrame latches it
@@ -883,6 +892,33 @@ func (u *ULA) SetTimexVideoMode(v byte) {
 // bits (port_ff_reg(5:0)) — the source NR$69's composed read pulls its
 // bits 5:0 from (zxnext.vhd:6096).
 func (u *ULA) TimexVideoMode() byte { return u.timexVideoMode & 0x3F }
+
+// SetULAFrameIntDisable drives the port_ff_reg(6) frame-INT disable
+// latch from its NextReg writers — NR$22 bit 2 (zxnext.vhd:3619) and
+// NR$C4 bit 0 inverted (:3621). The latch lives here, in port $FF
+// bit 6, so the NR$08-gated port-$FF read-back reflects those writes
+// exactly as the FPGA's port_ff_dat_tmx does.
+func (u *ULA) SetULAFrameIntDisable(disable bool) {
+	if disable {
+		u.timexVideoMode |= 0x40
+	} else {
+		u.timexVideoMode &^= 0x40
+	}
+	if u.frameIntDisableSink != nil {
+		u.frameIntDisableSink(disable)
+	}
+}
+
+// ULAFrameIntDisabled reports the port_ff_reg(6) latch
+// (port_ff_interrupt_disable, zxnext.vhd:3635) — the source NR$22's
+// read bit 2 (:5992) and NR$C4's read bit 0 (inverted, :6239 via
+// ula_int_en) compose from.
+func (u *ULA) ULAFrameIntDisabled() bool { return u.timexVideoMode&0x40 != 0 }
+
+// SetFrameIntDisableSink wires the frame-INT disable latch to its
+// consumer (cpu.FrameIntDisabled on ModelNext — pkg/next.Wire). Every
+// latch change, whichever of the three writers caused it, is pushed.
+func (u *ULA) SetFrameIntDisableSink(fn func(bool)) { u.frameIntDisableSink = fn }
 
 // SetULABlendMode mirrors NR$68 bits 6:5 (the blend operand select for
 // the additive layer modes 6/7) and bit 0 (the ULA/tilemap AND-stencil),
@@ -1775,13 +1811,22 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// Port $FF — the Timex SCLD video-mode register. bits 2:0 select the
 	// display mode (110 = 512x192 8x1 hi-res), bits 5:3 the hi-res colour.
 	// NextZXOS's 64/85-column text modes (e.g. the .more text viewer) use the
-	// hi-res mode. Stored here; rendered by renderTimexHiRes. Falls through so
-	// any other $FF semantics are unaffected.
+	// hi-res mode. Bit 6 is the ULA frame-INT disable latch (zxnext.vhd:3615
+	// port_ff_wr stores the full byte; :3635 port_ff_interrupt_disable is
+	// bit 6), pushed to the CPU's INT generator when the Next wiring has
+	// connected the sink. Stored here; rendered by renderTimexHiRes. Falls
+	// through so any other $FF semantics are unaffected.
 	if (addr & 0xFF) == 0xFF {
-		if u.timexVideoMode != val {
+		// Mixed-frame detection watches the VIDEO bits only — a write
+		// that just toggles the INT-disable latch must not demote a
+		// stable hi-res frame to the decimated 320 path.
+		if (u.timexVideoMode^val)&0x3F != 0 {
 			u.timexModeChanged = true
 		}
 		u.timexVideoMode = val
+		if u.frameIntDisableSink != nil {
+			u.frameIntDisableSink(val&0x40 != 0)
+		}
 	}
 	// Spectrum Next NextReg ports take priority over any other
 	// dispatch when wired. 0x243B is the select latch (write-only),
@@ -2913,6 +2958,14 @@ func (u *ULA) Reset() {
 	u.flash = false
 	u.flashCount = 0
 	u.KempstonState = 0
+	// The FPGA clears the whole port_ff_reg on reset (zxnext.vhd:3611).
+	// Only the frame-INT disable latch (bit 6) is cleared here: a stale
+	// disable would leave the machine INT-less after a reset, while the
+	// video bits keep their long-standing survive-reset behaviour (the
+	// next boot's NR$69 write refreshes them anyway).
+	if u.timexVideoMode&0x40 != 0 {
+		u.SetULAFrameIntDisable(false)
+	}
 	// Clear any per-scanline border changes left in the buffer.
 	// Without this, a model switch (e.g. 48K -> Next via the
 	// Machine menu) inherits the previous model's border writes;

@@ -139,3 +139,50 @@ func TestStepIRQ_FrameBoundary_ScalesWithCPUSpeed(t *testing.T) {
 			edges, frames, frames)
 	}
 }
+
+// TestFrameInt_NarrowPulse_DisableMidPulseWithdraws — the FPGA's frame-INT
+// disable (the shared port_ff_reg(6) latch: port $FF bit 6 / NR$22 bit 2 /
+// NR$C4 bit 0 inverted) gates int_ula combinationally
+// (zxula_timing.vhd:551): a disable landing while the pulse is LIVE forces
+// the line low on the spot. The emulator must withdraw IRQPending rather
+// than leave it latched for the rest of the window — otherwise an EI after
+// the disable still takes the "cancelled" interrupt.
+func TestFrameInt_NarrowPulse_DisableMidPulseWithdraws(t *testing.T) {
+	cpu, mem := createTestCPU()
+	defer cleanupTestROMs("test_roms_z80")
+
+	cpu.IM = 1
+	cpu.IFF1 = false // pulse raised but not yet accepted
+	cpu.IFF2 = false
+	cpu.PC = 0x8000
+	cpu.SP = 0xFFF0
+
+	// Pulse live during [20,52).
+	cpu.IntAssertTstate = 20
+	cpu.IntPulseTstates = 32
+
+	for a := 0x8000; a < 0x8100; a++ {
+		mem.Write(uint16(a), 0x00) // NOP
+	}
+	// EI at $800A executes ~tstate 40 — INSIDE the original pulse
+	// window, but after the mid-pulse disable below.
+	mem.Write(0x800A, 0xFB)
+
+	sawInt := false
+	cpu.BreakpointCheck = func(pc uint16) bool {
+		if pc == 0x8007 { // ~tstate 28: pulse already raised
+			cpu.FrameIntDisabled = true // e.g. OUT ($FF) with bit 6 set
+		}
+		if pc == 0x0038 {
+			sawInt = true
+		}
+		return false
+	}
+
+	cpu.ExecuteFrame(2000)
+
+	if sawInt {
+		t.Errorf("frame INT taken after a mid-pulse disable — IRQPending stayed " +
+			"latched instead of withdrawing (zxula_timing.vhd:551 forces int_ula low)")
+	}
+}

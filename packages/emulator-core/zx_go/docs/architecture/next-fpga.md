@@ -294,6 +294,13 @@ shared T-state counter, wired to NR$1E/$1F, so DI'd raster-polling code
 - Frame INT: narrow pulse with VHDL-derived assert T-state and width per
   machine timing and 50/60 Hz (`pkg/next/inttiming.go`), scaled with the
   turbo multiplier.
+- Frame-INT disable: the FPGA's shared `port_ff_reg(6)` latch
+  (zxnext.vhd:3609-3635) lives in the ULA's port-$FF byte, written by
+  port $FF bit 6, NR$22 bit 2 and NR$C4 bit 0 (inverted); a sink wired
+  by `next.Wire` mirrors it into `cpu.FrameIntDisabled`, which gates
+  pulse GENERATION (a mid-pulse disable withdraws the line). NR$22
+  bit 2 and NR$C4 bit 0 read composed from the latch; reset (NR$02
+  hard/soft and machine reset) clears it.
 - Line INT: NR$22/$23 program a 9-bit scanline; the wire layer converts
   it to a T-state offset for the CPU.
 - IM2 daisy-chain (`pkg/next/im2.go`): a port of the FPGA's

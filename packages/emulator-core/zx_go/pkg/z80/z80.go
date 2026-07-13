@@ -120,10 +120,13 @@ type CPU struct {
 	LineIntOffsetTstates uint64
 	lineIntFired         bool
 
-	// FrameIntDisabled mirrors NR$22 bit 6 (when 1, the ULA frame
-	// interrupt is suppressed). Updated by pkg/next/wire on NR$22
-	// writes. When true, ExecuteFrame skips the frame-start
-	// IRQPending.Store(true) — only line interrupts can fire.
+	// FrameIntDisabled mirrors the FPGA's shared frame-INT disable
+	// latch port_ff_reg(6) (zxnext.vhd:3609-3635), written by port
+	// $FF bit 6, NR$22 bit 2 and NR$C4 bit 0 (inverted). The latch
+	// itself lives in pkg/ula (port $FF bit 6); pkg/next.Wire pushes
+	// every change here. When true, the ULA frame INT is never
+	// generated (zxula_timing.vhd:551 gates int_ula at the source) —
+	// only line interrupts can fire.
 	FrameIntDisabled bool
 
 	// --- Spec-faithful frame-INT timing (timing.md §1a/§1c) ---
@@ -816,7 +819,18 @@ func (c *CPU) ExecuteRZXFrame(instructions uint64) {
 // frameIntDeasct are the per-frame one-shots, reset at each frame origin
 // by ExecuteFrame / StepInstructionWithIRQ.
 func (c *CPU) frameIntPulse(frameStart uint64) {
-	if c.IntPulseTstates == 0 || c.FrameIntDisabled {
+	if c.IntPulseTstates == 0 {
+		return
+	}
+	if c.FrameIntDisabled {
+		// zxula_timing.vhd:551: inten_ula_n=1 forces int_ula low on the
+		// spot — a disable written MID-pulse (port $FF / NR$22 / NR$C4
+		// between instructions) withdraws the line immediately rather
+		// than leaving IRQPending latched for the rest of the window.
+		if c.frameIntFired && !c.frameIntDeasct {
+			c.IRQPending.Store(false)
+			c.frameIntDeasct = true
+		}
 		return
 	}
 	assertAt := frameStart + c.IntAssertTstate*uint64(c.SpeedMultiplier())

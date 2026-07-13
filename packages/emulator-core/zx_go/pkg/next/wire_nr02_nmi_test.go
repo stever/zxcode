@@ -19,7 +19,7 @@ func nr02NMIHarness(t *testing.T) (*nextregs.Dispatcher, *z80.CPU) {
 	}
 	disp := nextregs.New()
 	cpu := z80.New(mem, wireTestULA{})
-	WireReset(disp, mem, cpu, nil)
+	WireReset(disp, mem, cpu, nil, nil)
 	return disp, cpu
 }
 

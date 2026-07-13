@@ -278,7 +278,7 @@ func TestWireResetSoftFiresOnEveryWrite(t *testing.T) {
 	}
 	disp := nextregs.New()
 	cpu := z80.New(mem, wireTestULA{})
-	WireReset(disp, mem, cpu, nil)
+	WireReset(disp, mem, cpu, nil, nil)
 
 	// Sanity: direct-boot cold default is $02 — the reset_type
 	// shift-history seeded at "010" (the FPGA bootrom's single soft
@@ -326,7 +326,7 @@ func TestWireResetHardClearsRegisters(t *testing.T) {
 	}
 	disp := nextregs.New()
 	cpu := z80.New(mem, wireTestULA{})
-	WireReset(disp, mem, cpu, nil)
+	WireReset(disp, mem, cpu, nil, nil)
 
 	cpu.PC = 0x1234
 	cpu.SP = 0x5678
@@ -361,7 +361,7 @@ func TestWireResetDeassertsDivMMCCS(t *testing.T) {
 	disp := nextregs.New()
 	cpu := z80.New(mem, wireTestULA{})
 	spy := &spiResetSpy{}
-	WireReset(disp, mem, cpu, spy)
+	WireReset(disp, mem, cpu, spy, nil)
 
 	disp.Select(0x02)
 	disp.WriteData(0x01) // soft reset
@@ -393,7 +393,7 @@ func TestWireResetSoftPreservesNRFile(t *testing.T) {
 	}
 	disp := nextregs.New()
 	cpu := z80.New(mem, wireTestULA{})
-	WireReset(disp, mem, cpu, nil)
+	WireReset(disp, mem, cpu, nil, nil)
 
 	// Establish non-default OS-configured state across a spread of
 	// registers the soft reset must NOT clobber.
@@ -445,7 +445,7 @@ func TestWireResetSoftReArmsDivMMCEntryPoints(t *testing.T) {
 	// reset's WriteReg fires through to it.
 	pager := divmmc.New(make([]byte, divmmc.ROMSize))
 	WireDivMMCEntryPoints(disp, pager)
-	WireReset(disp, mem, cpu, nil)
+	WireReset(disp, mem, cpu, nil, nil)
 
 	// NextZXOS clears NR$B8 bit 0 during operation (e.g. $82).
 	disp.WriteReg(0xB8, 0x82)
@@ -500,7 +500,7 @@ func TestWireResetPromotesAltROMStagedNibble(t *testing.T) {
 			disp := nextregs.New()
 			cpu := z80.New(mem, wireTestULA{})
 			WireAltROM(disp, mem)
-			WireReset(disp, mem, cpu, nil)
+			WireReset(disp, mem, cpu, nil, nil)
 
 			disp.Select(0x8C)
 			disp.WriteData(tc.pre)

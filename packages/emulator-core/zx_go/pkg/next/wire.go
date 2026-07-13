@@ -126,40 +126,57 @@ func WireJoystickIOMode(d *nextregs.Dispatcher) {
 	})
 }
 
-// WireInterruptEnable0 installs the NextReg $C4 OnWrite handler.
+// FrameIntLatch is the shared ULA frame-INT disable latch —
+// port_ff_reg(6) in the FPGA (zxnext.vhd:3609-3635). Three writers
+// share the one bit: a port $FF write (bit 6), NR$22 (bit 2,
+// vhd:3619) and NR$C4 (bit 0 inverted, vhd:3621). pkg/ula.ULA
+// satisfies it: keeping the latch in the ULA's port-$FF byte makes
+// the NR$08-gated port-$FF read-back reflect NextReg writes exactly
+// as the FPGA's port_ff_dat_tmx does.
+type FrameIntLatch interface {
+	SetULAFrameIntDisable(disable bool)
+	ULAFrameIntDisabled() bool
+}
+
+// WireInterruptEnable0 installs the NextReg $C4 handlers.
 //
 // Per nextreg.txt 0xC4 + zxnext.vhd:
 //
 //	bit 7 = Expansion bus /INT enable
 //	bits 6:2 = Reserved
-//	bit 1 = Line INT enable (ALIASES nr_22_line_interrupt_en)
-//	bit 0 = ULA INT enable
+//	bit 1 = Line INT enable (ALIASES nr_22_line_interrupt_en, vhd:5610)
+//	bit 0 = ULA INT enable (ALIASES port_ff_reg(6) INVERTED, vhd:3621)
 //
-// The bit-1 alias is critical: NextZXOS may write NR$C4 to control
-// line interrupts INSTEAD of NR$22. Per VHDL line 5610 the write
-// directly updates the same nr_22_line_interrupt_en signal.
+// Both aliases are critical: NextZXOS may write NR$C4 to control
+// interrupts INSTEAD of NR$22. Each write is folded into an
+// equivalent NR$22 byte (bit 1 = line enable, bit 2 = NOT bit 0) and
+// pushed through disp.WriteReg(0x22, ...), so the NR$22 OnWrite
+// handler drives the shared latch and cpu.LineIntOffsetTstates for
+// both entry points.
 //
-// We drive this by computing NR$22's new byte with bit 1 set/cleared
-// to match and writing it through disp.WriteReg(0x22, ...), which
-// triggers the existing NR$22 OnWrite handler to recompute
-// cpu.LineIntOffsetTstates.
+// The read composes from the live signals (vhd:6239 —
+// nr_c4_int_en_0_expbus & "00000" & ula_int_en): bit 1 mirrors the
+// stored NR$22 line enable, bit 0 the INVERSE of the shared disable
+// latch, read back through NR$22's composed bit 2.
 func WireInterruptEnable0(d *nextregs.Dispatcher) {
 	d.SetOnWrite(0xC4, func(disp *nextregs.Dispatcher, val byte) {
-		disp.Store(0xC4, val&0x83) // bits 7, 1, 0 retained
-		// Bit 1 of NR$C4 aliases NR$22 bit 1 (line int enable).
-		// Update NR$22's storage to reflect this AND trigger its
-		// OnWrite to recompute cpu.LineIntOffsetTstates.
-		oldNR22 := disp.Raw(0x22)
-		var newNR22 byte
-		if val&0x02 != 0 {
-			newNR22 = oldNR22 | 0x02
-		} else {
-			newNR22 = oldNR22 &^ 0x02
-		}
-		if newNR22 != oldNR22 {
-			disp.WriteReg(0x22, newNR22)
-		}
+		disp.Store(0xC4, val&0x80) // only bit 7 has its own storage
+		// vhd:3621 sets port_ff_reg(6) from NOT bit 0 on EVERY NR$C4
+		// write, so the NR$22 push is unconditional.
+		newNR22 := disp.Raw(0x22)&0x01 | val&0x02 | (val&0x01^0x01)<<2
+		disp.WriteReg(0x22, newNR22)
 	})
+	d.SetOnRead(0xC4, func(disp *nextregs.Dispatcher) byte {
+		v := disp.Raw(0xC4)&0x80 | disp.Raw(0x22)&0x02
+		if disp.ReadReg(0x22)&0x04 == 0 { // ula_int_en = NOT disable
+			v |= 0x01
+		}
+		return v
+	})
+	// Reset default: the NR reset block asserts the expansion-bus /INT
+	// enable (zxnext.vhd:5096 nr_c4_int_en_0_expbus <= '1'), so a fresh
+	// core reads NR$C4 = $81 (expbus enable + ULA INT enabled).
+	d.Store(0xC4, 0x80)
 }
 
 // WireInterruptControl installs the NextReg $C0 OnWrite handler.
@@ -1169,10 +1186,20 @@ func Wire(opts WireOpts) {
 	WireAltROM(opts.Dispatcher, opts.Memory)
 	WireMachineType(opts.Dispatcher, opts.Memory)
 	WireConfigModeRAMPage(opts.Dispatcher, opts.Memory)
+	// The frame-INT disable latch is port $FF bit 6 in the ULA (the
+	// FPGA's port_ff_reg(6), shared by port $FF / NR$22 / NR$C4
+	// writes). Its sink mirrors every change into the CPU's INT
+	// generator — including direct port $FF writes, which never pass
+	// through the NextReg dispatcher.
+	latch, _ := opts.ULANext.(FrameIntLatch)
+	if sinkSetter, ok := opts.ULANext.(interface{ SetFrameIntDisableSink(func(bool)) }); ok {
+		cpu := opts.CPU
+		sinkSetter.SetFrameIntDisableSink(func(disable bool) { cpu.FrameIntDisabled = disable })
+	}
 	spiReset, _ := opts.DivMMCPager.(SPIResetter)
-	WireReset(opts.Dispatcher, opts.Memory, opts.CPU, spiReset)
+	WireReset(opts.Dispatcher, opts.Memory, opts.CPU, spiReset, latch)
 	WireCPUSpeed(opts.Dispatcher, opts.CPU)
-	WireLineInterrupt(opts.Dispatcher, opts.CPU)
+	WireLineInterrupt(opts.Dispatcher, opts.CPU, latch)
 	WireContentionDisable(opts.Dispatcher, opts.Memory)
 	WirePeripheral2(opts.Dispatcher, opts.AYEngine, opts.DivMMCPager, opts.Memory)
 	WirePeripheral1(opts.Dispatcher, opts.DivMMCPager, opts.Memory)
@@ -1653,30 +1680,46 @@ func WireCPUSpeed(d *nextregs.Dispatcher, cpu *z80.CPU) {
 // NextZXOS uses this in IM 2 mode (NR$C0 bit 3 = 1) to drive its
 // per-frame scheduler step independently of the frame INT.
 //
-// NR$22 layout (Spectrum Next core register spec):
+// NR$22 layout (nextreg.txt 0x22 + zxnext.vhd:5297):
 //
-//	bit 7 = line interrupt enable (1 = enable)
-//	bit 6 = ULA frame interrupt disable (1 = disable normal frame INT)
+//	bit 7 = (READ-only) "ULA is asserting INT" — not a write field
+//	bit 2 = ULA frame interrupt disable (1 = disable normal frame INT)
+//	bit 1 = line interrupt enable (1 = enable)
 //	bit 0 = bit 8 of 9-bit target scan-line (MSB)
-//	bits 5..1 = reserved
+//	bits 6..3 = reserved
 //
 // NR$23 = bits 7..0 of target scan-line (LSB).
+//
+// Bit 2 does not have its own storage: it writes the SHARED
+// port_ff_reg(6) latch (zxnext.vhd:3619) that port $FF bit 6 and
+// NR$C4 bit 0 also write, and the read composes it back from that
+// latch (vhd:5992). latch carries it (the ULA on ModelNext, where
+// pkg/next.Wire has connected the latch's sink to
+// cpu.FrameIntDisabled); a nil latch falls back to driving
+// cpu.FrameIntDisabled directly for partial test wirings.
 //
 // 228 T-states per scan line at the 3.5 MHz reference; we scale by
 // the CPU's SpeedMultiplier so the offset stays correct under turbo
 // modes (NR$07 = 14 / 28 MHz). Must be called after WireCPUSpeed
 // (so OnWriteFn(0x07) is non-nil and we can chain onto it).
-func WireLineInterrupt(d *nextregs.Dispatcher, cpu *z80.CPU) {
+func WireLineInterrupt(d *nextregs.Dispatcher, cpu *z80.CPU, latch FrameIntLatch) {
 	const tstatesPerScanLine = 228
+	setFrameIntDisable := func(disable bool) {
+		if latch != nil {
+			latch.SetULAFrameIntDisable(disable) // sink mirrors to cpu
+		} else {
+			cpu.FrameIntDisabled = disable
+		}
+	}
+	frameIntDisabled := func() bool {
+		if latch != nil {
+			return latch.ULAFrameIntDisabled()
+		}
+		return cpu.FrameIntDisabled
+	}
 	recompute := func() {
 		nr22 := d.Raw(0x22)
 		nr23 := d.Raw(0x23)
-		// Per nextreg.txt 0x22 + zxnext.vhd:5297 the bit positions are:
-		//   bit 2 = frame INT disable
-		//   bit 1 = line INT enable
-		//   bit 0 = MSB of 9-bit line target value
-		//   bit 7 = (READ-only) "ULA is asserting INT" — not a write field
-		cpu.FrameIntDisabled = nr22&0x04 != 0
 		if nr22&0x02 == 0 {
 			cpu.LineIntOffsetTstates = 0
 			return
@@ -1694,15 +1737,25 @@ func WireLineInterrupt(d *nextregs.Dispatcher, cpu *z80.CPU) {
 		cpu.LineIntOffsetTstates = lineAbs * tstatesPerScanLine * uint64(cpu.SpeedMultiplier())
 	}
 	d.SetOnWrite(0x22, func(disp *nextregs.Dispatcher, v byte) {
-		// Per zxnext.vhd:5905 the NR$22 read shape is
-		//   bit 7 = (not pulse_int_n) dynamic — we don't model
-		//   bits 6:3 = "0000" reserved
-		//   bit 2 = frame INT disable
-		//   bit 1 = line INT enable
-		//   bit 0 = line interrupt MSB
-		// Mask bits 7:3 off so readback matches.
-		disp.Store(0x22, v&0x07)
+		// Only bits 1:0 (line enable + target MSB) are NR$22's own
+		// storage; bit 2 goes to the shared latch. Reserved bits are
+		// masked so the raw byte can't drift from the read shape.
+		disp.Store(0x22, v&0x03)
+		setFrameIntDisable(v&0x04 != 0)
 		recompute()
+	})
+	// Read composition per zxnext.vhd:5992:
+	//   bit 7 = (not pulse_int_n) dynamic — we don't model
+	//   bits 6:3 = "0000" reserved
+	//   bit 2 = port_ff_interrupt_disable — the SHARED latch, so a
+	//           port $FF or NR$C4 write shows up here
+	//   bits 1:0 = line INT enable + line target MSB (own storage)
+	d.SetOnRead(0x22, func(disp *nextregs.Dispatcher) byte {
+		v := disp.Raw(0x22) & 0x03
+		if frameIntDisabled() {
+			v |= 0x04
+		}
+		return v
 	})
 	d.SetOnWrite(0x23, func(disp *nextregs.Dispatcher, v byte) {
 		disp.Store(0x23, v)
@@ -1832,7 +1885,7 @@ func WireAltROM(d *nextregs.Dispatcher, mem *memory.Memory) {
 // divmmcSPI, if non-nil, has its SPI chip-select deasserted on every
 // reset (hard or soft) — modelling the FPGA's port_e7_reg reset. Pass
 // nil on classic-model / SD-less / test paths.
-func WireReset(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcSPI SPIResetter) {
+func WireReset(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcSPI SPIResetter, latch FrameIntLatch) {
 	// DIAGNOSTIC (not a fix): ZX_GO_SUPPRESS_RESET_PC="$XXXX" suppresses the
 	// actual reset effect for soft-resets whose trigger PC matches, while
 	// still latching NR$02. Used to test whether the recurring NextZXOS
@@ -1969,6 +2022,17 @@ func WireReset(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcS
 			divmmcSPI.ResetSPI()
 		}
 		if hardFire || softFire {
+			// port_ff_reg is cleared by the shared reset block on BOTH
+			// reset types (zxnext.vhd:3611 under `reset`, which
+			// zxnext_top_issue5.vhd:880 asserts for hard OR soft) — the
+			// frame-INT disable latch re-enables the frame INT. Only the
+			// latch bit is modelled here; the Timex video bits follow the
+			// existing keep-the-NR-file policy documented above.
+			if latch != nil {
+				latch.SetULAFrameIntDisable(false)
+			} else {
+				cpu.FrameIntDisabled = false
+			}
 			// NR$8C Alt-ROM staged-nibble promote (zxnext.vhd:2255): the
 			// core `reset` signal — asserted for BOTH reset types
 			// (zxnext_top_issue5.vhd:880 reset <= reset_hard or

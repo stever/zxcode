@@ -19,7 +19,7 @@ func nr02Harness(t *testing.T) *nextregs.Dispatcher {
 	}
 	disp := nextregs.New()
 	cpu := z80.New(mem, wireTestULA{})
-	WireReset(disp, mem, cpu, nil)
+	WireReset(disp, mem, cpu, nil, nil)
 	return disp
 }
 
@@ -87,7 +87,7 @@ func TestNR02ResetTypeSeed_FPGABootROM(t *testing.T) {
 	mem.SetFPGABootROM(make([]byte, 8192)) // bootrom active BEFORE WireReset
 	disp := nextregs.New()
 	cpu := z80.New(mem, wireTestULA{})
-	WireReset(disp, mem, cpu, nil)
+	WireReset(disp, mem, cpu, nil, nil)
 
 	if got := disp.ReadReg(0x02) & 0x03; got != 0x00 {
 		t.Fatalf("FPGA-bootrom cold NR$02 low bits = %#02x, want 00 (power-on seed 100)", got)

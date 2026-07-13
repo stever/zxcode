@@ -18,7 +18,7 @@ func bootromHarness(t *testing.T) (*nextregs.Dispatcher, *memory.Memory, *z80.CP
 	disp := nextregs.New()
 	cpu := z80.New(mem, wireTestULA{})
 	WireMachineType(disp, mem)
-	WireReset(disp, mem, cpu, nil)
+	WireReset(disp, mem, cpu, nil, nil)
 	return disp, mem, cpu
 }
 

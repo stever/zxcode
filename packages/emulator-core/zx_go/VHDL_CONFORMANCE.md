@@ -70,13 +70,13 @@ Every `nr_XX_* <= value` in the reset process. Read-back byte composed per the
 | $B9 divmmc ep_valid | $01 | $01 | ✅ | divmmc.New seeds epValid0=$01 (verified 2026-06-05); soft reset re-arms via WireReset |
 | $BA divmmc ep_timing | $00 | $00 | ✅ | |
 | $BB divmmc ep1 | $CD | $CD | ✅ | |
-| $C4 int en 0 | bit expbus=1 | $00 | ❌ | **GAP**: NR$C4 expbus int enable resets to 1 |
+| $C4 int en 0 | bit expbus=1 → reads $81 | $81 | ✅ | FIXED (was $00): WireInterruptEnable0 seeds bit 7 (vhd:5096) and composes the read (vhd:6239 — see Axis 4 port $FF bit 6) |
 | $C0 im2/nmi | $00 | $00 | ✅ | |
 | (all others) | $00 | $00 | ✅ | clip/scroll/copper/dma-int reset to 0 |
 
-**Axis 1 remaining gaps to close:** NR$C4 (expbus bit 7 resets to 1, but its
-read-back is composed with the ULA/line int-enable bits — needs the composed
-mux, not a bare default), NR$0B/$A9 (composed). None are boot-blocking. (NR$98/
+**Axis 1 remaining gaps to close:** NR$0B/$A9 (composed). None are
+boot-blocking. (NR$C4 closed: expbus default seeded AND the read composed
+from the live int-enable state — the port $FF bit 6 work, Axis 4.) (NR$98/
 $99 fixed earlier; NR$68 was a misread — already conformant; NR$10/$7F/$82-$89
 and the ULA-first palette default fixed by the NextReg_defaults audit, which
 now pins the whole default surface the upstream test reads.)
@@ -104,7 +104,9 @@ bits); $85/$89 reset_type shape (vhd:6138/6150). Tool: `--next-nrdiff` (CAVEAT: 
 reference emulator returns $00 for unimplemented read-backs — verify vs VHDL, never
 blind-match). The NextReg_defaults grid pins the read-back of every register its
 tables touch ($00-$B1 range). **Gap:** composed read-backs the grid skips
-($68,$C0,$C4,$C6,$CC-$CE,$A9,$0B,...) still not individually pinned to the VHDL mux.
+($68,$C0,$C6,$CC-$CE,$A9,$0B,...) still not individually pinned to the VHDL mux.
+$22 and $C4 are now composed from the live int-enable state and pinned
+(:5992/:6239 — the port $FF bit 6 shared latch, Axis 4).
 $69 is now composed from its three live sources (:6096) and pinned
 (`TestSpec_NR69_ComposedRead` + the Graphics NextReg0x69 runner); $123B
 reads its composed control state (:3933, `TestLayer2PortReadback`) and
@@ -121,10 +123,19 @@ membrane folds its dedicated keys into exactly those); the MD-only
 buttons have no input source yet, so $B2 reads idle — known-gaps.md.
 
 ## Axis 4 — Ports / IO decode
-Source: zxnext.vhd port decode (`port_*`). Tests: scattered. **Confirmed gap:** port **$FF** (Timex/SCLD) — bit6 = ULA-frame-INT disable
-(`port_ff_interrupt_disable`, vhd 3635/6711/6750) is **not implemented** in
-WritePort (the Timex video bits 5:0 ARE live, and reads compose under
-NR$08 bit 2 — Graphics group). ⚠️ $FE,$7FFD,$1FFD,$243B/$253B,$E3/$E7/$EB,$6B,$DFFD,AY ports present
+Source: zxnext.vhd port decode (`port_*`). Tests: scattered. ✅ Port **$FF**
+bit 6 = ULA-frame-INT disable (`port_ff_interrupt_disable`, vhd 3635) is
+wired as the FPGA's ONE shared latch port_ff_reg(6) (:3609-3623 — written by
+port $FF bit 6, NR$22 bit 2, NR$C4 bit 0 inverted; NR$69 leaves it alone),
+gating INT GENERATION at the source (zxula_timing.vhd:551 via i_inten_ula_n,
+:6750 — a mid-pulse disable withdraws the line) and composed back at NR$22
+bit 2 (:5992), NR$C4 bit 0 (:6239 ula_int_en, reset default $81 :5096) and
+the NR$08-gated port-$FF read; cleared by the shared reset block (:3611,
+hard AND soft). Pinned by TestPortFFBit6FrameIntDisable /
+TestFrameIntDisableSharedLatchWriters / TestFrameIntDisableResetClears
+(pkg/ula, production wiring), TestSpec_NR22/NRC4 (wire level) and
+TestFrameInt_NarrowPulse_DisableMidPulseWithdraws (pkg/z80).
+⚠️ $FE,$7FFD,$1FFD,$243B/$253B,$E3/$E7/$EB,$6B,$DFFD,AY ports present
 but no port-by-port VHDL decode conformance test.
 
 ## Axis 5 — Interrupts / timing  (zxula_timing.vhd + zxnext.vhd 2014-2033)
@@ -140,8 +151,9 @@ ScanlineReadingAndInterrupt's NR$1E/$1F marker rows (cvc 200 renders exactly
 128K/+3 geometry the Next runs. ⚠️ Remaining: per-NR$03 display geometry is not
 modelled (48K timing keeps the 228 T line — known-gaps.md), the sub-line hc
 component of the INT origin is below the render's one-line floor; line-INT at
-turbo; IM2 vector table; NR$22/$C0/$C4/$C6 enable gates not all wired to the
-INT generator.
+turbo; IM2 vector table; $C0/$C6 enable gates not all wired to the
+INT generator (the NR$22/$C4/port-$FF ULA-frame + line enables ARE — the
+Axis 4 shared latch, `ula_int_en` vhd:6711).
 
 ## Axis 6 — Z80 / Z80N operations  (FUSE + Sean Young + GHDL gate oracle)
 Tests: canonical T-state tables (iter 266-270), per-op timing batches, flags

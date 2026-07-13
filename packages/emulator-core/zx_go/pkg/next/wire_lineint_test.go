@@ -17,7 +17,7 @@ func TestWireLineInterruptNR22EnableComputesOffset(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil)
 
 	disp.Select(0x23)
 	disp.WriteData(192) // line LSB = 192, MSB stays 0
@@ -39,7 +39,7 @@ func TestWireLineInterruptNR22DisableClearsOffset(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil)
 
 	disp.Select(0x23)
 	disp.WriteData(50)
@@ -62,7 +62,7 @@ func TestWireLineInterruptNR22FrameDisable(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil)
 
 	disp.Select(0x22)
 	disp.WriteData(0x04) // bit 2 = frame INT disable
@@ -78,7 +78,7 @@ func TestWireLineInterruptNR22MSBCombines(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil)
 
 	disp.Select(0x23)
 	disp.WriteData(0x00)
@@ -97,7 +97,7 @@ func TestWireLineInterruptScalesWithSpeed(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil)
 
 	disp.Select(0x23)
 	disp.WriteData(100)
