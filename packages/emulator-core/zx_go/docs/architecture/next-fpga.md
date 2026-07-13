@@ -91,6 +91,11 @@ drift. Highlights:
   drift).
 - Peripherals: `WirePeripheral1/2/3` (NR$0A/$06/$09), `WireJoystickMode`,
   `WireRTC`, `WireUART`, `WireKeymap`, plus reserved-bit masks.
+- Input read-back: `WireExtendedKeys` (NR$B0/$B1 extended keys, NR$B2
+  MD-pad extra buttons) — read-only registers composed on every read
+  from the live ULA input state (keyboard-matrix composites + the
+  Kempston-backed joystick vector), the same live-source pattern as
+  NR$69.
 - Deliberately not wired here: the zxnDMA (ports $6B/$0B, wired via
   `ULA.SetNextDMA`) and the Pi accelerator registers (default storage).
 

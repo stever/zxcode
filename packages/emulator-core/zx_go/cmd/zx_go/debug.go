@@ -637,10 +637,19 @@ func parseDumpMemSpec(spec string) []dumpMemRange {
 
 // pressKeyEntry is one parsed --press-key schedule entry.
 type pressKeyEntry struct {
-	frame int
-	row   int  // 0..7
-	mask  byte // 0x01..0x10
-	name  string
+	frame    int
+	row      int  // 0..7
+	mask     byte // 0x01..0x10
+	kempston bool // when true, mask is a Kempston joystick bit and row is unused
+	name     string
+}
+
+// pressKempstonMap maps --press-key joystick names to Kempston
+// button bits (pkg/ula constants). Lets headless runs drive games
+// whose menus only accept joystick input (e.g. Warhawk's
+// "press fire to play").
+var pressKempstonMap = map[string]byte{
+	"kright": 0x01, "kleft": 0x02, "kdown": 0x04, "kup": 0x08, "kfire": 0x10,
 }
 
 // pressKeyMap is the Spectrum keyboard matrix lookup used by
@@ -686,6 +695,10 @@ func parsePressKeySpec(spec string) []pressKeyEntry {
 		// sees a simultaneous combination — BREAK, quote, etc.
 		for _, key := range strings.Split(name, "+") {
 			key = strings.TrimSpace(key)
+			if kmask, ok := pressKempstonMap[key]; ok {
+				out = append(out, pressKeyEntry{frame: frame, mask: kmask, kempston: true, name: key})
+				continue
+			}
 			mp, ok := pressKeyMap[key]
 			if !ok {
 				slog.Warn("press-key: unknown key", "name", key)

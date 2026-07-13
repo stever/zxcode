@@ -1727,6 +1727,32 @@ func (u *ULA) SetKempstonButton(mask byte, pressed bool) {
 	}
 }
 
+// ExtendedKeys exposes the keyboard's Spectrum Next extended-key vector
+// (i_KBD_EXTENDED_KEYS) for the NR $B0/$B1 read-back — see
+// keyboard.ExtendedKeys for the bit layout and derivation.
+func (u *ULA) ExtendedKeys() uint16 {
+	return u.kbd.ExtendedKeys()
+}
+
+// MDJoyLeft returns the left joystick as the FPGA's 12-bit i_JOY_LEFT
+// vector, active high, bits 11..0 = MODE X Z Y START A C B U D L R
+// (zxnext.vhd:90). Our joystick state is the Kempston byte, whose low
+// five bits (Fire=B, U, D, L, R) are the same order as i_JOY(4:0) —
+// the FPGA feeds i_JOY(5:0) straight to the Kempston port read
+// (zxnext.vhd:3479). The Megadrive-only buttons (START A C, and the
+// X Z Y MODE that NR $B2 reads) have no emulator-side source yet and
+// read idle (0).
+func (u *ULA) MDJoyLeft() uint16 {
+	return uint16(u.KempstonState & 0x1F)
+}
+
+// MDJoyRight is the right joystick's i_JOY_RIGHT vector. Only one
+// joystick is modelled (the Kempston state, reported as the left pad),
+// so the right pad always reads idle.
+func (u *ULA) MDJoyRight() uint16 {
+	return 0
+}
+
 // WritePort handles CPU writes to ULA-controlled ports. Public
 // entry point: dispatches to the internal handler and then fires
 // the port tracer if one is installed.

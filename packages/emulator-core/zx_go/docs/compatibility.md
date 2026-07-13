@@ -147,13 +147,13 @@ headless — not a full playability verdict.
 | Sonic the Hedgehog | Works (caveat) | Renders level/scroll/sprite/HUD and is controllable (arrows + Right-Alt/Ctrl). Residual: a few HUD icons in the top-right diverge from hardware (a game-loop/interrupt-timing detail, not a render bug). Not re-run in the 2026-07 sweep (file not present). |
 | Celeste | Works | Menu and in-game verified headless: ENTER starts the game, level + player render, gameplay frames advance. |
 | Nextoid | Works (caveat) | Boots to its input menu; drivable ('S' then SPACE). Note for headless driving: the menu's key poll only starts a few hundred frames after the menu is visible (intro loops run first), so fixed-frame key schedules are easy to mistime. |
-| Quantum Storm | Works (menu) | Options menu renders. Default controls are a pad ("8BitDo M30") — see the NR $B0-$B2 gap below; input not verified. |
+| Quantum Storm | Works (menu) | Options menu renders. Default controls are a pad ("8BitDo M30"); NR $B0-$B2 read-back is now live-composed, but the MD-only pad buttons still have no input source in any frontend (known-gaps.md), so pad-default titles need their control options switched to keyboard/Kempston. Input not verified. |
 | Head Over Heels (Next) | Works (title) | Title logo renders. |
 | Lords of Midnight (Next) | Works (title) | Title screen renders. |
 | Scramble (Next) | Works (title) | Title screen renders. |
 | Space Invaders (Next) | Works (title) | Title screen renders. |
 | Tyvarian | Works (title) | Title screen renders. |
-| Warhawk | Known issue | Title + high-score screens render, but the game cannot be started: it polls input ~40k times via NextReg $B2 (extended keys / MD pad) and barely touches the $FE matrix — NR $B0/$B1/$B2 are unimplemented, so it never sees a keypress. |
+| Warhawk | Works | Verified headless end-to-end: starts, plays (ship, scrolling level, enemies, scoring) and reaches GAME OVER. The menu wants a fire EDGE twice — the first brings up "PRESS FIRE TO PLAY", the second starts — from keyboard SPACE (`--press-key "space@N"` repeated every ~90 frames) or Kempston fire (`kfire@N`). The earlier "unstartable, NR $B0-$B2" verdict was a harness artifact: the timed key schedule never landed the two-edge sequence and `--press-key` had no joystick names (it does now). An A/B run with `WireExtendedKeys` disabled starts identically — the game reads NR $B2 each input poll (masked $0E = left-pad X/Z/Y) but $00-idle satisfies it. |
 | NextBASIC Invaders | Known issue | Draws the first invader wave, then freezes (screen hash identical for thousands of frames). Stuck spinning with IM 2 + interrupts disabled and SP=$20B6 while MMU slots 0/1 are ROM — pushed return addresses are discarded (the SP-in-ROM-window wreckage class below). Earlier report: `Integer out of range` during play — a NextBASIC `DEFPROC` parameter/local-var storage divergence ([janko-jj's reports](https://github.com/conorarmstrong/zx_go/issues)). |
 | Baggers in Space (Stonechat Games) | Known issue | Black screen after load. Stuck in a 9-instruction infinite loop calling its MMU6/7 paging helper: SP=$2098 with MMU slots 0/1 = ROM, so CALL pushes vanish and RET pops constant ROM bytes (SP-in-ROM-window class). |
 | Crowley World Tour | Known issue | Black screen after load. Spinning with IM 2 + interrupts disabled, SP=$20AE in the ROM window (SP-in-ROM-window class). |
@@ -184,11 +184,18 @@ blocks (the conformance prioritizer — see work item #159):
    Fist HALTs with IFF1=0). Possibly the same upstream cause as
    class 1 (all die at/near the loader → game handoff), but the
    signatures differ (SP intact). Lockstep candidates.
-3. **NR $B0/$B1/$B2 extended-keys / MD-pad registers unwired —
-   blocks input in 1 title outright, risk for 2+** (Warhawk
-   unstartable; Quantum Storm defaults to pad controls). Concrete,
-   small, matrix-actionable: reflect the keyboard matrix + joystick
-   state into NR $B0-$B2 read-back. Best value-for-effort row.
+3. **NR $B0/$B1/$B2 extended-keys / MD-pad registers — CLOSED
+   (work item #160), and the original blame was wrong.** The
+   registers are now live-composed and VHDL-pinned
+   (VHDL_CONFORMANCE.md Axis 3), but the A/B run showed Warhawk
+   never needed them: its "unstartable" verdict was a triage
+   harness artifact (the menu needs two fire edges, and
+   `--press-key` couldn't press joystick buttons — it now accepts
+   `kfire`/`kup`/`kdown`/`kleft`/`kright`). Warhawk is verified
+   playing headless. Residual, tracked in known-gaps.md: the
+   MD-only pad buttons (X Z Y MODE START A C) have no input
+   source, so pad-default titles (Quantum Storm) still need their
+   keyboard/Kempston control options.
 4. **Alive-but-black display path — 1 title** (Bomb Jack: line IRQ
    delivered, game loop runs, Layer 2 enabled, but its palette/pixel
    upload never lands). Suspects: DMA transfer path, Layer 2 write

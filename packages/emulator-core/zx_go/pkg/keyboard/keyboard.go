@@ -191,6 +191,70 @@ func (k *Keyboard) Scan(addr uint16) byte {
 	return result
 }
 
+// ExtendedKeys returns the Spectrum Next membrane's extended-key vector
+// (i_KBD_EXTENDED_KEYS, active high), bit layout per the FPGA's NR $B0/$B1
+// read mux comment (zxnext.vhd:6203-6204):
+//
+//	bits 15..8 = DOWN LEFT RIGHT DELETE . , " ;
+//	bits  7..0 = EDIT BREAK INV TRU GRAPH CAPSLOCK UP EXTEND
+//
+// On real hardware the vector comes from the membrane's dedicated key
+// columns 5..6 (membrane.vhd:158-175, read at :253-254), and each dedicated
+// key ALSO folds a composite CAPS/SYM entry into the standard 8x5 matrix
+// (membrane.vhd:236-249: UP = CAPS+7, EDIT = CAPS+1, ';' = SYM+O, ...).
+// Our model has no dedicated-key state — the host mapping (initKeyMap)
+// expresses those keys as exactly the composites the membrane would fold —
+// so this derives the vector by recognising the composites in the live
+// matrix: the inverse of the hardware fold, observably identical for the
+// NR $B0/$B1 read-back. Known divergence: a genuine two-key composite
+// (holding CAPS SHIFT and 7) also asserts the extended bit, which the
+// membrane's dedicated-column scan would not.
+func (k *Keyboard) ExtendedKeys() uint16 {
+	k.matrixMu.RLock()
+	defer k.matrixMu.RUnlock()
+
+	// Same effective-matrix rule as Scan: a TypeRune symbol pulse overlays
+	// its SYMBOL-SHIFT combo and releases CAPS SHIFT.
+	pulse := k.pulseFrames > 0
+	row := func(r int) byte {
+		m := k.matrix[r]
+		if pulse {
+			if r == 0 {
+				m |= 0x01
+			}
+			m &= k.pulseMatrix[r]
+		}
+		return m
+	}
+	r0, r3, r4, r5, r7 := row(0), row(3), row(4), row(5), row(7)
+	caps := r0&0x01 == 0
+	sym := r7&0x02 == 0
+
+	var ek uint16
+	set := func(bit uint, on bool) {
+		if on {
+			ek |= 1 << bit
+		}
+	}
+	set(0, caps && sym)           // EXTEND    = CAPS + SYMBOL
+	set(1, caps && r4&0x08 == 0)  // UP        = CAPS + 7
+	set(2, caps && r3&0x02 == 0)  // CAPS LOCK = CAPS + 2
+	set(3, caps && r4&0x02 == 0)  // GRAPH     = CAPS + 9
+	set(4, caps && r3&0x04 == 0)  // TRUE VID  = CAPS + 3
+	set(5, caps && r3&0x08 == 0)  // INV VID   = CAPS + 4
+	set(6, caps && r7&0x01 == 0)  // BREAK     = CAPS + SPACE
+	set(7, caps && r3&0x01 == 0)  // EDIT      = CAPS + 1
+	set(8, sym && r5&0x02 == 0)   // ;         = SYM  + O
+	set(9, sym && r5&0x01 == 0)   // "         = SYM  + P
+	set(10, sym && r7&0x08 == 0)  // ,         = SYM  + N
+	set(11, sym && r7&0x04 == 0)  // .         = SYM  + M
+	set(12, caps && r4&0x01 == 0) // DELETE   = CAPS + 0
+	set(13, caps && r4&0x04 == 0) // RIGHT    = CAPS + 8
+	set(14, caps && r3&0x10 == 0) // LEFT     = CAPS + 5
+	set(15, caps && r4&0x10 == 0) // DOWN     = CAPS + 6
+	return ek
+}
+
 // initKeyMap sets up the mapping from fyne.KeyName to Spectrum keyboard matrix.
 // This is based on the layout of a standard UK Spectrum.
 func (k *Keyboard) initKeyMap() {

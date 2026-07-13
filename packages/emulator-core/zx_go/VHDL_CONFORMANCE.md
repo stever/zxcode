@@ -109,6 +109,16 @@ $69 is now composed from its three live sources (:6096) and pinned
 (`TestSpec_NR69_ComposedRead` + the Graphics NextReg0x69 runner); $123B
 reads its composed control state (:3933, `TestLayer2PortReadback`) and
 port $FF reads return the Timex register under NR$08 bit 2 (:2813).
+$B0/$B1 (extended keys) and $B2 (MD-pad X Z Y MODE) are composed from
+the live keyboard matrix + joystick vectors and pinned bit-for-bit to
+the read mux (:6206-6215, i_JOY order :90-91, membrane fold
+membrane.vhd:236-249) by `TestWireExtendedKeysB0B1Shuffle` /
+`TestWireExtendedKeysB2Shuffle` / `TestWireExtendedKeysReadOnly` (wire
+level), `TestExtendedKeys` (matrix derivation) and
+`TestNextExtendedKeysFullStack` (keyboard+ULA through the production
+wiring). Extended keys derive from the classic CAPS/SYM composites (the
+membrane folds its dedicated keys into exactly those); the MD-only
+buttons have no input source yet, so $B2 reads idle — known-gaps.md.
 
 ## Axis 4 — Ports / IO decode
 Source: zxnext.vhd port decode (`port_*`). Tests: scattered. **Confirmed gap:** port **$FF** (Timex/SCLD) — bit6 = ULA-frame-INT disable

@@ -951,6 +951,57 @@ func WireULAControl(d *nextregs.Dispatcher, sink ULAVideoSink, l2 *layer2.Layer2
 	})
 }
 
+// ExtendedKeysSource is the live input state the extended-key / MD-pad
+// NextRegs read from (implemented by pkg/ula.ULA: keyboard matrix +
+// Kempston joystick).
+type ExtendedKeysSource interface {
+	// ExtendedKeys is the FPGA's i_KBD_EXTENDED_KEYS vector, active
+	// high: bits 15..8 = DOWN LEFT RIGHT DELETE . , " ; and bits
+	// 7..0 = EDIT BREAK INV TRU GRAPH CAPSLOCK UP EXTEND
+	// (zxnext.vhd:6203-6204).
+	ExtendedKeys() uint16
+	// MDJoyLeft / MDJoyRight are the FPGA's 12-bit i_JOY_* vectors,
+	// active high, bits 11..0 = MODE X Z Y START A C B U D L R
+	// (zxnext.vhd:90-91).
+	MDJoyLeft() uint16
+	MDJoyRight() uint16
+}
+
+// WireExtendedKeys installs the read-only extended-key / Megadrive-pad
+// registers NR $B0/$B1/$B2, composed from the live input state on every
+// read (the NR$69 pattern — nothing is stored):
+//
+//   - NR $B0 (zxnext.vhd:6206-6208) = ek(8) & ek(9) & ek(10) & ek(11) &
+//     ek(1) & ek(15:13) — read as ; " , . UP DOWN LEFT RIGHT.
+//   - NR $B1 (:6210-6212) = ek(12) & ek(7:2) & ek(0) — read as
+//     DELETE EDIT BREAK INV TRU GRAPH CAPSLOCK EXTEND.
+//   - NR $B2 (:6214-6215) = joyR(10:8) & joyR(11) & joyL(10:8) &
+//     joyL(11) — each pad's extra Megadrive buttons X Z Y MODE.
+//
+// All three are read-only (the FPGA's write cases are commented out,
+// zxnext.vhd:5575-5581); the dispatcher's default write path stores a
+// byte that these composed reads never consult, matching the hardware's
+// ignore.
+func WireExtendedKeys(d *nextregs.Dispatcher, src ExtendedKeysSource) {
+	bit := func(v uint16, n uint) byte {
+		return byte(v>>n) & 1
+	}
+	d.SetOnRead(0xB0, func(*nextregs.Dispatcher) byte {
+		ek := src.ExtendedKeys()
+		return bit(ek, 8)<<7 | bit(ek, 9)<<6 | bit(ek, 10)<<5 | bit(ek, 11)<<4 |
+			bit(ek, 1)<<3 | bit(ek, 15)<<2 | bit(ek, 14)<<1 | bit(ek, 13)
+	})
+	d.SetOnRead(0xB1, func(*nextregs.Dispatcher) byte {
+		ek := src.ExtendedKeys()
+		return bit(ek, 12)<<7 | (byte(ek>>2)&0x3F)<<1 | bit(ek, 0)
+	})
+	d.SetOnRead(0xB2, func(*nextregs.Dispatcher) byte {
+		l, r := src.MDJoyLeft(), src.MDJoyRight()
+		return bit(r, 10)<<7 | bit(r, 9)<<6 | bit(r, 8)<<5 | bit(r, 11)<<4 |
+			bit(l, 10)<<3 | bit(l, 9)<<2 | bit(l, 8)<<1 | bit(l, 11)
+	})
+}
+
 // WirePalette installs the NextReg 0x40 (index), 0x41 (8-bit
 // value with auto-increment), 0x42 (ULANext format), 0x43 (palette
 // select) and 0x44 (9-bit value, two-byte sequence) handlers.
@@ -1128,6 +1179,11 @@ func Wire(opts WireOpts) {
 	WireVideoTiming(opts.Dispatcher, opts.Memory)
 	WireJoystickMode(opts.Dispatcher)
 	WireJoystickIOMode(opts.Dispatcher)
+	// NR $B0-$B2 extended keys / MD pad — the ULA carries the live
+	// keyboard-matrix + joystick state these compose from.
+	if src, ok := opts.ULANext.(ExtendedKeysSource); ok {
+		WireExtendedKeys(opts.Dispatcher, src)
+	}
 	WireInterruptControl(opts.Dispatcher, opts.CPU)
 	WireInterruptEnable0(opts.Dispatcher)
 	WireInterruptEnable2(opts.Dispatcher)

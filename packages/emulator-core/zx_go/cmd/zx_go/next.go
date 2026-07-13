@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -201,25 +202,48 @@ func wireNextSubsystems(e *emulator) error {
 				watched[byte(n)] = true
 			}
 		}
+		// ZX_GO_NEXTREG_WATCH_READS: also log READS of the watched
+		// registers (sampled 1:64 per register — input-poll loops read
+		// thousands of times per second) with the polling PC, for
+		// locating a guest's input/status poll loop.
+		watchReads := os.Getenv("ZX_GO_NEXTREG_WATCH_READS") != ""
+		readSample := make(map[byte]uint64)
 		disp.SetTracer(func(reg, val byte, isWrite bool) {
-			if !isWrite || (!watchAll && !watched[reg]) {
+			if !watchAll && !watched[reg] {
 				return
+			}
+			if !isWrite {
+				if !watchReads {
+					return
+				}
+				readSample[reg]++
+				if readSample[reg]&0x3F != 1 {
+					return
+				}
 			}
 			slog.Info("nextreg-watch",
 				"reg", fmt.Sprintf("$%02X", reg),
 				"val", fmt.Sprintf("$%02X", val),
+				"write", isWrite,
 				"pc", fmt.Sprintf("$%04X", cpu.PC))
 		})
 	}
 	if os.Getenv("ZX_GO_NEXTREG_READ_TRACE") != "" {
+		// The count maps are written on the emulation thread and
+		// read by the summary ticker goroutine — take the mutex on
+		// both sides (an unguarded map iteration here used to crash
+		// long runs with "concurrent map iteration and map write").
+		var traceMu sync.Mutex
 		readCounts := make(map[byte]uint64)
 		writeCounts := make(map[byte]uint64)
 		disp.SetTracer(func(reg, val byte, isWrite bool) {
+			traceMu.Lock()
 			if isWrite {
 				writeCounts[reg]++
 			} else {
 				readCounts[reg]++
 			}
+			traceMu.Unlock()
 		})
 		// Print summary on emulator shutdown via finalizer-like hook.
 		// Cheap and well-bounded.
@@ -233,6 +257,7 @@ func wireNextSubsystems(e *emulator) error {
 					reg   byte
 					reads uint64
 				}
+				traceMu.Lock()
 				var deltas []kv
 				for reg, c := range readCounts {
 					d := c - lastReads[reg]
@@ -257,6 +282,7 @@ func wireNextSubsystems(e *emulator) error {
 					}
 					lastWrites[reg] = c
 				}
+				traceMu.Unlock()
 				sort.Slice(wdeltas, func(i, j int) bool { return wdeltas[i].reads > wdeltas[j].reads })
 				for i, kv := range wdeltas {
 					if i >= 5 {

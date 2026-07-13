@@ -602,10 +602,18 @@ func runHeadless(f *cliFlags) {
 			for _, pk := range pressKeys {
 				switch i {
 				case pk.frame:
-					emu.kbd.PressMatrixKey(pk.row, pk.mask, true)
+					if pk.kempston {
+						emu.ula.SetKempstonButton(pk.mask, true)
+					} else {
+						emu.kbd.PressMatrixKey(pk.row, pk.mask, true)
+					}
 					slog.Info("press-key down", "name", pk.name, "frame", i)
 				case pk.frame + keyHold:
-					emu.kbd.PressMatrixKey(pk.row, pk.mask, false)
+					if pk.kempston {
+						emu.ula.SetKempstonButton(pk.mask, false)
+					} else {
+						emu.kbd.PressMatrixKey(pk.row, pk.mask, false)
+					}
 					slog.Info("press-key up", "name", pk.name, "frame", i)
 				}
 			}

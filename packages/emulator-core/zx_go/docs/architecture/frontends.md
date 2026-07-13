@@ -36,7 +36,9 @@ absorbs the rate mismatch.
 ## Headless
 
 `--headless` runs the same machine with no UI: run N `--frames`, drive
-the guest with `--press-key "KEY@FRAME,..."`, save `--save-screen`
+the guest with `--press-key "KEY@FRAME,..."` (matrix key names plus the
+Kempston joystick buttons `kfire`/`kup`/`kdown`/`kleft`/`kright` — some
+game menus only accept joystick fire), save `--save-screen`
 PNGs, `--dump-state`, watchpoints, memory dumps, uninitialised-read
 detection, crash-detect heuristics, time-travel, snapshot-every, and
 trace channels. Env hooks reproduce browser behaviours headlessly
