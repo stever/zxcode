@@ -3,6 +3,7 @@ package testharness
 import (
 	"fmt"
 
+	"github.com/conorarmstrong/zx_go/pkg/roms"
 	"github.com/conorarmstrong/zx_go/pkg/snapshot"
 )
 
@@ -50,6 +51,13 @@ func applySnapshotFile(h *Harness, path string) error {
 	}
 	if s.Memory.Is128K {
 		h.mem.PageMemory(s.Memory.Port7FFD)
+	} else if h.mem.GetCurrentModel() == roms.ModelNext {
+		// A 48K snapshot (.sna/.snx) on the Next runs in NextZXOS's
+		// "48K personality": ROM bank 3 (the 48K BASIC ROM) selected.
+		// A guest's $7FFD ROM-select writes then keep the low bank bit
+		// set and stay on the 48K ROM — the MrKWatkins NextReg0x69
+		// test does exactly that to reach the $3D00 font.
+		h.mem.SetROMBank(3)
 	}
 	h.ula.BorderColour = s.CPU.BorderColor
 	return nil

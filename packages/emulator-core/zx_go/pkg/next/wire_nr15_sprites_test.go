@@ -16,7 +16,7 @@ func TestWireNR15EnablesSprites(t *testing.T) {
 	disp := nextregs.New()
 	e := sprite.New()
 	p := &LayerPriority{}
-	WireLayerPriority(disp, p, e)
+	WireLayerPriority(disp, p, e, nil)
 
 	if e.Enabled() {
 		t.Fatal("sprite engine should start disabled")
@@ -45,7 +45,7 @@ func TestWireNR15SpritePriority(t *testing.T) {
 	disp := nextregs.New()
 	e := sprite.New()
 	p := &LayerPriority{}
-	WireLayerPriority(disp, p, e)
+	WireLayerPriority(disp, p, e, nil)
 
 	if e.ZeroOnTop() {
 		t.Fatal("zero-on-top should start off (reset default)")
@@ -76,7 +76,7 @@ func TestWireNR15OverBorder(t *testing.T) {
 		e.WritePatternByte(0x11)
 	}
 	p := &LayerPriority{}
-	WireLayerPriority(disp, p, e)
+	WireLayerPriority(disp, p, e, nil)
 
 	disp.Select(0x15)
 	disp.WriteData(0x45) // Sonic: bit1=0 (over-border off), bit5=0

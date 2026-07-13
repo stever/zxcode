@@ -10,6 +10,7 @@ import (
 	"github.com/conorarmstrong/zx_go/pkg/ay"
 	"github.com/conorarmstrong/zx_go/pkg/keyboard"
 	"github.com/conorarmstrong/zx_go/pkg/memory"
+	"github.com/conorarmstrong/zx_go/pkg/next/lores"
 	"github.com/conorarmstrong/zx_go/pkg/peripherals"
 	"github.com/conorarmstrong/zx_go/pkg/roms"
 )
@@ -86,6 +87,15 @@ type ULA struct {
 	// (port $FF): bits 2:0 = display mode (110 = 512x192 8x1 hi-res), bits 5:3
 	// = hi-res ink/paper colour. 0 (the reset default) is the normal screen.
 	timexVideoMode byte
+	// timexModeChanged flags any CHANGE to the Timex mode since the last
+	// executed frame's render (CPU port/NR$69 writes between renders, or
+	// copper writes during the compose walk). timexMixedFrame latches it
+	// per executed frame: a frame whose Timex mode changed mid-frame
+	// (the NReg0x69 copper bands) renders through the 320 path with
+	// per-row decimated hi-res, while a STABLE hi-res frame renders the
+	// native 512-wide composite (renderWideTimexHiRes).
+	timexModeChanged bool
+	timexMixedFrame  bool
 
 	// ULANext attribute-decode state (Spectrum Next only), pushed by the
 	// NextReg wiring: NR$43 bit 0 enables ULANext, NR$42 is the ink
@@ -109,6 +119,20 @@ type ULA struct {
 	// resolution, so it is stored but not rendered (known-gaps.md).
 	ulaScrollX, ulaScrollY byte
 	ulaFineScrollX         bool
+
+	// layerControl is the live raw NR$15 byte (see ulaVideoState.nr15).
+	layerControl byte
+
+	// LoRes/Radastan layer state (pkg/next/lores): enable is NR$15 bit 7
+	// (carried raster-stamped in ulaVideoState.nr15); NR$6A mode /
+	// dfile-xor / palette-offset, NR$32/$33 scroll. While enabled, the
+	// LoRes pixel replaces the classic ULA pixel inside the shared NR$1A
+	// clip window (zxnext.vhd:6980).
+	loresRadastan      bool
+	loresRadastanXor   bool
+	loresPaletteOffset byte
+	loresScrollX       byte
+	loresScrollY       byte
 
 	// ULA clip window (NR$1A, zxula.vhd:562): paper pixels outside the
 	// inclusive [x1,x2]×[y1,y2] display-space window are transparent
@@ -290,12 +314,6 @@ type ULA struct {
 	// disk is mounted; nil otherwise. Its ports are decoded only while the
 	// TR-DOS ROM is paged in (mem.IsBetaActive).
 	beta BetaDisk
-
-	// port123BVal shadows the last byte written to the Layer 2 port
-	// $123B (FPGA signal port_123b_dat, reset 0). IN $123B returns it
-	// (zxnext.vhd:2822); the 128K launch's MF NMI handler reads it to
-	// snapshot Layer 2 state.
-	port123BVal byte
 
 	// portTracer, when non-nil, fires after every port read or
 	// write that completes through WritePort / ReadPort. Set via
@@ -635,6 +653,12 @@ type ulaVideoState struct {
 	ulaNextEnabled bool
 	ulaNextFormat  byte
 	ulaPalSecond   bool
+	// nr15 is the raw NR$15 layer-control byte (raster-stamped like the
+	// rest of this state): bits 4:2 the layer priority/blend mode, bit 7
+	// the LoRes enable. The MrKWatkins LayersMixing tests rewrite it per
+	// 32-line raster band from the CPU — each band must composite with
+	// the mode active at its raster line, not the frame-final value.
+	nr15 byte
 }
 
 // ulaVideoChange records a mid-frame ulaVideoState transition at the
@@ -758,8 +782,26 @@ func (u *ULA) recordULAVideoChange() {
 	}
 	u.ulaVideoChanges = append(u.ulaVideoChanges, ulaVideoChange{
 		scanline: scanline,
-		state:    ulaVideoState{u.ulaNextEnabled, u.ulaNextFormat, u.ulaPalSecond},
+		state:    u.liveULAVideoState(),
 	})
+}
+
+// liveULAVideoState snapshots the current raster-stamped video state.
+func (u *ULA) liveULAVideoState() ulaVideoState {
+	return ulaVideoState{u.ulaNextEnabled, u.ulaNextFormat, u.ulaPalSecond, u.layerControl}
+}
+
+// SetLayerControl mirrors the raw NR$15 layer-control byte (priority /
+// blend mode bits 4:2, LoRes enable bit 7). Raster-stamped like the
+// ULANext / displayed-palette state: the MrKWatkins LayersMixing tests
+// rewrite NR$15 per 32-line raster band by CPU timing, so each band must
+// composite with its own mode. Pushed by pkg/next.WireLayerPriority.
+func (u *ULA) SetLayerControl(val byte) {
+	if u.layerControl == val {
+		return
+	}
+	u.layerControl = val
+	u.recordULAVideoChange()
 }
 
 // SetULAScroll mirrors the NR$26/$27 ULA X/Y hardware scroll registers
@@ -788,8 +830,42 @@ func (u *ULA) SetULAClipWindow(x1, x2, y1, y2 byte) {
 // mode alias (zxnext.vhd:3617-3618 — nr_69_we writes port_ff_reg(5:0)).
 // Bits 7:6 of the live port-$FF state are preserved.
 func (u *ULA) SetTimexVideoMode(v byte) {
-	u.timexVideoMode = u.timexVideoMode&0xC0 | v&0x3F
+	nv := u.timexVideoMode&0xC0 | v&0x3F
+	if u.timexVideoMode != nv {
+		u.timexModeChanged = true
+	}
+	u.timexVideoMode = nv
 }
+
+// TimexVideoMode returns the live port-$FF Timex video state's low six
+// bits (port_ff_reg(5:0)) — the source NR$69's composed read pulls its
+// bits 5:0 from (zxnext.vhd:6096).
+func (u *ULA) TimexVideoMode() byte { return u.timexVideoMode & 0x3F }
+
+// SetULABlendMode mirrors NR$68 bits 6:5 (the blend operand select for
+// the additive layer modes 6/7) and bit 0 (the ULA/tilemap AND-stencil),
+// forwarded to the Next compositor's blend path. Pushed by
+// pkg/next.WireULAControl.
+func (u *ULA) SetULABlendMode(mode byte, stencil bool) {
+	if c, ok := u.nextCompositor.(interface{ SetBlendConfig(byte, bool) }); ok {
+		c.SetBlendConfig(mode, stencil)
+	}
+}
+
+// SetLoResControl mirrors NR$6A: bit 5 radastan mode, bit 4 the
+// radastan display-file XOR, bits 3:0 the palette offset
+// (zxnext.vhd:5455-5458 → lores_mode_0 / lores_dfile_0 /
+// lores_palette_offset_0 at :6795-6797). Pushed by pkg/next.WireULAControl.
+func (u *ULA) SetLoResControl(radastan, radastanXor bool, paletteOffset byte) {
+	u.loresRadastan = radastan
+	u.loresRadastanXor = radastanXor
+	u.loresPaletteOffset = paletteOffset & 0x0F
+}
+
+// SetLoResScroll mirrors NR$32/$33, the LoRes layer's own scroll pair
+// (zxnext.vhd:6772-6773 — independent of the ULA's NR$26/$27). Pushed
+// by pkg/next.WireULAControl.
+func (u *ULA) SetLoResScroll(x, y byte) { u.loresScrollX, u.loresScrollY = x, y }
 
 // ulaDisabledFill is the colour painted across the frame when the ULA output
 // is disabled: the Next compositor's NR$4A fallback when one is wired, else
@@ -880,7 +956,7 @@ func (u *ULA) Render() *image.RGBA {
 		// Fold the raster-stamped ULA-video changes (ULANext decode,
 		// displayed-palette select) into the per-display-line state map the
 		// Next render passes consume — the same fold as borderPerLine.
-		liveVideo := ulaVideoState{u.ulaNextEnabled, u.ulaNextFormat, u.ulaPalSecond}
+		liveVideo := u.liveULAVideoState()
 		if len(u.ulaVideoChanges) > 0 {
 			cur := u.frameStartULAVideo
 			idx := 0
@@ -991,11 +1067,25 @@ func (u *ULA) Render() *image.RGBA {
 			// 80-column tilemap = 640px wide; render the wide frame.
 			return u.renderWide()
 		}
+		// Timex hi-res through the compositor: a STABLE hi-res frame
+		// re-renders the paper at its native 512 half-pixels and
+		// composites at that granularity; a mixed-mode frame (copper
+		// switching NR$69 per band) already rendered decimated hi-res
+		// rows in the 320 walk above.
+		if !stale {
+			u.timexMixedFrame = u.timexModeChanged
+			u.timexModeChanged = false
+		}
+		if u.timexHiResActive() && !u.timexMixedFrame {
+			return u.renderWideTimexHiRes()
+		}
+		if u.timexHiResActive() {
+			return u.img
+		}
 	}
 
-	// Timex 512x192 8x1 hi-res (port $FF mode 110): the NextZXOS 64/85-column
-	// text modes (e.g. the .more text viewer) use it. Rendered as a 640-wide
-	// frame, like the other wide modes.
+	// Timex 512x192 8x1 hi-res (port $FF mode 110) without a Next
+	// compositor (classic machines): the pixel-doubled ULA-only render.
 	if u.timexHiResActive() {
 		return u.renderTimexHiRes()
 	}
@@ -1036,7 +1126,7 @@ func (u *ULA) renderNextFullHeight() *image.RGBA {
 	bc := u.palette[u.BorderColour&0x0F]
 	if res, ok := u.liveULAResolver(); ok {
 		c := u.nextBorderColourRGBA(u.BorderColour, res,
-			ulaVideoState{u.ulaNextEnabled, u.ulaNextFormat, u.ulaPalSecond})
+			u.liveULAVideoState())
 		bc = color.RGBA{R: c[0], G: c[1], B: c[2], A: c[3]}
 	}
 	rowFull := make([]byte, TotalWidth*4)
@@ -1199,15 +1289,22 @@ func (u *ULA) renderHiResLayer2() *image.RGBA {
 	return wide
 }
 
-// ActiveVideoLine returns the current raster line within the frame,
-// derived from the CPU's T-state position (T-states since frame start /
-// T-states-per-line). It is a 9-bit counter (0..511). The Spectrum Next
-// exposes this via NextReg $1E (MSB, bit 0) / $1F (LSB): NextZXOS dot
-// commands such as NextGuide DISABLE interrupts and poll it to sync to
-// the raster, so it MUST advance as the CPU runs or the wait hangs.
+// ActiveVideoLine returns the current raster line in the FPGA's video-
+// counter convention (cvc): line 0 is the TOP PAPER line, 191 the last,
+// and the bottom border / blank / top border run 192..310 (128K timing,
+// 311 lines). This is the counter NextReg $1E (MSB, bit 0) / $1F (LSB)
+// read (zxnext.vhd:5982-5986 — port_253b_dat <= cvc), the same
+// convention as the copper WAIT lines and the NR$22/$23 line interrupt
+// (paper top = raw line 64 after the frame INT — see WireLineInterrupt).
+// NextZXOS dot commands such as NextGuide DISABLE interrupts and poll it
+// to sync to the raster, so it MUST advance as the CPU runs or the wait
+// hangs; the MrKWatkins suite's WaitForScanline loops rely on the paper-
+// relative values to place raster-timed effects on the right rows.
 func (u *ULA) ActiveVideoLine() int {
 	line, _ := u.BeamPosition()
-	return line
+	const linesPerFrame = 311 // 70908 / 228 (128K timing, Next included)
+	const paperStartLine = 64 // frame INT → paper top, per WireLineInterrupt
+	return (line + linesPerFrame - paperStartLine) % linesPerFrame
 }
 
 // BeamPosition returns the current raster beam position derived from the
@@ -1320,13 +1417,23 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 		}
 	}
 
-	// Port $123B (Layer 2) readback: returns the last value written
-	// (zxnext.vhd:2822 port_123b_rd_dat <= port_123b_dat). The 128K
-	// launch's MF NMI handler reads $123B to snapshot Layer 2 state, so
-	// this must return the real latch, not open bus (which would read as
-	// bit1=1, "Layer 2 visible", and leave it visibly enabled afterwards).
+	// Port $123B (Layer 2) readback: the COMPOSED control state, not the
+	// last written byte (zxnext.vhd:3933 port_123b_dat <= segment & "00" &
+	// shadow & rd_en & layer2_en & wr_en) — so a bank-offset write (bit 4
+	// set) doesn't corrupt the read-back, and a Layer 2 enable via NR$69
+	// bit 7 is reflected here. The 128K launch's MF NMI handler reads
+	// $123B to snapshot Layer 2 state, so this must return the real
+	// state, not open bus (which would read as bit1=1, "Layer 2
+	// visible", and leave it visibly enabled afterwards).
 	if u.nextRegs != nil && addr == 0x123B {
-		return u.port123BVal, true
+		var v byte
+		if u.mem != nil {
+			v = u.mem.Layer2MapControl()
+		}
+		if u.nextRegs.ReadReg(0x69)&0x80 != 0 {
+			v |= 0x02
+		}
+		return v, true
 	}
 
 	// Port $303B read: sprite status (bit 0 collision, bit 1
@@ -1395,6 +1502,16 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 		if value, handled := u.peripherals.HandlePortRead(addr); handled {
 			return value, true
 		}
+	}
+
+	// Port $FF Timex read-back: with NR$08 bit 2 set ("Enable port $FF
+	// Timex video-mode read"), IN A,($FF) returns the live port-$FF
+	// register instead of the floating bus (zxnext.vhd:2813
+	// port_ff_rd_dat <= port_ff_dat_tmx when nr_08_port_ff_rd_en). The
+	// MrKWatkins NextReg0x69 test sets this bit and reads Timex state
+	// through the port to verify the NR$69 aliasing.
+	if u.nextRegs != nil && (addr&0xFF) == 0xFF && u.nextRegs.ReadReg(0x08)&0x04 != 0 {
+		return u.timexVideoMode, true
 	}
 
 	// Kempston joystick: port 0x1F. Decoded as A7..A5 = 0 and A4..A0 = 0x1F.
@@ -1592,6 +1709,9 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// hi-res mode. Stored here; rendered by renderTimexHiRes. Falls through so
 	// any other $FF semantics are unaffected.
 	if (addr & 0xFF) == 0xFF {
+		if u.timexVideoMode != val {
+			u.timexModeChanged = true
+		}
 		u.timexVideoMode = val
 	}
 	// Spectrum Next NextReg ports take priority over any other
@@ -1661,35 +1781,36 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 		return
 	}
 
-	// Port 0x123B: legacy Spectrum Next Layer 2 control. Per the
-	// TBBlue NextReg spec (nextreg.txt 0x69) "bit 7 = Enable layer
-	// 2 (alias port 0x123B bit 1)" — boot.bin writes its testcard
-	// to Layer 2 RAM and enables the layer via this port, NOT via
-	// NR$69 directly. Without this dispatch the testcard centre
-	// stays blank because Layer 2 is never visible to the
-	// compositor. Bits beyond the visibility alias map to L2 write
-	// enable / shadow / banking; they go through to NR$69 too so
-	// the FPGA-canonical NextReg accurately reflects the state.
+	// Port 0x123B: legacy Spectrum Next Layer 2 control
+	// (zxnext.vhd:3914-3923). A write with bit 4 clear sets the control
+	// register: bit 1 = Layer 2 visible (the SAME live register NR$69
+	// bit 7 writes — boot.bin enables its testcard through this port),
+	// bit 0/2 = write/read-over-ROM paging, bit 3 = shadow PAGING select
+	// (which NR$13 bank the over-ROM window maps — display source is
+	// untouched: the FPGA's $123B write drives no ULA-shadow signal),
+	// bits 7:6 = segment. A write with bit 4 set loads only the 3-bit
+	// bank offset (core 3.0.7+) and must leave the control state alone.
 	if u.nextRegs != nil && addr == 0x123B {
-		u.port123BVal = val // FPGA port_123b_dat — IN $123B reads this back
 		// Layer-2 write/read paging: route CPU accesses to Layer-2 RAM while
 		// enabled (bit 0/2) so a game's Layer-2 screen clear hits Layer-2 RAM,
 		// not normal RAM. (zxnext.vhd:3915-3933)
 		if u.mem != nil {
 			u.mem.SetLayer2MapControl(val)
 		}
-		nr69 := u.nextRegs.ReadReg(0x69)
-		if val&0x02 != 0 {
-			nr69 |= 0x80
-		} else {
-			nr69 &^= 0x80
+		if val&0x10 == 0 {
+			// Propagate bit 1 into the shared layer2_en register through
+			// the NR$69 write fan-out — composing the OTHER bits from
+			// their live sources (shadow display, Timex mode) so this
+			// write changes only what the FPGA's would.
+			nr69 := u.timexVideoMode & 0x3F
+			if u.mem != nil && u.mem.ScreenPage == 7 {
+				nr69 |= 0x40
+			}
+			if val&0x02 != 0 {
+				nr69 |= 0x80
+			}
+			u.nextRegs.WriteReg(0x69, nr69)
 		}
-		if val&0x08 != 0 { // Shadow display alias bit 6
-			nr69 |= 0x40
-		} else {
-			nr69 &^= 0x40
-		}
-		u.nextRegs.WriteReg(0x69, nr69)
 		return
 	}
 
@@ -1904,6 +2025,33 @@ func (u *ULA) applyNextCompositor() {
 			selector.SetULAActivePalette(u.ulaPalSecond)
 		}
 	}()
+	// Raster-stamped NR$15 replay: push each row's layer-priority mode
+	// (bits 4:2) into the compositor before composing it, so a CPU
+	// rewriting NR$15 per raster band (the MrKWatkins LayersMixing
+	// pattern) composites each band with its own mode. Pushed only on
+	// TRANSITIONS — a copper-driven live NR$15 (already applied at the
+	// priority source) is not clobbered row by row — and cleared after
+	// the walk so the live register resumes control.
+	prioOverride, _ := u.nextCompositor.(interface {
+		SetPriorityModeOverride(byte)
+		ClearPriorityModeOverride()
+	})
+	prioPushed := false
+	var prioCur byte
+	pushPriority := func(nr15 byte) {
+		m := (nr15 >> 2) & 0x07
+		if prioOverride == nil || (prioPushed && prioCur == m) {
+			return
+		}
+		prioOverride.SetPriorityModeOverride(m)
+		prioPushed = true
+		prioCur = m
+	}
+	defer func() {
+		if prioPushed {
+			prioOverride.ClearPriorityModeOverride()
+		}
+	}()
 	for y := 0; y < h; y++ {
 		// Run the Copper for this row BEFORE composing it so MOVEs
 		// affecting the compositor palette / Layer 2 are visible to this
@@ -1920,6 +2068,7 @@ func (u *ULA) applyNextCompositor() {
 			u.nextCopper.Step(uint16(y), 511, copperInstrPerScanline)
 		}
 		rowStart := (BorderTop+y)*u.img.Stride + BorderLeft*4
+		pushPriority(u.ulaVideoLine[BorderTop+y].nr15)
 		if liveULA {
 			st := u.ulaVideoLine[BorderTop+y]
 			pushSelect(st.ulaPalSecond)
@@ -2109,6 +2258,28 @@ func (u *ULA) nextBorderRGBA(imgRow int, res nextULAPaletteResolver) [4]byte {
 // fallback.
 func (u *ULA) nextBorderColourRGBA(borderColour byte, res nextULAPaletteResolver, st ulaVideoState) [4]byte {
 	border := borderColour & 7
+	// Timex hi-res: the border takes the synthesized hi-res attribute
+	// instead of port $FE (zxula.vhd:425-427 — attr_reg <=
+	// border_clr_tmx for screen_mode(2)), so it decodes to the hi-res
+	// PAPER colour: ULANext border path = 128 + attr(5:3) = 128 +
+	// NOT(colour) (the core-2.00.25+ "index 130" behaviour the upstream
+	// LayersMixingHiRes ReadMe documents), classic = 24 + NOT(colour).
+	if u.timexVideoMode&0x07 == 0x06 && u.mem != nil && u.mem.ScreenPage != 7 {
+		notColour := ^(u.timexVideoMode >> 3) & 0x07
+		idx := 24 + notColour
+		if st.ulaNextEnabled {
+			idx = 128 + notColour
+		}
+		r, g, b, transparent := res.ULARGBA(idx)
+		if st.ulaNextEnabled && st.ulaNextFormat == 0xFF {
+			transparent = true
+		}
+		if transparent {
+			f := u.ulaDisabledFill()
+			r, g, b = f.R, f.G, f.B
+		}
+		return [4]byte{r, g, b, 0xFF}
+	}
 	var r, g, b byte
 	var transparent bool
 	if st.ulaNextEnabled {
@@ -2128,13 +2299,14 @@ func (u *ULA) nextBorderColourRGBA(borderColour byte, res nextULAPaletteResolver
 }
 
 // liveULAResolver returns the compositor's live ULA palette resolver when
-// the live-palette render applies: a resolver is wired and the frame's ULA
-// content comes from the standard attribute decode (the disabled-fill and
-// Timex hi-res paths keep the classic pre-render, where the palette does
-// not apply).
+// the live-palette render applies: a resolver is wired and the ULA layer
+// paints (the disabled-fill path keeps its pre-render). Timex hi-res
+// frames use the live render too — decimated per row in the 320 walk,
+// with the stable-frame 512-wide re-composite on top
+// (renderWideTimexHiRes).
 func (u *ULA) liveULAResolver() (nextULAPaletteResolver, bool) {
 	res, ok := u.nextCompositor.(nextULAPaletteResolver)
-	if !ok || u.ulaOutputDisabled || u.timexHiResActive() {
+	if !ok || u.ulaOutputDisabled {
 		return nil, false
 	}
 	return res, true
@@ -2167,9 +2339,60 @@ func (u *ULA) paintImagePixel(y, x int, c [4]byte) {
 func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 	paced nextCopperCyclePaced, pixelCycle func(int) int, st ulaVideoState) {
 	screenMem := u.mem.GetPage(u.mem.ScreenPage)
-	attrMem := screenMem[0x1800:]
 	fallback := u.ulaDisabledFill()
 	paperShift := ulaNextPaperShift(st.ulaNextFormat)
+	// Timex display mode (port $FF bits 2:0, zxula.vhd:191): bit 0
+	// selects display file 2 (+$2000, "screen 1"), bit 1 the 8x1
+	// hi-colour attributes. With the ULA shadow display active the mode
+	// is forced to 000 (bank 7 only has 8K BRAM on the FPGA — same
+	// line). Hi-res (bit 2) renders through the wide path, not here.
+	// Read live (not raster-stamped): the copper interleave updates it
+	// through the NR$69 fan-out before each row's render, giving the
+	// row granularity the NReg0x69 scanline-switch test expects.
+	mode := u.timexVideoMode & 0x07
+	if u.mem.ScreenPage == 7 {
+		mode = 0
+	}
+	pixBase := 0
+	if mode&0x01 != 0 {
+		pixBase = 0x2000 // vram_a bit 13 = screen_mode(0), zxula.vhd:235
+	}
+	hiCol := mode&0x02 != 0
+	// Timex hi-res inside a MIXED-mode frame (a copper switching NR$69
+	// per band — renderWideTimexHiRes handles the stable whole-frame
+	// case): decimate to 256 pixels by sampling the even half-pixels
+	// (display file 1) and decode through the synthesized hi-res
+	// attribute "01" & NOT(colour) & colour (zxula.vhd:419).
+	hiRes := mode&0x04 != 0
+	var hiResAttr byte
+	if hiRes {
+		colour := (u.timexVideoMode >> 3) & 0x07
+		hiResAttr = 0x40 | (^colour&0x07)<<3 | colour
+		hiCol = false
+	}
+	// Classic attributes live at +$1800 of the SELECTED display file
+	// (screen 1 attrs at $7800: vram_a = screen_mode(0) & "110" & …,
+	// zxula.vhd:239-241).
+	attrMem := screenMem[pixBase+0x1800:]
+	// LoRes/Radastan layer (NR$15 bit 7): while enabled, the LoRes pixel
+	// replaces the classic ULA pixel wherever the shared NR$1A clip
+	// admits it (zxnext.vhd:6980 — ulalores_pixel_1 <= lores_pixel when
+	// lores_pixel_en else ula_pixel). LoRes has its OWN scroll pair
+	// (NR$32/$33) and dfile select (port $FF bit 0 XOR NR$6A bit 4,
+	// zxnext.vhd:6796); the ULA's NR$26/$27 scroll does not apply to it.
+	loresOn := st.nr15&0x80 != 0
+	var loresCfg lores.Config
+	var loresBank []byte
+	if loresOn {
+		loresCfg = lores.Config{
+			Radastan:      u.loresRadastan,
+			Dfile:         (u.timexVideoMode&0x01 != 0) != u.loresRadastanXor,
+			PaletteOffset: u.loresPaletteOffset,
+			ScrollX:       u.loresScrollX,
+			ScrollY:       u.loresScrollY,
+		}
+		loresBank = u.mem.GetPage(5)
+	}
 	// ULA Y hardware scroll (NR$27): source row = (y + scroll) mod 192 —
 	// zxula.vhd:192 (py_s = vc + scroll_y) folded back into 0..191 at
 	// :201-208. Attributes fetch through the same scrolled row (:222-223).
@@ -2185,28 +2408,52 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 		// and appends its low bits; the neighbouring char loads via
 		// px_1 (char+1 mod 32), so the wrap is a clean mod-256.
 		srcX := (x + int(u.ulaScrollX)) & 0xFF
-		pixels := screenMem[screenAddrForRowCol(srcY, srcX>>3)]
-		attr := attrRow[srcX>>3]
-		on := pixels&(0x80>>uint(srcX&7)) != 0
 		var idx byte
 		background := false
-		if st.ulaNextEnabled {
-			if on {
-				idx = attr & st.ulaNextFormat
-			} else if paperShift == 0 {
-				background = true
-			} else {
-				idx = 128 | attr>>paperShift
+		if loresOn {
+			// 8-bit LoRes palette index through the full ULA palette
+			// (lores.vhd:102-111); resolved below via the same live
+			// ULARGBA path, NR$14 transparency included.
+			addr := loresCfg.Address(uint16(x), uint16(y))
+			var data byte
+			if loresBank != nil && int(addr) < len(loresBank) {
+				data = loresBank[addr]
 			}
+			_, idx, _ = loresCfg.Pixel(uint16(x), uint16(y), data)
 		} else {
-			if u.flash && attr&0x80 != 0 {
-				on = !on
+			pixels := screenMem[pixBase+screenAddrForRowCol(srcY, srcX>>3)]
+			var attr byte
+			switch {
+			case hiRes:
+				attr = hiResAttr // display file 1 already sampled above
+			case hiCol:
+				// Timex hi-colour: the attribute byte fetches through the
+				// PIXEL address layout with vram_a bit 13 = 1 — one
+				// attribute per 8x1 pixel row (zxula.vhd:238-239 '1' &
+				// addr_p_spc_12_5).
+				attr = screenMem[0x2000+screenAddrForRowCol(srcY, srcX>>3)]
+			default:
+				attr = attrRow[srcX>>3]
 			}
-			bright := (attr >> 6) & 1
-			if on {
-				idx = bright<<3 | attr&7
+			on := pixels&(0x80>>uint(srcX&7)) != 0
+			if st.ulaNextEnabled {
+				if on {
+					idx = attr & st.ulaNextFormat
+				} else if paperShift == 0 {
+					background = true
+				} else {
+					idx = 128 | attr>>paperShift
+				}
 			} else {
-				idx = 16 | bright<<3 | (attr>>3)&7
+				if u.flash && attr&0x80 != 0 {
+					on = !on
+				}
+				bright := (attr >> 6) & 1
+				if on {
+					idx = bright<<3 | attr&7
+				} else {
+					idx = 16 | bright<<3 | (attr>>3)&7
+				}
 			}
 		}
 		var r, g, b byte
@@ -2233,6 +2480,143 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 			dst[off+3] = 0xFF
 		}
 	}
+}
+
+// renderNextTimexHiResRow renders one 512-half-pixel Timex hi-res ULA
+// row through the live palette. Pixel stream per zxula.vhd:389 — in
+// hi-res the shift register interleaves the two display files byte by
+// byte (even display byte = file 1, odd = file 2), so half-pixel h maps
+// to display byte h>>3 (file = byte&1) bit h&7. Every half-pixel decodes
+// through the SYNTHESIZED hi-res attribute "01" & NOT(colour) & colour
+// (border_clr_tmx, zxula.vhd:419/425-427) via the normal ULANext /
+// standard paths, then the palette — the ReadMe-documented "ink 5,
+// paper 138" decomposition for colour code 5 under ink-mask 7 falls out
+// of exactly this. The ULA X scroll shifts by classic pixels (two
+// half-pixels); Y scroll and the NR$1A clip fold as in the 256 render.
+func (u *ULA) renderNextTimexHiResRow(y int, dst []byte, res nextULAPaletteResolver, st ulaVideoState) {
+	screenMem := u.mem.GetPage(u.mem.ScreenPage)
+	fallback := u.ulaDisabledFill()
+	paperShift := ulaNextPaperShift(st.ulaNextFormat)
+	colour := (u.timexVideoMode >> 3) & 0x07
+	attr := 0x40 | (^colour&0x07)<<3 | colour
+	srcY := (y + int(u.ulaScrollY)) % ScreenHeight
+	rowClipped := y < int(u.ulaClipY1) || y > int(u.ulaClipY2)
+	for sx := 0; sx < 2*ScreenWidth; sx++ {
+		// Scroll at classic-pixel granularity = two half-pixels.
+		hsrc := (sx + 2*int(u.ulaScrollX)) & 0x1FF
+		dpByte := hsrc >> 3 // 0..63 display bytes per row
+		fileOff := 0
+		if dpByte&1 == 1 {
+			fileOff = 0x2000 // odd display bytes come from file 2
+		}
+		pixels := screenMem[fileOff+screenAddrForRowCol(srcY, dpByte>>1)]
+		on := pixels&(0x80>>uint(hsrc&7)) != 0
+		var idx byte
+		background := false
+		if st.ulaNextEnabled {
+			if on {
+				idx = attr & st.ulaNextFormat
+			} else if paperShift == 0 {
+				background = true
+			} else {
+				idx = 128 | attr>>paperShift
+			}
+		} else {
+			bright := (attr >> 6) & 1
+			if on {
+				idx = bright<<3 | attr&7
+			} else {
+				idx = 16 | bright<<3 | (attr>>3)&7
+			}
+		}
+		var r, g, b byte
+		var transparent bool
+		cx := sx >> 1 // classic-pixel coordinate for the clip window
+		switch {
+		case rowClipped || cx < int(u.ulaClipX1) || cx > int(u.ulaClipX2):
+			r, g, b = fallback.R, fallback.G, fallback.B
+			transparent = true
+		case background:
+			r, g, b = fallback.R, fallback.G, fallback.B
+		default:
+			r, g, b, transparent = res.ULARGBA(idx)
+		}
+		off := sx * 4
+		dst[off+0] = r
+		dst[off+1] = g
+		dst[off+2] = b
+		if transparent {
+			dst[off+3] = 0
+		} else {
+			dst[off+3] = 0xFF
+		}
+	}
+}
+
+// renderWideTimexHiRes builds the 640-wide frame for a STABLE Timex
+// hi-res frame on the Next: the composed 320 base (borders, sprite
+// strips — and the decimated paper, which this pass replaces) is
+// pixel-doubled, then each paper row is re-rendered at its native 512
+// half-pixels and re-composited against the layer stack at half-pixel
+// granularity (the FPGA mixes at its full pixel clock, so a sprite or
+// Layer 2 pixel covers two ULA half-pixels — the LayersMixingHiRes
+// checker rows exercise exactly this). Falls back to the doubled base
+// when the compositor lacks the hi-res pass.
+func (u *ULA) renderWideTimexHiRes() *image.RGBA {
+	const ww = 2 * TotalWidth
+	if u.wideImg == nil {
+		u.wideImg = image.NewRGBA(image.Rect(0, 0, ww, TotalHeight))
+		u.wideRow = make([]byte, ww*4)
+	}
+	wide := u.wideImg
+	for y := 0; y < TotalHeight; y++ {
+		srcStart := y * u.img.Stride
+		dstStart := y * wide.Stride
+		for x := 0; x < TotalWidth; x++ {
+			s := srcStart + x*4
+			r, g, b, a := u.img.Pix[s+0], u.img.Pix[s+1], u.img.Pix[s+2], u.img.Pix[s+3]
+			d := dstStart + x*8
+			wide.Pix[d+0], wide.Pix[d+1], wide.Pix[d+2], wide.Pix[d+3] = r, g, b, a
+			wide.Pix[d+4], wide.Pix[d+5], wide.Pix[d+6], wide.Pix[d+7] = r, g, b, a
+		}
+	}
+	res, okRes := u.nextCompositor.(nextULAPaletteResolver)
+	comp, okComp := u.nextCompositor.(interface {
+		ComposeHiResScanline(y int, ulaRGBA []byte, dst []byte)
+	})
+	if !okRes || !okComp {
+		return wide
+	}
+	// Raster-stamped replay for the re-composite, as in the 320 walk.
+	selector, _ := u.nextCompositor.(nextULAPaletteSelector)
+	prioOverride, _ := u.nextCompositor.(interface {
+		SetPriorityModeOverride(byte)
+		ClearPriorityModeOverride()
+	})
+	defer func() {
+		if selector != nil {
+			selector.SetULAActivePalette(u.ulaPalSecond)
+		}
+		if prioOverride != nil {
+			prioOverride.ClearPriorityModeOverride()
+		}
+	}()
+	scan := make([]byte, 2*ScreenWidth*4)
+	composed := make([]byte, 2*ScreenWidth*4)
+	for y := 0; y < ScreenHeight; y++ {
+		st := u.ulaVideoLine[BorderTop+y]
+		if selector != nil {
+			selector.SetULAActivePalette(st.ulaPalSecond)
+		}
+		if prioOverride != nil {
+			prioOverride.SetPriorityModeOverride((st.nr15 >> 2) & 0x07)
+		}
+		u.renderNextTimexHiResRow(y, scan, res, st)
+		comp.ComposeHiResScanline(y, scan, composed)
+		dstStart := (BorderTop+y)*wide.Stride + 2*BorderLeft*4
+		copy(wide.Pix[dstStart:dstStart+2*ScreenWidth*4], composed)
+	}
+	return wide
 }
 
 // StartRecording begins capturing the audio output to a WAV file. Returns

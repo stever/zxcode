@@ -1640,6 +1640,26 @@ func (m *Memory) SetLayer2MapControl(v byte) {
 	}
 }
 
+// Layer2MapControl composes the readable state of port $123B the way the
+// FPGA's read latch does (zxnext.vhd:3933: segment & "00" & shadow & rd_en
+// & layer2_en & wr_en) — EXCEPT bit 1 (layer2_en), which lives with the
+// Layer 2 object; the ULA's port read ORs it in. Reading always returns
+// the composed control state, even right after an offset write (bit 4 set),
+// because the offset lands in a separate register.
+func (m *Memory) Layer2MapControl() byte {
+	v := m.l2Segment << 6
+	if m.l2Shadow {
+		v |= 0x08
+	}
+	if m.l2RdEn {
+		v |= 0x04
+	}
+	if m.l2WrEn {
+		v |= 0x01
+	}
+	return v
+}
+
 // SetLayer2ActiveBank / SetLayer2ShadowBank record NR$12 / NR$13 — the 16K RAM
 // bank holding the first segment of Layer-2 (and its shadow). Used by the
 // Layer-2 write/read paging redirect.

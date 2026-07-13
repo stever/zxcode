@@ -195,7 +195,12 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   latches — and the 9-bit X wrap that shows high-X sprites on the left
   edge (sprites.vhd:855).
 - LoRes/Radastan (`pkg/next/lores`): 128×96 in 8-bit or 4-bit, a
-  line-by-line transcription of lores.vhd.
+  line-by-line transcription of lores.vhd. Wired as the ULA-layer
+  content: while NR$15 bit 7 is set, the LoRes pixel replaces the
+  classic ULA pixel wherever the shared NR$1A clip admits it
+  (zxnext.vhd:6980), resolved through the live ULA palette with NR$14
+  transparency; NR$6A supplies mode/dfile-xor/palette-offset and
+  NR$32/$33 its own scroll pair.
 - Palettes (`pkg/next/palette`): 9-bit RGB333 entries, 256 × 8 banks
   (first/second per layer), the two-byte NR$44 protocol, per-entry
   Layer 2 priority bit, ULANext format (NR$42).
@@ -207,10 +212,14 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   priority-bit promotion, ULA+tilemap combine, and the NR$4A fallback
   colour where every layer is transparent. `mixer.go` is a fully
   faithful port of the FPGA video mixer, golden-tested; the scanline
-  painter is the fast path and approximates the additive blends (see
-  known-gaps.md). Hi-res Layer 2 and 80-column tilemap take dedicated
-  wide render paths (640px), and border passes composite tilemap and
-  sprites over the border area.
+  painter is the fast path, and its additive blend orders (modes 6/7)
+  call `Mix` per pixel with the NR$68 blend-operand bits. The NR$15
+  priority mode is raster-stamped: CPU rewrites per raster band replay
+  per composed row (SetPriorityModeOverride). Hi-res Layer 2, Timex
+  hi-res ULA (composited at its native 512 half-pixels via
+  ComposeHiResScanline when the mode is frame-stable) and 80-column
+  tilemap take dedicated wide render paths (640px), and border passes
+  composite tilemap and sprites over the border area.
 - Copper (`pkg/next/copper`): 1024 × 16-bit instruction store, MOVE /
   WAIT / NOOP / HALT, four start modes (NR$62, list restart only on a
   mode TRANSITION into 01/11 per copper.vhd's edge detect), and the

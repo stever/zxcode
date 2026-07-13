@@ -695,10 +695,12 @@ func nextRegExpectedResult(reg int) int {
 //     (zxnext.vhd:1133 + :5923). MAME logs the same "04 10".
 //
 // Against the core-3.1.5 real-board photo the remaining difference is
-// seven cells the BOARD shows yellow ($12,$13,$14,$42,$4A,$8C,$8E):
+// six cells the BOARD shows yellow ($12,$13,$14,$42,$4A,$8C):
 // NextZXOS boot side-effects on the board (its log pairs match the OS
-// boot values, e.g. $8E=$0B), where the OS-less harness legitimately
-// earns the stricter green.
+// boot values), where the OS-less harness legitimately earns the
+// stricter green. $8E matches the board EXACTLY since the .snx loader
+// reproduces the NextZXOS 48K-launch ROM state (ROM bank 3 → $8E reads
+// the board's $0B, yellow).
 func TestNexttestsNextRegDefaults(t *testing.T) {
 	installtest.RedirectConfig(t)
 	installFakeDistroForLoad(t)
@@ -730,6 +732,13 @@ func TestNexttestsNextRegDefaults(t *testing.T) {
 			switch reg {
 			case 0x0A, 0x10: // core 3.2.x deviations, see doc comment
 				want = 0x50
+			case 0x8E:
+				// The .snx loader now reproduces the NextZXOS 48K-launch
+				// paging state (ROM bank 3 selected — see
+				// applySnapshotFile), so NR$8E reads $0B and this cell
+				// goes yellow EXACTLY like the reference board photo
+				// (whose NextZXOS log pair is $8E=$0B; see doc comment).
+				want = 0x30
 			}
 			if attr != want {
 				fails++

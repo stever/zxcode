@@ -186,3 +186,183 @@ func TestULAPaletteSelectMidFrameReplay(t *testing.T) {
 		t.Errorf("post-flip frame: row 50 through palette %d, want second (live)", g)
 	}
 }
+
+// TestNextULARowTimexModes pins the Timex display-mode decode in the
+// live ULA row render (port $FF bits 2:0, zxula.vhd:191/235-251):
+//
+//   - mode 001 ("screen 1"): pixels fetch from display file 2 (+$2000 —
+//     vram_a bit 13 = screen_mode(0)) and classic attributes from its
+//     own +$1800 block ($7800 in CPU terms, :239-241).
+//   - mode 010 (hi-colour): one attribute per 8x1 pixel row, fetched
+//     through the PIXEL address layout with bit 13 = 1 (:238-239).
+//   - the ULA shadow display forces mode 000 (bank 7 has no Timex
+//     surface on the FPGA, :191).
+func TestNextULARowTimexModes(t *testing.T) {
+	u, _, mem := newNextVideoULA(t)
+	page := mem.GetPage(mem.ScreenPage)
+
+	// Distinct content in the two display files at source (16..23, 40):
+	// file 1: ink pixels with attr ink 1; file 2: ink pixels with attr ink 3.
+	page[screenAddrForRowCol(40, 2)] = 0xFF
+	page[0x1800+(40>>3)*32+2] = 0x01 // file-1 classic attr: ink 1
+	page[0x2000+screenAddrForRowCol(40, 2)] = 0xFF
+	page[0x3800+(40>>3)*32+2] = 0x03 // file-2 classic attr: ink 3
+
+	// Screen 0 (mode 000): ink from file-1 attr.
+	u.SetTimexVideoMode(0x00)
+	u.Render()
+	if r, _, _, _ := paperPixel(u, 16, 40); r != 1 {
+		t.Errorf("mode 000 ink = idx %d, want 1 (file-1 attr)", r)
+	}
+
+	// Screen 1 (mode 001): pixels AND attrs from display file 2.
+	u.SetTimexVideoMode(0x01)
+	u.Render()
+	if r, _, _, _ := paperPixel(u, 16, 40); r != 3 {
+		t.Errorf("mode 001 ink = idx %d, want 3 (file-2 attr)", r)
+	}
+
+	// Hi-colour (mode 010): the attribute for pixel row 40 comes from
+	// $2000 + pixel-scrambled address — per-8x1 attributes. Rows 40 and
+	// 41 of the same char cell can differ.
+	page[0x2000+screenAddrForRowCol(40, 2)] = 0x05 // attr row 40: ink 5
+	page[screenAddrForRowCol(41, 2)] = 0xFF
+	page[0x2000+screenAddrForRowCol(41, 2)] = 0x06 // attr row 41: ink 6
+	u.SetTimexVideoMode(0x02)
+	u.Render()
+	if r, _, _, _ := paperPixel(u, 16, 40); r != 5 {
+		t.Errorf("hi-colour row 40 ink = idx %d, want 5", r)
+	}
+	if r, _, _, _ := paperPixel(u, 16, 41); r != 6 {
+		t.Errorf("hi-colour row 41 ink = idx %d, want 6", r)
+	}
+
+	// Shadow display: Timex modes forced off — back to file-1 classic
+	// decode even with mode 001 latched. (The shadow page itself is empty
+	// here; assert via the page the fetch would use: bank 7 all zeros →
+	// paper index 16+7*0… simply assert the pixel is NOT the file-2 ink.)
+	mem.ScreenPage = 7
+	u.SetTimexVideoMode(0x01)
+	u.Render()
+	if r, _, _, _ := paperPixel(u, 16, 40); r == 3 {
+		t.Errorf("shadow display still decoding Timex screen 1 (idx %d)", r)
+	}
+	mem.ScreenPage = 5
+}
+
+// TestNextULARowLoRes pins the LoRes/Radastan layer wiring
+// (zxnext.vhd:6980 — the LoRes pixel replaces the classic ULA pixel
+// inside the shared NR$1A clip window while NR$15 bit 7 is set):
+// standard-mode addressing/doubling and palette offset (lores.vhd:
+// 91-111 via pkg/next/lores), the NR$32/$33 private scroll, the
+// radastan nibble mode, and the clip window.
+func TestNextULARowLoRes(t *testing.T) {
+	u, m, mem := newNextVideoULA(t)
+	bank5 := mem.GetPage(5)
+
+	// LoRes standard mode: display (10,10) → data addr (10>>1)<<7 | (10>>1)
+	// wait: addr = (y>>1)<<7 | (x>>1) = 5*128+5 = 645.
+	bank5[5*128+5] = 0x42
+	u.SetLayerControl(0x80) // LoRes on, SLU priority
+	u.Render()
+	if r, _, _, _ := paperPixel(u, 10, 10); r != 0x42 {
+		t.Errorf("LoRes pixel (10,10) = idx $%02X, want $42", r)
+	}
+	// Pixel-doubling: (11,10) and (10,11) map to the same byte.
+	if r, _, _, _ := paperPixel(u, 11, 10); r != 0x42 {
+		t.Errorf("LoRes pixel (11,10) = idx $%02X, want $42 (x doubling)", r)
+	}
+	if r, _, _, _ := paperPixel(u, 10, 11); r != 0x42 {
+		t.Errorf("LoRes pixel (10,11) = idx $%02X, want $42 (y doubling)", r)
+	}
+
+	// Palette offset: high nibble of the data byte + offset (lores.vhd:102).
+	u.SetLoResControl(false, false, 2)
+	u.Render()
+	if r, _, _, _ := paperPixel(u, 10, 10); r != 0x62 {
+		t.Errorf("LoRes pixel with palette offset 2 = idx $%02X, want $62", r)
+	}
+	u.SetLoResControl(false, false, 0)
+
+	// LoRes scroll (NR$32/$33): display (6,4) + scroll (4,6) → source
+	// (10,10) → the same byte.
+	u.SetLoResScroll(4, 6)
+	u.Render()
+	if r, _, _, _ := paperPixel(u, 6, 4); r != 0x42 {
+		t.Errorf("scrolled LoRes pixel (6,4) = idx $%02X, want $42", r)
+	}
+	u.SetLoResScroll(0, 0)
+
+	// Second half: display row 96+ fetches from the $2000 block
+	// (lores.vhd:93-94 bumps addr bits 13:11 for y >= 96).
+	bank5[0x2000+2*128+3] = 0x77
+	u.Render()
+	if r, _, _, _ := paperPixel(u, 6, 100); r != 0x77 {
+		t.Errorf("bottom-half LoRes pixel (6,100) = idx $%02X, want $77", r)
+	}
+
+	// Radastan mode (NR$6A bit 5): two 4-bit pixels per byte, high
+	// nibble from the palette offset (lores.vhd:106-107).
+	u.SetLoResControl(true, false, 3)
+	// radastan addr for (20,10): (y>>1)<<6 | (x>>2) = 5*64+5 = 325.
+	bank5[5*64+5] = 0xAB
+	u.Render()
+	if r, _, _, _ := paperPixel(u, 20, 10); r != 0x3A {
+		t.Errorf("radastan pixel (20,10) = idx $%02X, want $3A (hi nibble)", r)
+	}
+	if r, _, _, _ := paperPixel(u, 22, 10); r != 0x3B {
+		t.Errorf("radastan pixel (22,10) = idx $%02X, want $3B (lo nibble)", r)
+	}
+	u.SetLoResControl(false, false, 0)
+
+	// Clip window: outside pixels are transparent fallback, exactly as
+	// for the classic ULA (the FPGA gates lores_pixel_en with the same
+	// NR$1A window).
+	u.SetULAClipWindow(8, 239, 8, 175)
+	u.Render()
+	fb := m.FallbackRGBA()
+	if r, g, b, a := paperPixel(u, 0, 0); a != 0 || r != fb[0] || g != fb[1] || b != fb[2] {
+		t.Errorf("clipped LoRes (0,0) = rgba(%d,%d,%d,%d), want transparent fallback", r, g, b, a)
+	}
+	u.SetULAClipWindow(0, 255, 0, 191)
+	u.SetLayerControl(0x00)
+}
+
+// TestLayerControlMidFrameRasterStamp pins the raster-stamped NR$15
+// replay through its LoRes-enable bit: a CPU enabling LoRes at
+// mid-frame renders rows before the write's raster line as classic ULA
+// and rows after as LoRes — the MrKWatkins LayersMixing tests rewrite
+// NR$15 per 32-line band this way (priority mode bits ride the same
+// stamped byte, pushed per row via SetPriorityModeOverride).
+func TestLayerControlMidFrameRasterStamp(t *testing.T) {
+	u, _, mem := newNextVideoULA(t)
+	tstates := uint64(0)
+	mem.TStates = &tstates
+	refT := uint64(1000)
+	mem.RefTstates = func() uint64 { return refT }
+
+	bank5 := mem.GetPage(5)
+	// Classic screen: paper cell attr ink 1 with a set pixel at (16,40)
+	// (row 40 = frame scanline 104); LoRes byte covering (16,40) = $55.
+	page := mem.GetPage(mem.ScreenPage)
+	page[screenAddrForRowCol(40, 2)] = 0xFF
+	page[0x1800+(40>>3)*32+2] = 0x01
+	page[screenAddrForRowCol(120, 2)] = 0xFF
+	page[0x1800+(120>>3)*32+2] = 0x01
+	bank5[(40>>1)*128+(16>>1)] = 0x55
+	bank5[0x2000+((120-96)>>1)*128+(16>>1)] = 0x66
+
+	// LoRes switches ON at frame scanline 150 → display line 110 →
+	// paper row 86: row 40 renders classic, row 120 renders LoRes.
+	tstates = uint64(150 * TStatesPerLineFor(mem.GetCurrentModel()))
+	u.SetLayerControl(0x80)
+	u.Render()
+
+	if r, _, _, _ := paperPixel(u, 16, 40); r != 1 {
+		t.Errorf("row 40 (before mid-frame LoRes-on) = idx %d, want 1 (classic ink)", r)
+	}
+	if r, _, _, _ := paperPixel(u, 16, 120); r != 0x66 {
+		t.Errorf("row 120 (after mid-frame LoRes-on) = idx $%02X, want $66 (LoRes)", r)
+	}
+	u.SetLayerControl(0x00)
+}

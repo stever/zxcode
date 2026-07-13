@@ -719,10 +719,17 @@ func WireSprites(d *nextregs.Dispatcher, e *sprite.Engine) {
 
 // WireLayerPriority installs the NextReg 0x15 OnWrite/OnRead
 // handlers. The compositor reads p.Get() to drive the 5-source
-// ordering rules from the NextReg 0x15 documentation.
-func WireLayerPriority(d *nextregs.Dispatcher, p *LayerPriority, sprites *sprite.Engine) {
+// ordering rules from the NextReg 0x15 documentation. ulaSink (the
+// ULA; may be nil) receives the raw byte for raster-stamping: bit 7 is
+// the LoRes/Radastan enable (zxnext.vhd:6817 nr_15_lores_en) and bits
+// 4:2 the priority/blend mode — the MrKWatkins LayersMixing tests
+// rewrite these per raster band by CPU timing.
+func WireLayerPriority(d *nextregs.Dispatcher, p *LayerPriority, sprites *sprite.Engine, ulaSink interface{ SetLayerControl(byte) }) {
 	d.SetOnWrite(0x15, func(disp *nextregs.Dispatcher, val byte) {
 		p.Set(val)
+		if ulaSink != nil {
+			ulaSink.SetLayerControl(val)
+		}
 		// NR$15 bit 0 = "Enable sprites" (registers.txt 0x15). This is the
 		// sprite layer's master enable; without it the compositor's
 		// doSprites gate (c.sprites.Enabled()) stays false and no sprite
@@ -830,9 +837,9 @@ type ULAVideoSink interface {
 //   - NR$69 (Display Control 1) — the FPGA fans a write out to three
 //     live registers (zxnext.vhd): bit 7 → port $123B Layer 2 enable
 //     (:3924), bit 6 → port $7FFD bit 3 shadow display (:3658), bits
-//     5:0 → port $FF Timex video mode (:3617). The read at :6096
-//     composes those live sources; our Store'd byte matches unless the
-//     guest writes the aliased ports directly afterwards.
+//     5:0 → port $FF Timex video mode (:3617). The read composes those
+//     live sources back (:6096), so writes to the aliased ports are
+//     reflected here — verified by the MrKWatkins NextReg0x69 test.
 //
 // sink, l2 and mem may each be nil (the corresponding pushes are
 // skipped) so partial wirings in unit tests keep working.
@@ -855,6 +862,12 @@ func WireULAControl(d *nextregs.Dispatcher, sink ULAVideoSink, l2 *layer2.Layer2
 		if sink != nil {
 			sink.SetULAOutputDisabled(val&0x80 != 0)
 			sink.SetULAFineScrollX(val&0x04 != 0)
+			// Bits 6:5 blend operand select + bit 0 stencil — the
+			// additive modes 6/7 read them through the compositor
+			// (zxnext.vhd:5444-5450 nr_68_blend_mode / stencil).
+			if bm, ok := sink.(interface{ SetULABlendMode(byte, bool) }); ok {
+				bm.SetULABlendMode((val>>5)&0x03, val&0x01 != 0)
+			}
 		}
 	})
 	d.SetOnWrite(0x69, func(disp *nextregs.Dispatcher, val byte) {
@@ -874,6 +887,67 @@ func WireULAControl(d *nextregs.Dispatcher, sink ULAVideoSink, l2 *layer2.Layer2
 			sink.SetTimexVideoMode(val & 0x3F)
 		}
 		disp.Store(0x69, val)
+	})
+	// NR$6A — LoRes control: bit 5 radastan mode, bit 4 the radastan
+	// display-file XOR, bits 3:0 the palette offset (zxnext.vhd:
+	// 5455-5458, read :6101 — bits 7:6 reserved). Pushed into the ULA's
+	// LoRes layer state.
+	d.SetOnWrite(0x6A, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x6A, val&0x3F)
+		if lr, ok := sink.(interface {
+			SetLoResControl(radastan, radastanXor bool, paletteOffset byte)
+		}); ok {
+			lr.SetLoResControl(val&0x20 != 0, val&0x10 != 0, val&0x0F)
+		}
+	})
+	// NR$32 / NR$33 — the LoRes layer's own scroll pair
+	// (zxnext.vhd:6772-6773), independent of the ULA's NR$26/$27.
+	pushLoResScroll := func(disp *nextregs.Dispatcher) {
+		if lr, ok := sink.(interface{ SetLoResScroll(x, y byte) }); ok {
+			lr.SetLoResScroll(disp.Raw(0x32), disp.Raw(0x33))
+		}
+	}
+	d.SetOnWrite(0x32, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x32, val)
+		pushLoResScroll(disp)
+	})
+	d.SetOnWrite(0x33, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x33, val)
+		pushLoResScroll(disp)
+	})
+	// NR$1E / NR$1F — the live raster line (FPGA cvc: 0 = top paper
+	// line), zxnext.vhd:5982-5986. Wired here (not just in cmd/zx_go)
+	// so the harness machine answers the suite's WaitForScanline polls
+	// — without it the MrKWatkins raster-phased tests hang on NR$1F=0.
+	if vl, ok := sink.(interface{ ActiveVideoLine() int }); ok {
+		d.SetOnRead(0x1F, func(*nextregs.Dispatcher) byte { return byte(vl.ActiveVideoLine()) })
+		d.SetOnRead(0x1E, func(*nextregs.Dispatcher) byte { return byte(vl.ActiveVideoLine()>>8) & 0x01 })
+	}
+	// NR$69 read is COMPOSED from the three live registers it aliases
+	// (zxnext.vhd:6096: port_123b_layer2_en & port_7ffd_shadow &
+	// port_ff_reg(5:0)) — a guest that writes port $123B / $7FFD /
+	// port $FF directly afterwards must see the change here. The
+	// stored byte only serves sources that aren't wired.
+	d.SetOnRead(0x69, func(disp *nextregs.Dispatcher) byte {
+		v := disp.Raw(0x69)
+		if l2 != nil {
+			if l2.Enabled() {
+				v |= 0x80
+			} else {
+				v &^= 0x80
+			}
+		}
+		if mem != nil {
+			if mem.ScreenPage == 7 {
+				v |= 0x40
+			} else {
+				v &^= 0x40
+			}
+		}
+		if tm, ok := sink.(interface{ TimexVideoMode() byte }); ok {
+			v = v&0xC0 | tm.TimexVideoMode()&0x3F
+		}
+		return v
 	})
 }
 
@@ -1065,7 +1139,11 @@ func Wire(opts WireOpts) {
 		WirePalette(opts.Dispatcher, opts.Palette, opts.ULANext)
 	}
 	if opts.Priority != nil {
-		WireLayerPriority(opts.Dispatcher, opts.Priority, opts.Sprites)
+		var ulaSink interface{ SetLayerControl(byte) }
+		if s, ok := opts.ULANext.(interface{ SetLayerControl(byte) }); ok {
+			ulaSink = s
+		}
+		WireLayerPriority(opts.Dispatcher, opts.Priority, opts.Sprites, ulaSink)
 	}
 	if opts.Sprites != nil {
 		WireSprites(opts.Dispatcher, opts.Sprites)
@@ -1280,12 +1358,8 @@ func WirePeripheralMasks(d *nextregs.Dispatcher) {
 		// nr_da_iotrap_cause are stored; bits 7:2 reserved.
 		disp.Store(0xDA, val&0x03)
 	})
-	d.SetOnWrite(0x6A, func(disp *nextregs.Dispatcher, val byte) {
-		// Per zxnext.vhd:5455-5458 + read at :6101 — bits 5
-		// (radastan), 4 (radastan_xor), 3:0 (lores palette offset).
-		// Bits 7:6 reserved (read as 0).
-		disp.Store(0x6A, val&0x3F)
-	})
+	// NR$6A (LoRes control) is wired in WireULAControl, which pushes it
+	// into the ULA's LoRes layer state.
 }
 
 // applyTBBLUEFWBootDefaults sets the NextReg values that real

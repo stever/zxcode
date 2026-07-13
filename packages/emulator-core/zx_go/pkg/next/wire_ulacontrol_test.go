@@ -8,9 +8,11 @@ package next
 import (
 	"testing"
 
+	"github.com/conorarmstrong/zx_go/pkg/memory"
 	"github.com/conorarmstrong/zx_go/pkg/next/layer2"
 	"github.com/conorarmstrong/zx_go/pkg/next/nextregs"
 	"github.com/conorarmstrong/zx_go/pkg/next/palette"
+	"github.com/conorarmstrong/zx_go/pkg/roms"
 )
 
 // fakeULAVideoSink records every push. Also implements ULANextSink +
@@ -96,6 +98,73 @@ func TestSpec_NR69_DisplayControlFanOut(t *testing.T) {
 	}
 	if sink.timex != 0 {
 		t.Errorf("NR$69=0: timex = $%02X, want $00", sink.timex)
+	}
+}
+
+// fakeULAVideoSinkWithLine extends the fake with the live-raster and
+// Timex read-back extensions WireULAControl probes for.
+type fakeULAVideoSinkWithLine struct {
+	fakeULAVideoSink
+	line int
+}
+
+func (f *fakeULAVideoSinkWithLine) ActiveVideoLine() int { return f.line }
+func (f *fakeULAVideoSinkWithLine) TimexVideoMode() byte { return f.timex & 0x3F }
+
+// TestSpec_NR69_ComposedRead — NR$69 reads compose the three LIVE
+// registers it aliases (zxnext.vhd:6096: port_123b_layer2_en &
+// port_7ffd_shadow & port_ff_reg(5:0)), so state changed through the
+// aliased ports — Layer 2 enable via $123B, shadow display via $7FFD,
+// Timex mode via port $FF — reads back here. The MrKWatkins NextReg0x69
+// test sets values through the original ports and verifies them
+// through NR$69.
+func TestSpec_NR69_ComposedRead(t *testing.T) {
+	d := nextregs.New()
+	sink := &fakeULAVideoSinkWithLine{}
+	l2 := layer2.New(nil)
+	mem, err := memory.New(wireTestROMs(t), roms.ModelNext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	WireULAControl(d, sink, l2, mem)
+
+	d.WriteReg(0x69, 0x00)
+	// Flip each live source WITHOUT an NR$69 write.
+	l2.SetEnabled(true)
+	mem.ScreenPage = 7
+	sink.timex = 0x16
+	if got := d.ReadReg(0x69); got != 0xD6 {
+		t.Errorf("NR$69 composed read = $%02X, want $D6 (L2 on, shadow on, timex $16)", got)
+	}
+	l2.SetEnabled(false)
+	mem.ScreenPage = 5
+	sink.timex = 0x00
+	if got := d.ReadReg(0x69); got != 0x00 {
+		t.Errorf("NR$69 composed read = $%02X, want $00 after sources cleared", got)
+	}
+}
+
+// TestSpec_NR1E_NR1F_VideoLineRead — NR$1E (bit 8) / NR$1F (bits 7:0)
+// read the LIVE raster line counter (zxnext.vhd:5982-5986 port_253b_dat
+// <= cvc). Wired through WireULAControl so both production and harness
+// machines answer the suite's WaitForScanline polls.
+func TestSpec_NR1E_NR1F_VideoLineRead(t *testing.T) {
+	d := nextregs.New()
+	sink := &fakeULAVideoSinkWithLine{line: 300}
+	WireULAControl(d, sink, nil, nil)
+
+	if got := d.ReadReg(0x1F); got != byte(300&0xFF) {
+		t.Errorf("NR$1F = %d, want %d", got, 300&0xFF)
+	}
+	if got := d.ReadReg(0x1E); got != 1 {
+		t.Errorf("NR$1E = %d, want 1 (bit 8 of 300)", got)
+	}
+	sink.line = 31
+	if got := d.ReadReg(0x1F); got != 31 {
+		t.Errorf("NR$1F = %d, want 31", got)
+	}
+	if got := d.ReadReg(0x1E); got != 0 {
+		t.Errorf("NR$1E = %d, want 0", got)
 	}
 }
 

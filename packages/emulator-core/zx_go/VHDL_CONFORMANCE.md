@@ -102,13 +102,17 @@ bits); $85/$89 reset_type shape (vhd:6138/6150). Tool: `--next-nrdiff` (CAVEAT: 
 reference emulator returns $00 for unimplemented read-backs — verify vs VHDL, never
 blind-match). The NextReg_defaults grid pins the read-back of every register its
 tables touch ($00-$B1 range). **Gap:** composed read-backs the grid skips
-($68,$69,$C0,$C4,$C6,$CC-$CE,$A9,$0B,...) still not individually pinned to the VHDL mux.
+($68,$C0,$C4,$C6,$CC-$CE,$A9,$0B,...) still not individually pinned to the VHDL mux.
+$69 is now composed from its three live sources (:6096) and pinned
+(`TestSpec_NR69_ComposedRead` + the Graphics NextReg0x69 runner); $123B
+reads its composed control state (:3933, `TestLayer2PortReadback`) and
+port $FF reads return the Timex register under NR$08 bit 2 (:2813).
 
 ## Axis 4 — Ports / IO decode
-Source: zxnext.vhd port decode (`port_*`). Tests: scattered. **Confirmed gap this
-session:** port **$FF** (Timex/SCLD) — bit6 = ULA-frame-INT disable
+Source: zxnext.vhd port decode (`port_*`). Tests: scattered. **Confirmed gap:** port **$FF** (Timex/SCLD) — bit6 = ULA-frame-INT disable
 (`port_ff_interrupt_disable`, vhd 3635/6711/6750) is **not implemented** in
-WritePort. ⚠️ $FE,$7FFD,$1FFD,$243B/$253B,$E3/$E7/$EB,$6B,$DFFD,AY ports present
+WritePort (the Timex video bits 5:0 ARE live, and reads compose under
+NR$08 bit 2 — Graphics group). ⚠️ $FE,$7FFD,$1FFD,$243B/$253B,$E3/$E7/$EB,$6B,$DFFD,AY ports present
 but no port-by-port VHDL decode conformance test.
 
 ## Axis 5 — Interrupts / timing  (zxula_timing.vhd + zxnext.vhd 2014-2033)
@@ -199,7 +203,29 @@ Pinned since (ULA group conformance work):
 - ✅ NR$69 write fan-out: bit 7 → Layer 2 enable (zxnext.vhd:3924),
   bit 6 → shadow display ($7FFD bit 3, :3658), bits 5:0 → Timex
   port-$FF mode (:3617) — `TestSpec_NR69_DisplayControlFanOut` +
-  TestNexttestsULAScroll's M-mode bank-7 switch.
+  TestNexttestsULAScroll's M-mode bank-7 switch — and the composed
+  read back from the live registers (:6096, `TestSpec_NR69_ComposedRead`
+  + TestNexttestsGraphicsNextReg0x69's 10/10 port cross-checks).
+- ✅ Timex display modes in the live ULA render: screen 1 / hi-colour
+  vram addressing (zxula.vhd:235-251, `TestNextULARowTimexModes`),
+  hi-res 512 half-pixel rows with the synthesized attribute
+  ("01" & NOT(c) & c, :419) and its border rule (:425-427) —
+  TestNexttestsGraphicsLayersMixingHiCol/HiRes.
+- ✅ LoRes/Radastan as the ULA-layer content (zxnext.vhd:6980 pixel
+  replace, :6795-6797 control, :6772 scroll, :6817 enable) —
+  `TestNextULARowLoRes` + TestNexttestsGraphicsLayersMixingLoRes.
+- ✅ Layer priority modes 6/7 (additive blends) through the golden
+  mixer arithmetic per pixel (zxnext.vhd:7196-7355) with NR$68
+  blend-operand bits (:5444-5450) — `TestComposeScanlineAdditiveBlend`
+  + TestNexttestsGraphicsLightenDarken.
+- ✅ Raster-stamped NR$15 (priority + LoRes enable) replay for CPU
+  band rewrites — `TestLayerControlMidFrameRasterStamp` + the
+  LayersMixing runners' six-band grids.
+- ✅ NR$1E/$1F live raster line in the FPGA cvc convention (0 = top
+  paper line, :5982-5986) — `TestSpec_NR1E_NR1F_VideoLineRead`.
+- ✅ ZX48 personality pins ROM bank 3 semantics for 48K snapshots
+  (zxnext.vhd:2983-2986 machine_type_48 → sram_rom3) — modelled as the
+  .snx loader's launch state; NR$8E then reads the board's exact $0B.
 
 ---
 

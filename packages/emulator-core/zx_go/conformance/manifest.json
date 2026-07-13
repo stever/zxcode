@@ -501,41 +501,91 @@
           "tests": [
             {
               "name": "Layer2Colours",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Colours"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Colours",
+              "notes": "All 24 sprite/L2/ULA combinations in all six NR$15 orders: the 6-band 4x6 verdict grid pixel-pinned (cross-checked against the upstream SLU table + MAME 0.282), raster-banded border asserted. Drove the port $123B shadow-PAGING fix, the NR$1E/$1F cvc raster counter and the raster-stamped NR$15 replay",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayer2Colours"
+                ]
+              }
             },
             {
               "name": "Layer2Port",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Port",
-              "notes": "Port $123B paging behaviour"
+              "notes": "Write/read-over-ROM windows (visible + shadow banks), IM1-in-L2, and the core-3.0.7+ bank-offset form: green border + full verdict surface scanned (no red pixel anywhere). Drove the composed $123B read-back (zxnext.vhd:3933)",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayer2Port"
+                ]
+              }
             },
             {
               "name": "Layer2Scroll",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Scroll"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Scroll",
+              "notes": "NR$16/$17 scroll to [196,133] + NR$18/$1A clips: self-reported register sheet OCR'd, ruler ULA-tick/L2-dot alignment pixel-pinned, clip margins show the fallback",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayer2Scroll"
+                ]
+              }
             },
             {
               "name": "LayersMixingHiCol",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiCol",
-              "notes": "Timex hi-colour mixing"
+              "notes": "The mixing matrix with Timex HI-COLOUR as the ULA layer (8x1 attributes, zxula.vhd:238): shared verdict grid + the per-pixel-row black banner as the mode witness",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayersMixingHiCol"
+                ]
+              }
             },
             {
               "name": "LayersMixingHiRes",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiRes",
-              "notes": "Timex hi-res mixing"
+              "notes": "The matrix with Timex HI-RES 512x192: composited at native half-pixel granularity (ComposeHiResScanline), 640x240 frame, synthesized attribute border (index 130 — the core-2.00.25+ rule the upstream ReadMe documents), sub-pixel checker transitions asserted",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayersMixingHiRes"
+                ]
+              }
             },
             {
               "name": "LayersMixingLoRes",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingLoRes",
-              "notes": "LoRes mixing"
+              "notes": "The matrix with LORES as the ULA layer: wired the orphaned pkg/next/lores into the live render (NR$15 bit 7 per-pixel replace, zxnext.vhd:6980); L2-drawn header text over LoRes white as the mode witness",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayersMixingLoRes"
+                ]
+              }
             },
             {
               "name": "LightenDarken_L2_ULA",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LightenDarken_L2_ULA",
-              "notes": "Additive blend modes — exercises a catalogued known gap (blend modes 6/7 approximated)"
+              "notes": "Additive blend modes 6/7 through the FPGA-golden Mix per pixel: gradient sums/differences pixel-pinned per band incl. the clamps, and transparent-L2 cells show the fallback (upstream table sTlTuu->TT). The catalogued approximated-as-SLU gap row CLOSED as a fix",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLightenDarken"
+                ]
+              }
             },
             {
               "name": "NextReg0x69",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/NextReg0x69",
-              "notes": "Display control register"
+              "notes": "NR$69 as a composed live alias of $123B/$7FFD/port $FF: the 10 read/write cross-checks self-report 10/10, and the copper switches the display source per scanline band (L2 / shadow / scr1 / hi-colour / two hi-res rows / combined) — every band's verdict cells pixel-pinned. Runner pokes NR$12=9, the NextZXOS launch state the test assumes. Mode-switch settle artefacts not modelled (upstream marks them core-version-specific); mixed-frame hi-res text bands render decimated (known-gaps.md)",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsNextReg0x69"
+                ]
+              }
             }
           ]
         },

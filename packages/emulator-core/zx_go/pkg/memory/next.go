@@ -54,8 +54,14 @@ func (m *Memory) setupNext() error {
 	// overwrites all four banks with it.
 	copy(m.rom[0], rom48)
 	copy(m.rom[1], rom0) // 128K editor — page 1
-	// Bank 2 / bank 3 stay zero-filled until the distro load (if any)
-	// populates them.
+	// Banks 2/3 mirror the same pair the way the REAL ROM set ends:
+	// bank 3 = 48K BASIC (the NextZXOS "48K personality" ROM — a 48K
+	// snapshot runs with ROM bank 3 selected, and a guest's $7FFD
+	// bit-4 writes keep the low bank bit at 1, staying on the 48K ROM
+	// and its $3D00 font, as the MrKWatkins NextReg0x69 test relies
+	// on). The distro load (if any) overwrites all four.
+	copy(m.rom[2], rom0)
+	copy(m.rom[3], rom48)
 
 	// NextZXOS distro ROM overlay: if `roms/next/enNextZX.rom` is
 	// installed, populate m.rom[0..3] with it so the CPU boots the

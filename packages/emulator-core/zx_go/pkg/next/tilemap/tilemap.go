@@ -108,6 +108,11 @@ func (t *Tilemap) SetTilesBase(v byte) { t.tilesBase = v }
 // byte, instead of the testcard's intended palette colour).
 func (t *Tilemap) OnTop() bool { return t.control&0x01 != 0 }
 
+// Textmode reports NR$6B bit 3 — 1bpp text-mode tiles. The blend path
+// feeds it to the mixer (tm_transparent includes an RGB-vs-NR$14 test
+// only in textmode, zxnext.vhd:7107).
+func (t *Tilemap) Textmode() bool { return t.control&(1<<3) != 0 }
+
 // Is80Col reports whether NR$6B bit 6 (80-column mode) is set. In that
 // mode the tilemap is 80 tiles × 8px = 640 pixels wide, so the caller
 // must render it through a 640-pixel buffer (the 320-pixel display path

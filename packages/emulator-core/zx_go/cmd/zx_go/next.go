@@ -1152,12 +1152,8 @@ func wireNextSubsystems(e *emulator) error {
 	// fallback, NR$4C tilemap nibble) — shared with the test harness via
 	// next.WireCompositor so the two wirings cannot drift.
 	next.WireCompositor(disp, comp)
-	// NextReg $1E/$1F (active video line MSB/LSB) — a LIVE raster-line
-	// counter derived from the CPU T-state position. NextZXOS dot
-	// commands (NextGuide) disable interrupts and poll it to wait for the
-	// raster; without a live value the wait loop hangs forever.
-	disp.SetOnRead(0x1F, func(*nextregs.Dispatcher) byte { return byte(u.ActiveVideoLine() & 0xFF) })
-	disp.SetOnRead(0x1E, func(*nextregs.Dispatcher) byte { return byte((u.ActiveVideoLine() >> 8) & 0x01) })
+	// NextReg $1E/$1F (active video line) is wired inside next.Wire →
+	// WireULAControl — shared with the harness so the two cannot drift.
 	// Tilemap pixel scroll (NR$2F:$30 = X 10-bit, NR$31 = Y 8-bit) per
 	// FPGA nr_30_tm_scrollx / nr_31_tm_scrolly.
 	disp.SetOnWrite(0x2F, func(d *nextregs.Dispatcher, val byte) {

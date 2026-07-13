@@ -66,7 +66,7 @@ func TestLayerPriority_GetRoundTrips(t *testing.T) {
 func TestWireLayerPriority_Routes(t *testing.T) {
 	disp := nextregs.New()
 	p := NewLayerPriority()
-	WireLayerPriority(disp, p, nil)
+	WireLayerPriority(disp, p, nil, nil)
 
 	disp.WriteReg(0x15, 0x0C) // bits 4:2 = 011 -> LUS
 	if p.Mode() != compositor.ModeLUS {

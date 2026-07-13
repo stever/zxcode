@@ -74,9 +74,14 @@ type Compositor struct {
 	sprites        *sprite.Engine
 	tilemap        *tilemap.Tilemap
 	prioritySource PrioritySource
+	modeOverride   PriorityMode // per-row raster-stamped mode (see SetPriorityModeOverride)
+	modeOverrideOn bool
 	transparency   byte
 	tilemapTrans   byte    // tilemap transparency nibble (NextReg 0x4C, low 4 bits)
 	fallback       [4]byte // NR$4A fallback RGBA, shown when every layer is transparent
+	fallbackRaw    byte    // the raw NR$4A byte — the blend path feeds it to Mix
+	blendMode      byte    // NR$68 bits 6:5 — the (U|T) blend operand select for modes 6/7
+	stencilMode    bool    // NR$68 bit 0 — ULA/tilemap AND-stencil
 
 	// ULA transparency: the classic ULA renders via its own 16-colour
 	// palette, so a ULA pixel is "transparent" (lets a lower layer show in
@@ -324,7 +329,35 @@ func (c *Compositor) ComposeSpriteBorderRow(frameY int, dst []byte, isInBorderAr
 // is wired separately via SetSprites so existing callers don't
 // have to update on the Sprint-6 -> Sprint-7 transition.
 func New(pal *palette.Bank, l2 *layer2.Layer2) *Compositor {
-	return &Compositor{pal: pal, l2: l2, transparency: DefaultTransparency, tilemapTrans: 0x0F}
+	return &Compositor{pal: pal, l2: l2, transparency: DefaultTransparency,
+		tilemapTrans: 0x0F, fallbackRaw: 0xE3}
+}
+
+// proj3to8 scales a 3-bit palette channel to 8 bits the way the palette
+// DAC does (v<<5 | v<<2 | v>>1) — the same projection Palette.RGB uses.
+func proj3to8(v byte) byte { return v<<5 | v<<2 | v>>1 }
+
+// inv3to8 maps an 8-bit channel value back to the 3-bit palette channel
+// whose projection is nearest. Every Next-rendered ULA row resolves its
+// pixels through Palette.RGB, so on the blend path this inversion is
+// exact; foreign values (classic renderer tones) snap to the nearest
+// 9-bit level.
+var inv3to8 [256]byte
+
+func init() {
+	for i := 0; i < 256; i++ {
+		best, bestD := byte(0), 1<<9
+		for v := byte(0); v < 8; v++ {
+			d := int(proj3to8(v)) - i
+			if d < 0 {
+				d = -d
+			}
+			if d < bestD {
+				best, bestD = v, d
+			}
+		}
+		inv3to8[i] = best
+	}
 }
 
 // SetSprites attaches the sprite engine. nil unhooks (compositor
@@ -334,6 +367,21 @@ func (c *Compositor) SetSprites(s *sprite.Engine) { c.sprites = s }
 // SetPrioritySource installs the LayerPriority reader. Without one
 // the compositor defaults to ModeSLU (Sprites over Layer 2 over ULA).
 func (c *Compositor) SetPrioritySource(p PrioritySource) { c.prioritySource = p }
+
+// SetPriorityModeOverride forces the layer-ordering mode for subsequent
+// ComposeScanline calls, overriding the live prioritySource. The ULA's
+// compose walk pushes each row's RASTER-STAMPED NR$15 mode through this
+// (the MrKWatkins LayersMixing tests rewrite NR$15 per 32-line band by
+// CPU timing — the live register at render time only holds the frame-
+// final value). ClearPriorityModeOverride restores the live source.
+func (c *Compositor) SetPriorityModeOverride(m byte) {
+	c.modeOverride = PriorityMode(m & 0x07)
+	c.modeOverrideOn = true
+}
+
+// ClearPriorityModeOverride returns mode selection to the live
+// prioritySource.
+func (c *Compositor) ClearPriorityModeOverride() { c.modeOverrideOn = false }
 
 // SetTilemapTransparency installs the tilemap transparency nibble
 // (NextReg 0x4C, low 4 bits). A tilemap pixel is transparent when the
@@ -364,6 +412,20 @@ func (c *Compositor) SetULAPalette(pal [16]color.RGBA) {
 // layer is transparent at a pixel.
 func (c *Compositor) SetFallbackColour(r, g, b byte) {
 	c.fallback = [4]byte{r, g, b, 0xFF}
+}
+
+// SetFallbackRaw installs the raw NR$4A byte. The additive-blend path
+// (modes 6/7) hands it to Mix, which widens it onto the 9-bit bus the
+// way the FPGA does (fallback_rgb_2 & (bit1 or bit0), zxnext.vhd:7214).
+func (c *Compositor) SetFallbackRaw(v byte) { c.fallbackRaw = v }
+
+// SetBlendConfig installs the NR$68 blend-operand select (bits 6:5 —
+// which of ULA / ULA+TM / tilemap participates as the additive operand
+// in priority modes 6/7) and the bit-0 ULA/tilemap AND-stencil. Pushed
+// by the ULA (SetULABlendMode) from pkg/next.WireULAControl.
+func (c *Compositor) SetBlendConfig(mode byte, stencil bool) {
+	c.blendMode = mode & 0x03
+	c.stencilMode = stencil
 }
 
 // FallbackRGBA returns the NR$4A fallback colour. Used by the ULA when its
@@ -465,7 +527,22 @@ func (c *Compositor) ULARGBA(idx byte) (byte, byte, byte, bool) {
 // dst must have at least Width*4 bytes; extra bytes are not
 // touched.
 func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
-	if len(dst) < Width*4 {
+	c.composeRow(y, ulaRGBA, dst, 1)
+}
+
+// ComposeHiResScanline is the 512-pixel variant for the Timex hi-res
+// ULA mode: ulaRGBA and dst carry 512 pixels (two half-pixels per
+// classic pixel — the FPGA mixes at its 28MHz pixel clock, so a
+// half-width ULA pixel composites against the Layer 2 / sprite /
+// tilemap pixel covering it). Layer lookups use x = half-pixel/2.
+func (c *Compositor) ComposeHiResScanline(y int, ulaRGBA []byte, dst []byte) {
+	c.composeRow(y, ulaRGBA, dst, 2)
+}
+
+// composeRow is the shared painter: sub is the number of output
+// sub-pixels per layer pixel (1 = classic 256, 2 = Timex hi-res 512).
+func (c *Compositor) composeRow(y int, ulaRGBA []byte, dst []byte, sub int) {
+	if len(dst) < Width*sub*4 {
 		return
 	}
 	// Palette writes don't notify the compositor, so refresh the
@@ -484,11 +561,11 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 	// path, so the 320-pixel inner pass skips it here.
 	doTilemap := c.tilemap != nil && c.tilemap.Enabled() && c.pal != nil && !c.tilemap.Is80Col()
 	if !doL2 && !doSprites && !doTilemap {
-		copy(dst[:Width*4], ulaRGBA[:Width*4])
+		copy(dst[:Width*sub*4], ulaRGBA[:Width*sub*4])
 		// Transparent ULA pixels (alpha 0 from the live-palette row
 		// render) have nothing beneath them here: show the NR$4A
 		// fallback, as the FPGA does when every layer is transparent.
-		for off := 0; off < Width*4; off += 4 {
+		for off := 0; off < Width*sub*4; off += 4 {
 			if dst[off+3] == 0 {
 				dst[off+0], dst[off+1], dst[off+2], dst[off+3] =
 					c.fallback[0], c.fallback[1], c.fallback[2], c.fallback[3]
@@ -574,10 +651,15 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 
 	// Decode the active priority mode. Each mode dictates the
 	// painting order top-down: the LAST one written wins per pixel.
-	// We always paint background-to-foreground.
+	// We always paint background-to-foreground. A raster-stamped
+	// per-row override (SetPriorityModeOverride) wins over the live
+	// register.
 	mode := ModeSLU
 	if c.prioritySource != nil {
 		mode = c.prioritySource.Mode()
+	}
+	if c.modeOverrideOn {
+		mode = c.modeOverride
 	}
 	// paintULA / paintL2 / paintSprites are functors that, given
 	// the dst offset, overlay that layer's pixel if non-transparent.
@@ -729,8 +811,9 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 		dst[off+2] = b
 		dst[off+3] = 0xFF
 	}
-	for x := 0; x < Width; x++ {
-		off := x * 4
+	for i := 0; i < Width*sub; i++ {
+		off := i * 4
+		x := i / sub
 		// First lay down ULA, then mix the tilemap onto ULA (the
 		// FPGA's ulatm_rgb formation), then the NR$15 priority chain
 		// places Layer 2 / Sprites above or below the combined layer.
@@ -778,13 +861,47 @@ func (c *Compositor) ComposeScanline(y int, ulaRGBA []byte, dst []byte) {
 			paintULAStencil(off)
 			paintTilemapOnULA(off, x)
 			paintL2Priority(off, x)
-		default: // 6/7: additive blend modes — approximate as SLU so
-			// content stays visible rather than dropping the layers the
-			// way an unhandled case would (mixer.go Mix has the faithful
-			// implementation; migrating this painter onto it is the
-			// long-term fix).
-			paintL2(off, x)
-			paintSprites(off, x)
+		default: // 6/7: the additive blend modes — routed through Mix
+			// (the FPGA-faithful video mixer, golden-tested against the
+			// captured hardware): clamped L+U (mode 6) / L+U-5 (mode 7)
+			// with the NR$68 bits 6:5 operand select. Verified by the
+			// MrKWatkins LightenDarken_L2_ULA test.
+			in := MixerInputs{
+				ULAEn:       true,
+				ULAClipped:  ulaTransparentAt(off), // per-pixel transparency signal
+				Transparent: c.transparency,
+				Fallback:    c.fallbackRaw,
+				StencilMode: c.stencilMode,
+				BlendMode:   c.blendMode,
+				Priority:    byte(mode),
+			}
+			in.ULARGB = uint16(inv3to8[ulaRGBA[off+0]])<<6 |
+				uint16(inv3to8[ulaRGBA[off+1]])<<3 |
+				uint16(inv3to8[ulaRGBA[off+2]])
+			if doTilemap {
+				idx := tilemapScan[x]
+				in.TMEn = true
+				in.TMRGB = tilemapPal.Get(idx)
+				in.TMPixelEn = (idx&0x0F) != tmTransparentNibble &&
+					!((idx&0x0F) == 0 && !tmOnTop)
+				in.TMBelow = !tmOnTop
+				in.TMTextmode = c.tilemap.Textmode()
+			}
+			if doSprites && spriteCover[x+BorderOffsetX] {
+				in.SpriteEn = true
+				in.SpriteRGB = spritePal.Get(spriteScan[x+BorderOffsetX])
+			}
+			if doL2 && x >= l2ClipX0 && x <= l2ClipX1 {
+				idx := l2Scanline[x]
+				in.Layer2En = true
+				in.Layer2RGB = l2Pal.Get(idx)
+				in.Layer2Priority = l2Pal.HasPriority(idx)
+			}
+			out := Mix(in)
+			dst[off+0] = proj3to8(byte(out>>6) & 7)
+			dst[off+1] = proj3to8(byte(out>>3) & 7)
+			dst[off+2] = proj3to8(byte(out) & 7)
+			dst[off+3] = 0xFF
 		}
 	}
 }

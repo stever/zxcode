@@ -1086,10 +1086,11 @@ func TestSpec_NRDA_IOTrapCause_OnlyBits1to0(t *testing.T) {
 
 // TestSpec_NR6A_LoresControl_ReservedBitsMasked.
 // VHDL :5455-5458 + read :6101 — "00" || bit 5 || bit 4 || bits 3:0.
-// Bits 7:6 reserved.
+// Bits 7:6 reserved. The handler lives in WireULAControl (it pushes the
+// LoRes control into the ULA when one is wired).
 func TestSpec_NR6A_LoresControl_ReservedBitsMasked(t *testing.T) {
 	disp := nextregs.New()
-	WirePeripheralMasks(disp)
+	WireULAControl(disp, nil, nil, nil)
 
 	disp.WriteReg(0x6A, 0xFF)
 	if got := disp.ReadReg(0x6A); got != 0x3F {

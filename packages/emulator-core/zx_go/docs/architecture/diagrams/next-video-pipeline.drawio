@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="v0" value="ULA.Render() base pass&#10;classic 256×192 screen + per-line border into 320×240 RGBA&#10;(Timex hi-res / LoRes handled in the base pass)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+        <mxCell id="v0" value="ULA.Render() base pass&#10;classic/Timex scr1/hi-colour/LoRes rows + per-line border into 320×240 RGBA&#10;(stable Timex hi-res re-composites at 512 half-pixels; mixed frames decimate per row)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="440" y="40" width="480" height="70" as="geometry" />
         </mxCell>
         <mxCell id="v1" value="Per active scanline y (0..191): copper RunToCycle interleaved PER PIXEL&#10;with the live-palette ULA row render (renderNextULARow: zxula.vhd decode&#10;through the live ULA palette, ULANext NR$42/$43, border via paper entry,&#10;NR$26/$27 hardware scroll + NR$1A clip window, and the raster-stamped&#10;displayed-palette / ULANext state replay for mid-frame NR$43 flips)&#10;MOVE=2 / NOOP=1 cycles at 28MHz; WAIT at vcount==Y &amp;&amp; hcount&gt;=(X&lt;&lt;3)+12&#10;lines 192..311 swept after the visible rows (copper.vhd)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
@@ -22,7 +22,7 @@
         <mxCell id="l-spr" value="Sprites (128)&#10;4/8bpp, scale, mirror,&#10;rotate, anchor groups,&#10;NR$4B transparency (raw pattern),&#10;dual NR$34/IO indexes (NR$09 tie),&#10;per-line budget + collision $303B" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="600" y="250" width="170" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="l-lores" value="LoRes / Radastan&#10;128×96 (lores.vhd&#10;transcription)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+        <mxCell id="l-lores" value="LoRes / Radastan&#10;128×96 (lores.vhd transcription)&#10;NR$15 bit 7: replaces the ULA pixel in-clip" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="790" y="250" width="150" height="70" as="geometry" />
         </mxCell>
         <mxCell id="l-pal" value="Palettes (pkg/next/palette)&#10;9-bit RGB333, 256 entries × 8 banks (first/second per layer)&#10;per-entry Layer 2 priority bit (NR$44 bit 7)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">

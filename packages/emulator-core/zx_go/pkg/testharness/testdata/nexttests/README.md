@@ -36,6 +36,14 @@ The Next-side tests ship as `.snx` snapshots — in practice standard
 | CPalTrV3.snx | ULA/ChangePaletteTransparency_v3 | ULANext OFF: entry 128+7 redefinition must not touch the classic decode; transparent INK-0 entry 0 gives rainbow text over Layer 2 |
 | Ula_Pal.snx | ULA/ClassicPaletized | Classic screen through both Next ULA palettes with CPU raster timing: mid-screen NR$43 displayed-palette flip + border rainbows — drove the raster-stamped ULA-video state replay |
 | UlaScrol.snx | ULA/UlaScroll | NR$26/$27 ULA hardware scroll + NR$1A clip window + NR$69 display modes (OPQA/H/R/M interactive) — drove the scroll/clip wiring and the NR$69 fan-out |
+| L2Colour.snx | Graphics/Layer2Colours | All 24 sprite/L2/ULA state combinations in all six NR$15 orders, priority-bit palette entries, pink fallback, and the closing shadow-over-ROM write. Drove the port $123B shadow-PAGING fix (the bit wrongly flipped the ULA shadow display), the NR$1E/$1F raster-line counter (harness wiring + FPGA cvc convention) and the raster-stamped NR$15 replay (vendored 2026-07-13, as the rest of the Graphics group) |
+| L2Port.snx | Graphics/Layer2Port | Port $123B write/read-over-ROM windows for visible + shadow banks, IM1-in-L2, and the core-3.0.7+ bank-offset form. Self-verdicting green blocks + green border; drove the composed $123B read-back |
+| L2Scroll.snx | Graphics/Layer2Scroll | NR$16/$17 Layer 2 scroll animated to [196,133] + NR$18/NR$1A clips; the ULA-drawn ruler ticks pin the L2 dot alignment, the sheet self-reports the registers |
+| LmxHiCol.snx | Graphics/LayersMixingHiCol | The mixing matrix with Timex HI-COLOUR as the ULA layer — drove the 8x1 attribute fetch (vram_a bit 13, zxula.vhd:238) |
+| LmxHiRes.snx | Graphics/LayersMixingHiRes | The matrix with Timex HI-RES 512x192 — drove the native half-pixel composite (ComposeHiResScanline) and the synthesized hi-res attribute/border (index 130, the core-2.00.25+ behaviour the upstream ReadMe documents) |
+| LmixLoRs.snx | Graphics/LayersMixingLoRes | The matrix with LORES as the ULA layer — drove wiring the orphaned pkg/next/lores (NR$15 bit 7, NR$6A, NR$32/$33) into the live ULA render |
+| Lmix_LxU.snx | Graphics/LightenDarken_L2_ULA | The additive blend modes: NR$15 mode 6 (clamped L+U) and 7 (L+U-5) over LoRes — drove routing the scanline painter's blend orders through the FPGA-golden Mix |
+| NReg0x69.snx | Graphics/NextReg0x69 | NR$69 as a composed live alias of $123B/$7FFD/port $FF (10 read/write cross-checks self-reported) + copper-driven per-scanline mode switching. Drove the composed NR$69/port-$FF reads, the NR$08 bit 2 port-$FF read gate and the 48K-personality ROM-3 launch state. Runner pokes NR$12=9 (the NextZXOS launch state the test assumes) |
 
 The classic `ULAvsSJS.sna` (visual ULA timing) is also not yet wired;
 it needs screenshot comparison rather than screen-text OCR.
