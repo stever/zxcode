@@ -263,6 +263,19 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   back-to-back Render with no CPU execution (the harness screenshot
   path) keeps the executed frame's maps instead of rebuilding uniform
   live state (the `stale` check on the monotonic reference clock).
+- Raster-stamped palette CONTENT (`pkg/next/palette` Bank stamped-write
+  log): mid-frame CPU writes of palette VALUES (NR$41/$44 — on the FPGA
+  a palette BRAM write is visible to the video fetch on the next pixel,
+  zxnext.vhd:4919-4930) are logged with their raster line; the
+  compositor pass rewinds the bank to frame-start state and re-applies
+  the log row by row (paper rows and the bottom-border sweep in raster
+  order, then a rewind for the top-border rows, which scanned before
+  the paper), suspending logging for the walk so the copper
+  interleave's render-time writes are never logged. EndReplay restores
+  the live state and RETAINS the consumed log for stale re-renders.
+  Granularity is one raster line; hi-res/wide re-composites stay at
+  end-of-frame palette state (known-gaps.md). Driven by the
+  Timing/ScanlineReadingAndInterrupt one-line palette flashes.
 - NR$69 (Display Control) fans out like the FPGA: bit 7 → Layer 2
   enable, bit 6 → shadow display, bits 5:0 → the Timex port-$FF mode
   (zxnext.vhd:3924/:3658/:3617; `next.WireULAControl`).

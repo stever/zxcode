@@ -449,6 +449,23 @@ type nextULAPaletteSelector interface {
 	SetULAActivePalette(second bool)
 }
 
+// nextPaletteReplay is the optional compositor contract for the raster-
+// stamped palette-CONTENT replay: applyNextCompositor brackets its row
+// walk with Begin/End (which also suspends the bank's write logging so
+// render-time copper writes are never logged), steps ReplayPaletteThrough
+// per row, and rewinds once for the top-border pass whose rows scanned
+// before the paper. Satisfied by pkg/next/compositor, which delegates to
+// palette.Bank's stamped-write log. Begin's stale flag marks a re-render
+// with no CPU execution since the last one (the harness screenshot
+// path): the retained log replays identically instead of the walk
+// erasing the raster-timed recolours with the end-of-frame state.
+type nextPaletteReplay interface {
+	BeginPaletteReplay(stale bool) bool
+	ReplayPaletteThrough(line int)
+	RewindPaletteReplay()
+	EndPaletteReplay()
+}
+
 // NextDAC is the contract for the four Spectrum Next DAC channels.
 // pkg/next/dac.Bank satisfies it via WritePort (which returns
 // "handled?" so the ULA's port dispatcher knows whether to fall
@@ -992,7 +1009,7 @@ func (u *ULA) Render() *image.RGBA {
 			}
 		}
 		if u.nextCompositor != nil {
-			u.applyNextCompositor()
+			u.applyNextCompositor(stale)
 			if u.nextCompositor.HiResLayer2Active() {
 				return u.renderHiResLayer2()
 			}
@@ -1057,7 +1074,7 @@ func (u *ULA) Render() *image.RGBA {
 	// Layer 2 data internally; we just hand it the existing ULA
 	// scanline and write the result back.
 	if u.nextCompositor != nil {
-		u.applyNextCompositor()
+		u.applyNextCompositor(stale)
 		if u.nextCompositor.HiResLayer2Active() {
 			// Layer 2 in 320×256 / 640×256 hi-res mode spans the full
 			// display width; composite it over the base frame.
@@ -1957,7 +1974,7 @@ func (u *ULA) Close() {
 // well within budget per the §13.5 performance estimate. The
 // row scratch buffers (compositorScan / compositorComposed /
 // compositorRow) are allocated once and reused across frames.
-func (u *ULA) applyNextCompositor() {
+func (u *ULA) applyNextCompositor(stale bool) {
 	const w = 256
 	const h = 192
 	// At 3.5 MHz the Copper runs ~one instruction per 4 CPU
@@ -1989,6 +2006,21 @@ func (u *ULA) applyNextCompositor() {
 	var paced nextCopperCyclePaced
 	if u.nextCopper != nil {
 		paced, _ = u.nextCopper.(nextCopperCyclePaced)
+	}
+	// Raster-stamped palette-CONTENT replay: rewind the palette bank to
+	// its frame-start state and re-apply the frame's logged NR$41/$44
+	// writes row by row, so a CPU rewriting palette entries mid-frame
+	// (the ScanlineReadingAndInterrupt one-line flashes) recolours from
+	// exactly its raster line — the FPGA's palette BRAM write is visible
+	// to the video fetch on the next pixel (zxnext.vhd:4919-4930). The
+	// bracket also suspends the bank's write logging for the whole walk,
+	// so the copper interleave's render-time writes are never logged.
+	// Stamp clock and fold convention match borderChanges (BeamPosition
+	// lines, paper top = 64).
+	palReplay, _ := u.nextCompositor.(nextPaletteReplay)
+	if palReplay != nil {
+		palReplay.BeginPaletteReplay(stale)
+		defer palReplay.EndPaletteReplay()
 	}
 	// Raster order of one display row's border pixels (hcount = pixel+12,
 	// 448 hcounts per line): the left border's first 20 pixels display
@@ -2053,6 +2085,13 @@ func (u *ULA) applyNextCompositor() {
 		}
 	}()
 	for y := 0; y < h; y++ {
+		// Apply the frame's stamped palette writes up to this paper
+		// row's raster line (y+64) before composing it — same
+		// convention as the borderChanges fold (line granularity;
+		// sub-line detail is below the render's precision floor).
+		if palReplay != nil {
+			palReplay.ReplayPaletteThrough(64 + y)
+		}
 		// Run the Copper for this row BEFORE composing it so MOVEs
 		// affecting the compositor palette / Layer 2 are visible to this
 		// row's composition. With a cycle-paced copper + live-palette ULA
@@ -2132,6 +2171,22 @@ func (u *ULA) applyNextCompositor() {
 	// covers only the paper rows; see known-gaps.md).
 	if liveULA {
 		for v := h; v < frameLines; v++ {
+			// Stamped-palette replay for the sweep rows. Bottom border
+			// rows scan at raster v+64, straight after the paper. The
+			// displayed frame's top border rows scanned BEFORE the
+			// paper (raster 40..63), so when the sweep reaches them the
+			// applied writes rewind to the frame start and replay
+			// forward again from there.
+			if palReplay != nil {
+				if v < frameLines-BorderTop {
+					palReplay.ReplayPaletteThrough(64 + v)
+				} else {
+					if v == frameLines-BorderTop {
+						palReplay.RewindPaletteReplay()
+					}
+					palReplay.ReplayPaletteThrough(v - (frameLines - BorderTop) + (64 - BorderTop))
+				}
+			}
 			if paced != nil {
 				paced.RunToCycle(uint16(v), lineEndCycle)
 			}

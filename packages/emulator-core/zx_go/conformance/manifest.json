@@ -753,16 +753,35 @@
             {
               "name": "Changing8kBank",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank",
-              "notes": "MMU bank-switch timing"
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsChanging8kBank"
+                ]
+              },
+              "notes": "MMU bank-switch timing off the frame INT: 2048 Z80N NEXTREG r,n (20T) render a green border band ending at image row 151 — pinned by instruction/frame-INT arithmetic (border-change stamps at raster 4 and 191) and matching MAME 0.282's proportion, the only upstream reference (no board photo). zx_go's fixed 128K-flavour raster (228T lines under 48K personality) is ~2% short of the FPGA's 48K timing — known-gaps.md"
             },
             {
               "name": "Changing8kBank_NoContention",
-              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank_NoContention"
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank_NoContention",
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsChanging8kBank"
+                ]
+              },
+              "notes": "NR$08 bit 6 contention-OFF variant: renders identically to the ON variant (equality asserted), matching MAME 0.282's identical capture pair. Machine-wide per-access contention is a catalogued deferral (known-gaps.md) — on the FPGA the ON band would be slightly taller; no board photo exists to pin that delta"
             },
             {
               "name": "ScanlineReadingAndInterrupt",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/ScanlineReadingAndInterrupt",
-              "notes": "NR$1E/$1F raster reads vs the frame interrupt"
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsScanlineIRQ"
+                ]
+              },
+              "notes": "All three modes driven and pixel-pinned: NR$1F busy-wait markers land on their cvc row (incl. the 8-bit double trigger echoing into the displayed top border), the NR$22/$23 line interrupt's cyan band, and the copper WAIT band (paper + right border, left border clean). Drove the raster-stamped palette-CONTENT replay (palette.Bank write log; zxnext.vhd:4919-4930). READ/IRQ markers carry the documented one-line granularity (upstream ReadMe: marker starts 'somewhat midway'); NR$64 line offset is a catalogued no-op"
             }
           ]
         },
@@ -777,7 +796,7 @@
             {
               "name": "DmaInteractive",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/DmaInteractive",
-              "notes": "Interactive; includes real Zilog hardware photos — manual comparison rather than CI",
+              "notes": "Interactive; includes real Zilog hardware photos — manual comparison rather than CI. Status re-confirmed 2026-07-13 with a hand-run: boots, full UI + byte-stream parser work (commit/LOAD/FORCE-RDY/ENABLE all recognized), but it is a free-form WR-register editor with grey-+2 Zilog photos as ground truth — no self-verdicting surface to pin. The run surfaced one real finding: its DEFAULT port $0B (Zilog-compatibility decode) is unclaimed in zx_go (only $6B is wired) — catalogued in known-gaps.md",
               "status": "manual"
             }
           ]
@@ -832,7 +851,13 @@
             {
               "name": "ULAvsSJS",
               "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/ULAvsSJS",
-              "notes": "ULA timing comparison"
+              "runner": {
+                "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAvsSJS"
+                ]
+              },
+              "notes": "Keyboard/Sinclair-joystick port mixing (not a timing test — the old note was wrong): $00FE whole-matrix reads must include every zero bit read on the $F7FE/$EFFE half-rows. Keys driven within and across half-rows; the live attribute cells, the hidden 'difference detected' message and the cyan border are asserted — the grey-+2 SJS quirk must never appear"
             }
           ]
         }

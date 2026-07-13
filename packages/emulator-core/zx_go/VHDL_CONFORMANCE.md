@@ -118,10 +118,18 @@ but no port-by-port VHDL decode conformance test.
 ## Axis 5 — Interrupts / timing  (zxula_timing.vhd + zxnext.vhd 2014-2033)
 Tests: `pkg/z80/int_timing_test.go` (narrow pulse, DI-across-pulse, speed-scaled
 frame boundary), `pkg/next/inttiming_test.go` (per-mode assert tstate + pulse).
-Fixed this session: **StepInstructionWithIRQ 28 MHz frame boundary not
-SpeedMultiplier-scaled (8× over-fire)**; narrow-pulse default. ⚠️ frame-ORIGIN
-offset (CPU tstate=0 ↔ ULA hc0/vc0) unvalidated; line-INT at turbo; IM2 vector
-table; NR$22/$C0/$C4/$C6 enable gates not all wired to the INT generator.
+Fixed earlier: **StepInstructionWithIRQ 28 MHz frame boundary not
+SpeedMultiplier-scaled (8× over-fire)**; narrow-pulse default. Frame-ORIGIN
+offset (CPU tstate=0 ↔ ULA hc0/vc0): **validated by instrument** (Timing group) —
+Changing8kBank's border band (frame INT at t=291 → StartTiming at raster 4,
+EndTiming at raster 191 after the derived 42.7k T of NEXTREG work) and
+ScanlineReadingAndInterrupt's NR$1E/$1F marker rows (cvc 200 renders exactly
+8 rows under the paper) pin INT→paper-top = 64 lines within a line for the
+128K/+3 geometry the Next runs. ⚠️ Remaining: per-NR$03 display geometry is not
+modelled (48K timing keeps the 228 T line — known-gaps.md), the sub-line hc
+component of the INT origin is below the render's one-line floor; line-INT at
+turbo; IM2 vector table; NR$22/$C0/$C4/$C6 enable gates not all wired to the
+INT generator.
 
 ## Axis 6 — Z80 / Z80N operations  (FUSE + Sean Young + GHDL gate oracle)
 Tests: canonical T-state tables (iter 266-270), per-op timing batches, flags

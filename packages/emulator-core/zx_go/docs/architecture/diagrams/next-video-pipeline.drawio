@@ -25,7 +25,7 @@
         <mxCell id="l-lores" value="LoRes / Radastan&#10;128×96 (lores.vhd transcription)&#10;NR$15 bit 7: replaces the ULA pixel in-clip" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="790" y="250" width="150" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="l-pal" value="Palettes (pkg/next/palette)&#10;9-bit RGB333, 256 entries × 8 banks (first/second per layer)&#10;per-entry Layer 2 priority bit (NR$44 bit 7)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+        <mxCell id="l-pal" value="Palettes (pkg/next/palette)&#10;9-bit RGB333, 256 entries × 8 banks (first/second per layer)&#10;per-entry Layer 2 priority bit (NR$44 bit 7)&#10;+ raster-stamped content-write log: mid-frame CPU NR$41/$44 writes&#10;rewound + replayed per row by the compositor pass (BeginReplay/&#10;ReplayThrough/RewindReplay/EndReplay; copper render-time writes unlogged)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
           <mxGeometry x="60" y="350" width="440" height="60" as="geometry" />
         </mxCell>
         <mxCell id="l-clip" value="Clip windows NR$18-$1B&#10;(4-coordinate + 2-bit index protocol)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">

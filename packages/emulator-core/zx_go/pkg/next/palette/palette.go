@@ -159,6 +159,147 @@ type Bank struct {
 	// the index (zxnext.vhd:5379-5381 / 5399-5401 gate the increment on this
 	// bit) — the guest writes the same entry repeatedly.
 	autoIncDisable bool
+
+	// Raster-stamped content-write log. On the FPGA a palette BRAM write
+	// (nr_palette_we, zxnext.vhd:4919-4930) is visible to the video fetch
+	// on the very next pixel, so a CPU rewriting an entry mid-frame
+	// recolours the scene from that raster position (the MrKWatkins
+	// ScanlineReadingAndInterrupt test paints its target-line marker
+	// exactly this way: one-line palette flashes timed off NR$1F). The
+	// emulator renders at end of frame, so each mid-frame write is logged
+	// with its raster line here and the ULA render replays the log row by
+	// row (Begin/ReplayThrough/Rewind/EndReplay), the same fold the border
+	// colour and NR$43-select changes already get. rasterLine is nil until
+	// wired (WirePalette) — no logging, no overhead for classic machines.
+	rasterLine     func() int
+	writes         []stampedWrite
+	replayCursor   int
+	replayActive   bool // suspends logging while the render replays/copper runs
+	writeOverflow  bool
+	writesConsumed bool // log already replayed; retained for stale re-renders
+}
+
+// stampedWrite is one logged palette-entry mutation: enough to undo
+// (old) and redo (new) the write during the render's per-row replay.
+type stampedWrite struct {
+	line     int
+	pal      byte // palette slot 0..7
+	idx      byte
+	old, new uint16
+	oldPrio  byte
+	newPrio  byte
+	hasPrio  bool
+}
+
+// maxStampedWrites bounds the per-frame log; a frame writing more than
+// this (bulk palette uploads) degrades to today's end-of-frame
+// resolution instead of growing without limit.
+const maxStampedWrites = 4096
+
+// SetRasterLineSource wires the raster-line clock (the ULA's
+// BeamPosition line, 0 = frame INT) that stamps each palette content
+// write. Nil disables logging.
+func (b *Bank) SetRasterLineSource(fn func() int) { b.rasterLine = fn }
+
+// logWrite records one entry mutation with the current raster stamp.
+// Must be called BEFORE the mutation lands so old captures the prior
+// value. No-op while the render replay owns the bank (render-time
+// copper writes are already raster-paced) or when no clock is wired.
+func (b *Bank) logWrite(idx byte, new uint16, newPrio byte, hasPrio bool) {
+	if b.rasterLine == nil || b.replayActive {
+		return
+	}
+	// First write of a new execution frame: drop the previous frame's
+	// consumed log.
+	if b.writesConsumed {
+		b.writes = b.writes[:0]
+		b.writesConsumed = false
+		b.writeOverflow = false
+	}
+	if len(b.writes) >= maxStampedWrites {
+		b.writeOverflow = true
+		return
+	}
+	pal := b.palettes[b.selected]
+	b.writes = append(b.writes, stampedWrite{
+		line:    b.rasterLine(),
+		pal:     b.selected,
+		idx:     idx,
+		old:     pal.Get(idx),
+		new:     new,
+		oldPrio: pal.Priority(idx),
+		newPrio: newPrio,
+		hasPrio: hasPrio,
+	})
+}
+
+// BeginReplay suspends write logging and rewinds every logged write (in
+// reverse) so the bank holds the frame-start palette state. Returns
+// whether any stamped writes exist to replay; on overflow the log is
+// dropped and the bank keeps its live (end-of-frame) state — today's
+// resolution — rather than replaying a truncated history.
+func (b *Bank) BeginReplay(stale bool) bool {
+	b.replayActive = true
+	// A fresh (non-stale) render whose log was already consumed by a
+	// previous render means the execution frame since then wrote no
+	// palette entries — drop the old log rather than replaying last
+	// frame's flashes again. A STALE render (no execution since the
+	// last render, e.g. the harness screenshot path) keeps the consumed
+	// log and replays it identically.
+	if !stale && b.writesConsumed {
+		b.writes = b.writes[:0]
+		b.writesConsumed = false
+	}
+	if b.writeOverflow || len(b.writes) == 0 {
+		b.writes = b.writes[:0]
+		b.writeOverflow = false
+		b.replayCursor = 0
+		return false
+	}
+	// Every logged write is live at this point, so rewinding "the
+	// applied prefix" means rewinding the whole log.
+	b.replayCursor = len(b.writes)
+	b.RewindReplay()
+	return true
+}
+
+// ReplayThrough applies, in order, every logged write stamped at or
+// before line that the cursor has not yet passed. Call with
+// monotonically increasing lines during the render's row walk.
+func (b *Bank) ReplayThrough(line int) {
+	for b.replayCursor < len(b.writes) && b.writes[b.replayCursor].line <= line {
+		w := b.writes[b.replayCursor]
+		b.palettes[w.pal].Set(w.idx, w.new)
+		if w.hasPrio {
+			b.palettes[w.pal].SetPriority(w.idx, w.newPrio)
+		}
+		b.replayCursor++
+	}
+}
+
+// RewindReplay rewinds the applied writes back to the frame-start
+// state so a second raster pass (the render's top-border sweep, whose
+// rows scan BEFORE the paper) can replay from the beginning.
+func (b *Bank) RewindReplay() {
+	for i := b.replayCursor - 1; i >= 0; i-- {
+		w := b.writes[i]
+		b.palettes[w.pal].Set(w.idx, w.old)
+		if w.hasPrio {
+			b.palettes[w.pal].SetPriority(w.idx, w.oldPrio)
+		}
+	}
+	b.replayCursor = 0
+}
+
+// EndReplay applies any writes the row walk never reached (restoring
+// the live end-of-frame palette state), marks the log consumed — it is
+// RETAINED so a stale re-render can replay it identically; the next
+// fresh render or the next logged write drops it — and resumes logging.
+func (b *Bank) EndReplay() {
+	b.ReplayThrough(int(^uint(0) >> 1))
+	b.writesConsumed = true
+	b.replayCursor = 0
+	b.replayActive = false
 }
 
 // SetAutoIncDisable sets the NR$43 bit-7 palette auto-increment-disable latch.
@@ -284,6 +425,7 @@ func (b *Bank) Write8(val byte) {
 	if val&0x03 != 0 {
 		v |= 1
 	}
+	b.logWrite(b.index, v, 0, false)
 	b.palettes[b.selected].Set(b.index, v)
 	if !b.autoIncDisable {
 		b.index++
@@ -320,6 +462,7 @@ func (b *Bank) ReadNR44() byte {
 // register writes can be added when there's a real caller.
 func (b *Bank) Write9(hi, lo byte) {
 	v := (uint16(hi) << 1) | uint16(lo&0x01)
+	b.logWrite(b.index, v, (lo>>6)&0x03, true)
 	b.palettes[b.selected].Set(b.index, v)
 	// lo bits 7:6 carry the 2-bit priority (NR$44 protocol, zxnext.vhd:4920).
 	b.palettes[b.selected].SetPriority(b.index, (lo>>6)&0x03)
@@ -352,4 +495,10 @@ func (b *Bank) WriteNR44(val byte) {
 func (b *Bank) ResetWriteLatches() {
 	b.pending9 = 0
 	b.have9 = false
+	// Drop the frame's stamped-write log too: a reboot's palette state
+	// is a fresh baseline, not something to rewind through.
+	b.writes = b.writes[:0]
+	b.writeOverflow = false
+	b.replayCursor = 0
+	b.replayActive = false
 }

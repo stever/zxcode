@@ -962,6 +962,18 @@ func WireULAControl(d *nextregs.Dispatcher, sink ULAVideoSink, l2 *layer2.Layer2
 // ulaNext may be nil; when set it is seeded with the current NR$42/$43
 // state and updated on every write of either register.
 func WirePalette(d *nextregs.Dispatcher, b *palette.Bank, ulaNext ULANextSink) {
+	// Raster-stamp palette CONTENT writes with the ULA's beam line so
+	// the render can replay them row by row: an FPGA palette BRAM write
+	// (nr_palette_we, zxnext.vhd:4919-4930) is visible to the video
+	// fetch on the next pixel, so mid-frame rewrites recolour the scene
+	// from their raster position (the ScanlineReadingAndInterrupt
+	// test's one-line target markers are exactly such flashes).
+	if bp, ok := ulaNext.(interface{ BeamPosition() (int, int) }); ok {
+		b.SetRasterLineSource(func() int {
+			line, _ := bp.BeamPosition()
+			return line
+		})
+	}
 	pushULANext := func(disp *nextregs.Dispatcher) {
 		if ulaNext != nil {
 			ulaNext.SetULANext(disp.Raw(0x43)&0x01 != 0, disp.Raw(0x42))

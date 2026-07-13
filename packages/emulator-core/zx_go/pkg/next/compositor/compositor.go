@@ -493,6 +493,51 @@ func (c *Compositor) SetULAActivePalette(second bool) {
 	c.pal.SetActive(palette.LayerULA, sel)
 }
 
+// Raster-stamped palette-content replay, delegated to the Bank (see
+// palette.Bank's stamped-write log): pkg/ula's applyNextCompositor
+// brackets its row walk with BeginPaletteReplay/EndPaletteReplay and
+// steps ReplayPaletteThrough per row so mid-frame CPU palette writes
+// (NR$41/$44) recolour the scene from their raster line, matching the
+// FPGA's next-pixel BRAM visibility (zxnext.vhd:4919-4930). The bracket
+// also suspends write logging, so the copper's render-time writes are
+// never logged. RewindPaletteReplay resets to the frame-start state for
+// the walk's top-border pass, whose rows scan before the paper.
+
+// BeginPaletteReplay rewinds the palette bank to its frame-start
+// content state; reports whether any stamped writes exist. stale marks
+// a re-render with no execution since the last one — the retained log
+// replays again instead of being discarded.
+func (c *Compositor) BeginPaletteReplay(stale bool) bool {
+	if c.pal == nil {
+		return false
+	}
+	return c.pal.BeginReplay(stale)
+}
+
+// ReplayPaletteThrough applies stamped palette writes up to and
+// including the given raster line (monotonic within a pass).
+func (c *Compositor) ReplayPaletteThrough(line int) {
+	if c.pal != nil {
+		c.pal.ReplayThrough(line)
+	}
+}
+
+// RewindPaletteReplay rewinds applied stamped writes back to the
+// frame-start state for a second raster pass.
+func (c *Compositor) RewindPaletteReplay() {
+	if c.pal != nil {
+		c.pal.RewindReplay()
+	}
+}
+
+// EndPaletteReplay restores the live end-of-frame palette state and
+// clears the frame's stamped-write log.
+func (c *Compositor) EndPaletteReplay() {
+	if c.pal != nil {
+		c.pal.EndReplay()
+	}
+}
+
 // ULARGBA resolves a ULA palette index (0..255) through the LIVE active ULA
 // palette — the FPGA feeds every ULA pixel (and border pixel) through the
 // palette SRAM, so NR$40/$41/$44 redefinitions (including copper MOVEs)

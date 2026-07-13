@@ -12,6 +12,7 @@ on the conformance dashboard.
 | int_skip.sna | ZX48_ZX128/Z80IntSkip | Interrupt-acceptance inhibition after EI and DD/FD prefixes; ISR entries per /INT pulse; IFF2 reads during int-ack |
 | ccffrm.sna | ZX48_ZX128/Z80CcfScfOutcomeStability | SCF/CCF outcome determinism frame over frame |
 | DIHalt.sna | Interrupts/HaltAfterDisable | DI + HALT must hang forever (border stays green) |
+| ULAvsSJS.sna | ZX48_ZX128/ULAvsSJS | Keyboard/Sinclair-joystick port mixing: live readings of $00FE (whole 8x5 matrix) vs the $F7FE/$EFFE half-rows — every half-row zero bit must also read zero on the all-rows port, and the "difference detected" message (the grey +2 SJS quirk it hunts) must stay hidden. TestNexttestsULAvsSJS drives keys across rows and asserts the attribute cells + border (vendored 2026-07-13) |
 
 The Next-side tests ship as `.snx` snapshots — in practice standard
 49179-byte 48K SNA files whose extension signals "run on a Next"
@@ -43,7 +44,7 @@ The Next-side tests ship as `.snx` snapshots — in practice standard
 | LmxHiRes.snx | Graphics/LayersMixingHiRes | The matrix with Timex HI-RES 512x192 — drove the native half-pixel composite (ComposeHiResScanline) and the synthesized hi-res attribute/border (index 130, the core-2.00.25+ behaviour the upstream ReadMe documents) |
 | LmixLoRs.snx | Graphics/LayersMixingLoRes | The matrix with LORES as the ULA layer — drove wiring the orphaned pkg/next/lores (NR$15 bit 7, NR$6A, NR$32/$33) into the live ULA render |
 | Lmix_LxU.snx | Graphics/LightenDarken_L2_ULA | The additive blend modes: NR$15 mode 6 (clamped L+U) and 7 (L+U-5) over LoRes — drove routing the scanline painter's blend orders through the FPGA-golden Mix |
+| Chg8kBan.snx | Timing/Changing8kBank | MMU bank-switch timing: 2048 Z80N NEXTREG r,n writes (20T each) timed as a green border band off the frame INT; contention ON variant. No board photo upstream — pinned by instruction/frame-INT arithmetic + the MAME 0.282 capture's proportions (vendored 2026-07-13, as the rest of the Timing group) |
+| Chg8kB_2.snx | Timing/Changing8kBank_NoContention | The NR$08-bit-6 contention-OFF variant; must render identically to the ON variant under the deferred machine-wide contention model (equality pinned — flip when contention lands) |
+| linesIRQ.snx | Timing/ScanlineReadingAndInterrupt | Interactive raster instrument: NR$1E/$1F reads, NR$22/$23 line interrupt and copper WAITs each paint the ULA white-paper palette entry on the target raster line. Drove the raster-stamped palette-CONTENT replay (palette.Bank stamped-write log) |
 | NReg0x69.snx | Graphics/NextReg0x69 | NR$69 as a composed live alias of $123B/$7FFD/port $FF (10 read/write cross-checks self-reported) + copper-driven per-scanline mode switching. Drove the composed NR$69/port-$FF reads, the NR$08 bit 2 port-$FF read gate and the 48K-personality ROM-3 launch state. Runner pokes NR$12=9 (the NextZXOS launch state the test assumes) |
-
-The classic `ULAvsSJS.sna` (visual ULA timing) is also not yet wired;
-it needs screenshot comparison rather than screen-text OCR.

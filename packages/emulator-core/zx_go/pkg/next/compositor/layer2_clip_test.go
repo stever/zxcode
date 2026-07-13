@@ -84,7 +84,7 @@ func TestComposeScanlineLayer2ClipXWindow(t *testing.T) {
 func TestComposeWideLayer2RowHonoursClip(t *testing.T) {
 	pal := palette.NewBank()
 	l2 := redOpaqueLayer2(pal)
-	l2.SetResolution(1)        // 320x256
+	l2.SetResolution(1)         // 320x256
 	l2.SetClip(10, 100, 0, 255) // X doubled in wide mode -> [20, 201]
 	c := New(pal, l2)
 
