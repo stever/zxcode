@@ -342,3 +342,36 @@ func TestULAClassicBrightMagentaDodgesTransparency(t *testing.T) {
 		}
 	}
 }
+
+// TestNR44HalfPairResetByIndexSelectAnd8Bit pins the FPGA rule that
+// writes to NR$40 (index), NR$41 (8-bit value) and NR$43 (select)
+// all reset the NR$44 two-write sequence (nr_palette_sub_idx <= '0',
+// zxnext.vhd:5376/5382/5395). WOTEF's palette-clear routine ends with
+// NR$40=$80 + ONE NR$44 byte; the next upload's NR$40 write must
+// start a fresh pair, or all 256 entries land one byte out of phase
+// (entry = second<<1|first&1 → four shades of dark blue, #165).
+func TestNR44HalfPairResetByIndexSelectAnd8Bit(t *testing.T) {
+	cases := []struct {
+		name  string
+		reset func(b *Bank)
+	}{
+		{"NR40 SetIndex", func(b *Bank) { b.SetIndex(0) }},
+		{"NR41 Write8", func(b *Bank) { b.Write8(0x00); b.SetIndex(0) }},
+		{"NR43 Select", func(b *Bank) { b.Select(PaletteTilemapFirst); b.SetIndex(0) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := NewBank()
+			b.Select(PaletteTilemapFirst)
+			b.SetIndex(0x80)
+			b.WriteNR44(0xAA) // dangling half-pair
+			tc.reset(b)
+			// A full pair now: 9-bit entry = (0x55 << 1) | 1 = $0AB at 0.
+			b.WriteNR44(0x55)
+			b.WriteNR44(0x01)
+			if got := b.PaletteForLayer(LayerTilemap).Get(0); got != 0x0AB {
+				t.Errorf("%s did not reset the NR$44 pair: entry 0 = %#x, want $0AB", tc.name, got)
+			}
+		})
+	}
+}

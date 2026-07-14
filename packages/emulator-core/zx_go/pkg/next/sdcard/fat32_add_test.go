@@ -3,6 +3,7 @@ package sdcard
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -257,5 +258,57 @@ func TestAddFileToFAT32_LongNameGetsUniqueAlias(t *testing.T) {
 	}
 	if got := readPath(t, img, "imported", filepath.Base(p2)); string(got) != "two" {
 		t.Errorf("second import = %q, want two", got)
+	}
+}
+
+// TestWriteFileToFAT32_DirtyFreeClusters is the #165 regression: on a
+// card whose free clusters hold stale bytes (the shipped 24.11 distro
+// image does), growing a directory past its first cluster must zero
+// the extension cluster. Without that, the free-slot scan weaves new
+// entries around the stale ones — separating LFN chains from their
+// 8.3 entries — and the guest's long-name F_OPEN fails (WOTEF's
+// Palettes/HighscoreTable.npl red-noise palette).
+func TestWriteFileToFAT32_DirtyFreeClusters(t *testing.T) {
+	img, err := BuildFAT32(t.TempDir(), FAT32Opts{SizeMB: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Dirty every free cluster with a pattern that mixes zero and
+	// nonzero first bytes across 32-byte dirent slots, like real
+	// deleted-file remnants.
+	b, err := openFAT32(img)
+	if err != nil {
+		t.Fatal(err)
+	}
+	junk := make([]byte, b.spc*512)
+	for i := range junk {
+		junk[i] = byte(i * 37)
+	}
+	for c := uint32(2); c < b.clusters+2; c++ {
+		if b.getFAT(c) == 0 {
+			copy(b.img[b.clusterOffset(c):], junk)
+		}
+	}
+
+	// Enough long-named files (3 dirent slots each) to force several
+	// directory-cluster extensions.
+	names := make([]string, 24)
+	for i := range names {
+		names[i] = fmt.Sprintf("LongPaletteName%02d.npl", i)
+	}
+	for i, name := range names {
+		payload := []byte(fmt.Sprintf("payload-%02d", i))
+		if _, err := WriteFileToFAT32(img, "palettes", name, payload); err != nil {
+			t.Fatalf("WriteFileToFAT32(%s): %v", name, err)
+		}
+	}
+	// Every file must resolve by LONG name, the way NextZXOS/esxDOS
+	// looks them up (requires each LFN chain contiguous with its 8.3
+	// entry).
+	for i, name := range names {
+		got := readLongPath(t, img, "palettes", name)
+		if want := fmt.Sprintf("payload-%02d", i); string(got) != want {
+			t.Errorf("long-name lookup %s = %q, want %q", name, got, want)
+		}
 	}
 }

@@ -278,6 +278,13 @@ func (b *fat32Builder) appendDirent(dirClus uint32, ent []byte) bool {
 			if extra == 0 {
 				return false
 			}
+			// A directory cluster must be zeroed: on an existing image
+			// (scanAlloc) the cluster holds whatever stale bytes the
+			// card had there, and the free-slot scan above would weave
+			// new entries around them — separating LFN chains from
+			// their 8.3 entries, which breaks the guest's long-name
+			// lookup (WOTEF's Palettes/HighscoreTable.npl, #165).
+			b.zeroCluster(extra)
 			b.linkCluster(c, extra)
 			c = extra
 		} else {

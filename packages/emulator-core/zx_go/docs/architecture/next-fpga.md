@@ -207,8 +207,11 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   transparency; NR$6A supplies mode/dfile-xor/palette-offset and
   NR$32/$33 its own scroll pair.
 - Palettes (`pkg/next/palette`): 9-bit RGB333 entries, 256 × 8 banks
-  (first/second per layer), the two-byte NR$44 protocol, per-entry
-  Layer 2 priority bit, ULANext format (NR$42).
+  (first/second per layer), the two-byte NR$44 protocol — a write to
+  NR$40/$41/$43 resets the pending half-pair (zxnext.vhd:5376/5382/5395);
+  guests deliberately leave dangling first bytes and rely on the next
+  index write to re-sync (#165) — per-entry Layer 2 priority bit,
+  ULANext format (NR$42).
 - Compositor (`pkg/next/compositor`): per-scanline composition in the
   NR$15 priority order (SLU/LSU/SUL/LUS/USL/ULS plus two additive blend
   modes), global transparency NR$14 (sprite transparency NR$4B lives in
@@ -360,7 +363,11 @@ raster instant (known-gaps.md).
   image built from a host directory tree (`BuildFAT32`, VFAT long names
   with ~N aliasing, the format NextZXOS actually boots).
   `AddFileToFAT32`/`WriteFileToFAT32` insert or replace files in an
-  existing image (this is what `zxPutFile` and .NEX import use).
+  existing image (this is what `zxPutFile` and .NEX import use). A
+  directory grown past its first cluster gets its extension cluster
+  zeroed — on a real card's dirty free space, stale bytes would
+  otherwise interleave with new entries and detach LFN chains from
+  their 8.3 entries, breaking the guest's long-name F_OPEN (#165).
 - esxDOS (`pkg/next/esxdos`): the RST 8 API implemented as a pre-fetch
   hook at PC $0008, gated on the divMMC overlay being paged in. Handlers
   for the file API (F_OPEN...F_READDIR), M_GETHANDLE, M_DRVAPI,

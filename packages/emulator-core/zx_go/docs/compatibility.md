@@ -167,12 +167,12 @@ method.
 | Warhawk | Works | Verified headless end-to-end: starts, plays and reaches GAME OVER (#160). r47 re-baseline: kfire edges register and the score header ticks. The menu wants a fire EDGE twice; `--press-key` accepts `kfire`/`kup`/... joystick names. The earlier "unstartable, NR $B0-$B2" verdict was a harness artifact. An A/B run with `WireExtendedKeys` disabled starts identically — the game reads NR $B2 each input poll but $00-idle satisfies it. |
 | NextBASIC Invaders | Works (in-game) | Plays on the shipped 24.11 distro headless: first wave, score header, shots (#163; was the loader-class freeze). r47 re-baseline: attract renders. The separately reported `Integer out of range` DEFPROC divergence ([janko-jj](https://github.com/conorarmstrong/zx_go/issues)) is still its own issue. |
 | Baggers in Space (Stonechat Games) | Works (title) | Title + high-score board render (re-verified r47; unblocked by #163). |
-| Crowley World Tour | Works (title, caveat) | Title + frame art render (unblocked by #163, re-verified r47). Caveat: the central menu/high-score panel stays empty through a 40000-frame attract run and keypresses. The game is alive (IM 2, ints firing); its panel content comes from runtime `.pfs`/`.sav`/text loads, so this may belong to the runtime-data-load class below — unverified against a reference. |
+| Crowley World Tour | Works (menu) | Title + frame art render (unblocked by #163). The formerly-empty central panel now shows the full ENDLESS MODE high-score table (#165: the panel content is runtime-loaded, and the staging tool's FAT32 append was detaching LFN chains in grown directories — the game's long-name F_OPENs failed). |
 | Bomb Jack (Next) | Works (title) | Full title screen (Layer 2) renders (re-verified r47; unblocked by #163). |
 | Saboteur (Next) | Works (menu) | r47 re-baseline: title renders, and a keypress advances to the night intro scene, which renders correctly. |
-| Aliens Neoplasma | Known issue | REVISED on r47: the earlier "sparse red lines" verdict was a harness artifact — the game's 15 `data/*.bin` files were never staged by the single-file launcher. With full-folder staging the title artwork renders completely. Remaining failure: a keypress past the title leads to a black screen with the game parked in an idle HALT wait (PC=$9BE6, SP=$5FFF, IM 2, ints firing) through 24000 frames. Class 2 bisect target. |
-| Way of the Exploding Fist (Next) | Known issue | REVISED on r47: the earlier dead-HALT verdict (both stacks) was the same staging artifact — its seven data folders were missing. Title screen now renders. Remaining failure: keypress → menu transition draws corrupted Layer 2 (red noise with a faint ghost of the menu image, white grid lines) in the same 320×256 mode (NR $70=$10) the title renders fine in — the menu's runtime data/palette load is suspect, not 320-mode rendering. Signature: PC=$8B3B running, IM 2, ints firing. Class 2 bisect target. |
-| TX-1696 | Known issue | REVISED on r47 with full-folder staging (minus its 54 MB `audio/`, which cannot fit the 64 MB card): launches and executes heavily (1.2G insns by 32000 frames) but shows only a uniform grey Layer 2 clear; PC cycles inside the divMMC/esxDOS window ($0203/$0755/$1FF2, IM 1) with interrupts accepted at ~25% of frame rate — a repeating esxDOS call loop. Zero-byte `audio/` dummies reproduce the stall byte-for-byte (same PC, ~same insns), ruling out the missing-audio explanation. Class 2 bisect target. |
+| Aliens Neoplasma | Works (menu) | FIXED by #165 (the class-1 staging repair): the post-title black-screen idle HALT was the game silently failing its runtime data F_OPENs on a corrupted staged directory. A keypress now advances title → the ACHILLES NAVIGATION SYSTEM menu (Play game / Redefine keys / About), rendered correctly. |
+| Way of the Exploding Fist (Next) | Works (menu) | FIXED by #165 — TWO stacked bugs. (1) The staging tool's FAT32 `appendDirent` extended a full directory without zeroing the new cluster; on the distro image's dirty free space, stale bytes interleaved with new entries and detached `Palettes/HighscoreTable.npl`'s LFN chain from its 8.3 entry, so the game's F_OPEN failed — and the game's own error path then uploaded a stale palette buffer from `$B000+1` (an esxDOS error CARRY rippling through its `RL E` address math). (2) With staging fixed, every post-keypress screen rendered in four shades of dark blue: our NR$44 half-pair latch wasn't reset by NR$40/$41/$43 writes (zxnext.vhd:5376/5382/5395) — the game's clear routine leaves a dangling half-pair and relies on the reset. High-score table (TOP 10 FIGHTERS) and menu (1 PLAYER / 2 PLAYERS / OPTIONS over Mt. Fuji) both render correctly now. |
+| TX-1696 | Known issue | Unchanged by #165's staging repair (re-verified on a clean-directory card): still a uniform grey Layer 2 with PC cycling in the divMMC/esxDOS window ($0203, IM 1). Caveat on the verdict: its 53 MB `audio/` cannot fit the 64 MB card, so every run so far used zero-byte audio dummies — the repeating esxDOS loop may simply be the engine failing on truncated audio files. Needs a bigger staged card (or a BuildFAT32-from-scratch image sized past 128 MB) before it can be called an emulator bug. |
 | RAMS | Known issue | r47 re-run with its arcade ROM sets staged: still boots to a corrupt first screen (fragments of the game-select UI; parked in a normal IM 2 HALT wait). The hardware build leans on cycle-exact tricks — its own distribution ships a separate emulator-specific `.nex` variant — so this stays in the architectural-timing class (conformance Axis 10), not the quick-fix list. |
 | Atic Atac (Next) | Untested | The local `ATICATAC.NEX` is 111 MB — not a valid `.nex`; needs a clean download before it can be triaged. |
 
@@ -181,24 +181,30 @@ method.
 The failures cluster into classes; ranked by how many titles each
 blocks (the conformance prioritizer — see work items #159/#164):
 
-1. **Post-launch runtime data-load failures — 3 titles confirmed,
-   possibly 4 (the new top target).** WOTEF (menu Layer 2 corrupt
-   after its runtime data load), Aliens Neoplasma (black screen +
-   idle wait right after the title), TX-1696 (grey Layer 2 with a
-   repeating esxDOS call loop) — and possibly Crowley World Tour's
-   empty menu panel. Common shape: content delivered in the `.nex`
-   banks renders fine (all four title screens are perfect), while
-   content the game LOADs at runtime through esxDOS misbehaves —
-   corrupt, black, or stuck mid-read. Counter-evidence to a single
-   root cause: Saboteur's post-title intro scene and Baggers'
-   high-score board also arrive post-launch and render fine, so
-   this may be three unrelated per-title bugs. The lockstep
-   walk-back (#162 drivers: `--next-bisect` / `--next-memdiff`,
-   staged images from `stage-oracle-sd`) is the arbitration:
-   compare loaded-data bytes against the reference at first
-   divergence. Fix item(s) should start with WOTEF — its corrupt
-   menu gives the most legible artefact (known-good title screen
-   in the SAME video mode seconds earlier).
+1. **CLOSED (work item #165, 2026-07-14): runtime data-load failures
+   — WOTEF, Aliens Neoplasma and Crowley's panel all unblocked by
+   TWO stacked fixes.** (a) `fat32.go appendDirent` extended a full
+   directory without zeroing the freshly allocated cluster; on the
+   shipped 24.11 image's dirty free space the free-slot scan then
+   wove new entries around stale bytes, detaching VFAT LFN chains
+   from their 8.3 entries — the guest's long-name F_OPENs failed
+   for whichever files landed in an extension cluster. This is the
+   shared machinery under `stage-oracle-sd`, `zxPutFile` (browser
+   game-folder staging + project files) and .NEX import, so it was
+   a REAL product bug, but a card-content bug, not core-emulation:
+   any faithful emulator shows the same wreck on such a card.
+   Which title failed which way was luck of directory layout —
+   that's why Saboteur/Baggers sailed through and why the class
+   resisted a single-emulator-cause story. (b) Under it, one real
+   FPGA-conformance bug: the NR$44 palette half-pair latch must
+   reset on NR$40/$41/$43 writes (zxnext.vhd:5376/5382/5395, Axis
+   9); WOTEF leaves a deliberate dangling half-pair, and without
+   the reset every palette upload landed one byte out of phase
+   (four shades of dark blue). The diagnosis account (SD-command
+   ground truth → Layer 2 bank diff → NR write-stream phase
+   analysis → game-code disassembly → F_OPEN carry) is in work
+   item #165. TX-1696 did NOT move — see its row (its verdict is
+   blocked on staging its 53 MB audio, not on this class).
 2. **CLOSED (work item #163, 2026-07-14): RETI mistreated as RETN
    unmapped the esxDOS overlay — 5 titles unblocked** (Baggers in
    Space, Crowley World Tour, NextBASIC Invaders, Saboteur, Bomb

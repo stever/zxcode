@@ -281,6 +281,15 @@ Pinned since (ULA group conformance work):
   (zxnext.vhd:2983-2986 machine_type_48 → sram_rom3) — modelled as the
   .snx loader's launch state; NR$8E then reads the board's exact $0B.
 
+Pinned since (work item #165, WOTEF palette bisect):
+- ✅ NR$44 two-write sub-index resets on ANY write to NR$40 / NR$41 /
+  NR$43 (nr_palette_sub_idx <= '0', zxnext.vhd:5376/5382/5395) — not
+  only on reboot. WOTEF's palette-clear routine deliberately ends with
+  NR$40=$80 + ONE NR$44 byte; the next upload's NR$40 write must start
+  a fresh pair or all 256 entries commit one byte out of phase
+  (entry = second<<1|first&1 → four shades of dark blue) —
+  `TestNR44HalfPairResetByIndexSelectAnd8Bit`.
+
 ## Axis 10 — Cycle & sub-line timing faithfulness  (architectural)
 
 The FPGA aspects the render/timing architecture models NON-faithfully by design.

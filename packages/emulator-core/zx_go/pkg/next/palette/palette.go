@@ -343,17 +343,29 @@ func NewBank() *Bank {
 }
 
 // Select sets the active palette per the NextReg 0x43 layout: bit 0
-// toggles first/second, bits 1-2 select layer.
+// toggles first/second, bits 1-2 select layer. A NR$43 write also
+// resets the NR$44 two-write sequence (nr_palette_sub_idx <= '0',
+// zxnext.vhd:5395).
 func (b *Bank) Select(val byte) {
 	b.selected = val & 0x07
+	b.have9 = false
 }
 
 // Selected returns the currently-selected palette index (0..7).
 func (b *Bank) Selected() byte { return b.selected }
 
 // SetIndex installs the palette-write cursor (NextReg 0x40 write).
-// Subsequent value writes auto-increment from here.
-func (b *Bank) SetIndex(i byte) { b.index = i }
+// Subsequent value writes auto-increment from here. A NR$40 write
+// also resets the NR$44 two-write sequence (nr_palette_sub_idx <=
+// '0', zxnext.vhd:5376) — guests rely on this to re-sync after a
+// routine deliberately leaves a dangling half-pair (WOTEF's palette
+// clear ends NR$40=$80 + one NR$44 byte, then the next upload's
+// NR$40 write must start a fresh pair or every entry lands one byte
+// out of phase, #165).
+func (b *Bank) SetIndex(i byte) {
+	b.index = i
+	b.have9 = false
+}
 
 // Index returns the current write cursor.
 func (b *Bank) Index() byte { return b.index }
@@ -430,6 +442,9 @@ func (b *Bank) Write8(val byte) {
 	if !b.autoIncDisable {
 		b.index++
 	}
+	// A NR$41 write also resets the NR$44 two-write sequence
+	// (nr_palette_sub_idx <= '0', zxnext.vhd:5382).
+	b.have9 = false
 }
 
 // Read8 returns the NextReg $41 read-back: the 8 most-significant bits
