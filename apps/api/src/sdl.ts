@@ -490,6 +490,7 @@ type session {
   created: timestamptz!
   updated: timestamptz
   expires: timestamptz!
+  absolute_expires: timestamptz!
   user: user
 }
 
@@ -513,6 +514,7 @@ input session_insert_input {
   auth_token: String
   created: timestamptz
   expires: timestamptz
+  absolute_expires: timestamptz
 }
 
 input session_set_input {

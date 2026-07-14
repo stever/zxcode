@@ -2,11 +2,13 @@
 // every authenticated request); the browser holds a JWT cookie that embeds
 // the session's random auth_token.
 
+import { config } from "./config.js";
 import { gql } from "./graphql.js";
 
 export interface Session {
     session_id: string;
     expires: string;
+    absolute_expires: string;
     user: { user_id: string };
 }
 
@@ -15,10 +17,11 @@ export async function createSession(
     authToken: string,
     created: Date,
     expires: Date,
+    absoluteExpires: Date,
 ): Promise<void> {
     await gql(
-        `mutation CreateSession($user_id: uuid!, $auth_token: String!, $created: timestamptz!, $expires: timestamptz!) {
-            insert_session_one(object: {user_id: $user_id, auth_token: $auth_token, created: $created, expires: $expires}) {
+        `mutation CreateSession($user_id: uuid!, $auth_token: String!, $created: timestamptz!, $expires: timestamptz!, $absolute_expires: timestamptz!) {
+            insert_session_one(object: {user_id: $user_id, auth_token: $auth_token, created: $created, expires: $expires, absolute_expires: $absolute_expires}) {
                 session_id
             }
         }`,
@@ -27,13 +30,16 @@ export async function createSession(
             auth_token: authToken,
             created: created.toISOString(),
             expires: expires.toISOString(),
+            absolute_expires: absoluteExpires.toISOString(),
         },
     );
 }
 
-// Returns the session when it exists and has not expired, touching its
-// `updated` timestamp (touch-on-access; expiry itself is not extended, same
-// as the .NET service).
+// Returns the session when it exists and has not expired. Expiry is sliding:
+// each access pushes `expires` out by the idle window, clamped to the
+// session's absolute cap, and touches the `updated` timestamp. The returned
+// session carries the extended expiry, so callers can re-issue the cookie
+// to match.
 export async function getSession(authToken: string): Promise<Session | null> {
     if (!authToken) return null;
     const data = await gql<{ session: Session[] }>(
@@ -41,6 +47,7 @@ export async function getSession(authToken: string): Promise<Session | null> {
             session(where: {auth_token: {_eq: $auth_token}}) {
                 session_id
                 expires
+                absolute_expires
                 user { user_id }
             }
         }`,
@@ -50,17 +57,30 @@ export async function getSession(authToken: string): Promise<Session | null> {
     if (data.session.length > 1) throw new Error("multiple sessions for token");
     const session = data.session[0] as Session;
 
-    if (!session.expires || new Date(session.expires) <= new Date()) {
+    const now = new Date();
+    if (!session.expires || new Date(session.expires) <= now) {
         return null;
     }
 
+    const slid = Math.min(
+        now.getTime() + config.login.idleExpirationMinutes * 60_000,
+        new Date(session.absolute_expires).getTime(),
+    );
+    if (slid > new Date(session.expires).getTime()) {
+        session.expires = new Date(slid).toISOString();
+    }
+
     await gql(
-        `mutation UpdateSessionTimestamp($session_id: uuid!, $updated: timestamptz!) {
-            update_session_by_pk(pk_columns: {session_id: $session_id}, _set: {updated: $updated}) {
+        `mutation UpdateSessionTimestamp($session_id: uuid!, $updated: timestamptz!, $expires: timestamptz!) {
+            update_session_by_pk(pk_columns: {session_id: $session_id}, _set: {updated: $updated, expires: $expires}) {
                 updated
             }
         }`,
-        { session_id: session.session_id, updated: new Date().toISOString() },
+        {
+            session_id: session.session_id,
+            updated: now.toISOString(),
+            expires: session.expires,
+        },
     );
     return session;
 }

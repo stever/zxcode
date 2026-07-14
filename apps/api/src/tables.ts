@@ -494,7 +494,7 @@ export const tables: Record<string, TableConfig> = {
     session: {
         prismaModel: "session",
         pk: ["session_id"],
-        columns: ["session_id", "user_id", "auth_token", "created", "updated", "expires"],
+        columns: ["session_id", "user_id", "auth_token", "created", "updated", "expires", "absolute_expires"],
         jsonColumns: [],
         nullableColumns: ["updated"],
         relations: {

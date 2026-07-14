@@ -1031,8 +1031,8 @@ describe("admin role (apps/auth documents)", () => {
     it("CreateSession / GetSession / UpdateSessionTimestamp", async () => {
         const now = new Date();
         const created = await data(
-            `mutation CreateSession($user_id: uuid!, $auth_token: String!, $created: timestamptz!, $expires: timestamptz!) {
-                insert_session_one(object: {user_id: $user_id, auth_token: $auth_token, created: $created, expires: $expires}) {
+            `mutation CreateSession($user_id: uuid!, $auth_token: String!, $created: timestamptz!, $expires: timestamptz!, $absolute_expires: timestamptz!) {
+                insert_session_one(object: {user_id: $user_id, auth_token: $auth_token, created: $created, expires: $expires, absolute_expires: $absolute_expires}) {
                     session_id
                 }
             }`,
@@ -1040,7 +1040,8 @@ describe("admin role (apps/auth documents)", () => {
                 user_id: bob.id,
                 auth_token: "session-token-1",
                 created: now.toISOString(),
-                expires: new Date(now.getTime() + 8 * 3600_000).toISOString(),
+                expires: new Date(now.getTime() + 7 * 86400_000).toISOString(),
+                absolute_expires: new Date(now.getTime() + 30 * 86400_000).toISOString(),
             },
             { admin: true },
         );
@@ -1049,7 +1050,7 @@ describe("admin role (apps/auth documents)", () => {
         const fetched = await data(
             `query GetSession($auth_token: String!) {
                 session(where: {auth_token: {_eq: $auth_token}}) {
-                    session_id expires
+                    session_id expires absolute_expires
                     user { user_id user_roles { role { name } } }
                 }
             }`,
@@ -1064,10 +1065,14 @@ describe("admin role (apps/auth documents)", () => {
         expect(sessions[0]?.user.user_id).toBe(bob.id);
 
         const touched = await data(
-            `mutation UpdateSessionTimestamp($session_id: uuid!, $updated: timestamptz!) {
-                update_session_by_pk(pk_columns: {session_id: $session_id}, _set: {updated: $updated}) { updated }
+            `mutation UpdateSessionTimestamp($session_id: uuid!, $updated: timestamptz!, $expires: timestamptz!) {
+                update_session_by_pk(pk_columns: {session_id: $session_id}, _set: {updated: $updated, expires: $expires}) { updated }
             }`,
-            { session_id: sessionId, updated: now.toISOString() },
+            {
+                session_id: sessionId,
+                updated: now.toISOString(),
+                expires: new Date(now.getTime() + 7 * 86400_000).toISOString(),
+            },
             { admin: true },
         );
         expect(touched.update_session_by_pk).not.toBeNull();
@@ -1075,8 +1080,8 @@ describe("admin role (apps/auth documents)", () => {
 
     it("DeleteSession / DeleteOtherSessions (logout and OTP-enable revocation)", async () => {
         const now = new Date();
-        const createDoc = `mutation CreateSession($user_id: uuid!, $auth_token: String!, $created: timestamptz!, $expires: timestamptz!) {
-            insert_session_one(object: {user_id: $user_id, auth_token: $auth_token, created: $created, expires: $expires}) {
+        const createDoc = `mutation CreateSession($user_id: uuid!, $auth_token: String!, $created: timestamptz!, $expires: timestamptz!, $absolute_expires: timestamptz!) {
+            insert_session_one(object: {user_id: $user_id, auth_token: $auth_token, created: $created, expires: $expires, absolute_expires: $absolute_expires}) {
                 session_id
             }
         }`;
@@ -1088,6 +1093,7 @@ describe("admin role (apps/auth documents)", () => {
                     auth_token: token,
                     created: now.toISOString(),
                     expires: new Date(now.getTime() + 3600_000).toISOString(),
+                    absolute_expires: new Date(now.getTime() + 3600_000).toISOString(),
                 },
                 { admin: true },
             );

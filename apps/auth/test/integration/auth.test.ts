@@ -151,19 +151,73 @@ describe("session expiry", () => {
 
         const expiredToken = `expired-${process.hrtime.bigint()}`;
         await adminGql(
-            `mutation ($user_id: uuid!, $auth_token: String!, $created: timestamptz!, $expires: timestamptz!) {
-                insert_session_one(object: {user_id: $user_id, auth_token: $auth_token, created: $created, expires: $expires}) { session_id }
+            `mutation ($user_id: uuid!, $auth_token: String!, $created: timestamptz!, $expires: timestamptz!, $absolute_expires: timestamptz!) {
+                insert_session_one(object: {user_id: $user_id, auth_token: $auth_token, created: $created, expires: $expires, absolute_expires: $absolute_expires}) { session_id }
             }`,
             {
                 user_id: userId,
                 auth_token: expiredToken,
                 created: new Date(Date.now() - 3600_000).toISOString(),
                 expires: new Date(Date.now() - 60_000).toISOString(),
+                absolute_expires: new Date(Date.now() + 3600_000).toISOString(),
             },
         );
+        // The cookie JWT itself is still valid: only the session row lapsed.
         const { mintSessionToken } = await import("../../src/tokens.js");
-        const jwt = await mintSessionToken(expiredToken, ["zxplay-user"]);
+        const jwt = await mintSessionToken(
+            expiredToken,
+            ["zxplay-user"],
+            new Date(Date.now() + 3600_000),
+        );
         expect((await get("/me", `access_token=${jwt}`)).status).toBe(401);
+    });
+
+    it("slides the idle deadline on access, clamped to the absolute cap", async () => {
+        const login = await get("/login");
+        const cookie = `access_token=${cookieValue(login.headers, "access_token")}`;
+        const { userId } = JSON.parse((await get("/me", cookie)).body) as {
+            userId: string;
+        };
+
+        // Pull the session row created moments ago and shrink its idle
+        // deadline, then hit /token: expires must be pushed back out.
+        const found = await adminGql<{
+            session: Array<{ session_id: string; expires: string; absolute_expires: string }>;
+        }>(
+            `query ($user_id: uuid!) {
+                session(where: {user_id: {_eq: $user_id}}, order_by: {created: desc}) {
+                    session_id expires absolute_expires
+                }
+            }`,
+            { user_id: userId },
+        );
+        const session = found.session[0]!;
+        const shrunk = new Date(Date.now() + 60_000).toISOString();
+        await adminGql(
+            `mutation ($session_id: uuid!, $expires: timestamptz!) {
+                update_session_by_pk(pk_columns: {session_id: $session_id}, _set: {expires: $expires}) { session_id }
+            }`,
+            { session_id: session.session_id, expires: shrunk },
+        );
+
+        const tokenRes = await get("/token", cookie);
+        expect(tokenRes.status).toBe(200);
+        // /token re-issues the session cookie alongside the bearer token.
+        expect(cookieValue(tokenRes.headers, "access_token")).toBeTruthy();
+
+        const after = await adminGql<{
+            session: Array<{ expires: string }>;
+        }>(
+            `query ($session_id: uuid!) {
+                session(where: {session_id: {_eq: $session_id}}) { expires }
+            }`,
+            { session_id: session.session_id },
+        );
+        const slid = new Date(after.session[0]!.expires).getTime();
+        expect(slid).toBeGreaterThan(new Date(shrunk).getTime());
+        expect(slid).toBeLessThanOrEqual(
+            new Date(session.absolute_expires).getTime(),
+        );
     });
 });
 

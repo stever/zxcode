@@ -11,6 +11,7 @@ import {
     deleteAuthCookies,
     popReturnUrl,
     requestCookie,
+    setAuthCookie,
     type Authenticated,
 } from "./cookies.js";
 import { establishSession, performLogin } from "./login.js";
@@ -18,6 +19,7 @@ import { getRoles, getUser, getUserByEmail, getUserById } from "./users.js";
 import {
     mintHasuraToken,
     mintOtpChallenge,
+    mintSessionToken,
     readOtpChallenge,
 } from "./tokens.js";
 import { consumeToken, issueToken } from "./logintokens.js";
@@ -111,10 +113,6 @@ function magicLinkUrl(rawToken: string): string {
     return `${publicUrl("verify")}?token=${rawToken}`;
 }
 
-function sessionExpiry(): Date {
-    return new Date(Date.now() + config.login.defaultExpirationMinutes * 60_000);
-}
-
 function otpSetupQr(secret: string, account: string): string {
     return new QRCode({
         content: otpauthUri(secret, account, OTP_ISSUER),
@@ -177,13 +175,7 @@ async function handleLogin(req: Request, res: Response): Promise<void> {
     // Dev mode: skip the magic-link flow entirely and log in the configured
     // user.
     if (config.debugAutoLoginUsername) {
-        await performLogin(
-            config.debugAutoLoginUsername,
-            sessionExpiry(),
-            null,
-            req,
-            res,
-        );
+        await performLogin(config.debugAutoLoginUsername, null, req, res);
         return;
     }
 
@@ -277,14 +269,7 @@ export function createApp(): express.Express {
                 return;
             }
         }
-        await performLogin(
-            consumed.email,
-            sessionExpiry(),
-            consumed.email,
-            req,
-            res,
-            redirect,
-        );
+        await performLogin(consumed.email, consumed.email, req, res, redirect);
     });
 
     app.post("/otp/login", async (req, res) => {
@@ -316,7 +301,6 @@ export function createApp(): express.Express {
         res.clearCookie(OTP_CHALLENGE_COOKIE);
         await establishSession(
             challenge.userId,
-            sessionExpiry(),
             req,
             res,
             safeReturnUrl(challenge.redirectUrl ?? undefined),
@@ -437,6 +421,16 @@ export function createApp(): express.Express {
         }
         const userId = auth.session.user.user_id;
         const roles = await getRoles(userId);
+        // The session slid on access (getSession); re-issue the cookie so
+        // its JWT and expiry track the pushed-out session expiry. /token is
+        // hit whenever the frontend's bearer JWT lapses, so any active use
+        // of the site keeps the cookie fresh.
+        const expires = new Date(auth.session.expires);
+        setAuthCookie(
+            res,
+            await mintSessionToken(auth.authToken, roles, expires),
+            expires,
+        );
         res.json({ token: await mintHasuraToken(userId, roles) });
     });
 

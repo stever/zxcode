@@ -1,6 +1,8 @@
 // JWT minting and cookie-JWT reading, matching the .NET dispensers:
-// - SessionToken (aud caddy, 8h): claims `roles` + `props.auth` (the 64-char
-//   session token). This is the value of the access_token cookie.
+// - SessionToken (aud caddy, expires with the session row it references —
+//   re-minted with the pushed-out expiry as the session slides): claims
+//   `roles` + `props.auth` (the 64-char session token). This is the value
+//   of the access_token cookie.
 // - HasuraToken (aud hasura, 15 min): the Hasura claims namespace the api
 //   verifies. Fetched by the frontend from /token.
 
@@ -15,13 +17,14 @@ const hasuraKey = new TextEncoder().encode(config.jwt.hasuraToken.secret);
 export async function mintSessionToken(
     authToken: string,
     roles: string[],
+    expires: Date,
 ): Promise<string> {
-    const { issuer, audience, expirationSeconds } = config.jwt.sessionToken;
+    const { issuer, audience } = config.jwt.sessionToken;
     return new SignJWT({ roles, props: { auth: authToken } })
         .setProtectedHeader({ alg: "HS256" })
         .setIssuer(issuer)
         .setAudience(audience)
-        .setExpirationTime(Math.floor(Date.now() / 1000) + expirationSeconds)
+        .setExpirationTime(Math.floor(expires.getTime() / 1000))
         .sign(sessionKey);
 }
 

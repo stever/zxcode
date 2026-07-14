@@ -58,8 +58,16 @@ export const config = {
     },
 
     login: {
-        defaultExpirationMinutes: parseInt(
-            loginEnv("DefaultExpirationMinutes") ?? "480",
+        // Sliding expiry: a session lapses after `idle` minutes without an
+        // authenticated request (each access pushes `expires` out again), and
+        // unconditionally at `absolute` minutes after login. The old
+        // DefaultExpirationMinutes fixed-lifetime setting no longer applies.
+        idleExpirationMinutes: parseInt(
+            env("AUTH_Login__IdleExpirationMinutes") ?? "10080", // 7 days
+            10,
+        ),
+        absoluteExpirationMinutes: parseInt(
+            env("AUTH_Login__AbsoluteExpirationMinutes") ?? "43200", // 30 days
             10,
         ),
         admitNewUsers: (loginEnv("AdmitNewUsers") ?? "true") === "true",
@@ -96,10 +104,8 @@ export const config = {
                 "",
             issuer: env("AUTH_JWT__SessionToken__Issuer") ?? "zxplay",
             audience: env("AUTH_JWT__SessionToken__Audience") ?? "caddy",
-            expirationSeconds: parseInt(
-                env("AUTH_JWT__SessionToken__ExpirationSeconds") ?? "28800",
-                10,
-            ),
+            // No ExpirationSeconds: the cookie JWT expires when the session
+            // row it references does (see mintSessionToken).
         },
         hasuraToken: {
             secret:

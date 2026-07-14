@@ -10,24 +10,25 @@ import {
 const SECRET = new TextEncoder().encode("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
 
 describe("session token", () => {
-    it("carries roles and props.auth, aud caddy", async () => {
-        const jwt = await mintSessionToken("session-token-123", ["zxplay-user"]);
+    it("carries roles and props.auth, aud caddy, expires with the session", async () => {
+        const expires = new Date(Date.now() + 3600_000);
+        const jwt = await mintSessionToken("session-token-123", ["zxplay-user"], expires);
         const { payload } = await jwtVerify(jwt, SECRET, {
             issuer: "zxplay",
             audience: "caddy",
         });
         expect(payload.roles).toEqual(["zxplay-user"]);
         expect(payload.props).toEqual({ auth: "session-token-123" });
-        expect(payload.exp! - Math.floor(Date.now() / 1000)).toBeGreaterThan(28000);
+        expect(payload.exp).toBe(Math.floor(expires.getTime() / 1000));
     });
 
     it("round-trips through the cookie reader", async () => {
-        const jwt = await mintSessionToken("abc", ["zxplay-user"]);
+        const jwt = await mintSessionToken("abc", ["zxplay-user"], new Date(Date.now() + 3600_000));
         expect(await readSessionCookie(jwt)).toBe("abc");
     });
 
     it("rejects tampered cookies", async () => {
-        const jwt = await mintSessionToken("abc", ["zxplay-user"]);
+        const jwt = await mintSessionToken("abc", ["zxplay-user"], new Date(Date.now() + 3600_000));
         const [header, payload] = jwt.split(".");
         expect(await readSessionCookie(`${header}.${payload}.AAAA`)).toBeNull();
         expect(await readSessionCookie("garbage")).toBeNull();

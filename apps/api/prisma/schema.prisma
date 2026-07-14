@@ -129,12 +129,13 @@ model user_follows {
 }
 
 model session {
-  session_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String    @db.Uuid
-  auth_token String    @unique(map: "session_auth_token_key") @db.VarChar(255)
-  created    DateTime  @db.Timestamptz(6)
-  updated    DateTime? @db.Timestamptz(6)
-  expires    DateTime  @db.Timestamptz(6)
+  session_id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @db.Uuid
+  auth_token       String    @unique(map: "session_auth_token_key") @db.VarChar(255)
+  created          DateTime  @db.Timestamptz(6)
+  updated          DateTime? @db.Timestamptz(6)
+  expires          DateTime  @db.Timestamptz(6)
+  absolute_expires DateTime  @db.Timestamptz(6)
 
   user user @relation(fields: [user_id], references: [user_id], onUpdate: Cascade, onDelete: Cascade, map: "session_user_id_fkey")
 }

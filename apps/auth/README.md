@@ -32,10 +32,18 @@ cover `/auth/*`).
 ## Sessions and cookies
 
 - `access_token` cookie (HttpOnly, SameSite=Lax, Secure outside dev): an
-  8-hour HS256 JWT (audience `caddy`) whose `props.auth` claim carries a
-  64-char random token matching a `session` row in the database. Every
-  authenticated request re-validates the row (and touches `updated`);
-  session expiry is `AUTH_Login__DefaultExpirationMinutes` (default 480).
+  HS256 JWT (audience `caddy`) whose `props.auth` claim carries a 64-char
+  random token matching a `session` row in the database; the JWT expires
+  when the session row does. Every authenticated request re-validates the
+  row and touches `updated`.
+- Session expiry is sliding: each authenticated request pushes the row's
+  `expires` out by `AUTH_Login__IdleExpirationMinutes` (default 10080, 7
+  days), clamped to the row's `absolute_expires` — set at login to
+  `AUTH_Login__AbsoluteExpirationMinutes` (default 43200, 30 days), which
+  renewal never extends. `/token` re-issues the cookie with the pushed-out
+  expiry, so active use of a frontend keeps both the row and the cookie
+  fresh; the retired fixed-lifetime `DefaultExpirationMinutes` setting no
+  longer applies.
 - `redirect_url` cookie (HttpOnly, 10 minutes, SameSite=None+Secure in
   production): only honoured when it starts with `AuthRedirect`. Magic links
   carry their own validated redirect in the `login_token` row, so a link
@@ -96,15 +104,17 @@ Environment variables (`AUTH_` prefix, `__` nesting):
 - `AUTH_GraphQL__Endpoint`, `AUTH_GraphQL__AdminSecret`
 - `AUTH_SMTP__{Host,Port,Username,Password,From}` (port default 465; From
   default `ZX Play <noreply@zxplay.org>`)
-- `AUTH_Login__{AdmitNewUsers,AuthCookieName,ReturnUrlCookieName,DefaultExpirationMinutes,MagicLinkExpiryMinutes}`
-  (defaults: true, `access_token`, `redirect_url`, 480, 15). The first four
-  fall back to the legacy `AUTH_SAML__*` names so an unmodified deploy
-  compose keeps working; migrate the names and drop the retired
+- `AUTH_Login__{AdmitNewUsers,AuthCookieName,ReturnUrlCookieName,IdleExpirationMinutes,AbsoluteExpirationMinutes,MagicLinkExpiryMinutes}`
+  (defaults: true, `access_token`, `redirect_url`, 10080, 43200, 15). The
+  first three fall back to the legacy `AUTH_SAML__*` names so an unmodified
+  deploy compose keeps working; migrate the names and drop the retired
   `AUTH_SAML__{AppId,ResponseCertificate,AssertionConsumer,SsoEndpoint,LogoutLink}`
-  when convenient.
+  and `AUTH_SAML__DefaultExpirationMinutes` when convenient.
 - `AUTH_JWT__DefaultRole`, `AUTH_JWT__AddDefaultRole`,
-  `AUTH_JWT__SessionToken__{Secret,Issuer,Audience,ExpirationSeconds}`,
-  `AUTH_JWT__HasuraToken__{Secret,Issuer,Audience,ExpirationSeconds}`
+  `AUTH_JWT__SessionToken__{Secret,Issuer,Audience}`,
+  `AUTH_JWT__HasuraToken__{Secret,Issuer,Audience,ExpirationSeconds}` (the
+  session-token JWT has no ExpirationSeconds of its own — it expires with
+  the session row)
 - `PORT` (default 8080; the dev script uses 5000)
 - `AUTH_DEV_MODE=true`: dev defaults (localhost endpoints, placeholder
   secrets, insecure cookies) plus auto-login as

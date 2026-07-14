@@ -34,5 +34,14 @@ export function refreshToken() {
         if (!jwt) throw new Error('invalid jwt value');
         authToken = jwt;
         return jwt;
+    }).catch(e => {
+        if (e.response && e.response.status === 401) {
+            // Session lapsed: bounce through the login flow and back to this
+            // page. The returned promise never settles — the page is
+            // navigating away, and rejecting would flash an error toast.
+            login();
+            return new Promise(() => {});
+        }
+        throw e;
     });
 }

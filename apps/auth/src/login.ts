@@ -31,19 +31,30 @@ function randomToken(length: number): string {
 
 // The session-establishment tail shared by every login path: session row,
 // session-JWT cookie, redirect. Callers have already authenticated the user
-// by whatever factor(s) apply.
+// by whatever factor(s) apply. Expiry is sliding (see sessions.getSession):
+// the initial idle deadline is clamped to the absolute cap in case the
+// configured idle window is the longer of the two.
 export async function establishSession(
     userId: string,
-    expiry: Date,
     req: Request,
     res: Response,
     redirectUrl?: string | null,
 ): Promise<void> {
+    const now = new Date();
+    const absoluteExpiry = new Date(
+        now.getTime() + config.login.absoluteExpirationMinutes * 60_000,
+    );
+    const expiry = new Date(
+        Math.min(
+            now.getTime() + config.login.idleExpirationMinutes * 60_000,
+            absoluteExpiry.getTime(),
+        ),
+    );
     const authToken = randomToken(64);
-    await createSession(userId, authToken, new Date(), expiry);
+    await createSession(userId, authToken, now, expiry, absoluteExpiry);
 
     const roles = await getRoles(userId);
-    const jwt = await mintSessionToken(authToken, roles);
+    const jwt = await mintSessionToken(authToken, roles, expiry);
     setAuthCookie(res, jwt, expiry);
 
     res.redirect(redirectUrl ?? popReturnUrl(req, res));
@@ -54,7 +65,6 @@ export async function establishSession(
 // carried the cookie.
 export async function performLogin(
     username: string,
-    expiry: Date,
     email: string | null,
     req: Request,
     res: Response,
@@ -87,5 +97,5 @@ export async function performLogin(
         if (email && user.username) await updateUserEmail(user.username, email);
     }
 
-    await establishSession(user.user_id, expiry, req, res, redirectUrl);
+    await establishSession(user.user_id, req, res, redirectUrl);
 }
