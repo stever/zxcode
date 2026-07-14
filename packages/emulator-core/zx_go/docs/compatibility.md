@@ -133,52 +133,80 @@ part of zx_go, and the most likely place to hit a bug.** `.nex`
 titles are launched through NextZXOS's own loader, so OS-dependent
 games run as on hardware — but per-title behaviour varies widely.
 
-The table below is the July 2026 headless triage sweep: every title
-was launched through the genuine `.nexload` path on the current SD
-distro (`ZX_GO_RUN_NEX_FILE`, see the headless notes in
-docs/architecture/frontends.md), run 12000–18000 frames with
-screenshots and crash heuristics, and the failures were state-dumped
-to a first observed divergence signature. "Works (title)" means the
-title screen/menu renders and the game was not driven further
-headless — not a full playability verdict.
+The table below is the July 2026 headless triage, re-baselined
+2026-07-14 against the r47 core (post #163 RETI/RETN fix). Method:
+each title's WHOLE release folder (data subfolders included) is
+staged onto a copy of the shipped SD image with an auto-running
+`.nexload` autoexec (`_tools/stage-oracle-sd`, recursive staging),
+cold-booted headless 16000–40000 frames with screenshots,
+`--press-key` schedules where a menu blocks progress, and
+`--dump-state` signatures. "Works (title)" means the title
+screen/menu renders and the game was not driven further headless —
+not a full playability verdict.
+
+Method lesson from the re-baseline: the original sweep launched each
+title through `ZX_GO_RUN_NEX_FILE`, which stages only the lone
+`.nex`. Titles that LOAD separate data files at runtime then failed
+for the wrong reason — two of the three previously recorded
+"game-era" failures (WOTEF's dead HALT, Aliens Neoplasma's sparse
+red lines) were exactly this staging artifact and cleared once their
+data folders were staged. Full-folder staging is now the sweep
+method.
 
 | Title | Status | Notes |
 |---|---|---|
-| Sonic the Hedgehog | Works (caveat) | Renders level/scroll/sprite/HUD and is controllable (arrows + Right-Alt/Ctrl). Residual: a few HUD icons in the top-right diverge from hardware (a game-loop/interrupt-timing detail, not a render bug). Not re-run in the 2026-07 sweep (file not present). |
-| Celeste | Works | Menu and in-game verified headless: ENTER starts the game, level + player render, gameplay frames advance. |
-| Nextoid | Works (caveat) | Boots to its input menu; drivable ('S' then SPACE). Note for headless driving: the menu's key poll only starts a few hundred frames after the menu is visible (intro loops run first), so fixed-frame key schedules are easy to mistime. |
-| Quantum Storm | Works (menu) | Options menu renders. Default controls are a pad ("8BitDo M30"); NR $B0-$B2 read-back is now live-composed, but the MD-only pad buttons still have no input source in any frontend (known-gaps.md), so pad-default titles need their control options switched to keyboard/Kempston. Input not verified. |
-| Head Over Heels (Next) | Works (title) | Title logo renders. |
-| Lords of Midnight (Next) | Works (title) | Title screen renders. |
-| Scramble (Next) | Works (title) | Title screen renders. |
-| Space Invaders (Next) | Works (title) | Title screen renders. |
-| Tyvarian | Works (title) | Title screen renders. |
-| Warhawk | Works | Verified headless end-to-end: starts, plays (ship, scrolling level, enemies, scoring) and reaches GAME OVER. The menu wants a fire EDGE twice — the first brings up "PRESS FIRE TO PLAY", the second starts — from keyboard SPACE (`--press-key "space@N"` repeated every ~90 frames) or Kempston fire (`kfire@N`). The earlier "unstartable, NR $B0-$B2" verdict was a harness artifact: the timed key schedule never landed the two-edge sequence and `--press-key` had no joystick names (it does now). An A/B run with `WireExtendedKeys` disabled starts identically — the game reads NR $B2 each input poll (masked $0E = left-pad X/Z/Y) but $00-idle satisfies it. |
-| NextBASIC Invaders | Works (in-game) | Plays on the shipped 24.11 distro headless: first wave, score header, shots (2026-07-14, RETI/RETN automap fix — work item #163; was the loader-class freeze). The separately reported `Integer out of range` DEFPROC divergence ([janko-jj](https://github.com/conorarmstrong/zx_go/issues)) is still its own issue. |
-| Baggers in Space (Stonechat Games) | Works (title) | Full title screen renders on the shipped 24.11 distro (2026-07-14, RETI/RETN automap fix — work item #163). Previously the loader-class black screen; also loads/plays on the 2020/2.06 stack. |
-| Crowley World Tour | Works (title) | Title renders on the shipped 24.11 distro (RETI/RETN automap fix, #163). |
-| Bomb Jack (Next) | Works (title) | Full title screen (Layer 2) renders on the shipped 24.11 distro (RETI/RETN automap fix, #163). |
-| Saboteur (Next) | Works (title) | Title + "press any key" renders on the shipped 24.11 distro (RETI/RETN automap fix, #163). |
-| Aliens Neoplasma | Known issue | After the #163 fix, its 24.11 behaviour matches the 2020/2.06 stack: game code RUNS (game banks mapped) but the screen shows only sparse red horizontal lines — the former loader-class component is gone; the remaining failure is its own display/NextReg issue (class 2). |
-| Way of the Exploding Fist (Next) | Known issue | HALT with IFF1=0 in IM 2 shortly after launch — **reproduces identically on the 2020/2.06 stack** (10.4M insns in), so this is NOT the 24.11 loader class; the divergence is in game-era code. Own bisect target. |
-| TX-1696 | Known issue | On 24.11: launch falls back to NextZXOS. On the 2020/2.06 stack it launches and executes game code (1.2G insns), but ends with SP=$0000 and a black screen — different failure per stack; needs its own triage. |
-| RAMS | Known issue | First screen renders corrupt (one broken character block). The hardware build leans on cycle-exact tricks — its own distribution ships a separate emulator-specific `.nex` variant — so this title sits in the architectural-timing class (conformance Axis 10), not the quick-fix list. |
+| Sonic the Hedgehog | Works (caveat) | Renders level/scroll/sprite/HUD and is controllable (arrows + Right-Alt/Ctrl). Residual: a few HUD icons in the top-right diverge from hardware (a game-loop/interrupt-timing detail, not a render bug). Not re-run in either 2026-07 sweep (file not present). |
+| Celeste | Works | Re-verified in-game on the r47 re-baseline: ENTER starts the game, level + player render, gameplay frames advance. |
+| Nextoid | Works (caveat) | Menu renders (r47 re-baseline). Headless start scheduling remains fiddly — the menu's key poll only starts a few hundred frames after the menu is visible, and neither `1`+`o` nor earlier schedules landed this sweep; drivability itself was verified in the #159 sweep ('S' then SPACE). |
+| Quantum Storm | Works (menu) | r47 re-baseline: intro art renders (circuit-board screen, magenta border — border colour 3, faithful). Keyboard/Kempston presses don't advance it headless; default controls are an MD pad and the MD-only pad buttons still have no input source (known-gaps.md), so menu navigation stays unverified. |
+| Head Over Heels (Next) | Works (title) | Title logo renders (re-verified r47). |
+| Lords of Midnight (Next) | Works (title) | Intro screen art renders (re-verified r47; runs IM 1). |
+| Scramble (Next) | Works (title) | Attract screen renders — score header, "© KONAMI 1981" (re-verified r47). |
+| Space Invaders (Next) | Works (title) | Attract/planet artwork renders (re-verified r47). |
+| Tyvarian | Works (title) | Attract text renders ("Rise of the Crystal Thief", options prompt) (re-verified r47). The noisy-looking header/footer rows haven't been compared against a reference. |
+| Warhawk | Works | Verified headless end-to-end: starts, plays and reaches GAME OVER (#160). r47 re-baseline: kfire edges register and the score header ticks. The menu wants a fire EDGE twice; `--press-key` accepts `kfire`/`kup`/... joystick names. The earlier "unstartable, NR $B0-$B2" verdict was a harness artifact. An A/B run with `WireExtendedKeys` disabled starts identically — the game reads NR $B2 each input poll but $00-idle satisfies it. |
+| NextBASIC Invaders | Works (in-game) | Plays on the shipped 24.11 distro headless: first wave, score header, shots (#163; was the loader-class freeze). r47 re-baseline: attract renders. The separately reported `Integer out of range` DEFPROC divergence ([janko-jj](https://github.com/conorarmstrong/zx_go/issues)) is still its own issue. |
+| Baggers in Space (Stonechat Games) | Works (title) | Title + high-score board render (re-verified r47; unblocked by #163). |
+| Crowley World Tour | Works (title, caveat) | Title + frame art render (unblocked by #163, re-verified r47). Caveat: the central menu/high-score panel stays empty through a 40000-frame attract run and keypresses. The game is alive (IM 2, ints firing); its panel content comes from runtime `.pfs`/`.sav`/text loads, so this may belong to the runtime-data-load class below — unverified against a reference. |
+| Bomb Jack (Next) | Works (title) | Full title screen (Layer 2) renders (re-verified r47; unblocked by #163). |
+| Saboteur (Next) | Works (menu) | r47 re-baseline: title renders, and a keypress advances to the night intro scene, which renders correctly. |
+| Aliens Neoplasma | Known issue | REVISED on r47: the earlier "sparse red lines" verdict was a harness artifact — the game's 15 `data/*.bin` files were never staged by the single-file launcher. With full-folder staging the title artwork renders completely. Remaining failure: a keypress past the title leads to a black screen with the game parked in an idle HALT wait (PC=$9BE6, SP=$5FFF, IM 2, ints firing) through 24000 frames. Class 2 bisect target. |
+| Way of the Exploding Fist (Next) | Known issue | REVISED on r47: the earlier dead-HALT verdict (both stacks) was the same staging artifact — its seven data folders were missing. Title screen now renders. Remaining failure: keypress → menu transition draws corrupted Layer 2 (red noise with a faint ghost of the menu image, white grid lines) in the same 320×256 mode (NR $70=$10) the title renders fine in — the menu's runtime data/palette load is suspect, not 320-mode rendering. Signature: PC=$8B3B running, IM 2, ints firing. Class 2 bisect target. |
+| TX-1696 | Known issue | REVISED on r47 with full-folder staging (minus its 54 MB `audio/`, which cannot fit the 64 MB card): launches and executes heavily (1.2G insns by 32000 frames) but shows only a uniform grey Layer 2 clear; PC cycles inside the divMMC/esxDOS window ($0203/$0755/$1FF2, IM 1) with interrupts accepted at ~25% of frame rate — a repeating esxDOS call loop. Zero-byte `audio/` dummies reproduce the stall byte-for-byte (same PC, ~same insns), ruling out the missing-audio explanation. Class 2 bisect target. |
+| RAMS | Known issue | r47 re-run with its arcade ROM sets staged: still boots to a corrupt first screen (fragments of the game-select UI; parked in a normal IM 2 HALT wait). The hardware build leans on cycle-exact tricks — its own distribution ships a separate emulator-specific `.nex` variant — so this stays in the architectural-timing class (conformance Axis 10), not the quick-fix list. |
 | Atic Atac (Next) | Untested | The local `ATICATAC.NEX` is 111 MB — not a valid `.nex`; needs a clean download before it can be triaged. |
 
-### Next failure classes and the ranked gap list (2026-07 triage; reranked 2026-07-14)
+### Next failure classes and the ranked gap list (re-baselined 2026-07-14 against r47, work item #164)
 
 The failures cluster into classes; ranked by how many titles each
-blocks (the conformance prioritizer — see work item #159):
+blocks (the conformance prioritizer — see work items #159/#164):
 
-1. **CLOSED (work item #163, 2026-07-14): RETI mistreated as RETN
+1. **Post-launch runtime data-load failures — 3 titles confirmed,
+   possibly 4 (the new top target).** WOTEF (menu Layer 2 corrupt
+   after its runtime data load), Aliens Neoplasma (black screen +
+   idle wait right after the title), TX-1696 (grey Layer 2 with a
+   repeating esxDOS call loop) — and possibly Crowley World Tour's
+   empty menu panel. Common shape: content delivered in the `.nex`
+   banks renders fine (all four title screens are perfect), while
+   content the game LOADs at runtime through esxDOS misbehaves —
+   corrupt, black, or stuck mid-read. Counter-evidence to a single
+   root cause: Saboteur's post-title intro scene and Baggers'
+   high-score board also arrive post-launch and render fine, so
+   this may be three unrelated per-title bugs. The lockstep
+   walk-back (#162 drivers: `--next-bisect` / `--next-memdiff`,
+   staged images from `stage-oracle-sd`) is the arbitration:
+   compare loaded-data bytes against the reference at first
+   divergence. Fix item(s) should start with WOTEF — its corrupt
+   menu gives the most legible artefact (known-good title screen
+   in the SAME video mode seconds earlier).
+2. **CLOSED (work item #163, 2026-07-14): RETI mistreated as RETN
    unmapped the esxDOS overlay — 5 titles unblocked** (Baggers in
    Space, Crowley World Tour, NextBASIC Invaders, Saboteur, Bomb
-   Jack all load/render on the SHIPPED 24.11 distro now; Aliens
-   Neoplasma's loader-class component gone, its class-2 issue
-   remains). Root cause: the Z80 core fired the RETN hook (divMMC
-   automap unmap + Multiface unmap) for RETI and every RETN/RETI
-   mirror, but zxnext.vhd's `divmmc_retn_seen` comes from the
-   im2_control decoder which matches the EXACT pair ED 45 only
+   Jack all load/render on the SHIPPED 24.11 distro now). Root
+   cause: the Z80 core fired the RETN hook (divMMC automap unmap +
+   Multiface unmap) for RETI and every RETN/RETI mirror, but
+   zxnext.vhd's `divmmc_retn_seen` comes from the im2_control
+   decoder which matches the EXACT pair ED 45 only
    (im2_control.vhd:236); RETI feeds the separate `reti_seen`
    (IM2 daisy chain). Failure mechanism: a game IM2 interrupt
    fires while an esxDOS RST $08 file call has the overlay paged
@@ -196,12 +224,12 @@ blocks (the conformance prioritizer — see work item #159):
    verified right, Axis 1); (b) the `.nex` entry PC IS reached on
    24.11 — the wreck happened in-game during the first RST $08
    data load, not "before the dot's first instruction".
-2. **Game-era failures — 2-3 titles** (Way of the Exploding Fist
-   dead-HALTs identically on both stacks; Aliens Neoplasma runs on
-   24.11 post-#163 but renders only sparse red lines — same as on
-   2.06, so it's an own display/NR issue; TX-1696 launches on 2.06
-   but ends with SP=$0000). Each needs its own bisect. Now the top
-   of the ranked list.
+   The #164 re-baseline retired the rest of the old class-2 list:
+   WOTEF's dead-HALT and Aliens' sparse-red-lines verdicts were
+   single-file-staging harness artifacts (their runtime data files
+   were never on the card), and TX-1696's two distro-dependent
+   signatures collapsed into the class-1 stall above once its
+   folder was staged.
 3. **NR $B0/$B1/$B2 extended-keys / MD-pad registers — CLOSED
    (work item #160), and the original blame was wrong.** The
    registers are now live-composed and VHDL-pinned
@@ -218,11 +246,6 @@ blocks (the conformance prioritizer — see work item #159):
    ship a per-emulator build; do not chase before the contention /
    sub-line timing items land.
 
-(The former "alive-but-black display path" (Bomb Jack) and
-"`.nexload` falls back to OS" (TX-1696) classes are absorbed above:
-Bomb Jack is class 1; TX-1696 moved to class 2 with a
-distro-dependent signature.)
-
 #### The loader-class A/B method (2026-07-14)
 
 The class-1 finding came from a symmetric-launch harness that both
@@ -236,8 +259,11 @@ zx_go and ZEsarUX in seconds (ZEsarUX reached Baggers' `.nex` entry
 PC in 11.6 s from reset); the 24.11 distro image also boots in
 ZEsarUX but takes ~12 minutes through that loader build's RAM test.
 Local-only staging tools: `_tools/stage-oracle-sd` (FAT32 distro
-images), mtools `mcopy` for FAT16 ones, `_tools/build-fat16-sd`
-(rebuild a distro tree as FAT16). Useful probes:
+images; stages the game folder recursively since #164, so data
+subfolders land at their relative card paths), mtools `mcopy` for
+FAT16 ones, `_tools/build-fat16-sd` (rebuild a distro tree as
+FAT16). Watch the 64 MB card budget: TX-1696's `audio/` alone is
+54 MB and cannot be staged alongside its 46 MB of game data. Useful probes:
 `ZX_GO_DIVMMC_PAGE_TRACE=1` (automap grant/DENY events with PC +
 instruction number) and `--trace pc --trace-pc-range $2000-$3FFF`
 (dot-window PC streams for A/B diffing).
