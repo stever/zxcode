@@ -30,9 +30,11 @@ export default function AboutPage() {
                     <li>
                         <a href="https://github.com/conorarmstrong/zx_go" target="_blank">zx_go</a> by
                         Conor Armstrong — the ZX Spectrum 48K/128K and Spectrum Next emulator core,
-                        compiled to WebAssembly. Licensed under terms of The MIT License - see{' '}
-                        <a href="https://github.com/conorarmstrong/zx_go/blob/main/LICENSE" target="_blank">LICENSE</a>.
-                        The built core embeds the Spectrum Next{"'"}s GPLv3 FPGA loader.
+                        compiled to WebAssembly. Upstream is licensed under terms of The MIT License.
+                        The core running here is this site{"'"}s modified version: the modifications
+                        are licensed under The GPL version 3, making the built core GPLv3 as a whole
+                        (it also embeds the Spectrum Next{"'"}s GPLv3 FPGA loader) - see{' '}
+                        <a href="https://github.com/stever/zxcode/blob/main/packages/emulator-core/zx_go/LICENSE" target="_blank">LICENSE</a>.
                     </li>
                     <li>
                         <a href="https://github.com/gasman/jsspeccy3" target="_blank">JSSpeccy3</a>{' '}
