@@ -22,7 +22,7 @@ func TestActiveVideoLine(t *testing.T) {
 	var ts uint64
 	mem := &memory.Memory{}
 	mem.TStates = &ts
-	u := &ULA{mem: mem, frameStartTstate: 100}
+	u := &ULA{mem: mem, frameStartTstate: 100, frameStartRefTstate: 100}
 
 	// The frame INT fires 64 lines before the paper: cvc = 311-64 = 247.
 	ts = 100
@@ -66,7 +66,7 @@ func TestBeamPosition(t *testing.T) {
 	var ts uint64
 	mem := &memory.Memory{}
 	mem.TStates = &ts
-	u := &ULA{mem: mem, frameStartTstate: 100}
+	u := &ULA{mem: mem, frameStartTstate: 100, frameStartRefTstate: 100}
 
 	// Part-way through line 5: T-state offset 40 → hpos 40/4 = 10.
 	ts = 100 + uint64(TStatesPerLine*5+40)
@@ -87,5 +87,52 @@ func TestBeamPosition(t *testing.T) {
 	// No T-state source → (0,0), not a panic.
 	if line, hpos := (&ULA{}).BeamPosition(); line != 0 || hpos != 0 {
 		t.Errorf("nil mem: got line=%d hpos=%d, want 0,0", line, hpos)
+	}
+}
+
+// TestBeamPositionTurbo pins the two properties the TX-1696 wedge (#166)
+// exposed:
+//
+//  1. The beam advances at VIDEO rate, not CPU rate: the FPGA cvc counter
+//     (zxnext.vhd:5982-5986, read via NR$1E/$1F) runs on the video clock,
+//     so at 28 MHz (turbo ×8) 8 CPU T-states advance it by ONE reference
+//     T-state. Dividing raw CPU T-states by 228 made NR$1F sweep the
+//     frame 8× per real frame — TX-1696's raster-sync (poll NR$1F ≥ 192
+//     before an SP push-fill through $2000-$3FFF) read garbage and let
+//     the frame INT land mid-fill with SP in ROM territory.
+//  2. The origin comes from the CPU's frame origin (FrameOriginRef), which
+//     is re-recorded every frame boundary even in no-audio sessions where
+//     the legacy flushAudioFrame stamp never runs.
+func TestBeamPositionTurbo(t *testing.T) {
+	var ts uint64 // raw CPU T-states (28 MHz: 8× reference rate)
+	var originRef uint64
+	mem := &memory.Memory{}
+	mem.TStates = &ts
+	mem.RefTstates = func() uint64 { return ts / 8 }
+	mem.FrameOriginRef = func() uint64 { return originRef }
+	u := &ULA{mem: mem}
+
+	// Frame origin at ref T-state 1000 (raw 8000).
+	originRef = 1000
+	ts = 8000
+	if line, hpos := u.BeamPosition(); line != 0 || hpos != 0 {
+		t.Errorf("frame start: got line=%d hpos=%d, want 0,0", line, hpos)
+	}
+	// 228*8 raw CPU T-states = one video line.
+	ts = 8000 + uint64(TStatesPerLine*8)
+	if line, _ := u.BeamPosition(); line != 1 {
+		t.Errorf("after one video line of CPU time: line=%d, want 1", line)
+	}
+	// 64 video lines after the frame origin = paper top = cvc 0.
+	ts = 8000 + uint64(TStatesPerLine*64*8)
+	if got := u.ActiveVideoLine(); got != 0 {
+		t.Errorf("ActiveVideoLine at paper top = %d, want 0", got)
+	}
+	// The INT fires ~291 ref T-states after the frame origin (128K
+	// timing, c_int_v=1): the beam must read cvc 248 there, the line
+	// TX-1696's ≥192 raster gate treats as already-past.
+	ts = 8000 + 291*8
+	if got := u.ActiveVideoLine(); got != 248 {
+		t.Errorf("ActiveVideoLine at INT = %d, want 248", got)
 	}
 }

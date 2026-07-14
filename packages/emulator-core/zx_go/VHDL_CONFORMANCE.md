@@ -188,6 +188,16 @@ The ✅ rows below are green at LINE granularity; the sub-line copper/palette
 detail they collapse is the ⚙️ row in Axis 10, not an omission here.
 
 Pinned since (base/Copper + base/DMA conformance work):
+- ✅ NR$1E/$1F active-video-line counter runs on the VIDEO clock, not the
+  CPU clock (zxnext.vhd:5982-5986 port_253b_dat <= cvc; zxula_timing.vhd
+  cvc/c_int_v): `ULA.BeamPosition` derives the beam on the 3.5 MHz-
+  reference timeline from the CPU's per-frame origin
+  (z80.FrameOriginRefTstates — the SAME origin the frame-INT assert
+  offset scales from, zxula_timing.vhd c_int_v=1 → cvc 248 in 128K
+  timing), so a 28 MHz guest's raster gate and the frame INT agree.
+  Dividing raw CPU T-states by 228 swept NR$1F 8× per real frame and
+  wedged TX-1696's raster-synced SP push-fill (work item #166, r49) —
+  `TestBeamPositionTurbo`, TestNexttestsScanlineIRQ.
 - ✅ ULA pixel/border palette-index composition per video/zxula.vhd:483-558
   (standard ink / 16+paper / border=paper path; ULANext ink mask + paper
   128|attr>>n + $FF/non-canonical → NR$4A background; flash standard-only)

@@ -120,6 +120,15 @@ type CPU struct {
 	LineIntOffsetTstates uint64
 	lineIntFired         bool
 
+	// frameOriginRef is the current frame's origin on the 3.5 MHz-
+	// reference timeline (RefTstates units), recorded at each frame
+	// boundary by ExecuteFrame / StepInstructionWithIRQ. It is the
+	// SAME origin the frame-INT assert offset is measured from, so a
+	// beam position derived from it (ULA BeamPosition → NR$1E/$1F)
+	// stays consistent with the interrupt's raster placement even as
+	// per-frame instruction overshoot drifts both together.
+	frameOriginRef uint64
+
 	// FrameIntDisabled mirrors the FPGA's shared frame-INT disable
 	// latch port_ff_reg(6) (zxnext.vhd:3609-3635), written by port
 	// $FF bit 6, NR$22 bit 2 and NR$C4 bit 0 (inverted). The latch
@@ -687,6 +696,13 @@ func (c *CPU) RefTstates() uint64 {
 	return (c.refClock8 + (c.tstates-c.refMark)*8/uint64(c.SpeedMultiplier())) / 8
 }
 
+// FrameOriginRefTstates returns the current frame's origin on the
+// RefTstates timeline — the same origin the frame INT's assert offset is
+// measured from. The ULA's beam position (NR$1E/$1F, palette raster
+// stamping) derives from it so raster reads and interrupt placement can
+// never drift apart.
+func (c *CPU) FrameOriginRefTstates() uint64 { return c.frameOriginRef }
+
 // setSpeed applies a validated speed selector: it folds the reference
 // clock at the outgoing speed and rescales any in-flight ExecuteFrame
 // budget so the frame still ends after its full 20ms of machine time.
@@ -880,6 +896,7 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	// the guest mixes speeds within it.
 	budget := uint64(tstatesPerFrame) * uint64(c.SpeedMultiplier())
 	frameStart := c.tstates
+	c.frameOriginRef = c.RefTstates()
 	c.frameEnd = c.tstates + budget
 	// Keep the step path's frame bookkeeping in sync. nextFrameBoundary
 	// is otherwise only maintained by StepInstructionWithIRQ itself, so
@@ -1278,6 +1295,7 @@ func (c *CPU) StepInstructionWithIRQ() {
 			c.IRQPending.Store(true)
 		}
 		c.nextFrameBoundary = ((c.tstates / frameBudget) + 1) * frameBudget
+		c.frameOriginRef = c.RefTstates()
 		c.lineIntFired = false
 		c.frameIntFired = false
 		c.frameIntDeasct = false

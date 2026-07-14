@@ -1264,6 +1264,7 @@ func Wire(opts WireOpts) {
 	WireClipWindows(opts.Dispatcher, opts.Tilemap, opts.Sprites, opts.Layer2, ulaVideo)
 	opts.Memory.SpeedMultiplier = opts.CPU.SpeedMultiplier
 	opts.Memory.RefTstates = opts.CPU.RefTstates
+	opts.Memory.FrameOriginRef = opts.CPU.FrameOriginRefTstates
 	applyTBBLUEFWBootDefaults(opts.Dispatcher)
 }
 

@@ -172,7 +172,7 @@ method.
 | Saboteur (Next) | Works (menu) | r47 re-baseline: title renders, and a keypress advances to the night intro scene, which renders correctly. |
 | Aliens Neoplasma | Works (menu) | FIXED by #165 (the class-1 staging repair): the post-title black-screen idle HALT was the game silently failing its runtime data F_OPENs on a corrupted staged directory. A keypress now advances title → the ACHILLES NAVIGATION SYSTEM menu (Play game / Redefine keys / About), rendered correctly. |
 | Way of the Exploding Fist (Next) | Works (menu) | FIXED by #165 — TWO stacked bugs. (1) The staging tool's FAT32 `appendDirent` extended a full directory without zeroing the new cluster; on the distro image's dirty free space, stale bytes interleaved with new entries and detached `Palettes/HighscoreTable.npl`'s LFN chain from its 8.3 entry, so the game's F_OPEN failed — and the game's own error path then uploaded a stale palette buffer from `$B000+1` (an esxDOS error CARRY rippling through its `RL E` address math). (2) With staging fixed, every post-keypress screen rendered in four shades of dark blue: our NR$44 half-pair latch wasn't reset by NR$40/$41/$43 writes (zxnext.vhd:5376/5382/5395) — the game's clear routine leaves a dangling half-pair and relies on the reset. High-score table (TOP 10 FIGHTERS) and menu (1 PLAYER / 2 PLAYERS / OPTIONS over Mt. Fuji) both render correctly now. |
-| TX-1696 | Known issue | Unchanged by #165's staging repair (re-verified on a clean-directory card): still a uniform grey Layer 2 with PC cycling in the divMMC/esxDOS window ($0203, IM 1). Caveat on the verdict: its 53 MB `audio/` cannot fit the 64 MB card, so every run so far used zero-byte audio dummies — the repeating esxDOS loop may simply be the engine failing on truncated audio files. Needs a bigger staged card (or a BuildFAT32-from-scratch image sized past 128 MB) before it can be called an emulator bug. |
+| TX-1696 | Known issue | #166 re-verdict with its REAL 53 MB audio staged (the dummy-file caveat is retired): NOT capacity — the audio fits the shipped 64 MB card with 1.2 MB spare once the 43 MB of DVD-case artwork PDFs (`Art/`, not game data) are excluded, and a 256 MB BuildFAT32 card reproduces the failure with everything staged. One real emulator bug found and FIXED along the way (r49): NR$1E/$1F swept the frame 8× too fast at 28 MHz (BeamPosition divided raw CPU T-states by 228 — the FPGA cvc counts on the video clock, zxnext.vhd zxula_timing), so the game's raster-sync (poll NR$1F ≥ 192 before a ~9-line `push hl` fill with SP descending through $2000-$3FFF) read garbage and let the frame INT land mid-fill with SP in the ROM window — pushes lost, pops read ROM3 bytes, PC warped into the $0013 `JP (IX)` stub and wedged. Post-fix the game gets further but still dies in the same IM1-during-low-SP class (wreckage: game IX/IY set, SP=$2Cxx, PC executing ROM data). The game demonstrably relies on surviving an IM1 with SP in the low window on real hardware (its `ld ix,$C085` resume hook + the OS trampoline exit); prime suspect for the residual divergence is the TBBLUE.FW divMMC-RAM IM1 handler's user-hook dispatch (the ROM3 $3CE6 `call $0013` routine) which our FW-handler emulation may not reach. Also: the game's loader is FAT-geometry sensitive — on 512-byte-cluster cards (shipped 64 MB, mkfs defaults) it aborts early to a grey screen without ever installing its audio engine; BuildFAT32's 2 KB-cluster 256 MB card gets it to the audio-install. |
 | RAMS | Known issue | r47 re-run with its arcade ROM sets staged: still boots to a corrupt first screen (fragments of the game-select UI; parked in a normal IM 2 HALT wait). The hardware build leans on cycle-exact tricks — its own distribution ships a separate emulator-specific `.nex` variant — so this stays in the architectural-timing class (conformance Axis 10), not the quick-fix list. |
 | Atic Atac (Next) | Untested | The local `ATICATAC.NEX` is 111 MB — not a valid `.nex`; needs a clean download before it can be triaged. |
 
@@ -181,7 +181,26 @@ method.
 The failures cluster into classes; ranked by how many titles each
 blocks (the conformance prioritizer — see work items #159/#164):
 
-1. **CLOSED (work item #165, 2026-07-14): runtime data-load failures
+1. **PARTIAL (work item #166, 2026-07-14): NR$1E/$1F raster counter
+   ran at CPU speed instead of video speed — FIXED (r49); TX-1696
+   still blocked by a residual IM1-during-low-SP divergence.**
+   `ULA.BeamPosition` divided raw CPU T-states by 228, but the
+   FPGA's cvc counter (NR$1E/$1F, copper WAITs, palette raster
+   stamping) runs on the VIDEO clock (zxnext.vhd:5982-5986,
+   zxula_timing.vhd) — at 28 MHz the readback swept the frame 8×
+   per real frame, and in no-audio sessions the per-frame origin
+   stamp (buried in the audio flush) never ran at all, adding a
+   free-running wrap drift. Fixed by deriving the beam from the
+   3.5 MHz-reference timeline against the CPU's own frame origin
+   (`z80.FrameOriginRefTstates`, the same origin the frame-INT
+   assert offset uses, so raster reads and INT placement cannot
+   drift apart). Pinned by `TestBeamPositionTurbo`; the nexttests
+   Copper/ScanlineIRQ suite now passes from the exact frame origin
+   rather than the stale audio stamp. TX-1696's residual failure
+   (IM1 landing while its SP crosses the $2000-$3FFF window during
+   Layer-2-era push-fills — survivable on real hardware, fatal
+   here) is the top open item; see its row for the mechanism map.
+2. **CLOSED (work item #165, 2026-07-14): runtime data-load failures
    — WOTEF, Aliens Neoplasma and Crowley's panel all unblocked by
    TWO stacked fixes.** (a) `fat32.go appendDirent` extended a full
    directory without zeroing the freshly allocated cluster; on the
@@ -205,7 +224,7 @@ blocks (the conformance prioritizer — see work items #159/#164):
    analysis → game-code disassembly → F_OPEN carry) is in work
    item #165. TX-1696 did NOT move — see its row (its verdict is
    blocked on staging its 53 MB audio, not on this class).
-2. **CLOSED (work item #163, 2026-07-14): RETI mistreated as RETN
+3. **CLOSED (work item #163, 2026-07-14): RETI mistreated as RETN
    unmapped the esxDOS overlay — 5 titles unblocked** (Baggers in
    Space, Crowley World Tour, NextBASIC Invaders, Saboteur, Bomb
    Jack all load/render on the SHIPPED 24.11 distro now). Root
@@ -236,7 +255,7 @@ blocks (the conformance prioritizer — see work items #159/#164):
    were never on the card), and TX-1696's two distro-dependent
    signatures collapsed into the class-1 stall above once its
    folder was staged.
-3. **NR $B0/$B1/$B2 extended-keys / MD-pad registers — CLOSED
+4. **NR $B0/$B1/$B2 extended-keys / MD-pad registers — CLOSED
    (work item #160), and the original blame was wrong.** The
    registers are now live-composed and VHDL-pinned
    (VHDL_CONFORMANCE.md Axis 3), but the A/B run showed Warhawk
@@ -248,7 +267,7 @@ blocks (the conformance prioritizer — see work items #159/#164):
    MD-only pad buttons (X Z Y MODE START A C) have no input
    source, so pad-default titles (Quantum Storm) still need their
    keyboard/Kempston control options.
-4. **Architectural timing (Axis 10) — 1 title** (RAMS). Its authors
+5. **Architectural timing (Axis 10) — 1 title** (RAMS). Its authors
    ship a per-emulator build; do not chase before the contention /
    sub-line timing items land.
 
@@ -268,8 +287,14 @@ Local-only staging tools: `_tools/stage-oracle-sd` (FAT32 distro
 images; stages the game folder recursively since #164, so data
 subfolders land at their relative card paths), mtools `mcopy` for
 FAT16 ones, `_tools/build-fat16-sd` (rebuild a distro tree as
-FAT16). Watch the 64 MB card budget: TX-1696's `audio/` alone is
-54 MB and cannot be staged alongside its 46 MB of game data. Useful probes:
+FAT16). The 64 MB card budget is looser than it looks: the distro uses
+only ~3 MB (59.5 MB free), and TX-1696's 53 MB `audio/` + game
+data fit with 1.2 MB spare once its 43 MB `Art/` (DVD-case PDFs,
+not game data) is excluded. For bigger payloads,
+`_tools/build-base-sd` rebuilds the distro (extracted from the
+shipped image via `mcopy -s`) onto a BuildFAT32 card of any size
+(256 MB default; ZEsarUX only boots 64 MB-geometry images though
+— it sat in its RAM-test loop indefinitely on a 256 MB one). Useful probes:
 `ZX_GO_DIVMMC_PAGE_TRACE=1` (automap grant/DENY events with PC +
 instruction number) and `--trace pc --trace-pc-range $2000-$3FFF`
 (dot-window PC streams for A/B diffing).

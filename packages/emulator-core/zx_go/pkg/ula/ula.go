@@ -1385,19 +1385,39 @@ func (u *ULA) ActiveVideoLine() int {
 	return (line + linesPerFrame - paperStartLine) % linesPerFrame
 }
 
-// BeamPosition returns the current raster beam position derived from the
-// CPU T-state counter: the scanline (0-based, 9-bit) and the horizontal
-// position in 8-pixel units (2 pixels per T-state, 8 pixels per hpos unit,
-// so hpos = (T-state-in-line)/4 → 0..56 across a 228-T-state line). This
-// lets the Copper, memory contention and (eventually) a per-scanline ULA
-// renderer query the beam mid-frame at per-T-state granularity instead of
-// the coarse scanline quantum. Returns (0,0) when no T-state source is
-// wired.
+// BeamPosition returns the current raster beam position: the scanline
+// (0-based, 9-bit) and the horizontal position in 8-pixel units (2 pixels
+// per T-state, 8 pixels per hpos unit, so hpos = (T-state-in-line)/4 →
+// 0..56 across a 228-T-state line). This lets the Copper, memory
+// contention and (eventually) a per-scanline ULA renderer query the beam
+// mid-frame at per-T-state granularity instead of the coarse scanline
+// quantum. Returns (0,0) when no T-state source is wired.
+//
+// The beam is derived from the 3.5 MHz-REFERENCE timeline (refNow /
+// frameStartRefTstate), not the raw CPU T-state counter: the FPGA's cvc
+// counter runs on the video clock, so it advances at the same real-time
+// rate whatever NR$07 turbo the CPU selects. Dividing raw CPU T-states by
+// 228 made NR$1E/$1F sweep the frame 8× per real frame at 28 MHz —
+// TX-1696's raster-sync (poll NR$1F ≥ 192, then a ~9-line SP push-fill
+// with SP descending through $2000-$3FFF) read garbage lines, let the
+// frame INT land mid-fill with SP in ROM territory, and wedged in the
+// NextZXOS $0013 JP (IX) rescue loop.
 func (u *ULA) BeamPosition() (line, hpos int) {
 	if u.mem == nil || u.mem.TStates == nil {
 		return 0, 0
 	}
-	t := int(*u.mem.TStates - u.frameStartTstate)
+	// Preferred origin: the CPU's own frame origin on the reference
+	// timeline (ModelNext wiring). It is re-recorded at every frame
+	// boundary unconditionally — the legacy frameStartRefTstate stamp
+	// below lives in the AUDIO frame flush, which never runs in
+	// no-audio (headless) sessions, leaving the beam free-running
+	// across the &0x1FF wrap.
+	var t int
+	if u.mem.FrameOriginRef != nil {
+		t = int(u.refNow() - u.mem.FrameOriginRef())
+	} else {
+		t = int(u.refNow() - u.frameStartRefTstate)
+	}
 	if t < 0 {
 		t = 0
 	}

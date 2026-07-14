@@ -119,8 +119,11 @@ Three coexisting levels, from coarse to fine:
 - Shared clock, derived views: the raw T-state counter is shared by
   pointer across CPU/memory/ULA. The Next adds a 3.5 MHz reference clock
   (`RefTstates`, kept in eighths) so audio and tape events land correctly
-  across mid-frame turbo changes, and `BeamPosition()` derives the raster
-  position from the same counter.
+  across mid-frame turbo changes; `BeamPosition()` derives the raster
+  position from the REFERENCE clock against the CPU's per-frame origin
+  (`FrameOriginRefTstates` — the same origin the frame-INT offset uses),
+  because the FPGA's cvc counter runs on the video clock, not the CPU
+  clock (work item #166, r49).
 
 Contention is a property of the memory system, not the CPU: the classic
 pattern {6,5,4,3,2,1,0,0} applies to $4000-$7FFF inside the display

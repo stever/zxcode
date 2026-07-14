@@ -288,9 +288,17 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   enable, bit 6 → shadow display, bits 5:0 → the Timex port-$FF mode
   (zxnext.vhd:3924/:3658/:3617; `next.WireULAControl`).
 
-Raster feedback: `ULA.BeamPosition()` derives (line, hpos) from the
-shared T-state counter, wired to NR$1E/$1F, so DI'd raster-polling code
-(NextGuide) works.
+Raster feedback: `ULA.BeamPosition()` derives (line, hpos) on the
+3.5 MHz-REFERENCE timeline measured from the CPU's per-frame origin
+(`z80.FrameOriginRefTstates`, re-recorded at every frame boundary and
+shared with the frame-INT assert offset), wired to NR$1E/$1F, so DI'd
+raster-polling code (NextGuide) works and raster reads can never drift
+from interrupt placement. The FPGA's cvc counter runs on the VIDEO
+clock (zxnext.vhd:5982-5986), so the beam must NOT advance with raw
+CPU T-states: at 28 MHz that swept the frame 8× per real frame — the
+r49 TX-1696 finding (work item #166), where the game's NR$1F ≥ 192
+raster gate read garbage and its SP push-fill collided with the frame
+INT. Pinned by `TestBeamPositionTurbo`.
 
 ## Interrupts
 

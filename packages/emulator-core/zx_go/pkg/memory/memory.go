@@ -134,6 +134,15 @@ type Memory struct {
 	// just for their beeper routines) doesn't misplace or drop them.
 	RefTstates func() uint64
 
+	// FrameOriginRef returns the current frame's origin on the RefTstates
+	// timeline (z80.CPU.FrameOriginRefTstates) — the same origin the frame
+	// INT offset is measured from. Set by ModelNext construction; nil
+	// elsewhere. pkg/ula's BeamPosition prefers it so the NR$1E/$1F raster
+	// counter is exact every frame regardless of whether the audio frame
+	// flush (the legacy per-frame stamp) ran, and can never drift from the
+	// interrupt's raster placement.
+	FrameOriginRef func() uint64
+
 	// PeripheralRead is called for reads in the ROM area (0x0000-0x3FFF).
 	// If it returns (value, true), the peripheral ROM overrides the normal ROM.
 	PeripheralRead func(addr uint16) (byte, bool)
