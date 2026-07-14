@@ -1,6 +1,7 @@
 # @zxplay/emulator-core
 
-The zx_go emulator (Go, MIT) compiled to WebAssembly — the engine that
+The zx_go emulator (Go; MIT upstream, this repository's modifications
+GPLv3 — see LICENSES.md) compiled to WebAssembly — the engine that
 replaces the JSSpeccy3 AssemblyScript core. Vendored from
 [zx_go](https://github.com/conorarmstrong/zx_go) with the wasm-port changes
 applied in-tree (see `wasm/STATUS.md` for the port design and

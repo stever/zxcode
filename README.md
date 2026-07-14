@@ -81,6 +81,7 @@ Engine highlights:
 
 This software uses code from the following open source projects:
 
+- zx_go by Conor Armstrong, the emulator core. Licensed under terms of the MIT License; this repository's modifications to it are licensed under terms of the GPL version 3.
 - JSSpeccy3 & JSSpeccy3-mobile. These are licensed under terms of the GPL version 3.
 - Pasmo by Julián Albo García, alias "NotFound". Licensed under terms of the GPL version 3.
 - Boriel ZX BASIC by Jose Rodriguez. Licensed under terms of the GPL version 3.

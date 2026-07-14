@@ -35,14 +35,16 @@ Columns: **zx_go** · **CSpect** · **ZEsarUX** · **MAME** (`tbblue` driver).
 | Criterion | zx_go | CSpect | ZEsarUX | MAME |
 |---|:---:|:---:|:---:|:---:|
 | **Open source** | ✅ | ❌ | ✅ | ✅ |
-| License | MIT ¹ | Proprietary freeware ² | GPL-3.0 | GPL-2.0+/BSD-3 |
+| License | MIT / GPL-3.0 ¹ | Proprietary freeware ² | GPL-3.0 | GPL-2.0+/BSD-3 |
 | Source publicly available | ✅ | ❌ | ✅ | ✅ |
 | Redistribution permitted | ✅ | ❌ | ✅ | ✅ |
 | Implementation language | Go | C# / .NET | C | C++ |
 | Cost | Free | "Name your price" | Free | Free |
 
-¹ Project code is MIT; the bundled FPGA boot ROM (`tbblue_loader.rom`) is GPLv3.
-The licensed NextZXOS system ROMs are **not** bundled — see §6.
+¹ Upstream project code is MIT; this repository's modifications are GPLv3, and
+the bundled FPGA boot ROM (`tbblue_loader.rom`) is GPLv3, so this tree is
+distributed under GPLv3 as a whole. The licensed NextZXOS system ROMs are
+**not** bundled — see §6.
 ² CSpect is a closed-source personal "devkit"; the author states there is no
 support and that redistribution is not permitted.
 
@@ -268,7 +270,8 @@ Next debugging; MAME instead offers a strong native debugger plus Lua.
 
 ## Honest summary
 
-**Where zx_go stands out today:** it is a clean, fully open-source (MIT) Go
+**Where zx_go stands out today:** it is a clean, fully open-source (MIT
+upstream; GPLv3 as modified here) Go
 implementation that cold-boots NextZXOS faithfully, models Next memory contention
 and sprite collision (areas where some rivals have gaps), ships both a GUI and a
 scriptable telnet debugger over a shared backend, and uniquely supports RZX

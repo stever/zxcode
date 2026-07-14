@@ -2,7 +2,7 @@
 
 **A faithful emulator for the entire Sinclair 8-bit line — the ZX80, the ZX81, every classic ZX Spectrum (48K, 128K, +2, +2A, +3), the Pentagon clone, and a from-the-silicon-up ZX Spectrum Next — written in Go.**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8.svg)](https://go.dev)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#installation)
 [![Releases](https://img.shields.io/badge/downloads-releases-green.svg)](https://github.com/conorarmstrong/zx_go/releases)
@@ -295,4 +295,4 @@ LICENSES/         GPLv3 text + NOTICE for the embedded tbblue_loader.rom
 
 ## License
 
-**MIT** — see [LICENSE](LICENSE). The bundled FPGA loader (`pkg/roms/data/tbblue_loader.rom`, embedded) is **GPLv3**; see [`LICENSES/tbblue_loader-NOTICE.md`](LICENSES/tbblue_loader-NOTICE.md). The NextZXOS system ROMs are licensed (Amstrad/Sky) and are **not** bundled — they're downloaded on first run.
+**GPLv3 as a whole** — see [LICENSE](LICENSE). Upstream [zx_go](https://github.com/conorarmstrong/zx_go) is **MIT**; the modifications and additions made in this repository are **GPLv3**, so this modified tree is distributed under GPLv3. The bundled FPGA loader (`pkg/roms/data/tbblue_loader.rom`, embedded) is also **GPLv3**; see [`LICENSES/tbblue_loader-NOTICE.md`](LICENSES/tbblue_loader-NOTICE.md). The NextZXOS system ROMs are licensed (Amstrad/Sky) and are **not** bundled — they're downloaded on first run.
