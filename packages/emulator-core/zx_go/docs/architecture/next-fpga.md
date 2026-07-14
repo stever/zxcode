@@ -345,7 +345,9 @@ raster instant (known-gaps.md).
 - divMMC (`pkg/next/divmmc`): the automap state machine with all trigger
   variants (instant/delayed, ROM3-gated), entry-point registers
   NR$B8-$BB, the $3Dxx trap, $1FF8-$1FFF page-out after fetch, CONMEM
-  and sticky MAPRAM via port $E3, 128K divMMC RAM, RETN page-out. SPI to
+  and sticky MAPRAM via port $E3, 128K divMMC RAM, RETN page-out (the
+  exact ED 45 pair only, per im2_control.vhd's retn_seen — RETI and the
+  RETN mirrors leave the automap latch alone; work item #163). SPI to
   the card through ports $E7/$EB. Includes two documented pragmatic
   emulations of firmware-installed stubs (the $2009 FRAMES bump and the
   bank-1 stub write-protect).

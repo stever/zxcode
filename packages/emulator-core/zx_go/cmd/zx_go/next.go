@@ -1239,9 +1239,16 @@ func wireNextSubsystems(e *emulator) error {
 		// the latch timeline is the ground truth for dispatch-era
 		// overlay state.
 		pager.SetPageLogger(func(event string, pc uint16) {
+			p7, p1, _ := mem.GetPortState()
 			slog.Info("divmmc-page", "event", event,
 				"pc", fmt.Sprintf("$%04X", pc),
-				"insn", cpu.InstructionCount())
+				"insn", cpu.InstructionCount(),
+				"rom_bank", mem.GetROMBank(),
+				"alt", fmt.Sprintf("$%02X", mem.AltROMReg()),
+				"p7ffd", fmt.Sprintf("$%02X", p7),
+				"p1ffd", fmt.Sprintf("$%02X", p1),
+				"mmu01", fmt.Sprintf("%02X,%02X", mem.GetMMU(0), mem.GetMMU(1)),
+				"gate", mem.DivMMCRom3Gate(pc))
 		})
 	}
 	// ZX_GO_CAPTURE_LOOP: once the instruction count passes a gate (deep
@@ -1296,12 +1303,19 @@ func wireNextSubsystems(e *emulator) error {
 			}
 		})
 	}
-	// RETN/RETI clear the automap latch on real hardware (the T80N
-	// asserts I_RETN for both; zxnext.vhd feeds it as i_retn_seen).
-	// RETN (ED 45) pages out BOTH the divMMC and the Next Multiface
-	// (zxnext changelog 3.01.09 — "executing a retn will now disable the
-	// multiface and the divmmc"). The MF $0066 handler ends with a RETN to
-	// return to the interrupted program; that same RETN pages the MF out.
+	// RETN (the exact ED 45 pair, nothing else) clears the automap latch
+	// on real hardware: zxnext.vhd's z80_retn_seen comes from the
+	// im2_control decoder (im2_control.vhd:236) and feeds both the divMMC
+	// (divmmc_retn_seen, zxnext.vhd:4111) and the Next Multiface
+	// (cpu_retn_seen_i, zxnext.vhd:4287) — the changelog 3.01.09 line
+	// "executing a retn will now disable the multiface and the divmmc".
+	// RETI and the RETN mirrors do NOT unmap (the Z80 core only fires
+	// this hook for ED 45): a game IM2 handler ending in RETI while an
+	// esxDOS RST$08 call has the overlay paged in must return into
+	// still-mapped overlay code — treating RETI as RETN here was the
+	// NextZXOS 24.11 five-title loader-class wreck (work item #163).
+	// The MF $0066 handler ends with a real RETN to return to the
+	// interrupted program; that same RETN pages the MF out.
 	cpu.SetRETNHook(func() {
 		if mem.MultifaceActive() {
 			mem.SetMultifaceActive(false)

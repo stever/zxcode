@@ -61,7 +61,7 @@ Every `nr_XX_* <= value` in the reset process. Read-back byte composed per the
 | $A9 esp gpio0 | 1 | $00 | ⚠️ | composed; nrdiff showed ours $02 — verify read |
 | i2c $103B/$113B | SCL/SDA latches, open-drain | rtc.Bus + ULA dispatch | ✅ | zxnext.vhd:2630/3234 — TestI2C_* + TestI2CPortRouting (D31ai) |
 | $8C alt-rom | reset: 7:4←3:0 | promote in WireReset | ✅ | zxnext.vhd:2255 staged-nibble promote (both reset types) — TestWireResetPromotesAltROMStagedNibble (D31g) |
-| (rom3 automap gate) | (altrom_en∧alt_128_n)∨(rom3∧¬altrom_en) | Memory.DivMMCRom3Gate | ✅ | zxnext.vhd:3138 full gate — TestDivMMCRom3Gate (D31g) |
+| (rom3 automap gate) | (altrom_en∧alt_128_n)∨(rom3∧¬altrom_en) | Memory.DivMMCRom3Gate | ✅ | zxnext.vhd:3138 full gate — TestDivMMCRom3Gate (D31g). Re-validated in-situ by #163: 24.11's ROM0 has real code at $3D96 (HALT/LD A,$07/CALL $0D6B) that the gate correctly leaves untrapped when ROM0 is paged — the #159 "DENY(3dxx) = divergence" reading was a misread of faithful behaviour |
 | $7F user reg 0 | $FF | $FF | ✅ | FIXED (was $00) — zxnext.vhd:1216; NextReg_defaults grid |
 | $82-$88 port-decode enables | $FF | $FF | ✅ | FIXED (were $00 except $82/$83) — zxnext.vhd:1226-1235 |
 | $85/$89 decode+reset_type | read $8F (bit7 reset_type & "000" & 4 enables, vhd:6138/6150) | $8F | ✅ | FIXED — read-shape-composed seed |
@@ -170,6 +170,15 @@ matrix vs the VHDL mux priority.
 automap triggers (rom3/delayed variants, $3DXX gate), SPI, CSD v1/v2. The
 `$2401` divMMC-RAM NOP-slide that once blocked the cold boot is **closed** — the
 Next now boots NextZXOS end-to-end from the SD image (`TestNextRealROMBoot`).
+✅ automap RETN page-out decode: divmmc_retn_seen (and the Multiface's
+cpu_retn_seen_i) come from the im2_control decoder, which matches the EXACT
+pair ED 45 only (im2_control.vhd:236) — NOT the T80N I_RETN (asserted for
+RETI + every mirror, t80n_mcode.vhd:660/2432, consumed by nothing
+memory-mapping). RETI (ED 4D) drives the separate reti_seen (IM2 daisy
+chain); RETN mirrors ED 55/65/75 assert neither. Pinned by
+`TestRETNHookFiresForExactED45Only` (pkg/z80). Firing the unmap on RETI was
+the NextZXOS 24.11 five-title loader-class wreck (#163): a game IM2 ISR
+returning mid-RST$08 unmapped the esxDOS overlay.
 ⚠️ Remaining: no port-by-port conformance test pins the automap trigger variants
 or the SPI / CSD command set to the VHDL.
 

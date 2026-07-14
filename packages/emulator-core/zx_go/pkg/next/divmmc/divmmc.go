@@ -683,8 +683,11 @@ func (p *Pager) AssertNMIButton() { p.nmiButton = true }
 // HandleRETN is the post-RETN unmap hook. divMMC pages itself out
 // when the CPU executes RETN from within the overlay — this is
 // how the NMI handler (RST 0x66 → RETN) returns to the underlying
-// code and surrenders the bus. The Z80 core calls this after every
-// RETN. No-op when automap is disabled.
+// code and surrenders the bus. The Z80 core calls this ONLY for the
+// exact ED 45 encoding: zxnext.vhd's divmmc_retn_seen comes from the
+// im2_control decoder (exact ED 45, im2_control.vhd:236), so RETI and
+// the RETN mirror opcodes leave the automap latch alone. No-op when
+// automap is disabled.
 func (p *Pager) HandleRETN() {
 	// button_nmi clears on RETN regardless of automap/CONMEM (divmmc.vhd:108).
 	p.nmiButton = false

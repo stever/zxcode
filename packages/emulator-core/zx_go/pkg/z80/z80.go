@@ -191,7 +191,7 @@ type CPU struct {
 	// speedLocked pins speedSelect across guest NR$07 writes (diagnostic).
 	speedLocked bool
 
-	// retnHook fires after RETN/RETI — see SetRETNHook.
+	// retnHook fires after the exact RETN pair ED 45 — see SetRETNHook.
 	retnHook func()
 
 	// Memory and ULA interfaces
@@ -656,12 +656,17 @@ func (c *CPU) SpeedMultiplier() int {
 	return 1
 }
 
-// retnHook, when non-nil, fires after every RETN/RETI (all ED
-// mirror encodings). The TBBlue T80N asserts I_RETN for BOTH
-// instructions (t80n_mcode.vhd:660,2432) and zxnext.vhd routes it
-// to the divMMC as i_retn_seen, clearing the automap latch — without
-// this the overlay would stay latched across ISR exits where real
-// hardware drops it.
+// retnHook, when non-nil, fires after the exact RETN encoding ED 45
+// ONLY. The consumers (divMMC automap latch + Multiface unmap) hang
+// off zxnext.vhd's z80_retn_seen, produced by the im2_control decoder
+// which matches the exact byte pair ED 45 (im2_control.vhd:236) — NOT
+// the T80N's I_RETN (that one covers RETI and every mirror,
+// t80n_mcode.vhd:660,2432, but nothing memory-mapping consumes it).
+// RETI (ED 4D) asserts the separate reti_seen used by the IM2
+// peripheral daisy chain, and the RETN mirrors (ED 55/65/75) assert
+// neither. Firing this hook on RETI unmapped the esxDOS overlay under
+// any game whose IM2 handler ran mid-RST$08 — the NextZXOS 24.11
+// five-title loader-class wreck (work item #163).
 //
 // SetRETNHook installs it; pass nil to remove.
 func (c *CPU) SetRETNHook(fn func()) { c.retnHook = fn }
@@ -3042,9 +3047,11 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 		// (IFF1 <- IFF2), the same as RETN.
 		c.IFF1 = c.IFF2
 		c.tstates += 14
-		if c.retnHook != nil {
-			c.retnHook() // t80n_mcode.vhd asserts I_RETN for RETI too (line 660)
-		}
+		// NO retnHook: im2_control.vhd asserts retn_seen for the exact
+		// pair ED 45 only; RETI drives the daisy-chain reti_seen and
+		// leaves the divMMC automap latch alone. A game IM2 handler
+		// ending in RETI while the esxDOS overlay is paged in must NOT
+		// unmap it (see SetRETNHook).
 	case 0x45, 0x55, 0x65, 0x75: // RETN mirrors
 		popped := c.pop() // always pop (SP stays correct)
 		if c.NMIStackless && c.StacklessReadNR != nil {
@@ -3058,7 +3065,10 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 		c.WZ = c.PC // per Sean Young §3.4: RETN sets MEMPTR = popped PC
 		c.IFF1 = c.IFF2
 		c.tstates += 14
-		if c.retnHook != nil {
+		// Exact ED 45 only — the mirrors ($55/$65/$75) behave as RETN on
+		// the Z80 but do not assert im2_control's retn_seen, so they do
+		// not unmap the divMMC/Multiface (see SetRETNHook).
+		if opcode == 0x45 && c.retnHook != nil {
 			c.retnHook()
 		}
 
