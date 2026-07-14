@@ -154,36 +154,57 @@ headless — not a full playability verdict.
 | Space Invaders (Next) | Works (title) | Title screen renders. |
 | Tyvarian | Works (title) | Title screen renders. |
 | Warhawk | Works | Verified headless end-to-end: starts, plays (ship, scrolling level, enemies, scoring) and reaches GAME OVER. The menu wants a fire EDGE twice — the first brings up "PRESS FIRE TO PLAY", the second starts — from keyboard SPACE (`--press-key "space@N"` repeated every ~90 frames) or Kempston fire (`kfire@N`). The earlier "unstartable, NR $B0-$B2" verdict was a harness artifact: the timed key schedule never landed the two-edge sequence and `--press-key` had no joystick names (it does now). An A/B run with `WireExtendedKeys` disabled starts identically — the game reads NR $B2 each input poll (masked $0E = left-pad X/Z/Y) but $00-idle satisfies it. |
-| NextBASIC Invaders | Known issue | Draws the first invader wave, then freezes (screen hash identical for thousands of frames). Stuck spinning with IM 2 + interrupts disabled and SP=$20B6 while MMU slots 0/1 are ROM — pushed return addresses are discarded (the SP-in-ROM-window wreckage class below). Earlier report: `Integer out of range` during play — a NextBASIC `DEFPROC` parameter/local-var storage divergence ([janko-jj's reports](https://github.com/conorarmstrong/zx_go/issues)). |
-| Baggers in Space (Stonechat Games) | Known issue | Black screen after load. Stuck in a 9-instruction infinite loop calling its MMU6/7 paging helper: SP=$2098 with MMU slots 0/1 = ROM, so CALL pushes vanish and RET pops constant ROM bytes (SP-in-ROM-window class). |
-| Crowley World Tour | Known issue | Black screen after load. Spinning with IM 2 + interrupts disabled, SP=$20AE in the ROM window (SP-in-ROM-window class). |
-| Bomb Jack (Next) | Known issue | Black screen, but the game is ALIVE: line interrupt (NR $22=$06/$23=$BE, frame INT disabled) fires once per frame, the main loop polls Kempston $1F. Layer 2 is enabled (bank via NR $12) yet its palette is never uploaded (default ramp) and no pixels appear — graphics-upload/display-path divergence, not a CPU hang. |
-| Saboteur (Next) | Known issue | Black screen. Busy-spins (>1.3G instructions) with interrupts disabled in IM 0, polling NextReg read-back via port $253B; zero interrupts taken after launch. |
-| Way of the Exploding Fist (Next) | Known issue | Black screen. Executes HALT with IFF1=0 in IM 2 shortly after launch — unrecoverable by design, so the divergence is upstream of the HALT. |
-| TX-1696 | Known issue | Never leaves the OS: after `.nexload`, ends HALTed at a ROM idle loop in IM 1 with frame interrupts running — the launch fails back to NextZXOS (loader-path issue, distinct from the in-game classes). |
+| NextBASIC Invaders | Known issue (loader class) | On the shipped 24.11 distro: draws the first wave then freezes with IM 2 + DI and SP=$20B6 in the ROM window. **Runs to its menu on the 2020/NextZXOS 2.06 stack** (2026-07-14 A/B, see the loader-class note below) — the freeze signature is 24.11 dot-dispatch wreckage, not game code. The separately reported `Integer out of range` DEFPROC divergence ([janko-jj](https://github.com/conorarmstrong/zx_go/issues)) is still its own issue. |
+| Baggers in Space (Stonechat Games) | Known issue (loader class) | On 24.11: black screen; CPU ends up executing ROM 3 floating-point code at $315x-$31xx with SP=$2098 inside the ROM window (wreckage, not game code — the "MMU6/7 paging helper" reading was a mis-attribution; those bytes are the 48K ROM FP calculator). The `.nex` entry PC ($5C50) is never reached: the wreck happens **before the dot command's first instruction**. **Loads and plays on the 2020/2.06 stack** (title + high-scores verified). |
+| Crowley World Tour | Known issue (loader class) | On 24.11: black screen, SP=$20AE ROM-window wreckage. **Renders its title on the 2020/2.06 stack.** |
+| Bomb Jack (Next) | Known issue (loader class) | On 24.11: alive-but-black (line IRQ fires, Kempston polled, Layer 2 palette never lands). **Full title screen renders on the 2020/2.06 stack** — so this too is the 24.11 loader-path divergence, not a display-path bug. |
+| Saboteur (Next) | Known issue (loader class) | On 24.11: DI busy-spin polling NR read-back via $253B. **Title screen + "press any key" renders on the 2020/2.06 stack.** |
+| Aliens Neoplasma | Known issue | On 24.11: DI busy-spin after launch. On the 2020/2.06 stack the game code RUNS (game banks mapped, 1.2G insns) but the screen shows only sparse red horizontal lines — likely the 24.11 loader-class failure stacked on an own display/NextReg issue. |
+| Way of the Exploding Fist (Next) | Known issue | HALT with IFF1=0 in IM 2 shortly after launch — **reproduces identically on the 2020/2.06 stack** (10.4M insns in), so this is NOT the 24.11 loader class; the divergence is in game-era code. Own bisect target. |
+| TX-1696 | Known issue | On 24.11: launch falls back to NextZXOS. On the 2020/2.06 stack it launches and executes game code (1.2G insns), but ends with SP=$0000 and a black screen — different failure per stack; needs its own triage. |
 | RAMS | Known issue | First screen renders corrupt (one broken character block). The hardware build leans on cycle-exact tricks — its own distribution ships a separate emulator-specific `.nex` variant — so this title sits in the architectural-timing class (conformance Axis 10), not the quick-fix list. |
 | Atic Atac (Next) | Untested | The local `ATICATAC.NEX` is 111 MB — not a valid `.nex`; needs a clean download before it can be triaged. |
 
-### Next failure classes and the ranked gap list (2026-07 triage)
+### Next failure classes and the ranked gap list (2026-07 triage; reranked 2026-07-14)
 
 The failures cluster into classes; ranked by how many titles each
 blocks (the conformance prioritizer — see work item #159):
 
-1. **SP-in-ROM-window wreckage — 3 titles** (Baggers in Space,
-   Crowley World Tour, NextBASIC Invaders). Shared signature: game
-   hangs spinning with interrupts disabled and SP inside
-   $2000-$3FFF while MMU slots 0/1 read $FF (ROM), so CALL/RET is
-   broken. On hardware these games run, so the observed state is
-   wreckage — the first divergence is upstream (candidates: divMMC
-   automap in/out timing around the dot-command → game handoff,
-   NR $50/$51 restore semantics, an interrupt racing the handoff).
-   **The top lockstep-bisect candidate: one root cause likely
-   unblocks all three.**
-2. **DI busy-spin / dead-halt after launch — 3 titles** (Saboteur,
-   Aliens Neoplasma spin with interrupts off; Way of the Exploding
-   Fist HALTs with IFF1=0). Possibly the same upstream cause as
-   class 1 (all die at/near the loader → game handoff), but the
-   signatures differ (SP intact). Lockstep candidates.
+1. **24.11 dot-command dispatch: divMMC automap DENY at $3Dxx —
+   5 titles confirmed** (Baggers in Space, Crowley World Tour,
+   NextBASIC Invaders, Saboteur, Bomb Jack; Aliens Neoplasma
+   partially — see class 2). Established by a same-emulator A/B
+   (2026-07-14): every one of these titles loads/renders when
+   launched through NextZXOS 2.06 (the 2020 distro on FAT16), and
+   fails identically on the 24.11 distro regardless of filesystem
+   (FAT32 original AND a FAT16 rebuild) and regardless of the
+   NEXLOAD dot binary (24.11's dot works fine on the 2.06 kernel).
+   First divergence found by divMMC page-event trace
+   (`ZX_GO_DIVMMC_PAGE_TRACE=1`): during the 24.11 OS's
+   dot-command dispatch — BEFORE the dot's first instruction —
+   M1 fetches at $3D96-$3D9E are **DENIED divMMC automap by the
+   rom3 gate** (10 denials in the failing run, zero in the entire
+   working 2.06 load; $3D00 maps IN moments earlier, so the gate
+   inputs flip mid-dispatch). The dispatch then executes ROM 3
+   bytes where esxDOS overlay code should be and collapses into
+   the ROM 3 FP-calculator region with SP inside $2000-$3FFF —
+   the previously recorded "SP-in-ROM-window" signatures are all
+   this wreckage. VHDL cross-ref: $3Dxx instant automap is
+   rom3-class and NR $BB bit 7-gated (zxnext.vhd 2898-2899 + the
+   line-3138 rom3 gate); NR $BB=$F2 at the wreck, so the enable
+   bit is set — the suspect is the rom3 gate evaluation or our
+   AltROM/ROM-bank state tracking across the 24.11 dispatch's ROM
+   switching. **Fixing this one gate decision likely unblocks all
+   five titles on the shipped distro.** Not yet arbitrated against
+   a reference (ZEsarUX does boot the 24.11 image but takes ~12
+   minutes through its loader's RAM test; a lockstep anchored at
+   the first $3Dxx denial is the follow-up).
+2. **Game-era failures surviving the 2.06 stack — 2-3 titles**
+   (Way of the Exploding Fist dead-HALTs identically on both
+   stacks; Aliens Neoplasma runs but renders only partial red
+   lines on 2.06 — its 24.11 DI-spin may be class 1 stacked on an
+   own display/NR issue; TX-1696 launches on 2.06 but ends with
+   SP=$0000). Each needs its own bisect.
 3. **NR $B0/$B1/$B2 extended-keys / MD-pad registers — CLOSED
    (work item #160), and the original blame was wrong.** The
    registers are now live-composed and VHDL-pinned
@@ -196,23 +217,42 @@ blocks (the conformance prioritizer — see work item #159):
    MD-only pad buttons (X Z Y MODE START A C) have no input
    source, so pad-default titles (Quantum Storm) still need their
    keyboard/Kempston control options.
-4. **Alive-but-black display path — 1 title** (Bomb Jack: line IRQ
-   delivered, game loop runs, Layer 2 enabled, but its palette/pixel
-   upload never lands). Suspects: DMA transfer path, Layer 2 write
-   mapping via port $123B banking. Needs a reference diff to
-   localize.
-5. **`.nexload` launch falls back to OS — 1 title** (TX-1696).
-   Loader/esxDOS-API path, distinct from the in-game classes.
-6. **Architectural timing (Axis 10) — 1 title** (RAMS). Its authors
+4. **Architectural timing (Axis 10) — 1 title** (RAMS). Its authors
    ship a per-emulator build; do not chase before the contention /
    sub-line timing items land.
 
-Classes 1 and 2 are why the reference-emulator lockstep harness
-matters: the wreckage dumps show where each game DIED, not where it
+(The former "alive-but-black display path" (Bomb Jack) and
+"`.nexload` falls back to OS" (TX-1696) classes are absorbed above:
+Bomb Jack is class 1; TX-1696 moved to class 2 with a
+distro-dependent signature.)
+
+#### The loader-class A/B method (2026-07-14)
+
+The class-1 finding came from a symmetric-launch harness that both
+zx_go and a reference emulator can boot: stage the game's files plus
+a fixed-name `/zx.nex` copy and an auto-running
+`c:/nextzxos/autoexec.bas` (`10 .nexload /zx.nex`, autostart 10)
+onto an SD image; every cold boot then launches the game with no
+typed input (autoexec.bas with an autostart line DOES run on
+headless boots). The 2020/NextZXOS 2.06 FAT16 image boots on both
+zx_go and ZEsarUX in seconds (ZEsarUX reached Baggers' `.nex` entry
+PC in 11.6 s from reset); the 24.11 distro image also boots in
+ZEsarUX but takes ~12 minutes through that loader build's RAM test.
+Local-only staging tools: `_tools/stage-oracle-sd` (FAT32 distro
+images), mtools `mcopy` for FAT16 ones, `_tools/build-fat16-sd`
+(rebuild a distro tree as FAT16). Useful probes:
+`ZX_GO_DIVMMC_PAGE_TRACE=1` (automap grant/DENY events with PC +
+instruction number) and `--trace pc --trace-pc-range $2000-$3FFF`
+(dot-window PC streams for A/B diffing).
+
+Class 2 is why the reference-emulator lockstep harness still
+matters: those dumps show where each game DIED, not where it
 DIVERGED. The `--next-bisect` / `--next-lockstep` / `--next-nrdiff` /
 `--next-memdiff` drivers exist for exactly this walk-back; they
 compile under the development-only `oracle` build tag with a local
-reference-emulator driver.
+reference-emulator driver (ZEsarUX ZRCP since work item #162), and
+the sd-image spec accepts `img.mmc!nexload=/zx.nex` to have the
+local side type the launch when an autoexec can't be staged.
 
 If a Next game fails for you, **that is expected at this stage** —
 please file it (with what you see vs. real hardware / a stable
