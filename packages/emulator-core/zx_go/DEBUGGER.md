@@ -7,6 +7,8 @@ zx_go ships two complementary debuggers:
 
 Both share the same CPU underneath, so anything you observe in one is observable in the other. You can run both at the same time.
 
+There is also a third, emulator-independent option: [hwdebug/](hwdebug/README.md) drives a **real ZX Spectrum Next** over a joystick-port serial cable (dezogif + a standalone DZRP client) — scriptable breakpoints, memory/NextReg reads and .nex loading on actual silicon. Use it for ground-truth A/B runs against either emulator debugger when conformance is in question.
+
 > The emulator also ships extensive headless diagnostics (provenance tracer, trace-DB, crash detector, time-travel, …); run `zx_go --help` for the flags.
 
 ---
