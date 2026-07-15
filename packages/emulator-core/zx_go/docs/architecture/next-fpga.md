@@ -414,9 +414,15 @@ raster instant (known-gaps.md).
   ACMD41/13/51, CSD v1 (SDSC) and v2 (SDHC) paired with the OCR CCS bit,
   real CRC16 over data blocks, multi-block streams that survive CS
   toggles, and slot-0-only CS decode. Backing sources: an in-memory
-  image (`ImageSource`, with `--sd-writeback` persistence) or a FAT32
-  image built from a host directory tree (`BuildFAT32`, VFAT long names
-  with ~N aliasing, the format NextZXOS actually boots).
+  image (`ImageSource`, with `--sd-writeback` persistence), a
+  file-streamed image for cards too big to slurp (`FileSource` —
+  ReadAt-backed with guest writes captured in a RAM overlay, the file
+  never modified; auto-selected by the desktop/headless loader for
+  `ZX_GO_NEXT_SD_IMG` files over 1 GiB, e.g. a dd of a real card;
+  the .nex import path needs `ImageSource` so it is unavailable in
+  this mode), or a FAT32 image built from a host directory tree
+  (`BuildFAT32`, VFAT long names with ~N aliasing, the format
+  NextZXOS actually boots).
   `AddFileToFAT32`/`WriteFileToFAT32` insert or replace files in an
   existing image (this is what `zxPutFile` and .NEX import use). A
   directory grown past its first cluster gets its extension cluster

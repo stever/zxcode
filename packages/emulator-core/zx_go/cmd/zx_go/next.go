@@ -1333,8 +1333,23 @@ func wireNextSubsystems(e *emulator) error {
 	// host-side.img/.mmc file (handy for booting the bootrom against
 	// a known-good the reference Spectrum Next emulator-style image).
 	if imgPath := install.SDCardImage(); imgPath != "" {
-		raw, err := os.ReadFile(imgPath)
-		if err != nil {
+		var cardSrc sdcard.BlockSource
+		// Images too large to slurp (a dd of a real multi-GB card)
+		// stream from the file instead, with guest writes captured
+		// in a RAM overlay (the file is never modified). The .nex
+		// import path needs the in-memory ImageSource, so it stays
+		// unavailable in this mode — Browser-driven launches work.
+		const slurpLimit = 1 << 30
+		if st, err := os.Stat(imgPath); err == nil && st.Size() > slurpLimit {
+			fsrc, err := sdcard.NewFileSource(imgPath)
+			if err != nil {
+				slog.Warn("next: large SD image open failed", "path", imgPath, "err", err)
+			} else {
+				slog.Info("SD card streaming from large image (writes overlay in RAM)",
+					"path", imgPath, "size", st.Size())
+				cardSrc = fsrc
+			}
+		} else if raw, err := os.ReadFile(imgPath); err != nil {
 			slog.Warn("next: SD image file read failed", "path", imgPath, "err", err)
 		} else {
 			src, _ := sdcard.NewImageSource(raw, false)
@@ -1350,7 +1365,11 @@ func wireNextSubsystems(e *emulator) error {
 			if cliFlagsActive != nil && cliFlagsActive.sdWriteback {
 				e.sdImagePath = imgPath
 			}
-			card := sdcard.NewCard(src)
+			slog.Info("SD card loaded from image", "path", imgPath, "size", len(raw))
+			cardSrc = src
+		}
+		if cardSrc != nil {
+			card := sdcard.NewCard(cardSrc)
 			sdDebug := os.Getenv("ZX_GO_SD_DEBUG") != "" || (cliFlagsActive != nil && cliFlagsActive.logSDCommands)
 			card.SetLogger(func(cmd byte, arg uint32, isACMD bool) {
 				// SD-command breakpoint (`break-on-sd`): pause the CPU when
@@ -1387,7 +1406,6 @@ func wireNextSubsystems(e *emulator) error {
 				card.SetSDHC(true)
 			}
 			pager.SetCard(card)
-			slog.Info("SD card loaded from image", "path", imgPath, "size", len(raw))
 			goto sdReady
 		}
 	}
