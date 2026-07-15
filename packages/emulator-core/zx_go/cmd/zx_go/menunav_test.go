@@ -61,10 +61,14 @@ func TestMenuCursorNavigation(t *testing.T) {
 		if emu.kbd != nil {
 			emu.kbd.Tick()
 		}
-		// Observe only DURING the waitCursor step (idx == cursorStep): before
-		// it, $F700 holds uninitialised garbage from the boot phase; after it,
-		// $F700 is no longer a menu cursor.
-		if emu.nexloadMacro.idx == cursorStep {
+		// Observe from the waitCursor step through the ENTER step (cursorStep
+		// + 2: waitCursor, the settle wait, then ENTER): before that window
+		// $F700 holds uninitialised garbage from the boot phase; after ENTER
+		// it is no longer a menu cursor. Watching PAST the waitCursor step
+		// matters — a held cursor key released one frame late can auto-repeat
+		// the cursor off the target after the step completed, so ENTER opens
+		// the wrong item (Command Line read, NextBASIC opened).
+		if idx := emu.nexloadMacro.idx; idx >= cursorStep && idx <= cursorStep+2 {
 			if c := emu.mem.Read(nextMenuCursorAddr); c > maxCursor {
 				maxCursor = c
 			}

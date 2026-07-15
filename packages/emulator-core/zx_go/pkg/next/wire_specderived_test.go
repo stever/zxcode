@@ -7,6 +7,7 @@ import (
 	"github.com/conorarmstrong/zx_go/pkg/next/layer2"
 	"github.com/conorarmstrong/zx_go/pkg/next/nextregs"
 	"github.com/conorarmstrong/zx_go/pkg/next/sprite"
+	"github.com/conorarmstrong/zx_go/pkg/next/tilemap"
 	"github.com/conorarmstrong/zx_go/pkg/roms"
 	"github.com/conorarmstrong/zx_go/pkg/z80"
 )
@@ -1055,10 +1056,11 @@ func TestSpec_NR71_Layer2ScrollX_OnlyBit0(t *testing.T) {
 
 // TestSpec_NR2F_TilemapScrollXHigh_OnlyBits1to0.
 // VHDL :5330-5331 / :6017 — write bits 1:0 only, read returns
-// "000000" || bits 1:0.
+// "000000" || bits 1:0. The $2F handler lives in WireTilemap (it also
+// feeds the tilemap's scroll X), not WirePeripheralMasks.
 func TestSpec_NR2F_TilemapScrollXHigh_OnlyBits1to0(t *testing.T) {
 	disp := nextregs.New()
-	WirePeripheralMasks(disp)
+	WireTilemap(disp, tilemap.New(&tilemapBanks{}), nil, nil)
 
 	disp.WriteReg(0x2F, 0xFF)
 	if got := disp.ReadReg(0x2F); got != 0x03 {

@@ -28,7 +28,7 @@ func TestWireTilemap_NR6B_EnablesAndStores(t *testing.T) {
 	disp := nextregs.New()
 	tm := tilemap.New(&tilemapBanks{})
 	pal := palette.NewBank()
-	WireTilemap(disp, tm, pal)
+	WireTilemap(disp, tm, pal, nil)
 	// Bit 7 set → enabled. Bit 4 set → tilemap second palette.
 	disp.WriteReg(0x6B, 0x90)
 	if !tm.Enabled() {
@@ -42,7 +42,7 @@ func TestWireTilemap_NR6B_EnablesAndStores(t *testing.T) {
 func TestWireTilemap_NR6E_BitsMasked(t *testing.T) {
 	disp := nextregs.New()
 	tm := tilemap.New(&tilemapBanks{})
-	WireTilemap(disp, tm, nil)
+	WireTilemap(disp, tm, nil, nil)
 	// Write $FF — bit 6 should be dropped on store.
 	disp.WriteReg(0x6E, 0xFF)
 	if got := disp.ReadReg(0x6E); got != 0xBF {
@@ -53,7 +53,7 @@ func TestWireTilemap_NR6E_BitsMasked(t *testing.T) {
 func TestWireTilemap_NR6F_BitsMasked(t *testing.T) {
 	disp := nextregs.New()
 	tm := tilemap.New(&tilemapBanks{})
-	WireTilemap(disp, tm, nil)
+	WireTilemap(disp, tm, nil, nil)
 	disp.WriteReg(0x6F, 0xFF)
 	if got := disp.ReadReg(0x6F); got != 0xBF {
 		t.Errorf("NR$6F bit-6 mask: read = $%02X, want $BF", got)

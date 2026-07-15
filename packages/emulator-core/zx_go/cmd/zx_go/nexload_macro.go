@@ -205,8 +205,13 @@ func (m *nexloadMacro) tick(e *emulator) bool {
 	if s.waitCursor {
 		// Hold this step's keys (cursor DOWN) until the menu cursor reaches
 		// the target item, or the safety cap fires. The keys stay held from
-		// the frame==0 press above; releaseAll on the next step drops them.
+		// the frame==0 press above. Release them HERE, in the same tick that
+		// observes the target: the next step's entry-release only runs after
+		// one more frame has executed, and that frame is enough for the menu
+		// scan loop to auto-repeat the still-held key past the target (the
+		// cursor read Command Line but ENTER landed on NextBASIC).
 		if e.mem.Read(nextMenuCursorAddr) == s.cursorTarget || m.frame > waitCursorCap {
+			m.releaseAll(e)
 			m.idx++
 			m.frame = 0
 		}
