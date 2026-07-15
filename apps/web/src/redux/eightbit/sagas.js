@@ -301,7 +301,7 @@ function* handleGetProjectTapActions(_) {
                 }
                 break;
             case 'nextbas':
-                // Consolidated Sinclair/Next BASIC (#110) — txt2bas is the
+                // Consolidated Sinclair/NextBASIC (#110) — txt2bas is the
                 // single tokeniser on every machine, so one source convention
                 // covers the range; only the output format follows the target
                 // (lib/nextbas.js).

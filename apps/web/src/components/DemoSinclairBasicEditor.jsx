@@ -17,7 +17,7 @@ export function DemoSinclairBasicEditor() {
     const code = useSelector(state => state?.demo.sinclairBasicCode);
     const lineNumbers = useSelector((state) => state?.app?.lineNumbers ?? true);
 
-    // The demo is the consolidated Sinclair/Next BASIC (#110): txt2bas
+    // The demo is the consolidated Sinclair/NextBASIC (#110): txt2bas
     // tokenises for every machine, so the NextBASIC highlight always applies.
     const options = {
         mode: 'text/x-nextbas',

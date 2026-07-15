@@ -1,6 +1,6 @@
 import { file2bas, statements } from "txt2bas";
 
-// The consolidated Sinclair/Next BASIC compiler (#110): txt2bas (Remy
+// The consolidated Sinclair/NextBASIC compiler (#110): txt2bas (Remy
 // Sharp's in-browser NextBASIC tokeniser) is the single tokeniser for every
 // machine, so one source convention covers the whole range. The output
 // format follows the target: a PLUS3DOS program for the Next (handed to the

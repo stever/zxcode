@@ -44,7 +44,7 @@ function toToolInputs(files: ProjectFileRecord[]): Record<string, Uint8Array | s
  * Compile a project's source to a self-loading TAP, dispatching on language.
  *
  * In-process WASM: basic (zmakebas), bas2tap, asm (pasmo --tapbas loader).
- * In-process JS: nextbas (txt2bas — the consolidated Sinclair/Next BASIC).
+ * In-process JS: nextbas (txt2bas — the consolidated Sinclair/NextBASIC).
  * Via the api compile mutations: zxbasic (Boriel), c (z88dk), sjasmplus, pascal.
  *
  * `machine` ('48' | '128' | 'next') is only consulted by languages whose
@@ -70,7 +70,7 @@ export async function compileProject(
                 return getBas2Tap(code);
             });
         case 'nextbas':
-            // Consolidated Sinclair/Next BASIC: txt2bas tokenises for every
+            // Consolidated Sinclair/NextBASIC: txt2bas tokenises for every
             // machine. Always emit the TAP format — a Next render translates
             // it into NextZXOS's native delivery exactly as the sites do
             // (tap-to-next.mjs), and a classic render tape-loads it. The

@@ -7,7 +7,7 @@ export function getLanguageLabel(lang) {
     // 'bas2tap' keep their own source conventions as standalone tools
     // under the Other menu.
     basic: "zmakebas",
-    nextbas: "Sinclair/Next BASIC",
+    nextbas: "Sinclair/NextBASIC",
     bas2tap: "bas2tap",
     c: "z88dk C",
     pascal: "Pasta80 Pascal",
@@ -168,7 +168,7 @@ const LANGUAGE_MODES = {
   asm: "text/x-pasmo",
   basic: "text/x-zmakebas",
   bas2tap: "text/x-zmakebas",
-  // Consolidated Sinclair/Next BASIC (#110): txt2bas tokenises for every
+  // Consolidated Sinclair/NextBASIC (#110): txt2bas tokenises for every
   // machine, so the NextBASIC highlight always applies.
   nextbas: "text/x-nextbas",
   c: "text/x-z88dk-csrc",

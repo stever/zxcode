@@ -55,7 +55,7 @@ function* handleRunSinclairBasicActions(_) {
         const code = yield select((state) => state.demo.sinclairBasicCode);
         const machine = yield select((state) => state.app.machine);
         console.log(`[demo-basic] run requested machine=${machine} codeLength=${code?.length}`);
-        // The demo editor is the consolidated Sinclair/Next BASIC (#110):
+        // The demo editor is the consolidated Sinclair/NextBASIC (#110):
         // txt2bas tokenises for every machine, only the output format follows
         // the target — a PLUS3DOS program handed to the Next delivery, a
         // program TAP for the 48K/128K (lib/nextbas.js).

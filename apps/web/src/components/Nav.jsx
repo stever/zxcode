@@ -97,7 +97,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
-  // One consolidated BASIC (#110): "Sinclair/Next BASIC" (lang nextbas) is
+  // One consolidated BASIC (#110): "Sinclair/NextBASIC" (lang nextbas) is
   // txt2bas-tokenised for every machine, so there is a single headline entry
   // instead of the old machine-dependent zmakebas/NextBASIC pair. zmakebas
   // and bas2tap live on under Other as standalone classic tokenisers with
