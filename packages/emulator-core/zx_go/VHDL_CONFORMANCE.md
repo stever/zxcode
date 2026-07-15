@@ -135,6 +135,17 @@ hard AND soft). Pinned by TestPortFFBit6FrameIntDisable /
 TestFrameIntDisableSharedLatchWriters / TestFrameIntDisableResetClears
 (pkg/ula, production wiring), TestSpec_NR22/NRC4 (wire level) and
 TestFrameInt_NarrowPulse_DisableMidPulseWithdraws (pkg/z80).
+✅ Joystick ports **$1F/$37**: both decode on the LOW address byte alone
+(:2546-2547) and always answer — an unrouted port reads $00 from the
+`port_XX_dat` mux (:2829-2830, :3499-3507), never the floating bus. The
+read composes both sticks per the NR$05 routing (:3472-3494): Kempston
+modes "001"/"100" pass i_JOY bits 5:0 on $1F/$37, MD modes "101"/"110"
+additionally pass START/A in bits 7:6. `pkg/ula` nextJoyPortByte, pinned
+by TestNextJoyPort37Idle / TestNextJoyPortRouting
+(joyports_next_test.go); found via Atic Atac (Next), which ORs
+IN($1F)|IN($37) every frame and read the old floating $FF as every
+button held. The MD-only bits still READ idle for lack of a pad input
+source (known-gaps.md).
 ⚠️ $FE,$7FFD,$1FFD,$243B/$253B,$E3/$E7/$EB,$6B,$DFFD,AY ports present
 but no port-by-port VHDL decode conformance test.
 

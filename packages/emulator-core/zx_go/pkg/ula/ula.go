@@ -1662,14 +1662,33 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 		return u.timexVideoMode, true
 	}
 
-	// Kempston joystick: port 0x1F. Decoded as A7..A5 = 0 and A4..A0 = 0x1F.
-	// On the Spectrum Next the FPGA ALWAYS decodes $1F as the Kempston joystick
-	// (the TBBLUE firmware polls it at boot; the joystick-mode NextReg only
-	// selects which physical input drives it), so an idle read returns $00 —
-	// not the floating bus. Games rely on this: Sonic reads $1F and complements
-	// it (IN A,($1F); XOR $FF; …) to derive an option-menu flag; a floating-bus
-	// $FF there inverted the flag and forced a blank-screen path.
+	// Next joystick ports $1F and $37: the FPGA decodes BOTH on the low
+	// address byte alone (zxnext.vhd:2546-2547) and always answers — an
+	// unrouted port reads $00, never the floating bus (:2829-2830 mux
+	// port_XX_dat, which idles at 0). NR$05 routes each physical stick
+	// to one port and mode (:3472-3494): modes "001"/"100" put a
+	// Kempston-style stick on $1F/$37 (i_JOY bits 5:0), and the MD-pad
+	// modes "101"/"110" additionally expose START/A in bits 7:6. Games
+	// rely on the always-decoded idle $00: Sonic complements IN($1F)
+	// for an option-menu flag, and Atic Atac ORs IN($1F) with IN($37)
+	// every frame — a floating-bus $FF from an undecoded $37 reads as
+	// every button held, so its title screen never saw a fire edge.
 	isNext := u.mem != nil && u.mem.GetCurrentModel() == roms.ModelNext
+	if isNext && u.nextRegs != nil && (byte(addr) == 0x1F || byte(addr) == 0x37) {
+		// NR$05 read-back layout (see WireJoystickMode): bits 7:6 =
+		// joy0[1:0], bit 3 = joy0[2]; bits 5:4 = joy1[1:0], bit 1 =
+		// joy1[2].
+		mode05 := u.nextRegs.ReadReg(0x05)
+		joy0 := mode05>>6&0x03 | mode05>>1&0x04
+		joy1 := mode05>>4&0x03 | mode05<<1&0x04
+		return nextJoyPortByte(u.MDJoyLeft(), joy0, byte(addr)) |
+			nextJoyPortByte(u.MDJoyRight(), joy1, byte(addr)), true
+	}
+
+	// Kempston joystick: port 0x1F. Decoded as A7..A5 = 0 and A4..A0 = 0x1F.
+	// (On the Next the branch above handles $1F; this stays as the
+	// classic-interface path, and as a fallback for Next wirings with
+	// no NextReg dispatcher attached.)
 	if (u.KempstonEnabled || isNext) && (addr&0x00E0) == 0x0000 && (addr&0x001F) == 0x001F {
 		return u.KempstonState & 0x1F, true
 	}
@@ -1856,6 +1875,33 @@ func (u *ULA) MDJoyLeft() uint16 {
 // so the right pad always reads idle.
 func (u *ULA) MDJoyRight() uint16 {
 	return 0
+}
+
+// nextJoyPortByte composes one stick's contribution to a joystick
+// port read per zxnext.vhd:3472-3506. mode is the stick's 3-bit
+// NR$05 routing, vec its 12-bit i_JOY vector (active high), port the
+// low address byte ($1F or $37). Bits 5:0 pass when the stick is
+// routed to this port in Kempston or MD mode (joyX_YY_en); bits 7:6
+// (START/A) only in the MD mode for this port (mdX_YY_en). The two
+// sticks' bytes are ORed by the caller, matching port_1f_dat /
+// port_37_dat.
+func nextJoyPortByte(vec uint16, mode byte, port byte) byte {
+	var md, en bool
+	if port == 0x1F {
+		md = mode == 0b101
+		en = mode == 0b001 || md
+	} else {
+		md = mode == 0b110
+		en = mode == 0b100 || md
+	}
+	var b byte
+	if en {
+		b = byte(vec) & 0x3F
+	}
+	if md {
+		b |= byte(vec) & 0xC0
+	}
+	return b
 }
 
 // WritePort handles CPU writes to ULA-controlled ports. Public

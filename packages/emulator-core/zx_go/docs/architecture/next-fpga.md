@@ -95,7 +95,10 @@ drift. Highlights:
   MD-pad extra buttons) — read-only registers composed on every read
   from the live ULA input state (keyboard-matrix composites + the
   Kempston-backed joystick vector), the same live-source pattern as
-  NR$69.
+  NR$69. The joystick ports $1F/$37 themselves are composed in
+  `pkg/ula` (`nextJoyPortByte`): low-address-byte decode, idle $00
+  (never floating bus), NR$05 routing incl. the MD-mode START/A bits
+  (zxnext.vhd:2546-2547, :3472-3507).
 - Deliberately not wired here: the zxnDMA (ports $6B/$0B, wired via
   `ULA.SetNextDMA`) and the Pi accelerator registers (default storage).
 
