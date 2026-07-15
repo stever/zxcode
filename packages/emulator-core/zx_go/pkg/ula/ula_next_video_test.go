@@ -49,6 +49,7 @@ func (m *liveULAMock) SetULAActivePalette(second bool) {
 	m.second = second
 	m.selectCalls = append(m.selectCalls, second)
 }
+func (m *liveULAMock) OverpaintWideL2Row(y int, dst []byte, xScale int) {}
 
 func newNextVideoULA(t *testing.T) (*ULA, *liveULAMock, *memory.Memory) {
 	t.Helper()
@@ -65,9 +66,11 @@ func newNextVideoULA(t *testing.T) (*ULA, *liveULAMock, *memory.Memory) {
 }
 
 // paperPixel reads the rendered image pixel for paper coordinate (x, y).
+// With a Next compositor wired the frame is the FPGA's 320×256 wide
+// frame: the paper starts at (BorderLeft, NextBorderTop) = (32, 32).
 func paperPixel(u *ULA, x, y int) (r, g, b, a byte) {
 	img := u.img
-	off := (BorderTop+y)*img.Stride + (BorderLeft+x)*4
+	off := (NextBorderTop+y)*img.Stride + (BorderLeft+x)*4
 	return img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3]
 }
 

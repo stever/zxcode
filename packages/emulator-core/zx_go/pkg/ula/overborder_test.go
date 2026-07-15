@@ -26,11 +26,12 @@ func (m *overBorderMock) ComposeSpriteBorderRow(y int, dst []byte, f func(int) b
 		dst[0], dst[1], dst[2], dst[3] = 0x12, 0x34, 0x56, 0xFF
 	}
 }
-func (m *overBorderMock) TilemapIs80Col() bool                    { return false }
-func (m *overBorderMock) ComposeWideTilemapRow(y int, dst []byte) {}
-func (m *overBorderMock) HiResLayer2Active() bool                 { return false }
-func (m *overBorderMock) Layer2Width() int                        { return 320 }
-func (m *overBorderMock) ComposeWideLayer2Row(y int, dst []byte)  {}
+func (m *overBorderMock) TilemapIs80Col() bool                             { return false }
+func (m *overBorderMock) ComposeWideTilemapRow(y int, dst []byte)          {}
+func (m *overBorderMock) HiResLayer2Active() bool                          { return false }
+func (m *overBorderMock) Layer2Width() int                                 { return 320 }
+func (m *overBorderMock) ComposeWideLayer2Row(y int, dst []byte)           {}
+func (m *overBorderMock) OverpaintWideL2Row(y int, dst []byte, xScale int) {}
 
 // TestNextRenderShowsOverBorderSprites locks in that, when the Next sprite
 // layer is active, the display returns the full 320x256 over-border frame (not
@@ -67,10 +68,13 @@ func TestNextRenderShowsOverBorderSprites(t *testing.T) {
 	}
 }
 
-// TestNextRenderNoSpritesStaysClassicHeight verifies the frame stays 320x240
-// when the Next sprite layer is inactive (no over-border band needed), so the
-// taller frame is scoped to sprite-using content only.
-func TestNextRenderNoSpritesStaysClassicHeight(t *testing.T) {
+// TestNextRenderAlwaysWideFrame verifies a compositor-wired (Next) ULA
+// renders the FPGA's full 320×256 wide frame regardless of sprite
+// activity — the frame geometry is a property of the machine, not of
+// which layers happen to be enabled (zxula_timing.vhd o_wvc counts
+// 256 visible lines unconditionally) — and that unhooking the
+// compositor restores the classic 320×240 frame.
+func TestNextRenderAlwaysWideFrame(t *testing.T) {
 	testDir := "test_roms_overborder_off"
 	createTestROMs(t, testDir)
 	defer cleanupTestROMs(testDir)
@@ -82,8 +86,14 @@ func TestNextRenderNoSpritesStaysClassicHeight(t *testing.T) {
 	u.SetNextCompositor(&noSpriteMock{})
 
 	img := u.Render()
+	if h := img.Bounds().Dy(); h != NextTotalHeight {
+		t.Errorf("no-sprite Next frame height = %d, want %d", h, NextTotalHeight)
+	}
+
+	u.SetNextCompositor(nil)
+	img = u.Render()
 	if h := img.Bounds().Dy(); h != TotalHeight {
-		t.Errorf("no-sprite Next frame height = %d, want %d", h, TotalHeight)
+		t.Errorf("classic frame height after compositor unhook = %d, want %d", h, TotalHeight)
 	}
 }
 
@@ -99,3 +109,4 @@ func (m *noSpriteMock) ComposeWideTilemapRow(y int, dst []byte)                 
 func (m *noSpriteMock) HiResLayer2Active() bool                                    { return false }
 func (m *noSpriteMock) Layer2Width() int                                           { return 320 }
 func (m *noSpriteMock) ComposeWideLayer2Row(y int, dst []byte)                     {}
+func (m *noSpriteMock) OverpaintWideL2Row(y int, dst []byte, xScale int)           {}

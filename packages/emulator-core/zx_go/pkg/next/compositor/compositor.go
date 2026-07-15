@@ -293,6 +293,96 @@ func (c *Compositor) HasActiveSprites() bool {
 	return c.sprites != nil && c.sprites.Enabled() && c.pal != nil
 }
 
+// OverpaintWideL2Row restores, in the active NR$15 order, the layers
+// that sit ABOVE Layer 2 after the hi-res L2 overlay covered the base
+// frame: sprites in every mode except the L2-topmost LSU/LUS and ULS
+// (where sprites are the bottom layer), and the ULA+TM slot's TILEMAP
+// in the U-above-L modes (SUL/USL/ULS — zxnext.vhd's priority chain
+// places the combined ULA+TM result above Layer 2 there). Ordering
+// within the overpaint: SUL is S-over-U, so its tilemap paints below
+// the sprites; USL/ULS paint it above. The classic ULA pixels of the
+// U slot are NOT repainted (documented residue — that needs per-pixel
+// ULA data at this point in the pipeline; content that disables the
+// ULA output via NR$68 bit 7, like RAMS, has none to lose). The blend
+// modes 6/7 keep the sprites-only overpaint. dst is a full frame row
+// at xScale output pixels per frame pixel (1 = 320-wide, 2 = 640).
+func (c *Compositor) OverpaintWideL2Row(frameY int, dst []byte, xScale int) {
+	mode := ModeSLU
+	if c.prioritySource != nil {
+		mode = c.prioritySource.Mode()
+	}
+	sprites := mode != ModeLSU && mode != ModeLUS && mode != ModeULS
+	tilemap := mode == ModeSUL || mode == ModeUSL || mode == ModeULS
+	if tilemap && mode == ModeSUL {
+		c.composeTilemapOverlayRow(frameY, dst, xScale)
+	}
+	if sprites {
+		c.composeSpriteOverlayRow(frameY, dst, xScale)
+	}
+	if tilemap && mode != ModeSUL {
+		c.composeTilemapOverlayRow(frameY, dst, xScale)
+	}
+}
+
+// composeSpriteOverlayRow paints the sprite row for frame row frameY over
+// dst at xScale horizontal output pixels per sprite pixel. Every covered
+// sprite pixel is painted — the full-row counterpart of
+// ComposeSpriteBorderRow.
+func (c *Compositor) composeSpriteOverlayRow(frameY int, dst []byte, xScale int) {
+	if !c.HasActiveSprites() {
+		return
+	}
+	spritePal := c.pal.PaletteForLayer(palette.LayerSprites)
+	if spritePal == nil {
+		return
+	}
+	var scan [FullWidth]byte
+	c.sprites.RenderScanline(frameY, scan[:], FullWidth)
+	cover := c.sprites.LineCoverage()
+	for x := 0; x < FullWidth; x++ {
+		if !cover[x] {
+			continue
+		}
+		r, g, b := spritePal.RGB(scan[x])
+		for i := 0; i < xScale; i++ {
+			off := (x*xScale + i) * 4
+			dst[off+0], dst[off+1], dst[off+2], dst[off+3] = r, g, b, 0xFF
+		}
+	}
+}
+
+// composeTilemapOverlayRow paints the tilemap row for frame row frameY
+// over dst at xScale output pixels per frame pixel, with the same
+// transparency rules as the inner pass's paintTilemapOnULA: the low
+// nibble of the palette index against NR$4C (tilemap.vhd:427), and the
+// legacy nibble-0 skip when tm_on_top is clear.
+func (c *Compositor) composeTilemapOverlayRow(frameY int, dst []byte, xScale int) {
+	if !c.HasActiveTilemap() {
+		return
+	}
+	tilemapPal := c.pal.PaletteForLayer(palette.LayerTilemap)
+	if tilemapPal == nil {
+		return
+	}
+	var scan [FullWidth]byte
+	c.tilemap.RenderScanline(frameY, scan[:])
+	onTop := c.tilemap.OnTop()
+	for x := 0; x < FullWidth; x++ {
+		idx := scan[x]
+		if (idx & 0x0F) == c.tilemapTrans {
+			continue
+		}
+		if !onTop && (idx&0x0F) == 0 {
+			continue
+		}
+		r, g, b := tilemapPal.RGB(idx)
+		for i := 0; i < xScale; i++ {
+			off := (x*xScale + i) * 4
+			dst[off+0], dst[off+1], dst[off+2], dst[off+3] = r, g, b, 0xFF
+		}
+	}
+}
+
 // ComposeSpriteBorderRow paints sprite pixels over the border-area pixels of a
 // full-screen row, the sprite counterpart to ComposeBorderRow. Sprites are
 // frame-relative (the 320x256 frame), so frameY is the sprite vcounter for this
@@ -538,6 +628,35 @@ func (c *Compositor) EndPaletteReplay() {
 	}
 }
 
+// FoldTilemapScroll builds the tilemap's per-raster-line scroll table
+// from the frame's stamped NR$2F/$30/$31 writes, so every tilemap row
+// pass this render (inner, border, wide-L2 overpaint) applies mid-frame
+// scroll changes from their raster row (tilemap.FoldScrollStamps).
+// Called by the ULA at the top of its compositor pass, alongside the
+// palette replay bracket.
+func (c *Compositor) FoldTilemapScroll(stale bool) {
+	if c.tilemap != nil {
+		c.tilemap.FoldScrollStamps(stale)
+	}
+}
+
+// CaptureTilemapRowScroll snapshots the copper's render-time scroll for
+// one raster line (tilemap.CaptureRowScroll) — fed per row by the ULA's
+// compositor walk.
+func (c *Compositor) CaptureTilemapRowScroll(rasterLine int) {
+	if c.tilemap != nil {
+		c.tilemap.CaptureRowScroll(rasterLine)
+	}
+}
+
+// EndTilemapScrollCapture closes the render bracket opened by
+// FoldTilemapScroll (deferred from ULA.Render, after the wide passes).
+func (c *Compositor) EndTilemapScrollCapture() {
+	if c.tilemap != nil {
+		c.tilemap.EndScrollCapture()
+	}
+}
+
 // ULARGBA resolves a ULA palette index (0..255) through the LIVE active ULA
 // palette — the FPGA feeds every ULA pixel (and border pixel) through the
 // palette SRAM, so NR$40/$41/$44 redefinitions (including copper MOVEs)
@@ -662,15 +781,15 @@ func (c *Compositor) composeRow(y int, ulaRGBA []byte, dst []byte, sub int) {
 		if tilemapPal == nil {
 			doTilemap = false
 		} else {
-			// Render the FULL 320-pixel tilemap row. The inner
-			// 256-wide compose pass uses the centred 256 pixels
-			// (cols 32..287 of the tilemap = the cols that overlap
-			// the classic-screen area when tilemap col 0 maps to
-			// image col 0). See sram_pre_layer2_A21_A13 / FPGA
-			// 320-pixel video framing — tilemap is anchored to the
-			// full screen including the 32-px border, not to the
-			// inner 256-wide rectangle.
-			c.tilemap.RenderScanline(y, c.tilemapScratch[:])
+			// Render the FULL 320-pixel tilemap row. The tilemap is
+			// anchored to the 320×256 wide frame — the SAME whc/wvc
+			// counters the sprite engine consumes (zxnext.vhd:4337 vs
+			// 4389), so paper row y is tilemap row y+SpriteFrameYTop
+			// and the inner 256-wide compose pass uses the centred
+			// 256 pixels (cols 32..287). Passing the frame row also
+			// makes the NR$1B clip window (frame-coordinate rows)
+			// apply where the FPGA applies it.
+			c.tilemap.RenderScanline(y+SpriteFrameYTop, c.tilemapScratch[:])
 			tilemapScan = c.tilemapScratch[BorderOffsetX : BorderOffsetX+Width]
 		}
 	}

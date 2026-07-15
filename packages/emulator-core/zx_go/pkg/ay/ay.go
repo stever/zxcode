@@ -230,7 +230,7 @@ func (a *AY) WriteRegister(reg, val byte) {
 func (a *AY) ReadRegister(reg byte) byte {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.regs[reg&0x0F]
+	return a.readRegLocked(reg & 0x0F)
 }
 
 // ReadSelected returns the value of the currently selected register, used by
@@ -238,7 +238,31 @@ func (a *AY) ReadRegister(reg byte) byte {
 func (a *AY) ReadSelected() byte {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.regs[a.selected]
+	return a.readRegLocked(a.selected)
+}
+
+// readRegLocked resolves a register read with the IO-port semantics of
+// the FPGA's ym2149 (ym2149.vhd:241-249): with the port in INPUT mode
+// (reg 7 bit 6 for port A, bit 7 for port B, 0 = input) a read returns
+// the external port pins — tied to all-ones on the Next ("AYs have
+// internal pullups", turbosound.vhd port_a_i/port_b_i => (others=>'1'))
+// — NOT the register latch. In OUTPUT mode the read is reg AND pins =
+// the latch. Guest code that senses hardware through the AY IO ports
+// (the Konami/Frogger arcade lineage reads its inputs there) must see
+// idle-high, not the power-on zero latch. Must be called with the
+// mutex held.
+func (a *AY) readRegLocked(reg byte) byte {
+	switch reg {
+	case RegIOA:
+		if a.regs[RegMixer]&0x40 == 0 {
+			return 0xFF
+		}
+	case RegIOB:
+		if a.regs[RegMixer]&0x80 == 0 {
+			return 0xFF
+		}
+	}
+	return a.regs[reg]
 }
 
 // writeRegisterLocked must be called with the mutex held.

@@ -48,6 +48,7 @@ func (m *replayMock) RewindPaletteReplay() {
 func (m *replayMock) EndPaletteReplay() {
 	m.log = append(m.log, "end")
 }
+func (m *replayMock) OverpaintWideL2Row(y int, dst []byte, xScale int) {}
 
 func TestApplyNextCompositorPaletteReplaySequence(t *testing.T) {
 	dir := t.TempDir()

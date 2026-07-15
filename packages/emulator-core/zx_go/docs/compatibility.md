@@ -163,11 +163,11 @@ method.
 | Lords of Midnight (Next) | Works (title) | Intro screen art renders (re-verified r47; runs IM 1). |
 | Scramble (Next) | Works (title) | Attract screen renders — score header, "© KONAMI 1981" (re-verified r47). |
 | Space Invaders (Next) | Works (title) | Attract/planet artwork renders (re-verified r47). |
-| Tyvarian | Works (title) | Attract text renders ("Rise of the Crystal Thief", options prompt) (re-verified r47). The noisy-looking header/footer rows haven't been compared against a reference. |
+| Tyvarian | Works (title) | Attract text renders ("Rise of the Crystal Thief", options prompt). The r47 note's "noisy-looking header/footer rows" were the #171 wide-frame geometry bug (the game draws tilemap/wide-L2 content into the border ring, which our render tore 24 px against itself at the paper/border seam) — fixed r51, and the user-reported gameplay sprite-vs-backdrop drift + matching collision feel is the same class. Pending browser re-test post-r51. |
 | Warhawk | Works | Verified headless end-to-end: starts, plays and reaches GAME OVER (#160). r47 re-baseline: kfire edges register and the score header ticks. The menu wants a fire EDGE twice; `--press-key` accepts `kfire`/`kup`/... joystick names. The earlier "unstartable, NR $B0-$B2" verdict was a harness artifact. An A/B run with `WireExtendedKeys` disabled starts identically — the game reads NR $B2 each input poll but $00-idle satisfies it. |
 | NextBASIC Invaders | Works (in-game) | Plays on the shipped 24.11 distro headless: first wave, score header, shots (#163; was the loader-class freeze). r47 re-baseline: attract renders. The separately reported `Integer out of range` DEFPROC divergence ([janko-jj](https://github.com/conorarmstrong/zx_go/issues)) is still its own issue. |
 | Baggers in Space (Stonechat Games) | Works (title) | Title + high-score board render (re-verified r47; unblocked by #163). |
-| Crowley World Tour | Works (menu) | Title + frame art render (unblocked by #163). The formerly-empty central panel now shows the full ENDLESS MODE high-score table (#165: the panel content is runtime-loaded, and the staging tool's FAT32 append was detaching LFN chains in grown directories — the game's long-name F_OPENs failed). |
+| Crowley World Tour | Works (menu) | Title + frame art render (unblocked by #163); central panel content unblocked by #165 (staging FAT32 LFN repair). The user-reported start-screen text sitting below its box and gameplay shapes landing below the playfield were the #171 wide-frame geometry bug (mixed tilemap/Layer 2 vertical origins) — fixed r51, pending browser re-test. |
 | Bomb Jack (Next) | Works (title) | Full title screen (Layer 2) renders (re-verified r47; unblocked by #163). |
 | Saboteur (Next) | Works (menu) | r47 re-baseline: title renders, and a keypress advances to the night intro scene, which renders correctly. |
 | Aliens Neoplasma | Works (menu) | FIXED by #165 (the class-1 staging repair): the post-title black-screen idle HALT was the game silently failing its runtime data F_OPENs on a corrupted staged directory. A keypress now advances title → the ACHILLES NAVIGATION SYSTEM menu (Play game / Redefine keys / About), rendered correctly. |
@@ -181,7 +181,31 @@ method.
 The failures cluster into classes; ranked by how many titles each
 blocks (the conformance prioritizer — see work items #159/#164):
 
-1. **PARTIAL (work items #166/#169, 2026-07-14): TX-1696's install
+1. **CLOSED (work item #171, 2026-07-15): Next wide-layer geometry —
+   one 320×256 frame coordinate system.** Found by a manual game-test
+   pass: border-area corruption and a consistent vertical offset
+   between sprites and background layers (Tyvarian's torn title +
+   sprite/backdrop drift, Crowley World Tour's displaced text and
+   falling shapes, and any title drawing tilemap or wide Layer 2
+   content). In the FPGA, sprites, the tilemap and Layer 2's
+   320×256/640×256 modes all consume the SAME whc/wvc wide counters
+   (zxnext.vhd:4208/4337/4389) — one 320×256 frame, paper at (32,32).
+   Our render used a 320×240 canvas with THREE vertical conventions:
+   sprites correct, tilemap 32 px low in the paper area (frame offset
+   applied horizontally but not vertically) and torn 24 px against
+   itself at the paper/border seam, wide Layer 2 8 px low with its
+   bottom 16 rows cropped, over-border sprites dropped in hi-res L2
+   mode, and L2 painted over sprites regardless of NR$15. Fixed by
+   making the compositor-wired ULA render the full 320×256 frame
+   (`SetNextCompositor` switches the geometry; image row = frame row)
+   with every layer routed through frame coordinates, plus a sprite
+   repaint above wide L2 in the S-above-L modes. 320×256 doubles to
+   exactly the browser's 640×512 box. Pinned by
+   `TestNextWideFrameLayerAnchoring`; NextZXOS Browser (full-frame
+   tilemap) and Celeste (full-frame starfield) verified by headless
+   screenshot. Tyvarian/Crowley gameplay alignment pending re-test in
+   the browser.
+2. **PARTIAL (work items #166/#169, 2026-07-14): TX-1696's install
    geometry — two more real gaps FIXED (r50), one blocker still
    open.** The #166 story (r49): `ULA.BeamPosition` divided raw CPU
    T-states by 228, but the FPGA's cvc counter (NR$1E/$1F, copper
@@ -208,7 +232,7 @@ blocks (the conformance prioritizer — see work items #159/#164):
    community source contradicts — see its row for the full map and
    the two candidate resolutions (real 28 MHz write waits, or an
    earlier INT).
-2. **CLOSED (work item #165, 2026-07-14): runtime data-load failures
+3. **CLOSED (work item #165, 2026-07-14): runtime data-load failures
    — WOTEF, Aliens Neoplasma and Crowley's panel all unblocked by
    TWO stacked fixes.** (a) `fat32.go appendDirent` extended a full
    directory without zeroing the freshly allocated cluster; on the
@@ -232,7 +256,7 @@ blocks (the conformance prioritizer — see work items #159/#164):
    analysis → game-code disassembly → F_OPEN carry) is in work
    item #165. TX-1696 did NOT move — see its row (its verdict is
    blocked on staging its 53 MB audio, not on this class).
-3. **CLOSED (work item #163, 2026-07-14): RETI mistreated as RETN
+4. **CLOSED (work item #163, 2026-07-14): RETI mistreated as RETN
    unmapped the esxDOS overlay — 5 titles unblocked** (Baggers in
    Space, Crowley World Tour, NextBASIC Invaders, Saboteur, Bomb
    Jack all load/render on the SHIPPED 24.11 distro now). Root
@@ -263,7 +287,7 @@ blocks (the conformance prioritizer — see work items #159/#164):
    were never on the card), and TX-1696's two distro-dependent
    signatures collapsed into the class-1 stall above once its
    folder was staged.
-4. **NR $B0/$B1/$B2 extended-keys / MD-pad registers — CLOSED
+5. **NR $B0/$B1/$B2 extended-keys / MD-pad registers — CLOSED
    (work item #160), and the original blame was wrong.** The
    registers are now live-composed and VHDL-pinned
    (VHDL_CONFORMANCE.md Axis 3), but the A/B run showed Warhawk
@@ -275,7 +299,7 @@ blocks (the conformance prioritizer — see work items #159/#164):
    MD-only pad buttons (X Z Y MODE START A C) have no input
    source, so pad-default titles (Quantum Storm) still need their
    keyboard/Kempston control options.
-5. **Architectural timing (Axis 10) — 1 title** (RAMS). Its authors
+6. **Architectural timing (Axis 10) — 1 title** (RAMS). Its authors
    ship a per-emulator build; do not chase before the contention /
    sub-line timing items land.
 

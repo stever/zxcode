@@ -8,8 +8,15 @@ func TestNewResetsRegisters(t *testing.T) {
 	a := New()
 	for i := 0; i < NumRegisters; i++ {
 		expected := byte(0)
-		if i == RegMixer {
+		switch i {
+		case RegMixer:
 			expected = 0x3F // all channels muted by default
+		case RegIOA, RegIOB:
+			// Reset mixer $3F leaves both IO ports in INPUT mode
+			// (bits 6/7 = 0): reads return the external pins, tied
+			// all-ones on the Next (ym2149.vhd:241-249 +
+			// turbosound.vhd pullups) — not the zeroed latch.
+			expected = 0xFF
 		}
 		if got := a.ReadRegister(byte(i)); got != expected {
 			t.Errorf("register %d: expected %02X, got %02X", i, expected, got)

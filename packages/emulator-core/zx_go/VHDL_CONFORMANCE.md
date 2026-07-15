@@ -225,6 +225,34 @@ The ✅ rows below are green at LINE granularity; the sub-line copper/palette
 detail they collapse is the ⚙️ row in Axis 10, not an omission here.
 
 Pinned since (base/Copper + base/DMA conformance work):
+- ✅ Wide-frame geometry (r51, #171): sprites, tilemap and wide Layer 2
+  all render in the FPGA's ONE 320×256 frame — the same whc/wvc
+  counters feed all three blocks (zxnext.vhd:4208/4337/4389 ←
+  zxula_timing.vhd o_whc/o_wvc), (0,0) = border-ring top-left, paper at
+  (32,32). Previously the render used THREE vertical origins on a
+  320×240 canvas: tilemap 32 px low in the paper area (the inner pass
+  applied the frame offset horizontally but not vertically) and torn
+  24 px against itself at the paper/border seam; wide Layer 2 8 px low,
+  bottom 16 rows cropped, and painted over sprites regardless of NR$15
+  (the S-above-L modes now repaint sprites on top). Frame-anchored
+  NR$1B tilemap clip rows now apply where the FPGA applies them.
+  `TestNextWideFrameLayerAnchoring` + the re-derived
+  nexttests/ext327 placement suites. Mid-frame tilemap scroll writes
+  (NR$2F/$30/$31 — combinational into the pixel pipeline,
+  tilemap.vhd:326) are raster-stamped and folded per line, applying in
+  every tilemap pass incl. the wide-L2 overpaint
+  (`TestScrollFoldAppliesMidFrameWrites`; the RAMS/Galaxian
+  band-scrolled player ship).
+  Wide-L2 overpaint order per mode (OverpaintWideL2Row): sprites
+  (non-L-topmost), tilemap (U-above-L; SUL under sprites, USL/ULS
+  over — RAMS's USL menu/HUD text, verified against its real ROM
+  sets). Mid-frame tilemap scroll (combinational registers,
+  tilemap.vhd:326) renders per raster line via a two-writer table:
+  CPU writes beam-stamped + folded, copper render-time MOVEs captured
+  per walk row (TestScrollFold*/TestScrollCapture* — RAMS's
+  copper-banded Galaxian player ship, NR$62=$C0 restart-on-vblank).
+  ⚠️ Residue: classic ULA pixels above wide L2 (SUL/USL/ULS)
+  still approximate as covered (known-gaps.md).
 - ✅ NR$1E/$1F active-video-line counter runs on the VIDEO clock, not the
   CPU clock (zxnext.vhd:5982-5986 port_253b_dat <= cvc; zxula_timing.vhd
   cvc/c_int_v): `ULA.BeamPosition` derives the beam on the 3.5 MHz-

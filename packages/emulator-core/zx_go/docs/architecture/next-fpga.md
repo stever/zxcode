@@ -172,6 +172,16 @@ Per frame the ULA renders its classic base image, then for each active
 scanline re-renders the ULA row through the live Next ULA palette with
 the Copper interleaved per pixel, and calls the compositor. The pieces:
 
+- Frame geometry (r51, #171): the Next composites into the FPGA's
+  320×256 wide frame — sprites, the tilemap and Layer 2's wide modes
+  all consume the SAME whc/wvc counters (zxnext.vhd:4208/4337/4389 ←
+  zxula_timing.vhd o_whc/o_wvc), one coordinate system with (0,0) at
+  the top-left of the 32-px border ring and the classic paper at
+  (32,32). `ULA.SetNextCompositor` switches the ULA's canvas to this
+  geometry (image row r IS frame row r, no bias arithmetic; classics
+  keep 320×240), and 320×256 doubles to exactly the browser's fixed
+  640×512 display box. Pinned by `TestNextWideFrameLayerAnchoring`.
+
 - Layer 2 (`pkg/next/layer2`): framebuffer over three consecutive 16K
   banks. 256×192 8bpp row-major, 320×256 8bpp and 640×256 4bpp
   column-major (NR$70), 9-bit X scroll, palette offset added per the
@@ -181,7 +191,17 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
 - Tilemap (`pkg/next/tilemap`): 40/80×32 tiles, 4bpp, optional per-tile
   attributes (palette offset, mirror X/Y, rotate, priority), 1bpp text
   mode, 512-tile mode, pixel scroll with torus wrap, clip. Bases from
-  NR$6E/$6F select bank 5 or 7.
+  NR$6E/$6F select bank 5 or 7. Mid-frame scroll changes apply from
+  their raster row in every tilemap pass, wide-L2 overpaint included
+  (the FPGA's scroll registers are combinational into the pixel
+  pipeline, tilemap.vhd:326), via a per-raster-line scroll table with
+  two writers: CPU writes are stamped with the beam line and folded at
+  render start (FoldScrollStamps), and the COPPER's render-time MOVEs
+  are captured per row as the compositor walk announces each raster
+  line (CaptureRowScroll, bracketed by Render — logScroll suppresses
+  CPU stamping inside the bracket). RAMS band-scrolls the Galaxian
+  player ship with per-line copper MOVEs to NR$30. Wired by
+  WireTilemap (shared with the harness).
 - Sprites (`pkg/next/sprite`): 128 slots, 16×16 in 4bpp or 8bpp over a
   16K shared pattern RAM, mirror/rotate/scale 1-8×, relative sprites in
   composite and unified anchor groups, the $303B status port (collision
@@ -226,8 +246,14 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   per composed row (SetPriorityModeOverride). Hi-res Layer 2, Timex
   hi-res ULA (composited at its native 512 half-pixels via
   ComposeHiResScanline when the mode is frame-stable) and 80-column
-  tilemap take dedicated wide render paths (640px), and border passes
-  composite tilemap and sprites over the border area.
+  tilemap take dedicated wide render paths, and border passes
+  composite tilemap and sprites over the border area — all in the one
+  320×256 frame coordinate system (see "Frame geometry" above). The
+  hi-res Layer 2 overlay repaints the layers the NR$15 mode places
+  above L2 from their sources (OverpaintWideL2Row): sprites in the
+  non-L-topmost modes, tilemap in the U-above-L modes (SUL below
+  sprites, USL/ULS above). Classic ULA pixels above wide L2 remain
+  approximated as covered (known-gaps).
 - Copper (`pkg/next/copper`): 1024 × 16-bit instruction store, MOVE /
   WAIT / NOOP / HALT, four start modes (NR$62, list restart only on a
   mode TRANSITION into 01/11 per copper.vhd's edge detect), and the
@@ -241,7 +267,10 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   with the live-palette ULA row render (mid-scanline palette MOVEs land
   on the right pixel — the base/Copper flags), sweeps lines 192..311
   after the visible rows, and restarts StartOnVBL lists at the frame
-  wrap. The legacy per-scanline `Step` remains for the golden replay
+  wrap. The border-line sweep runs even when the live-ULA render is
+  off (NR$68 bit 7 ULA-disabled content — RAMS): the copper's
+  192..311 WAITs must release on their lines regardless, via the
+  per-row Step fallback. The legacy per-scanline `Step` remains for the golden replay
   and non-live fallback paths.
 - Live-palette ULA render (`pkg/ula` renderNextULARow +
   `Compositor.ULARGBA`): on the Next, ULA inner-screen and border

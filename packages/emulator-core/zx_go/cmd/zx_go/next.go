@@ -1180,20 +1180,9 @@ func wireNextSubsystems(e *emulator) error {
 	next.WireCompositor(disp, comp)
 	// NextReg $1E/$1F (active video line) is wired inside next.Wire →
 	// WireULAControl — shared with the harness so the two cannot drift.
-	// Tilemap pixel scroll (NR$2F:$30 = X 10-bit, NR$31 = Y 8-bit) per
-	// FPGA nr_30_tm_scrollx / nr_31_tm_scrolly.
-	disp.SetOnWrite(0x2F, func(d *nextregs.Dispatcher, val byte) {
-		d.Store(0x2F, val&0x03)
-		tilemapLayer.SetScrollX(int(val&0x03)<<8 | int(d.ReadReg(0x30)))
-	})
-	disp.SetOnWrite(0x30, func(d *nextregs.Dispatcher, val byte) {
-		d.Store(0x30, val)
-		tilemapLayer.SetScrollX(int(d.ReadReg(0x2F)&0x03)<<8 | int(val))
-	})
-	disp.SetOnWrite(0x31, func(d *nextregs.Dispatcher, val byte) {
-		d.Store(0x31, val)
-		tilemapLayer.SetScrollY(int(val))
-	})
+	// Tilemap pixel scroll (NR$2F/$30/$31) is wired inside next.Wire →
+	// WireTilemap (raster-stamped for the per-line fold) — shared with
+	// the harness so the two cannot drift.
 	// NR$4B (sprite transparency colour) is wired inside next.WireSprites:
 	// the sprite ENGINE owns the comparison (raw pattern value vs NR$4B,
 	// sprites.vhd:971), not the compositor.

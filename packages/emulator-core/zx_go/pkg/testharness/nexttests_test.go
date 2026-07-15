@@ -287,7 +287,7 @@ func TestNexttestsCopper(t *testing.T) {
 
 	img := h.ScreenImage()
 	at := func(sx, sy int) [3]byte {
-		px := img.RGBAAt(32+sx, 24+sy)
+		px := img.RGBAAt(32+sx, 32+sy)
 		return [3]byte{px.R, px.G, px.B}
 	}
 	check := func(what string, sx, sy int, want [3]byte) {
@@ -381,9 +381,9 @@ func TestNexttestsCopper(t *testing.T) {
 	// the classic-renderer value. (A mismatch here is exactly the
 	// banded-border regression the live-palette render shipped with.)
 	check("top border", 100, -10, copperWhite)
-	check("top border first row", 100, -24, copperWhite)
+	check("top border first row", 100, -32, copperWhite)
 	check("bottom border", 100, 200, copperWhite)
-	check("bottom border last row", 100, 215, copperWhite)
+	check("bottom border last row", 100, 223, copperWhite)
 }
 
 // --- base/DMA: zxnDMA transfer-mode matrix ------------------------------
@@ -691,14 +691,14 @@ func TestNexttestsZilogDMA(t *testing.T) {
 		rgb      string // "" = the flashing-block fill colour (any, but equal)
 		min, max int
 	}{
-		{black, 18, 24}, // top border: IM2 paints port nibble ($0B -> 0)
+		{black, 26, 32}, // top border (32 rows on the wide frame): IM2 paints port nibble ($0B -> 0)
 		{"", 49, 53},    // flashing block 1: 2918 x 4T
 		{white, 1, 2},
 		{green, 5, 7},
 		{yellow, 1, 2},
 		{"", 49, 53}, // flashing block 2: same timing
 		{white, 1, 2},
-		{blue, 100, 240}, // completed: blue for the rest of the frame
+		{blue, 100, 256}, // completed: blue for the rest of the frame
 	}
 	if len(bands) != len(structure) {
 		t.Fatalf("border column has %d bands, want %d: %v", len(bands), len(structure), bands)

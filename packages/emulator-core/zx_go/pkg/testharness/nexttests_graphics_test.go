@@ -227,10 +227,10 @@ func TestNexttestsGraphicsLayersMixingLoRes(t *testing.T) {
 func TestNexttestsGraphicsLayersMixingHiRes(t *testing.T) {
 	h := runNexttestsSNX(t, "LmxHiRes.snx", 200)
 	img := h.ScreenImage()
-	if img.Rect.Dx() != 640 || img.Rect.Dy() != 240 {
-		t.Fatalf("frame = %dx%d, want 640x240 (hi-res wide)", img.Rect.Dx(), img.Rect.Dy())
+	if img.Rect.Dx() != 640 || img.Rect.Dy() != 256 {
+		t.Fatalf("frame = %dx%d, want 640x256 (hi-res wide)", img.Rect.Dx(), img.Rect.Dy())
 	}
-	assertMixCellGrid(t, img, func(px, py int) (int, int) { return 64 + 2*px, 24 + py })
+	assertMixCellGrid(t, img, func(px, py int) (int, int) { return 64 + 2*px, 32 + py })
 	// Hi-res border: uniform index-130 colour on all four sides, every
 	// band (port $FE writes are inert in hi-res, zxula.vhd:425-427).
 	for _, p := range [][2]int{{5, 5}, {5, 120}, {5, 235}, {634, 5}, {634, 120}, {634, 235}, {320, 5}, {320, 235}} {
@@ -242,9 +242,9 @@ func TestNexttestsGraphicsLayersMixingHiRes(t *testing.T) {
 	// colour many times across a 96-half-pixel span — a doubled 320
 	// render cannot produce this many transitions at this position.
 	transitions := 0
-	prev := imgRGB(img, 64+2*184, 24+156)
+	prev := imgRGB(img, 64+2*184, 32+156)
 	for i := 1; i < 96; i++ {
-		cur := imgRGB(img, 64+2*184+i, 24+156)
+		cur := imgRGB(img, 64+2*184+i, 32+156)
 		if cur != prev {
 			transitions++
 			prev = cur
@@ -327,7 +327,7 @@ func TestNexttestsGraphicsLayer2Port(t *testing.T) {
 	bright, pale, red := 0, 0, 0
 	for y := 0; y < 192; y++ {
 		for x := 0; x < 256; x++ {
-			switch imgRGB(img, 32+x, 24+y) {
+			switch imgRGB(img, 32+x, 32+y) {
 			case [3]byte{0, 255, 0}:
 				bright++
 			case [3]byte{0, 219, 0}:
@@ -422,37 +422,38 @@ func TestNexttestsGraphicsNextReg0x69(t *testing.T) {
 		}
 		return n
 	}
-	// Per-band verdict rows (image rows; each band is one 8px char row
-	// displaying a different NR$69-selected source):
-	//   52  Layer 2 band       — L2 green cell
-	//   60  ULA shadow band    — bank-7 screen's green cell
-	//   68  Timex screen 1     — dfile-2 green cell
-	//   76  Timex hi-colour    — 8x1-attr green cell
-	//   84  hi-res black/white — white text band
-	//   92  hi-res blue/yellow — yellow band
-	//  100  L2 + shadow        — BOTH green cells
-	//  108  L2 + Timex scr1    — BOTH green cells
-	if n := countIn(52, [3]byte{0, 255, 0}); n < 12 {
+	// Per-band verdict rows (image rows on the 320×256 wide frame,
+	// paper at row 32; each band is one 8px char row displaying a
+	// different NR$69-selected source):
+	//   60  Layer 2 band       — L2 green cell
+	//   68  ULA shadow band    — bank-7 screen's green cell
+	//   76  Timex screen 1     — dfile-2 green cell
+	//   84  Timex hi-colour    — 8x1-attr green cell
+	//   92  hi-res black/white — white text band
+	//  100  hi-res blue/yellow — yellow band
+	//  108  L2 + shadow        — BOTH green cells
+	//  116  L2 + Timex scr1    — BOTH green cells
+	if n := countIn(60, [3]byte{0, 255, 0}); n < 12 {
 		t.Errorf("Layer 2 band green pixels = %d, want >= 12", n)
 	}
-	for _, y := range []int{60, 68, 76} {
+	for _, y := range []int{68, 76, 84} {
 		if n := countIn(y, [3]byte{0, 182, 0}); n < 12 {
 			t.Errorf("band at row %d green pixels = %d, want >= 12", y, n)
 		}
 	}
 	for x := 132; x < 252; x++ {
-		if got := imgRGB(img, x, 84); got != [3]byte{255, 255, 255} {
-			t.Errorf("hi-res b/w band at (%d,84) = %v, want white", x, got)
+		if got := imgRGB(img, x, 92); got != [3]byte{255, 255, 255} {
+			t.Errorf("hi-res b/w band at (%d,92) = %v, want white", x, got)
 			break
 		}
 	}
 	for x := 132; x < 252; x++ {
-		if got := imgRGB(img, x, 92); got != [3]byte{255, 255, 0} {
-			t.Errorf("hi-res blue/yellow band at (%d,92) = %v, want yellow", x, got)
+		if got := imgRGB(img, x, 100); got != [3]byte{255, 255, 0} {
+			t.Errorf("hi-res blue/yellow band at (%d,100) = %v, want yellow", x, got)
 			break
 		}
 	}
-	for _, y := range []int{100, 108} {
+	for _, y := range []int{108, 116} {
 		if a, b := countIn(y, [3]byte{0, 255, 0}), countIn(y, [3]byte{0, 182, 0}); a < 12 || b < 12 {
 			t.Errorf("combined band row %d greens = %d L2 / %d ULA, want >= 12 each", y, a, b)
 		}

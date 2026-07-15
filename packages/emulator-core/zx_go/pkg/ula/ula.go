@@ -20,10 +20,20 @@ const (
 	ScreenWidth  = 256                        // Spectrum screen width in pixels
 	ScreenHeight = 192                        // Spectrum screen height in pixels
 	BorderLeft   = 32                         // Left border width in pixels
-	BorderTop    = 24                         // Top border height in pixels
+	BorderTop    = 24                         // Classic top border height in pixels
 	TotalWidth   = ScreenWidth + BorderLeft*2 // 320
-	TotalHeight  = ScreenHeight + BorderTop*2 // 240
+	TotalHeight  = ScreenHeight + BorderTop*2 // 240 (classic frame)
 	FlashFrames  = 16                         // Number of frames between flash toggles
+
+	// The Spectrum Next composites into the FPGA's 320×256 wide frame:
+	// sprites, the tilemap and Layer 2's wide modes all consume the same
+	// whc/wvc counters (zxnext.vhd:4208/4337/4389 ← zxula_timing.vhd
+	// o_whc/o_wvc), one coordinate system with (0,0) at the top-left of a
+	// 32-px border ring and the classic paper at (32,32). The ULA switches
+	// to this geometry when a Next compositor is wired (SetNextCompositor).
+	NextBorderTop   = 32                             // Next top/bottom border height
+	NextTotalHeight = ScreenHeight + NextBorderTop*2 // 256 (Next wide frame)
+	MaxTotalHeight  = NextTotalHeight                // array-sizing bound
 )
 
 // TStatesPerLine is the number of T-states per scanline. 228 is the 128K
@@ -53,17 +63,19 @@ type ULA struct {
 	ay          *ay.AY
 	peripherals *peripherals.PeripheralManager
 	img         *image.RGBA
+	// borderTop / totalHeight are the frame's vertical geometry: the
+	// classic 24/240 until a Next compositor is wired, then the FPGA's
+	// 32/256 wide frame (see the NextBorderTop constants). img row r is
+	// frame row r; the paper starts at (BorderLeft, borderTop). All
+	// render paths use these, never the constants, so the two frames
+	// coexist without bias arithmetic.
+	borderTop   int
+	totalHeight int
 	// wideImg / wideRow are reused across frames for the 640-pixel
 	// 80-column tilemap path (renderWide), so it doesn't allocate a
 	// ~600 KB image every frame in the GUI's 50 Hz render loop.
 	wideImg *image.RGBA
 	wideRow []byte
-	// nextFullImg is the 320×256 over-border frame for the Next: the standard
-	// 320×240 image plus the 8-px top/bottom strips of the sprite frame (Y 0-7
-	// and 248-255) that the classic 24-px border crops. Reused across frames.
-	// Built only when the Next sprite layer is active (NextBASIC Invaders parks
-	// its player ship at sprite Y=240, in the bottom over-border strip).
-	nextFullImg *image.RGBA
 	// compositorScan / compositorComposed are reused across frames as the
 	// per-row scratch buffers for the Spectrum Next inner-screen compositor
 	// pass (applyNextCompositor), and compositorRow likewise for its
@@ -157,7 +169,7 @@ type ULA struct {
 	// the whole frame rendered through the frame-final palette.
 	ulaVideoChanges    []ulaVideoChange
 	frameStartULAVideo ulaVideoState
-	ulaVideoLine       [TotalHeight]ulaVideoState
+	ulaVideoLine       [MaxTotalHeight]ulaVideoState
 
 	// lastRenderRefT detects a back-to-back Render with no CPU execution
 	// in between (the harness's screenshot path) so the raster maps built
@@ -170,7 +182,7 @@ type ULA struct {
 	// Render each frame (port-$FE change list applied). Kept on the ULA so
 	// the Next compositor pass can re-resolve border pixels through the
 	// live ULA palette per row.
-	borderLineColours [TotalHeight]byte
+	borderLineColours [MaxTotalHeight]byte
 
 	// Port 0xFE state
 	BorderColour byte
@@ -389,6 +401,12 @@ type NextCompositor interface {
 	// ComposeWideLayer2Row overlays the hi-res Layer 2 row onto dst, an
 	// RGBA row Layer2Width pixels wide already holding the lower layers.
 	ComposeWideLayer2Row(y int, dst []byte)
+	// OverpaintWideL2Row restores the layers the wide Layer 2 overlay
+	// covered, in the active NR$15 order: sprites (non-L-topmost
+	// modes) and the tilemap (the U-above-L modes) — the hi-res
+	// Layer 2 path's layer-order repair. xScale is output pixels per
+	// frame pixel (1 = 320, 2 = 640).
+	OverpaintWideL2Row(frameY int, dst []byte, xScale int)
 }
 
 // NextSpritePort is the contract for port $303B: SelectSprite on a
@@ -514,6 +532,17 @@ type nextPaletteReplay interface {
 	EndPaletteReplay()
 }
 
+// nextTilemapScrollFold is the optional compositor extension for the
+// raster-stamped tilemap scroll: Render opens the bracket (fold CPU
+// stamps + start render-time capture), the compositor walk feeds
+// per-row captures of copper scroll writes, and the deferred End
+// re-enables CPU-write stamping after the wide passes.
+type nextTilemapScrollFold interface {
+	FoldTilemapScroll(stale bool)
+	CaptureTilemapRowScroll(rasterLine int)
+	EndTilemapScrollCapture()
+}
+
 // NextDAC is the contract for the four Spectrum Next DAC channels.
 // pkg/next/dac.Bank satisfies it via WritePort (which returns
 // "handled?" so the ULA's port dispatcher knows whether to fall
@@ -588,9 +617,27 @@ func (u *ULA) SetNextRegs(n NextRegAccess) { u.nextRegs = n }
 
 // SetNextCompositor installs the Spectrum Next render stack's
 // scanline compositor. Once installed, Render overlays the
-// composited output on top of the 256x192 active display region.
-// Passing nil restores the plain-ULA render.
-func (u *ULA) SetNextCompositor(c NextCompositor) { u.nextCompositor = c }
+// composited output on top of the 256x192 active display region,
+// and the frame switches to the FPGA's 320×256 wide geometry
+// (paper at 32,32 — see the NextBorderTop constants): sprites,
+// tilemap and wide Layer 2 all share that one coordinate frame, so
+// img row r IS frame row r with no bias arithmetic. Passing nil
+// restores the plain-ULA render and the classic 320×240 frame.
+func (u *ULA) SetNextCompositor(c NextCompositor) {
+	u.nextCompositor = c
+	bt, th := BorderTop, TotalHeight
+	if c != nil {
+		bt, th = NextBorderTop, NextTotalHeight
+	}
+	if th != u.totalHeight {
+		u.borderTop, u.totalHeight = bt, th
+		u.img = image.NewRGBA(image.Rect(0, 0, TotalWidth, th))
+		// The wide scratch frame is height-dependent; drop it so the
+		// wide paths reallocate at the new geometry.
+		u.wideImg = nil
+		u.wideRow = nil
+	}
+}
 
 // Palette returns the ULA's 16-colour palette. The Next compositor uses it
 // to resolve the ULA transparency colour: the classic ULA renders via this
@@ -748,9 +795,11 @@ type audioEvent struct {
 // New creates a new ULA instance.
 func New(mem *memory.Memory, kbd *keyboard.Keyboard) *ULA {
 	u := &ULA{
-		mem: mem,
-		kbd: kbd,
-		img: image.NewRGBA(image.Rect(0, 0, TotalWidth, TotalHeight)),
+		mem:         mem,
+		kbd:         kbd,
+		borderTop:   BorderTop,
+		totalHeight: TotalHeight,
+		img:         image.NewRGBA(image.Rect(0, 0, TotalWidth, TotalHeight)),
 		// ULA clip window reset default = the full paper
 		// (zxnext.vhd:4971-4976 {00,FF,00,BF}); the NextReg wiring
 		// re-pushes this, but a bare ULA must not clip anything.
@@ -1012,9 +1061,25 @@ func (u *ULA) Render() *image.RGBA {
 		}
 	}
 
+	// Raster-stamped tilemap-scroll bracket (Next): fold the frame's
+	// CPU scroll stamps into the per-line table now, and capture the
+	// copper's render-time scroll writes per row as the walk proceeds
+	// (CaptureTilemapRowScroll from the paper/border passes) — so
+	// EVERY tilemap pass this render, the post-walk wide-L2 overpaint
+	// included, applies the scroll in force at each row's raster line.
+	// RAMS band-scrolls the Galaxian player ship with per-line copper
+	// MOVEs to NR$30; the FPGA registers are combinational into the
+	// pixel pipeline (tilemap.vhd:326). The deferred End re-enables
+	// CPU-write stamping once the whole render (wide passes included)
+	// is done.
+	if tsf, ok := u.nextCompositor.(nextTilemapScrollFold); ok {
+		tsf.FoldTilemapScroll(stale)
+		defer tsf.EndTilemapScrollCapture()
+	}
+
 	// Build per-scanline border colour map from recorded changes.
 	// Each display scanline (0-239) maps to a border colour.
-	var borderPerLine [TotalHeight]byte
+	var borderPerLine [MaxTotalHeight]byte
 	if stale {
 		borderPerLine = u.borderLineColours
 	} else if len(u.borderChanges) > 0 {
@@ -1026,10 +1091,10 @@ func (u *ULA) Render() *image.RGBA {
 			currentBorder = u.borderChanges[0].colour
 		}
 		changeIdx := 0
-		for line := 0; line < TotalHeight; line++ {
+		for line := 0; line < u.totalHeight; line++ {
 			// Advance past any border changes that apply to this scanline
 			// Map display line to frame scanline (line 0 = top border start)
-			frameScanline := line + (64 - BorderTop) // approximate: 64 lines before active display on 48K
+			frameScanline := line + (64 - u.borderTop) // display top = raster 64-borderTop (paper top = raster 64)
 			for changeIdx < len(u.borderChanges) && u.borderChanges[changeIdx].scanline <= frameScanline {
 				currentBorder = u.borderChanges[changeIdx].colour
 				changeIdx++
@@ -1037,7 +1102,7 @@ func (u *ULA) Render() *image.RGBA {
 			borderPerLine[line] = currentBorder
 		}
 	} else {
-		for line := 0; line < TotalHeight; line++ {
+		for line := 0; line < u.totalHeight; line++ {
 			borderPerLine[line] = u.BorderColour
 		}
 	}
@@ -1057,8 +1122,8 @@ func (u *ULA) Render() *image.RGBA {
 		if len(u.ulaVideoChanges) > 0 {
 			cur := u.frameStartULAVideo
 			idx := 0
-			for line := 0; line < TotalHeight; line++ {
-				frameScanline := line + (64 - BorderTop)
+			for line := 0; line < u.totalHeight; line++ {
+				frameScanline := line + (64 - u.borderTop)
 				for idx < len(u.ulaVideoChanges) && u.ulaVideoChanges[idx].scanline <= frameScanline {
 					cur = u.ulaVideoChanges[idx].state
 					idx++
@@ -1083,7 +1148,7 @@ func (u *ULA) Render() *image.RGBA {
 	// the per-pixel transparency path).
 	if u.ulaOutputDisabled {
 		fill := u.ulaDisabledFill()
-		for y := 0; y < TotalHeight; y++ {
+		for y := 0; y < u.totalHeight; y++ {
 			for x := 0; x < TotalWidth; x++ {
 				u.img.Set(x, y, fill)
 			}
@@ -1101,10 +1166,10 @@ func (u *ULA) Render() *image.RGBA {
 	}
 
 	// Draw borders with per-scanline colours
-	for y := 0; y < TotalHeight; y++ {
+	for y := 0; y < u.totalHeight; y++ {
 		borderColor := u.palette[borderPerLine[y]]
 		for x := 0; x < TotalWidth; x++ {
-			if x < BorderLeft || x >= BorderLeft+ScreenWidth || y < BorderTop || y >= BorderTop+ScreenHeight {
+			if x < BorderLeft || x >= BorderLeft+ScreenWidth || y < u.borderTop || y >= u.borderTop+ScreenHeight {
 				u.img.Set(x, y, borderColor)
 			}
 		}
@@ -1138,7 +1203,7 @@ func (u *ULA) Render() *image.RGBA {
 
 			for bit := 0; bit < 8; bit++ {
 				px := BorderLeft + (x*8 + bit)
-				py := BorderTop + y
+				py := u.borderTop + y
 				if (pixels & (0x80 >> bit)) != 0 {
 					u.img.Set(px, py, ink)
 				} else {
@@ -1187,60 +1252,11 @@ func (u *ULA) Render() *image.RGBA {
 		return u.renderTimexHiRes()
 	}
 
-	// Next over-border: the sprite frame is 320×256 (32-px top/bottom borders),
-	// but the classic frame is 320×240 (24-px). When the Next sprite layer is
-	// active, return the full 256-line frame so sprites in the top/bottom
-	// over-border strips (e.g. NBI's player ship at sprite Y=240) are visible
-	// instead of cropped. (Classic models have no compositor and are unaffected.)
-	if u.nextCompositor != nil && u.nextCompositor.HasActiveSprites() {
-		return u.renderNextFullHeight()
-	}
-
+	// The Next's img is already the full 320×256 wide frame (paper at
+	// 32,32 — SetNextCompositor switched the geometry), so over-border
+	// sprites/tilemap rows were composited in place by the border
+	// passes; nothing to crop or extend.
 	return u.img
-}
-
-// renderNextFullHeight returns the 320×256 over-border Next frame: the standard
-// 320×240 render copied into the centre (rows 8..247 = sprite frame Y 8..247)
-// plus the two 8-px strips the classic border crops — the top (frame Y 0..7)
-// and bottom (frame Y 248..255). Each strip is filled with the border colour
-// then has the over-border sprite pass run over it, so sprites parked in the
-// Next's extra border band render fully. In this 256-line image the row index
-// equals the sprite frame Y (bias 0), matching applyNextCompositor's y+8 map
-// for the copied middle.
-func (u *ULA) renderNextFullHeight() *image.RGBA {
-	const fullH = 256
-	const extra = (fullH - TotalHeight) / 2 // 8 px added top and bottom
-	if u.nextFullImg == nil {
-		u.nextFullImg = image.NewRGBA(image.Rect(0, 0, TotalWidth, fullH))
-	}
-	dst := u.nextFullImg
-	// Middle band: copy the 240-line render into rows extra..extra+TotalHeight-1.
-	copy(dst.Pix[extra*dst.Stride:(extra+TotalHeight)*dst.Stride], u.img.Pix[:TotalHeight*u.img.Stride])
-	// Over-border strips: border fill + the sprite border pass (whole row is
-	// border in these strips). frameY == dst row here (bias 0). The fill
-	// resolves through the live ULA palette when the live render is active,
-	// so the strips match the in-frame border (one palette, one DAC).
-	bc := u.palette[u.BorderColour&0x0F]
-	if res, ok := u.liveULAResolver(); ok {
-		c := u.nextBorderColourRGBA(u.BorderColour, res,
-			u.liveULAVideoState())
-		bc = color.RGBA{R: c[0], G: c[1], B: c[2], A: c[3]}
-	}
-	rowFull := make([]byte, TotalWidth*4)
-	allBorder := func(int) bool { return true }
-	paintStrip := func(rowStart, rowEnd int) {
-		for fy := rowStart; fy < rowEnd; fy++ {
-			for x := 0; x < TotalWidth; x++ {
-				o := x * 4
-				rowFull[o], rowFull[o+1], rowFull[o+2], rowFull[o+3] = bc.R, bc.G, bc.B, 0xFF
-			}
-			u.nextCompositor.ComposeSpriteBorderRow(fy, rowFull, allBorder)
-			copy(dst.Pix[fy*dst.Stride:fy*dst.Stride+TotalWidth*4], rowFull)
-		}
-	}
-	paintStrip(0, extra)           // top over-border: frame Y 0..7
-	paintStrip(fullH-extra, fullH) // bottom over-border: frame Y 248..255
-	return dst
 }
 
 // renderWide builds a 640×TotalHeight frame for 80-column tilemap mode.
@@ -1252,12 +1268,12 @@ func (u *ULA) renderNextFullHeight() *image.RGBA {
 func (u *ULA) renderWide() *image.RGBA {
 	const ww = 2 * TotalWidth // 640
 	if u.wideImg == nil {
-		u.wideImg = image.NewRGBA(image.Rect(0, 0, ww, TotalHeight))
+		u.wideImg = image.NewRGBA(image.Rect(0, 0, ww, u.totalHeight))
 		u.wideRow = make([]byte, ww*4)
 	}
 	wide := u.wideImg
 	rowWide := u.wideRow
-	for y := 0; y < TotalHeight; y++ {
+	for y := 0; y < u.totalHeight; y++ {
 		srcStart := y * u.img.Stride
 		for x := 0; x < TotalWidth; x++ {
 			s := srcStart + x*4
@@ -1295,12 +1311,12 @@ func (u *ULA) timexHiResColours() (ink, paper color.RGBA) {
 func (u *ULA) renderTimexHiRes() *image.RGBA {
 	const ww = 2 * TotalWidth // 640
 	if u.wideImg == nil {
-		u.wideImg = image.NewRGBA(image.Rect(0, 0, ww, TotalHeight))
+		u.wideImg = image.NewRGBA(image.Rect(0, 0, ww, u.totalHeight))
 		u.wideRow = make([]byte, ww*4)
 	}
 	wide := u.wideImg
 	// Pixel-double the base frame (correct doubled border + a fallback paper).
-	for y := 0; y < TotalHeight; y++ {
+	for y := 0; y < u.totalHeight; y++ {
 		srcStart := y * u.img.Stride
 		dstStart := y * wide.Stride
 		for x := 0; x < TotalWidth; x++ {
@@ -1317,7 +1333,7 @@ func (u *ULA) renderTimexHiRes() *image.RGBA {
 	}
 	ink, paper := u.timexHiResColours()
 	for sy := 0; sy < ScreenHeight; sy++ { // 192
-		py := BorderTop + sy
+		py := u.borderTop + sy
 		for fileIdx := 0; fileIdx < ScreenWidth/8; fileIdx++ { // 0..31
 			addr := screenAddrForRowCol(sy, fileIdx)
 			for half := 0; half < 2; half++ {
@@ -1344,20 +1360,27 @@ func (u *ULA) renderTimexHiRes() *image.RGBA {
 // renderHiResLayer2 builds the frame for a hi-res Layer 2 mode (NR$70
 // resolution 1 = 320×256, 2 = 640×256). The base frame (ULA + border +
 // sprites + tilemap — Layer 2 was skipped in the 256-wide pass) is the
-// lower layer; the native-width Layer 2 is composited on top (SLU-default
-// priority — Layer 2 above ULA). For 640 the 320 base is pixel-doubled.
-// The frame height stays TotalHeight (240): the hi-res L2's rows 0..239 are
-// shown; the bottom 16 of its 256 lines fall outside our visible window
-// (a documented simplification of the full 256-line hi-res display).
+// lower layer; the native-width Layer 2 is composited on top. Both the
+// base and the hi-res L2 live in the same 320×256 wide frame (identical
+// whc/wvc counters in the FPGA), so L2 row y IS img row y — all 256
+// lines show. After the L2 overlay covers the base frame, the layers
+// the active NR$15 mode places ABOVE Layer 2 are repainted from their
+// sources (Compositor.OverpaintWideL2Row): sprites in the non-L-topmost
+// modes, and the ULA+TM slot's tilemap in the U-above-L modes (RAMS:
+// USL with the ULA output disabled — its menu text and Galaxian's
+// formation/HUD live on the tilemap above the L2 art). Classic ULA
+// pixels above wide L2 remain approximated as covered (known-gaps.md).
+// For 640 the 320 base is pixel-doubled.
 func (u *ULA) renderHiResLayer2() *image.RGBA {
 	w := u.nextCompositor.Layer2Width()
 	if w <= TotalWidth {
 		// 320-wide: composite directly into the existing 320-wide img.
 		row := make([]byte, w*4)
-		for y := 0; y < TotalHeight; y++ {
+		for y := 0; y < u.totalHeight; y++ {
 			start := y * u.img.Stride
 			copy(row, u.img.Pix[start:start+w*4])
 			u.nextCompositor.ComposeWideLayer2Row(y, row)
+			u.nextCompositor.OverpaintWideL2Row(y, row, 1)
 			copy(u.img.Pix[start:start+w*4], row)
 		}
 		return u.img
@@ -1365,12 +1388,12 @@ func (u *ULA) renderHiResLayer2() *image.RGBA {
 	// 640-wide: pixel-double the 320 base, then overlay the 640 L2.
 	const ww = 2 * TotalWidth
 	if u.wideImg == nil {
-		u.wideImg = image.NewRGBA(image.Rect(0, 0, ww, TotalHeight))
+		u.wideImg = image.NewRGBA(image.Rect(0, 0, ww, u.totalHeight))
 		u.wideRow = make([]byte, ww*4)
 	}
 	wide := u.wideImg
 	rowWide := u.wideRow
-	for y := 0; y < TotalHeight; y++ {
+	for y := 0; y < u.totalHeight; y++ {
 		srcStart := y * u.img.Stride
 		for x := 0; x < TotalWidth; x++ {
 			s := srcStart + x*4
@@ -1380,6 +1403,7 @@ func (u *ULA) renderHiResLayer2() *image.RGBA {
 			rowWide[d+4], rowWide[d+5], rowWide[d+6], rowWide[d+7] = r, g, b, a
 		}
 		u.nextCompositor.ComposeWideLayer2Row(y, rowWide)
+		u.nextCompositor.OverpaintWideL2Row(y, rowWide, 2)
 		dstStart := y * wide.Stride
 		copy(wide.Pix[dstStart:dstStart+ww*4], rowWide)
 	}
@@ -2172,6 +2196,10 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		palReplay.BeginPaletteReplay(stale)
 		defer palReplay.EndPaletteReplay()
 	}
+	// The tilemap-scroll fold/capture bracket was opened by Render
+	// (nextTilemapScrollFold) before any compositor pass; this walk
+	// feeds it per-row captures below.
+	scrollCap, _ := u.nextCompositor.(nextTilemapScrollFold)
 	// Raster order of one display row's border pixels (hcount = pixel+12,
 	// 448 hcounts per line): the left border's first 20 pixels display
 	// during the PREVIOUS line's tail (hcount 428..447) and its last 12
@@ -2254,12 +2282,26 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			// y releases on y, not one scanline late. The Copper's WAIT
 			// release threshold is hcount >= (X<<3)+12 (device/copper.vhd:94);
 			// passing the max hcount clears it for all X.
+			// Capture the scroll in force at the START of row y — the
+			// state the copper left at the end of line y-1. Copper scroll
+			// lists write each band's value at the END of the preceding
+			// line (WAIT(y-1, end); MOVE) so the whole next line renders
+			// cleanly; capturing after line y's ops instead put the
+			// band's restore one row early (RAMS Galaxian: the formation
+			// band's BOTTOM row rendered with the post-band scroll —
+			// stale-looking ships). Row granularity: a mid-row MOVE lands
+			// on the next row, the render's documented line quantum.
+			if scrollCap != nil {
+				scrollCap.CaptureTilemapRowScroll(64 + y)
+			}
 			u.nextCopper.Step(uint16(y), 511, copperInstrPerScanline)
+		} else if scrollCap != nil {
+			scrollCap.CaptureTilemapRowScroll(64 + y)
 		}
-		rowStart := (BorderTop+y)*u.img.Stride + BorderLeft*4
-		pushPriority(u.ulaVideoLine[BorderTop+y].nr15)
+		rowStart := (u.borderTop+y)*u.img.Stride + BorderLeft*4
+		pushPriority(u.ulaVideoLine[u.borderTop+y].nr15)
 		if liveULA {
-			st := u.ulaVideoLine[BorderTop+y]
+			st := u.ulaVideoLine[u.borderTop+y]
 			pushSelect(st.ulaPalSecond)
 			// Left border: carried tail pixels first, then the 12 pixels
 			// that belong to this line's own hcount 0..11.
@@ -2267,14 +2309,14 @@ func (u *ULA) applyNextCompositor(stale bool) {
 				if leftCarryValid {
 					u.paintImagePixel(y, bx, leftCarry[bx])
 				} else {
-					u.paintImagePixel(y, bx, u.nextBorderRGBA(BorderTop+y, resolver))
+					u.paintImagePixel(y, bx, u.nextBorderRGBA(u.borderTop+y, resolver))
 				}
 			}
 			for bx := leftTailPx; bx < BorderLeft; bx++ {
 				if paced != nil {
 					paced.RunToCycle(uint16(y), (bx-leftTailPx)*cyclesPerHcount+2)
 				}
-				u.paintImagePixel(y, bx, u.nextBorderRGBA(BorderTop+y, resolver))
+				u.paintImagePixel(y, bx, u.nextBorderRGBA(u.borderTop+y, resolver))
 			}
 			u.renderNextULARow(y, ulaScan, resolver, paced, pixelCycle, st)
 		} else {
@@ -2288,7 +2330,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 				if paced != nil {
 					paced.RunToCycle(uint16(y), (268+bx)*cyclesPerHcount+2)
 				}
-				u.paintImagePixel(y, BorderLeft+w+bx, u.nextBorderRGBA(BorderTop+y, resolver))
+				u.paintImagePixel(y, BorderLeft+w+bx, u.nextBorderRGBA(u.borderTop+y, resolver))
 			}
 			// Line tail: resolve the next row's carried left-border pixels
 			// live at their hcount, then finish the copper's line.
@@ -2297,7 +2339,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 					if paced != nil {
 						paced.RunToCycle(uint16(y), (428+bx)*cyclesPerHcount+2)
 					}
-					leftCarry[bx] = u.nextBorderRGBA(BorderTop+y+1, resolver)
+					leftCarry[bx] = u.nextBorderRGBA(u.borderTop+y+1, resolver)
 				}
 				leftCarryValid = true
 			}
@@ -2319,44 +2361,64 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// before the wrap to line 0. Each row takes its line's END-of-line
 	// palette state (line granularity — the per-pixel copper interleave
 	// covers only the paper rows; see known-gaps.md).
-	if liveULA {
+	//
+	// The copper advance + per-line scroll capture run even WITHOUT the
+	// live-ULA render: content that disables the ULA output entirely
+	// (NR$68 bit 7 — RAMS) still runs its copper across the border
+	// lines, where RAMS's Galaxian writes the HUD bands' tilemap
+	// scroll. Only the border-pixel repaint (live palette resolve) is
+	// liveULA machinery.
+	if liveULA || u.nextCopper != nil {
 		for v := h; v < frameLines; v++ {
+			imgRow := -1
+			switch {
+			case v < h+u.borderTop:
+				imgRow = u.borderTop + v // bottom border, right after the paper
+			case v >= frameLines-u.borderTop:
+				imgRow = v - (frameLines - u.borderTop) // top border, end of sweep
+			}
+			// Border rows: same per-row scroll capture as the paper
+			// walk (raster = image row + 32 on the wide frame),
+			// BEFORE this line's copper ops — the start-of-line state
+			// (see the paper walk's capture comment).
+			if imgRow >= 0 && scrollCap != nil {
+				scrollCap.CaptureTilemapRowScroll(imgRow + 32)
+			}
 			// Stamped-palette replay for the sweep rows. Bottom border
 			// rows scan at raster v+64, straight after the paper. The
 			// displayed frame's top border rows scanned BEFORE the
 			// paper (raster 40..63), so when the sweep reaches them the
 			// applied writes rewind to the frame start and replay
 			// forward again from there.
-			if palReplay != nil {
-				if v < frameLines-BorderTop {
+			if liveULA && palReplay != nil {
+				if v < frameLines-u.borderTop {
 					palReplay.ReplayPaletteThrough(64 + v)
 				} else {
-					if v == frameLines-BorderTop {
+					if v == frameLines-u.borderTop {
 						palReplay.RewindPaletteReplay()
 					}
-					palReplay.ReplayPaletteThrough(v - (frameLines - BorderTop) + (64 - BorderTop))
+					palReplay.ReplayPaletteThrough(v - (frameLines - u.borderTop) + (64 - u.borderTop))
 				}
 			}
-			if paced != nil {
+			if paced != nil && liveULA {
 				paced.RunToCycle(uint16(v), lineEndCycle)
-			}
-			imgRow := -1
-			switch {
-			case v < h+BorderTop:
-				imgRow = BorderTop + v // bottom border, right after the paper
-			case v >= frameLines-BorderTop:
-				imgRow = v - (frameLines - BorderTop) // top border, end of sweep
+			} else if u.nextCopper != nil {
+				// Non-live flow (the paper walk used per-row Step): keep
+				// stepping so line-192..311 WAITs release on their line.
+				u.nextCopper.Step(uint16(v), 511, copperInstrPerScanline)
 			}
 			if imgRow >= 0 {
-				pushSelect(u.ulaVideoLine[imgRow].ulaPalSecond)
-				c := u.nextBorderRGBA(imgRow, resolver)
-				off := imgRow * u.img.Stride
-				for x := 0; x < TotalWidth; x++ {
-					o := off + x*4
-					u.img.Pix[o+0] = c[0]
-					u.img.Pix[o+1] = c[1]
-					u.img.Pix[o+2] = c[2]
-					u.img.Pix[o+3] = c[3]
+				if liveULA {
+					pushSelect(u.ulaVideoLine[imgRow].ulaPalSecond)
+					c := u.nextBorderRGBA(imgRow, resolver)
+					off := imgRow * u.img.Stride
+					for x := 0; x < TotalWidth; x++ {
+						o := off + x*4
+						u.img.Pix[o+0] = c[0]
+						u.img.Pix[o+1] = c[1]
+						u.img.Pix[o+2] = c[2]
+						u.img.Pix[o+3] = c[3]
+					}
 				}
 			}
 		}
@@ -2364,27 +2426,25 @@ func (u *ULA) applyNextCompositor(stale bool) {
 
 	// Border-area tilemap pass. Tilemap content in NextZXOS Browser
 	// (40×32 tile grid = 320×256 pixels) extends beyond the classic
-	// 256×192 inner screen into the 32-px L/R borders + 24-px T/B
-	// borders. The inner pass above already painted tilemap inside
-	// the 256×192 box; here we walk the FULL 320×240 image and only
-	// touch border pixels.
+	// 256×192 inner screen into the 32-px border ring. The inner pass
+	// above already painted tilemap inside the 256×192 box; here we
+	// walk the FULL 320×256 image and only touch border pixels.
 	if u.nextCompositor.HasActiveTilemap() {
 		if u.compositorRow == nil {
 			u.compositorRow = make([]byte, TotalWidth*4)
 		}
 		rowFull := u.compositorRow
-		for y := 0; y < TotalHeight; y++ {
+		for y := 0; y < u.totalHeight; y++ {
 			imgRowStart := y * u.img.Stride
 			copy(rowFull, u.img.Pix[imgRowStart:imgRowStart+TotalWidth*4])
-			// Tilemap y origin = top of image (y=0). The tilemap
-			// itself is 256 lines tall; rows 0..239 of the image
-			// map to tilemap rows 0..239 (the bottom 16 rows of
-			// the 256-line tilemap are cropped out of the 240-line
-			// image).
+			// The image IS the 320×256 wide frame, and the tilemap
+			// shares the sprite frame's origin (same whc/wvc
+			// counters, zxnext.vhd:4337/4389): image row y = tilemap
+			// row y, all 256 rows visible.
 			inBorder := func(x int) bool {
 				return x < BorderLeft || x >= BorderLeft+ScreenWidth
 			}
-			if y < BorderTop || y >= BorderTop+ScreenHeight {
+			if y < u.borderTop || y >= u.borderTop+ScreenHeight {
 				// Above or below the inner screen: every x is
 				// border, paint the whole row.
 				inBorder = func(int) bool { return true }
@@ -2402,24 +2462,22 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// SHIPS/SCORE row at frame Y 224-225) and the 32-px L/R borders of screen
 	// rows. The sprite engine's over-border clip gates whether they show.
 	if u.nextCompositor.HasActiveSprites() {
-		// The image (TotalHeight=240, BorderTop) is the centre of the 256-line
-		// sprite frame (top border 32): image row r = frame vcounter r + bias.
-		const spriteFrameH = 256
-		bias := (spriteFrameH - TotalHeight) / 2 // 8 for a 240-line image
+		// The image IS the 320×256 sprite frame (SetNextCompositor
+		// switched the geometry): image row r = sprite vcounter r.
 		if u.compositorRow == nil {
 			u.compositorRow = make([]byte, TotalWidth*4)
 		}
 		rowFull := u.compositorRow
-		for y := 0; y < TotalHeight; y++ {
+		for y := 0; y < u.totalHeight; y++ {
 			imgRowStart := y * u.img.Stride
 			copy(rowFull, u.img.Pix[imgRowStart:imgRowStart+TotalWidth*4])
 			inBorder := func(x int) bool {
 				return x < BorderLeft || x >= BorderLeft+ScreenWidth
 			}
-			if y < BorderTop || y >= BorderTop+ScreenHeight {
+			if y < u.borderTop || y >= u.borderTop+ScreenHeight {
 				inBorder = func(int) bool { return true }
 			}
-			u.nextCompositor.ComposeSpriteBorderRow(y+bias, rowFull, inBorder)
+			u.nextCompositor.ComposeSpriteBorderRow(y, rowFull, inBorder)
 			copy(u.img.Pix[imgRowStart:imgRowStart+TotalWidth*4], rowFull)
 		}
 	}
@@ -2519,7 +2577,7 @@ func (u *ULA) liveULAResolver() (nextULAPaletteResolver, bool) {
 
 // paintImagePixel writes one RGBA pixel at image column x of display row y.
 func (u *ULA) paintImagePixel(y, x int, c [4]byte) {
-	off := (BorderTop+y)*u.img.Stride + x*4
+	off := (u.borderTop+y)*u.img.Stride + x*4
 	u.img.Pix[off+0] = c[0]
 	u.img.Pix[off+1] = c[1]
 	u.img.Pix[off+2] = c[2]
@@ -2770,11 +2828,11 @@ func (u *ULA) renderNextTimexHiResRow(y int, dst []byte, res nextULAPaletteResol
 func (u *ULA) renderWideTimexHiRes() *image.RGBA {
 	const ww = 2 * TotalWidth
 	if u.wideImg == nil {
-		u.wideImg = image.NewRGBA(image.Rect(0, 0, ww, TotalHeight))
+		u.wideImg = image.NewRGBA(image.Rect(0, 0, ww, u.totalHeight))
 		u.wideRow = make([]byte, ww*4)
 	}
 	wide := u.wideImg
-	for y := 0; y < TotalHeight; y++ {
+	for y := 0; y < u.totalHeight; y++ {
 		srcStart := y * u.img.Stride
 		dstStart := y * wide.Stride
 		for x := 0; x < TotalWidth; x++ {
@@ -2809,7 +2867,7 @@ func (u *ULA) renderWideTimexHiRes() *image.RGBA {
 	scan := make([]byte, 2*ScreenWidth*4)
 	composed := make([]byte, 2*ScreenWidth*4)
 	for y := 0; y < ScreenHeight; y++ {
-		st := u.ulaVideoLine[BorderTop+y]
+		st := u.ulaVideoLine[u.borderTop+y]
 		if selector != nil {
 			selector.SetULAActivePalette(st.ulaPalSecond)
 		}
@@ -2818,7 +2876,7 @@ func (u *ULA) renderWideTimexHiRes() *image.RGBA {
 		}
 		u.renderNextTimexHiResRow(y, scan, res, st)
 		comp.ComposeHiResScanline(y, scan, composed)
-		dstStart := (BorderTop+y)*wide.Stride + 2*BorderLeft*4
+		dstStart := (u.borderTop+y)*wide.Stride + 2*BorderLeft*4
 		copy(wide.Pix[dstStart:dstStart+2*ScreenWidth*4], composed)
 	}
 	return wide

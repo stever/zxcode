@@ -70,7 +70,8 @@ golden.
 The ULA type is the I/O hub for every machine and the classic video
 renderer. Video: once-per-frame render of the 256×192 bitmap
 (Spectrum address interleave, attributes, FLASH every 16 frames) inside
-a 320×240 border, with mid-frame border changes replayed per scanline.
+a 320×240 border (320×256 on the Next — the FPGA's wide frame, paper at
+32,32), with mid-frame border changes replayed per scanline.
 Timex hi-res (port $FF) and the Next paths hang off the same render.
 
 Port $FE: keyboard scan AND-plane, EAR from the tape edge stream, MIC

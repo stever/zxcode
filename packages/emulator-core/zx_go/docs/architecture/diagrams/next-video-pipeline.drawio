@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="v0" value="ULA.Render() base pass&#10;classic/Timex scr1/hi-colour/LoRes rows + per-line border into 320×240 RGBA&#10;(stable Timex hi-res re-composites at 512 half-pixels; mixed frames decimate per row)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+        <mxCell id="v0" value="ULA.Render() base pass&#10;classic/Timex scr1/hi-colour/LoRes rows + per-line border into the 320×256 wide frame&#10;(the FPGA whc/wvc coordinate system: paper at 32,32 — classics keep 320×240;&#10;stable Timex hi-res re-composites at 512 half-pixels; mixed frames decimate per row)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="440" y="40" width="480" height="70" as="geometry" />
         </mxCell>
         <mxCell id="v1" value="Per active scanline y (0..191): copper RunToCycle interleaved PER PIXEL&#10;with the live-palette ULA row render (renderNextULARow: zxula.vhd decode&#10;through the live ULA palette, ULANext NR$42/$43, border via paper entry,&#10;NR$26/$27 hardware scroll + NR$1A clip window, and the raster-stamped&#10;displayed-palette / ULANext state replay for mid-frame NR$43 flips)&#10;MOVE=2 / NOOP=1 cycles at 28MHz; WAIT at vcount==Y &amp;&amp; hcount&gt;=(X&lt;&lt;3)+12&#10;lines 192..311 swept after the visible rows (copper.vhd)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
@@ -34,10 +34,10 @@
         <mxCell id="v2" value="Compositor.ComposeScanline(y)&#10;priority order from NR$15 bits 4:2 (SLU/LSU/SUL/LUS/USL/ULS + additive blends)&#10;transparency: global NR$14 · sprite coverage from the engine (NR$4B) · tilemap nibble NR$4C&#10;SUL per-pixel stencil · Layer 2 priority-bit promotion · ULA+tilemap combine&#10;fallback colour NR$4A where every layer is transparent&#10;(mixer.go = fully faithful zxnext.vhd:7100-7355 port; scanline painter is the fast path)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
           <mxGeometry x="200" y="450" width="600" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="v3" value="Wide display paths (skip the 256-wide pass)&#10;hi-res Layer 2: renderHiResLayer2 (320/640×256, pixel-doubling for 640)&#10;80-col tilemap: renderWide (640px, pixel-doubled base + native tilemap)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="v3" value="Wide display paths (skip the 256-wide pass)&#10;hi-res Layer 2: renderHiResLayer2 (320/640×256, all 256 rows, pixel-doubling for 640;&#10;sprites repainted on top in the S-above-L NR$15 modes)&#10;80-col tilemap: renderWide (640×256, pixel-doubled base + native tilemap)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="850" y="460" width="480" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="v4" value="Border passes over the full 320×240 image&#10;ComposeBorderRow (tilemap in border) · ComposeSpriteBorderRow (sprites over border,&#10;256-line sprite frame centred with Y bias 8) · renderNextFullHeight (320×256 over-border)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="v4" value="Border passes over the full 320×256 frame&#10;ComposeBorderRow (tilemap in border) · ComposeSpriteBorderRow (sprites over border)&#10;image row = frame row for every layer (one origin, no bias)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="200" y="600" width="600" height="80" as="geometry" />
         </mxCell>
         <mxCell id="v5" value="Final RGBA frame&#10;every mode composites into a fixed canvas (browser: 640×512), so page layout never moves" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">

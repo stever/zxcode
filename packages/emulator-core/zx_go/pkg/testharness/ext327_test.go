@@ -151,7 +151,7 @@ func TestExt327Level2Order(t *testing.T) {
 			h := runExt327(t, fmt.Sprintf("Level2Order_%d.nex", c.order), 40)
 			img := h.ScreenImage()
 			at := func(sx, sy int) [3]byte {
-				px := img.RGBAAt(32+sx, 24+sy)
+				px := img.RGBAAt(32+sx, 32+sy)
 				return [3]byte{px.R, px.G, px.B}
 			}
 			check := func(what string, sx, sy int, want [3]byte) {
@@ -169,15 +169,14 @@ func TestExt327Level2Order(t *testing.T) {
 			check("bot ink", 100, 170, c.botInk)
 			check("bot paper", 101, 170, c.botPaper)
 			// Sprite 0 sits at sprite frame Y 80 = paper row 48; its
-			// dense pattern row 5 is paper row 53. With sprites active
-			// the image is the 320x256 frame, so the at() helper's
-			// 24+sy convention lands 24+61 = image row 85 = that same
-			// paper row 53 (85-32). The alignment is pinned
-			// paper-relative by TestNexttestsSpritesRelative (sprite
-			// fill exactly inside its ULA outline). Sampled on an ink
-			// column (36, pattern $BF) and a paper column (37, $DF).
-			check("sprite/ink col", 36, 61, c.spriteInkCol)
-			check("sprite/paper col", 37, 61, c.spritePaperCol)
+			// dense pattern row 5 is frame Y 85 = paper row 53, which
+			// the at() helper's 32+sy convention reads at sy=53. The
+			// alignment is pinned paper-relative by
+			// TestNexttestsSpritesRelative (sprite fill exactly inside
+			// its ULA outline). Sampled on an ink column (36, pattern
+			// $BF) and a paper column (37, $DF).
+			check("sprite/ink col", 36, 53, c.spriteInkCol)
+			check("sprite/paper col", 37, 53, c.spritePaperCol)
 		})
 	}
 }
@@ -204,7 +203,7 @@ func TestExt327ULAScreenPaging(t *testing.T) {
 				// screen-content comparison.
 				img := h.ScreenImage()
 				var buf []byte
-				for y := 24; y < 216; y++ {
+				for y := 32; y < 224; y++ {
 					row := img.PixOffset(32, y)
 					buf = append(buf, img.Pix[row:row+256*4]...)
 				}

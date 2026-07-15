@@ -46,18 +46,19 @@ func imgRGB(img *image.RGBA, x, y int) [3]byte {
 	return [3]byte{img.Pix[off], img.Pix[off+1], img.Pix[off+2]}
 }
 
-// paperRGB reads paper coordinate (0..255, 0..191) from a 320x240 frame.
-func paperRGB(img *image.RGBA, x, y int) [3]byte { return imgRGB(img, 32+x, 24+y) }
+// paperRGB reads paper coordinate (0..255, 0..191) from the Next's
+// 320×256 wide frame (paper at 32,32).
+func paperRGB(img *image.RGBA, x, y int) [3]byte { return imgRGB(img, 32+x, 32+y) }
 
 // assertBorderUniform samples every pixel of all four border regions of
-// a 320x240 frame — the whole-surface rule from the banded-border
+// the 320×256 wide frame — the whole-surface rule from the banded-border
 // regression: no test may leave a border region unasserted.
 func assertBorderUniform(t *testing.T, img *image.RGBA, want [3]byte, label string) {
 	t.Helper()
 	bad := 0
-	for y := 0; y < 240; y++ {
+	for y := 0; y < 256; y++ {
 		for x := 0; x < 320; x++ {
-			if x >= 32 && x < 288 && y >= 24 && y < 216 {
+			if x >= 32 && x < 288 && y >= 32 && y < 224 {
 				continue
 			}
 			if got := imgRGB(img, x, y); got != want {

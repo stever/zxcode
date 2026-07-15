@@ -47,10 +47,27 @@ type Tilemap struct {
 	tilesBase   byte // NR$6F
 	scrollX     int  // NR$2F:$30 (10-bit pixel scroll X)
 	scrollY     int  // NR$31 (8-bit pixel scroll Y)
-	clipX1      byte // NR$1B clip window: visible X is [clipX1*2, clipX2*2+1]
-	clipX2      byte
-	clipY1      byte // visible Y is [clipY1, clipY2]
-	clipY2      byte
+
+	// Raster-stamped mid-frame scroll (see logScroll/FoldScrollStamps):
+	// the per-line fold lets the render apply scroll writes from their
+	// raster row, the way the FPGA's combinational registers do.
+	rasterLine     func() int
+	scrollStamps   []scrollStamp
+	scrollOverflow bool
+	scrollConsumed bool
+	foldActive     bool
+	scrollXLine    [frameRasterLines]int
+	scrollYLine    [frameRasterLines]int
+	// captureActive marks the render bracket (FoldScrollStamps →
+	// EndScrollCapture): scroll writes inside it are the COPPER's
+	// render-time MOVEs — not stamped as CPU writes, but captured
+	// per row into the table by CaptureRowScroll once dirty.
+	captureActive bool
+	captureDirty  bool
+	clipX1        byte // NR$1B clip window: visible X is [clipX1*2, clipX2*2+1]
+	clipX2        byte
+	clipY1        byte // visible Y is [clipY1, clipY2]
+	clipY2        byte
 }
 
 // New constructs a tilemap reader. Disabled by default; clip window
@@ -121,9 +138,163 @@ func (t *Tilemap) Is80Col() bool { return t.control&(1<<6) != 0 }
 
 // SetScrollX / SetScrollY set the tilemap pixel scroll offsets (NR$2F:$30
 // = X, 10-bit; NR$31 = Y, 8-bit per FPGA nr_30_tm_scrollx/nr_31). The
-// tilemap wraps as a torus.
-func (t *Tilemap) SetScrollX(v int) { t.scrollX = v }
-func (t *Tilemap) SetScrollY(v int) { t.scrollY = v }
+// tilemap wraps as a torus. When a raster-line source is wired
+// (SetRasterLineSource) each write is stamped with the beam line so
+// FoldScrollStamps can apply mid-frame changes from their raster row.
+func (t *Tilemap) SetScrollX(v int) { t.logScroll(false, t.scrollX, v); t.scrollX = v }
+func (t *Tilemap) SetScrollY(v int) { t.logScroll(true, t.scrollY, v); t.scrollY = v }
+
+// scrollStamp is one raster-stamped mid-frame scroll write.
+type scrollStamp struct {
+	line   int // raw raster line (paper top = 64, BeamPosition convention)
+	isY    bool
+	oldVal int
+	newVal int
+}
+
+// frameRasterLines bounds the per-line scroll fold (311 raster lines on
+// 128K/Next timing; 312 leaves headroom for the 48K's 312).
+const frameRasterLines = 312
+
+// maxScrollStamps caps the per-frame log; overflow degrades that frame
+// to today's end-of-frame scroll resolution instead of growing without
+// limit.
+const maxScrollStamps = 512
+
+// SetRasterLineSource wires the raster-line clock (the ULA's
+// BeamPosition line) that stamps each scroll write. Nil disables
+// stamping — SetScrollX/Y then behave exactly as before.
+func (t *Tilemap) SetRasterLineSource(fn func() int) { t.rasterLine = fn }
+
+// logScroll records a scroll write with the current raster stamp. The
+// FPGA's scroll registers feed the pixel pipeline combinationally
+// (tm_scroll_x_i/tm_scroll_y_i into tm_abs_y_s, tilemap.vhd:326), so a
+// mid-frame write re-anchors the tilemap from the next scanline — RAMS
+// emulates the Galaxian cabinet's per-band scroll this way (scroll =
+// player X across the ship's scanline band, restored elsewhere).
+func (t *Tilemap) logScroll(isY bool, old, new int) {
+	if t.rasterLine == nil || old == new {
+		return
+	}
+	// Render-time (copper MOVE) write: no CPU stamp — the walk captures
+	// the live value per row from here on (CaptureRowScroll).
+	if t.captureActive {
+		t.captureDirty = true
+		return
+	}
+	// First write after a fold consumed the log: start a fresh frame.
+	if t.scrollConsumed {
+		t.scrollStamps = t.scrollStamps[:0]
+		t.scrollConsumed = false
+		t.scrollOverflow = false
+	}
+	if len(t.scrollStamps) >= maxScrollStamps {
+		t.scrollOverflow = true
+		return
+	}
+	t.scrollStamps = append(t.scrollStamps, scrollStamp{
+		line: t.rasterLine(), isY: isY, oldVal: old, newVal: new,
+	})
+}
+
+// FoldScrollStamps builds the per-raster-line scroll table from the
+// frame's stamped writes, activating per-row scroll for the render
+// passes. With no stamps (the common case) the fold deactivates and
+// RenderScanline uses the live registers — zero cost, identical to the
+// pre-stamp behaviour. A STALE fold (no execution since the last
+// render — the harness screenshot path) replays the consumed log
+// identically; a fresh fold with an already-consumed log means the
+// frame wrote no scroll — the log is dropped.
+func (t *Tilemap) FoldScrollStamps(stale bool) {
+	t.foldActive = false
+	if t.rasterLine == nil {
+		return
+	}
+	// Open the render bracket: scroll writes from here to
+	// EndScrollCapture are the copper's render-time MOVEs.
+	t.captureActive = true
+	t.captureDirty = false
+	if !stale && t.scrollConsumed {
+		t.scrollStamps = t.scrollStamps[:0]
+		t.scrollConsumed = false
+		t.scrollOverflow = false
+	}
+	if t.scrollOverflow || len(t.scrollStamps) == 0 {
+		t.scrollStamps = t.scrollStamps[:0]
+		t.scrollOverflow = false
+		// No CPU stamps: prefill the table with the live scroll so
+		// per-row copper captures overlay a correct baseline (rows
+		// before the copper's first write keep the frame value).
+		for line := 0; line < frameRasterLines; line++ {
+			t.scrollXLine[line], t.scrollYLine[line] = t.scrollX, t.scrollY
+		}
+		return
+	}
+	// Frame-start values: each stamp records the value it replaced, so
+	// the first stamp per axis carries the frame-start state.
+	x, y := t.scrollX, t.scrollY
+	seenX, seenY := false, false
+	for _, s := range t.scrollStamps {
+		if s.isY && !seenY {
+			y, seenY = s.oldVal, true
+		}
+		if !s.isY && !seenX {
+			x, seenX = s.oldVal, true
+		}
+	}
+	idx := 0
+	for line := 0; line < frameRasterLines; line++ {
+		for idx < len(t.scrollStamps) && t.scrollStamps[idx].line <= line {
+			if t.scrollStamps[idx].isY {
+				y = t.scrollStamps[idx].newVal
+			} else {
+				x = t.scrollStamps[idx].newVal
+			}
+			idx++
+		}
+		t.scrollXLine[line], t.scrollYLine[line] = x, y
+	}
+	t.scrollConsumed = true
+	t.foldActive = true
+}
+
+// CaptureRowScroll snapshots the LIVE scroll into the per-line table
+// for one raster line, once a render-time (copper) scroll write made
+// the live registers diverge from the fold. Called by the ULA's walk
+// after the copper ran for each row, in raster order — rows before the
+// copper's first write keep their folded/prefilled values, rows at and
+// after it track the copper's per-line values, and the post-walk
+// wide-L2 overpaint re-renders every row with the same table.
+func (t *Tilemap) CaptureRowScroll(rasterLine int) {
+	if !t.captureActive || !t.captureDirty {
+		return
+	}
+	if rasterLine < 0 || rasterLine >= frameRasterLines {
+		return
+	}
+	t.scrollXLine[rasterLine], t.scrollYLine[rasterLine] = t.scrollX, t.scrollY
+	t.foldActive = true
+}
+
+// EndScrollCapture closes the render bracket: scroll writes are CPU
+// (execution-time) writes again and get raster-stamped.
+func (t *Tilemap) EndScrollCapture() { t.captureActive = false }
+
+// scrollForRow returns the scroll pair for visible frame row y
+// (0..255): the folded per-raster-line value when mid-frame writes
+// were stamped this frame, else the live registers. Frame row 0 is
+// raster line 32 (paper top = frame row 32 = raster 64 — the same
+// convention as the palette replay and borderChanges folds).
+func (t *Tilemap) scrollForRow(y int) (int, int) {
+	if !t.foldActive {
+		return t.scrollX, t.scrollY
+	}
+	r := y + 32
+	if r < 0 || r >= frameRasterLines {
+		return t.scrollX, t.scrollY
+	}
+	return t.scrollXLine[r], t.scrollYLine[r]
+}
 
 // SetClip sets the tilemap clip window (NR$1B). Visible pixels are X in
 // [x1*2, x2*2+1] (in 40-col 2-pixel units; the bounds double in 80-col so
@@ -206,7 +377,8 @@ func (t *Tilemap) RenderScanline(y int, dst []byte) {
 
 	// Pixel scroll (NR$2F:$30 / $31): offset the source coords and wrap
 	// the tilemap as a torus.
-	absY := y + t.scrollY
+	rowScrollX, rowScrollY := t.scrollForRow(y)
+	absY := y + rowScrollY
 	tileY := (absY / TileHeight) % TilesPerCol
 	pixelRow := absY % TileHeight
 
@@ -224,7 +396,7 @@ func (t *Tilemap) RenderScanline(y int, dst []byte) {
 		if x < clipXStart || x > clipXEnd {
 			continue // outside the clip window — leave transparent
 		}
-		absX := x + t.scrollX
+		absX := x + rowScrollX
 		tileX := (absX / TileWidth) % tilesPerRow
 		mapEntry := mapOffsetBase + (tileY*tilesPerRow+tileX)*bytesPerTile
 		mapEntry &= 0x3FFF

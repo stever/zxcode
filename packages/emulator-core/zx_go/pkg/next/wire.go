@@ -1256,7 +1256,7 @@ func Wire(opts WireOpts) {
 		WireKeymap(opts.Dispatcher, opts.Keymap)
 	}
 	if opts.Tilemap != nil {
-		WireTilemap(opts.Dispatcher, opts.Tilemap, opts.Palette)
+		WireTilemap(opts.Dispatcher, opts.Tilemap, opts.Palette, opts.ULANext)
 	}
 	WirePeripheralMasks(opts.Dispatcher)
 	ulaVideo, _ := opts.ULANext.(ULAVideoSink)
@@ -1430,11 +1430,6 @@ func WirePeripheralMasks(d *nextregs.Dispatcher) {
 	// NR$1C (clip-index reset/read) is owned by WireClipWindows, which
 	// models the real 4-coordinate + 2-bit-index clip windows (NR$18-$1B)
 	// rather than the old single-byte approximation.
-	d.SetOnWrite(0x2F, func(disp *nextregs.Dispatcher, val byte) {
-		// Per zxnext.vhd:5330-5331 — only bits 1:0 stored (tilemap
-		// scrollX high 2 bits). Read at :6017 returns "000000" || bits 1:0.
-		disp.Store(0x2F, val&0x03)
-	})
 	d.SetOnWrite(0x4C, func(disp *nextregs.Dispatcher, val byte) {
 		disp.Store(0x4C, val&0x0F)
 	})
@@ -1533,11 +1528,36 @@ func applyTBBLUEFWBootDefaults(disp *nextregs.Dispatcher) {
 //	 a 256-byte offset within the 16 KB bank
 //	$6F tile-defs base — same encoding as $6E
 //
+//	$2F:$30 pixel scroll X (10-bit), $31 pixel scroll Y (8-bit) —
+//	 combinational in the FPGA (tilemap.vhd:326), so writes are
+//	 raster-stamped for the render's per-line fold when the ULA
+//	 provides a beam clock (mid-frame band scrolls — RAMS/Galaxian).
+//
 // Matches FPGA verilog at cores/zxnext/src/zxnext.vhd:5461-5475 and
 // the tilemap module itself at video/tilemap.vhd. NextZXOS Browser
 // writes $6B=$A1 + $6E=$40 + $6F=$45 during bank-0 init to set up
 // the file-picker menu.
-func WireTilemap(d *nextregs.Dispatcher, t *tilemap.Tilemap, b *palette.Bank) {
+func WireTilemap(d *nextregs.Dispatcher, t *tilemap.Tilemap, b *palette.Bank, ulaNext ULANextSink) {
+	if bp, ok := ulaNext.(interface{ BeamPosition() (int, int) }); ok {
+		t.SetRasterLineSource(func() int {
+			line, _ := bp.BeamPosition()
+			return line
+		})
+	}
+	d.SetOnWrite(0x2F, func(disp *nextregs.Dispatcher, val byte) {
+		// Only bits 1:0 stored (scroll X high bits, zxnext.vhd:5330-5331;
+		// read at :6017 returns "000000" || bits 1:0).
+		disp.Store(0x2F, val&0x03)
+		t.SetScrollX(int(val&0x03)<<8 | int(disp.Raw(0x30)))
+	})
+	d.SetOnWrite(0x30, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x30, val)
+		t.SetScrollX(int(disp.Raw(0x2F)&0x03)<<8 | int(val))
+	})
+	d.SetOnWrite(0x31, func(disp *nextregs.Dispatcher, val byte) {
+		disp.Store(0x31, val)
+		t.SetScrollY(int(val))
+	})
 	d.SetOnWrite(0x6B, func(disp *nextregs.Dispatcher, val byte) {
 		t.SetEnabled(val&0x80 != 0)
 		t.SetControl(val)

@@ -112,12 +112,13 @@ func TestModelNextLayer2VisibleEndToEnd(t *testing.T) {
 	h.RunFrames(2)
 	img := h.ScreenImage()
 
-	// Active display row 0 in img coordinates is BorderTop, x in
+	// Active display row 0 in img coordinates is NextBorderTop (32,
+	// the Next's wide frame), x in
 	// [BorderLeft, BorderLeft+256). The bank we set for Layer 2
 	// has palette-index-5 in row 0. With the compositor enabled,
 	// this row should now be pure red.
 	const borderLeft = 32
-	const borderTop = 24
+	const borderTop = 32
 	r, g, b, a := img.RGBAAt(borderLeft+0, borderTop+0).RGBA()
 	r >>= 8
 	g >>= 8

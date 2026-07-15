@@ -88,7 +88,7 @@ func chg8kBandTransition(t *testing.T, snx, verdict string) int {
 	for _, x := range []int{4, 316} {
 		last := ""
 		trans := -1
-		for y := 0; y < 240; y++ {
+		for y := 0; y < img.Bounds().Dy(); y++ {
 			c := img.RGBAAt(x, y)
 			cls := timingColour(c.R, c.G, c.B)
 			if cls != "bordergreen" && cls != "black" {
@@ -111,9 +111,10 @@ func chg8kBandTransition(t *testing.T, snx, verdict string) int {
 		transition = trans
 	}
 	// 2048 NEXTREG r,n at 20T ≈ 187 lines of green ending at raster
-	// ~191 → image row 151. ±2 rows of slack for the launch ISR cost.
-	if transition < 149 || transition > 153 {
-		t.Errorf("green band ends at image row %d, want 151±2 (2048×20T NEXTREG work)", transition)
+	// ~191 → image row 159 (wide frame: raster − 32). ±2 rows of
+	// slack for the launch ISR cost.
+	if transition < 157 || transition > 161 {
+		t.Errorf("green band ends at image row %d, want 159±2 (2048×20T NEXTREG work)", transition)
 	}
 	// The attribute rainbow down column 0 (bright, paper cycling
 	// green->cyan->... by +P_BLUE with green forced back in) is static
@@ -179,7 +180,7 @@ func linesIRQTarget(t *testing.T, h *Harness) int {
 func linesIRQRows(h *Harness, x int, cls string) []int {
 	img := h.ScreenImage()
 	var rows []int
-	for y := 0; y < 240; y++ {
+	for y := 0; y < img.Bounds().Dy(); y++ {
 		c := img.RGBAAt(x, y)
 		if timingColour(c.R, c.G, c.B) == cls {
 			rows = append(rows, y)
@@ -218,8 +219,8 @@ func TestNexttestsScanlineIRQ(t *testing.T) {
 	// the same palette entry the flash rewrites.
 	for _, x := range []int{4, 160, 316} {
 		rows := linesIRQRows(h, x, "green")
-		if len(rows) != 1 || rows[0] < 224 || rows[0] > 225 {
-			t.Errorf("READ@200 x=%d: green rows %v, want exactly one at 224..225", x, rows)
+		if len(rows) != 1 || rows[0] < 232 || rows[0] > 233 {
+			t.Errorf("READ@200 x=%d: green rows %v, want exactly one at 232..233", x, rows)
 		}
 	}
 
@@ -233,14 +234,14 @@ func TestNexttestsScanlineIRQ(t *testing.T) {
 	if target >= 192 || target < 100 {
 		t.Fatalf("target after W taps = %d, want a paper line in [100,191]", target)
 	}
-	if rows := linesIRQRows(h, 4, "green"); len(rows) != 1 || rows[0] < 24+target || rows[0] > 25+target {
-		t.Errorf("READ@%d: green rows %v, want one at %d..%d", target, rows, 24+target, 25+target)
+	if rows := linesIRQRows(h, 4, "green"); len(rows) != 1 || rows[0] < 32+target || rows[0] > 33+target {
+		t.Errorf("READ@%d: green rows %v, want one at %d..%d", target, rows, 32+target, 33+target)
 	}
 
 	// Drive the target below 55 to exercise the double trigger the
 	// upstream ReadMe documents: NR$1F is only 8 bits, so LSB n also
 	// matches cvc n+256, which scans in the DISPLAYED TOP BORDER
-	// (raster n+9, image row n-31) — before the paper. This pins the
+	// (raster n+9, image row n-23) — before the paper. This pins the
 	// render's top-border replay pass.
 	for i := 0; i < 12 && linesIRQTarget(t, h) > 54; i++ {
 		linesIRQTap(h, 2, 0x02) // W
@@ -250,10 +251,10 @@ func TestNexttestsScanlineIRQ(t *testing.T) {
 		t.Fatalf("target after W taps = %d, want [31,54] for the dual-trigger scene", target)
 	}
 	if rows := linesIRQRows(h, 4, "green"); len(rows) != 2 ||
-		rows[0] < target-31 || rows[0] > target-30 ||
-		rows[1] < 24+target || rows[1] > 25+target {
+		rows[0] < target-23 || rows[0] > target-22 ||
+		rows[1] < 32+target || rows[1] > 33+target {
 		t.Errorf("READ@%d: green rows %v, want [%d..%d %d..%d] (top-border echo + paper)",
-			target, rows, target-31, target-30, 24+target, 25+target)
+			target, rows, target-23, target-22, 32+target, 33+target)
 	}
 
 	// INTERRUPT mode (Z): the NR$22/$23 line interrupt fires at the end
@@ -268,8 +269,8 @@ func TestNexttestsScanlineIRQ(t *testing.T) {
 	if len(rows) < 1 || len(rows) > 3 {
 		t.Fatalf("INTER@%d: cyan rows %v, want a 1-3 row band", target, rows)
 	}
-	if start := rows[0]; start != 24+target-1 && start != 24+target {
-		t.Errorf("INTER@%d: cyan band starts at %d, want %d±1", target, start, 24+target)
+	if start := rows[0]; start != 32+target-1 && start != 32+target {
+		t.Errorf("INTER@%d: cyan band starts at %d, want %d±1", target, start, 32+target)
 	}
 
 	// COPPER mode (Z again): the copper list WAITs for the target line
@@ -283,11 +284,11 @@ func TestNexttestsScanlineIRQ(t *testing.T) {
 	// deliberately not asserted.
 	linesIRQTap(h, 0, 0x02) // Z
 	target = linesIRQTarget(t, h)
-	if rows := linesIRQRows(h, 160, "copper"); len(rows) != 1 || rows[0] != 24+target {
-		t.Errorf("COPPER@%d: paper copper rows %v, want [%d]", target, rows, 24+target)
+	if rows := linesIRQRows(h, 160, "copper"); len(rows) != 1 || rows[0] != 32+target {
+		t.Errorf("COPPER@%d: paper copper rows %v, want [%d]", target, rows, 32+target)
 	}
-	if rows := linesIRQRows(h, 316, "copper"); len(rows) != 1 || rows[0] != 24+target {
-		t.Errorf("COPPER@%d: right-border copper rows %v, want [%d]", target, rows, 24+target)
+	if rows := linesIRQRows(h, 316, "copper"); len(rows) != 1 || rows[0] != 32+target {
+		t.Errorf("COPPER@%d: right-border copper rows %v, want [%d]", target, rows, 32+target)
 	}
 	if rows := linesIRQRows(h, 4, "copper"); len(rows) != 0 {
 		t.Errorf("COPPER@%d: left border must stay white, got copper rows %v", target, rows)
@@ -298,8 +299,8 @@ func TestNexttestsScanlineIRQ(t *testing.T) {
 	linesIRQTap(h, 0, 0x02) // Z
 	target = linesIRQTarget(t, h)
 	if rows := linesIRQRows(h, 4, "green"); len(rows) == 0 ||
-		rows[len(rows)-1] < 24+target || rows[len(rows)-1] > 25+target {
-		t.Errorf("READ again @%d: green rows %v, want last at %d..%d", target, rows, 24+target, 25+target)
+		rows[len(rows)-1] < 32+target || rows[len(rows)-1] > 33+target {
+		t.Errorf("READ again @%d: green rows %v, want last at %d..%d", target, rows, 32+target, 33+target)
 	}
 }
 

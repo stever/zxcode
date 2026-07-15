@@ -31,6 +31,7 @@ func (m *hiResL2Mock) ComposeWideLayer2Row(y int, dst []byte) {
 		dst[0], dst[1], dst[2], dst[3] = 0xAB, 0xCD, 0xEF, 0xFF
 	}
 }
+func (m *hiResL2Mock) OverpaintWideL2Row(y int, dst []byte, xScale int) {}
 
 // TestRenderHiResLayer2DispatchesWidePass verifies that when Layer 2 is in
 // a hi-res mode the display path routes through renderHiResLayer2 and
@@ -53,8 +54,10 @@ func TestRenderHiResLayer2DispatchesWidePass(t *testing.T) {
 			m := &hiResL2Mock{width: tc.width}
 			u.SetNextCompositor(m)
 			img := u.Render()
-			if m.wideL2Calls != TotalHeight {
-				t.Errorf("ComposeWideLayer2Row called %d times, want %d", m.wideL2Calls, TotalHeight)
+			// With a compositor wired the ULA runs the Next's 320×256
+			// wide frame: one wide-L2 composite per frame row.
+			if m.wideL2Calls != NextTotalHeight {
+				t.Errorf("ComposeWideLayer2Row called %d times, want %d", m.wideL2Calls, NextTotalHeight)
 			}
 			// The wide-L2 overlay must survive into the returned frame.
 			if p := img.Pix[0:4]; p[0] != 0xAB || p[1] != 0xCD || p[2] != 0xEF || p[3] != 0xFF {
