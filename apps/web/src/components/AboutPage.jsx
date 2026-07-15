@@ -105,6 +105,14 @@ export default function AboutPage() {
                         <a href="https://github.com/remy/txt2bas/blob/main/package.json" target="_blank">The MIT License</a>.
                     </li>
                     <li>
+                        <a href="https://github.com/remy/zx-tools" target="_blank">zx-tools</a> by
+                        Remy Sharp — this IDE{"'"}s sprite, palette and tile map editors are
+                        original code, but their design is based on his Next tooling
+                        (see <a href="https://zx.remysharp.com/sprites/" target="_blank">zx.remysharp.com</a>):
+                        the .spr/.pal/.map file handling, drawing tools and key bindings all
+                        follow it. zx-tools is licensed under terms of The MIT License.
+                    </li>
+                    <li>
                         <a href="https://github.com/sehugg/8bitworkshop" target="_blank">8bitworkshop</a> by
                         Steven Hugg. Licensed under terms of The GPL version 3 - see{' '}
                         <a href="https://github.com/sehugg/8bitworkshop/blob/master/LICENSE" target="_blank">LICENSE</a>.

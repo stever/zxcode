@@ -1,3 +1,6 @@
+// Original code, but the editor's design — .spr/.pal file handling, drawing
+// tools and key bindings — is based on Remy Sharp's zx-tools sprite editor
+// (https://github.com/remy/zx-tools, MIT), credited on the About page.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Button } from "primereact/button";

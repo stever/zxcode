@@ -79,7 +79,7 @@ Engine highlights:
 
 ## Acknowledgements
 
-This software uses code from the following open source projects:
+This software uses code from, or is based on the work of, the following open source projects:
 
 - zx_go by Conor Armstrong, the emulator core. Licensed under terms of the MIT License; this repository's modifications to it are licensed under terms of the GPL version 3.
 - JSSpeccy3 & JSSpeccy3-mobile. These are licensed under terms of the GPL version 3.
@@ -87,4 +87,5 @@ This software uses code from the following open source projects:
 - Boriel ZX BASIC by Jose Rodriguez. Licensed under terms of the GPL version 3.
 - zmakebas by Russell Marks. This tool is public domain.
 - txt2bas by Remy Sharp, the in-browser NextBASIC tokeniser. Licensed under terms of the MIT License.
+- zx-tools by Remy Sharp. The IDE's sprite, palette and tile map editors are original code modelled on his zx-tools suite: the .spr/.pal/.map file handling, drawing tools and key bindings follow it. zx-tools is licensed under terms of the MIT License.
 - 8bitworkshop by Steven Hugg. Licensed under terms of the GPL version 3.

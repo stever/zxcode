@@ -90,7 +90,7 @@
     "createProjects": "Vytváření projektů",
     "registeredUsers": "Registrovaní uživatelé mohou ukládat projekty.",
     "createAccount": "Použijte tlačítko Přihlásit se výše a na následující stránce vyhledejte odkaz „Sign Up“ pro vytvoření účtu.",
-    "acknowledgementsIntro": "Tento software využívá kód z následujících open source projektů:",
+    "acknowledgementsIntro": "Tento software využívá kód z následujících open source projektů, nebo z jejich práce vychází:",
     "sinclairRomHeading": "Povolení k autorským právům ROM Sinclair",
     "sinclairRomText": "Společnost Amstrad laskavě udělila svolení k šíření svého materiálu chráněného autorskými právy, tato práva si však ponechává.",
     "intro1": "Emulátor ZX Spectrum a programovací prostředí pro prohlížeč. Zdrojový kód je dostupný <srcLink>zde</srcLink>.",

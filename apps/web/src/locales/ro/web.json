@@ -90,7 +90,7 @@
     "createProjects": "Creează proiecte",
     "registeredUsers": "Utilizatorii înregistrați pot salva proiecte.",
     "createAccount": "Folosește butonul Autentificare de mai sus și caută linkul \"Sign Up\" pe pagina următoare pentru a crea un cont.",
-    "acknowledgementsIntro": "Acest software folosește cod din următoarele proiecte open source:",
+    "acknowledgementsIntro": "Acest software folosește cod din următoarele proiecte open source sau se bazează pe munca lor:",
     "sinclairRomHeading": "Permisiune privind drepturile de autor pentru ROM-ul Sinclair",
     "sinclairRomText": "Amstrad a acordat cu amabilitate permisiunea de a redistribui materialul lor protejat prin drepturi de autor, dar își păstrează aceste drepturi.",
     "intro1": "Un emulator ZX Spectrum și mediu de programare pentru browser. Codul sursă este disponibil <srcLink>aici</srcLink>.",

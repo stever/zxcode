@@ -97,7 +97,7 @@
     "createProjects": "Create Projects",
     "registeredUsers": "Registered users can save projects.",
     "createAccount": "Use the Sign-In button above and look for the \"Sign Up\" link on the proceeding page to create an account.",
-    "acknowledgementsIntro": "This software uses code from the following open source projects:",
+    "acknowledgementsIntro": "This software uses code from, or is based on the work of, the following open source projects:",
     "sinclairRomHeading": "Sinclair ROM Copyright Permission",
     "sinclairRomText": "Amstrad have kindly given their permission for the redistribution of their copyrighted material but retain that copyright.",
     "intro1": "A ZX Spectrum emulator & programming environment for the browser. Source available <srcLink>here</srcLink>.",

@@ -90,7 +90,7 @@
     "createProjects": "Twórz projekty",
     "registeredUsers": "Zarejestrowani użytkownicy mogą zapisywać projekty.",
     "createAccount": "Użyj przycisku logowania powyżej i poszukaj odnośnika „Sign Up” na kolejnej stronie, aby założyć konto.",
-    "acknowledgementsIntro": "To oprogramowanie korzysta z kodu następujących projektów open source:",
+    "acknowledgementsIntro": "To oprogramowanie korzysta z kodu następujących projektów open source lub opiera się na ich pracy:",
     "sinclairRomHeading": "Zgoda na prawa autorskie do ROM-u Sinclair",
     "sinclairRomText": "Amstrad uprzejmie wyraził zgodę na redystrybucję swoich materiałów objętych prawem autorskim, zachowując jednak to prawo autorskie.",
     "intro1": "Emulator ZX Spectrum i środowisko programistyczne dla przeglądarki. Kod źródłowy dostępny <srcLink>tutaj</srcLink>.",

@@ -90,7 +90,7 @@
     "createProjects": "Vytvárať projekty",
     "registeredUsers": "Registrovaní používatelia môžu ukladať projekty.",
     "createAccount": "Použite tlačidlo Prihlásiť sa vyššie a na nasledujúcej stránke nájdite odkaz „Sign Up“ na vytvorenie účtu.",
-    "acknowledgementsIntro": "Tento softvér využíva kód z nasledujúcich open source projektov:",
+    "acknowledgementsIntro": "Tento softvér využíva kód z nasledujúcich open source projektov, alebo z ich práce vychádza:",
     "sinclairRomHeading": "Povolenie autorských práv k Sinclair ROM",
     "sinclairRomText": "Spoločnosť Amstrad láskavo udelila povolenie na ďalšie šírenie svojho materiálu chráneného autorskými právami, ale tieto práva si ponecháva.",
     "intro1": "Emulátor ZX Spectrum a programovacie prostredie pre prehliadač. Zdrojový kód je dostupný <srcLink>tu</srcLink>.",
