@@ -152,6 +152,12 @@ type Card struct {
 	// NextZXOS bank-2 SD driver path; set true to investigate the
 	// FPGA-bootrom path which expects SDHC addressing.
 	advertiseSDHC bool
+
+	// readCount seeds the per-read access-time (Nac) hash in
+	// handleReadBlock so consecutive reads of the same LBA still see
+	// different (deterministic) access times, like a real card's
+	// internal state does.
+	readCount uint32
 }
 
 // SetSDHC toggles the OCR's CCS bit so this card advertises
@@ -592,6 +598,26 @@ func (c *Card) handleReadBlock(arg uint32) {
 	buf := make([]byte, 512)
 	if c.src != nil {
 		_ = c.src.ReadBlock(c.argToLBA(arg), buf)
+	}
+	// Variable access time (SD spec "Nac"): a real card holds DataOut
+	// high between the R1 response and the $FE data token while it
+	// fetches the block internally, and the count varies per access.
+	// Correct guest code polls for the $FE token, so the exact count
+	// is invisible to it; we model a small deterministic per-access
+	// variance (hash of LBA + per-card read counter, so runs stay
+	// reproducible) rather than answering instantly, which is closer
+	// to a real card than a fixed pad. Register reads (CSD/CID) keep
+	// the fixed pad their fixed-count TBBLUE.FW readers require.
+	// (Work item #169 explored whether a real-card-SIZED latency
+	// affects TX-1696's raster-phased install retry; it does not —
+	// the install re-locks its raster phase on an NR$1F poll each
+	// pass, so SD timing washes out. Kept small and faithful.)
+	c.readCount++
+	h := c.argToLBA(arg)*2654435761 ^ c.readCount*0x9E3779B9
+	h ^= h >> 16
+	nac := int(4 + h%61) // 4..64 byte-times
+	for i := 0; i < nac; i++ {
+		c.rxQueue = append(c.rxQueue, 0xFF)
 	}
 	c.queueRawDataBlock(buf)
 }

@@ -172,7 +172,7 @@ method.
 | Saboteur (Next) | Works (menu) | r47 re-baseline: title renders, and a keypress advances to the night intro scene, which renders correctly. |
 | Aliens Neoplasma | Works (menu) | FIXED by #165 (the class-1 staging repair): the post-title black-screen idle HALT was the game silently failing its runtime data F_OPENs on a corrupted staged directory. A keypress now advances title → the ACHILLES NAVIGATION SYSTEM menu (Play game / Redefine keys / About), rendered correctly. |
 | Way of the Exploding Fist (Next) | Works (menu) | FIXED by #165 — TWO stacked bugs. (1) The staging tool's FAT32 `appendDirent` extended a full directory without zeroing the new cluster; on the distro image's dirty free space, stale bytes interleaved with new entries and detached `Palettes/HighscoreTable.npl`'s LFN chain from its 8.3 entry, so the game's F_OPEN failed — and the game's own error path then uploaded a stale palette buffer from `$B000+1` (an esxDOS error CARRY rippling through its `RL E` address math). (2) With staging fixed, every post-keypress screen rendered in four shades of dark blue: our NR$44 half-pair latch wasn't reset by NR$40/$41/$43 writes (zxnext.vhd:5376/5382/5395) — the game's clear routine leaves a dangling half-pair and relies on the reset. High-score table (TOP 10 FIGHTERS) and menu (1 PLAYER / 2 PLAYERS / OPTIONS over Mt. Fuji) both render correctly now. |
-| TX-1696 | Known issue | #166 re-verdict with its REAL 53 MB audio staged (the dummy-file caveat is retired): NOT capacity — the audio fits the shipped 64 MB card with 1.2 MB spare once the 43 MB of DVD-case artwork PDFs (`Art/`, not game data) are excluded, and a 256 MB BuildFAT32 card reproduces the failure with everything staged. One real emulator bug found and FIXED along the way (r49): NR$1E/$1F swept the frame 8× too fast at 28 MHz (BeamPosition divided raw CPU T-states by 228 — the FPGA cvc counts on the video clock, zxnext.vhd zxula_timing), so the game's raster-sync (poll NR$1F ≥ 192 before a ~9-line `push hl` fill with SP descending through $2000-$3FFF) read garbage and let the frame INT land mid-fill with SP in the ROM window — pushes lost, pops read ROM3 bytes, PC warped into the $0013 `JP (IX)` stub and wedged. Post-fix the game gets further but still dies in the same IM1-during-low-SP class (wreckage: game IX/IY set, SP=$2Cxx, PC executing ROM data). The game demonstrably relies on surviving an IM1 with SP in the low window on real hardware (its `ld ix,$C085` resume hook + the OS trampoline exit); prime suspect for the residual divergence is the TBBLUE.FW divMMC-RAM IM1 handler's user-hook dispatch (the ROM3 $3CE6 `call $0013` routine) which our FW-handler emulation may not reach. Also: the game's loader is FAT-geometry sensitive — on 512-byte-cluster cards (shipped 64 MB, mkfs defaults) it aborts early to a grey screen without ever installing its audio engine; BuildFAT32's 2 KB-cluster 256 MB card gets it to the audio-install. |
+| TX-1696 | Known issue | #169 pinned the r49 residual to the LINE: the game's audio-install runs a raster-phased stack blast — poll NR$1F ≥ 192 ($B168: `LD A,$1F`/NR read/`CP $C0`), ~18 lines of setup, then CALL $EDE8 = a 4,632-byte `PUSH HL` slide (SP from $4CFE down through the $2000-$3FFF ROM window, writes past $4000 discarded on purpose). The frame INT (cvc 248, zxula_timing.vhd c_int_v=1) must land mid-slide with SP in the window: the discarded interrupt pushes make the IM1 exit's final `RET` (ROM3 $0050 path) pop a ROM3 data word, PC lands in the game's `$E5` flood covering high RAM, surfs the pushes to a collector, and the game resumes — verified end-to-end in-emulator by staging SP/PC/beam at the designed geometry (the #166 FW `JP (IX)` hook-dispatch theory is retired: bank1 $2009 does drivers+keyboard+FRAMES only). Two real conformance gaps found and FIXED en route (r50): the 28 MHz wait state applied to M1 fetches only instead of EVERY memory read (zxnext.vhd:3168-3181 — opcode, prefix, operand AND data reads wait; specnext wiki confirms NOP=5T), and the CTC block not being wired at all (ports $183B-$1F3B, NR$C5, pulse-mode INT — the game's install hook arms CTC ch0 at 250 kHz as its IM2 heartbeat; zxnext.vhd:4064-4093/2014-2043). REMAINING BLOCKER (open): with every constant measured and VHDL-verified (entry cvc ~210.5, slide 30.5 lines at 12T/push, wrap-1 at 241 hits ROM3 $0000 = `DI`, INT at 248.3 arrives ~1.3 lines after the second wrap, dead every retry, ~3.98M-insn retry period), the design only closes if real-hardware 28 MHz `PUSH` costs ≥ 15.1T (i.e. writes ALSO wait, which neither the vendored 3.02.03 VHDL nor community docs show) or the INT fires ≥ 7.3 lines earlier. The raster poll re-locks the phase every retry so no upstream jitter (SD Nac variance was added — faithful in itself — but is absorbed by the poll). HARDWARE-MEASURED (2026-07-15, `_tools/hw-probe` on a real Next): NOPs 33 lines/12k (5T exact = our model), pushes 40 lines/6k (~12.2T — writes do NOT wait; ROM-window writes = RAM writes), frame INT at raster 248 (exact). Instruction timing is exonerated on silicon — the install geometry cannot close on real hardware either as measured, so the working-on-hardware reports (NextZXOS 2.07k/2.08) most plausibly differ via the OS build's code-path lengths shifting the slide-entry raster phase; our card runs 2.09 (24.11 distro). Next step: run the game on a real Next from a 2.09/24.11-era card — failure there closes this as a game/OS-version incompatibility with the emulator faithful. Loader is also FAT-geometry sensitive (512 B-cluster cards abort earlier; BuildFAT32 2 KB clusters get furthest). |
 | RAMS | Known issue | r47 re-run with its arcade ROM sets staged: still boots to a corrupt first screen (fragments of the game-select UI; parked in a normal IM 2 HALT wait). The hardware build leans on cycle-exact tricks — its own distribution ships a separate emulator-specific `.nex` variant — so this stays in the architectural-timing class (conformance Axis 10), not the quick-fix list. |
 | Atic Atac (Next) | Untested | The local `ATICATAC.NEX` is 111 MB — not a valid `.nex`; needs a clean download before it can be triaged. |
 
@@ -181,25 +181,33 @@ method.
 The failures cluster into classes; ranked by how many titles each
 blocks (the conformance prioritizer — see work items #159/#164):
 
-1. **PARTIAL (work item #166, 2026-07-14): NR$1E/$1F raster counter
-   ran at CPU speed instead of video speed — FIXED (r49); TX-1696
-   still blocked by a residual IM1-during-low-SP divergence.**
-   `ULA.BeamPosition` divided raw CPU T-states by 228, but the
-   FPGA's cvc counter (NR$1E/$1F, copper WAITs, palette raster
-   stamping) runs on the VIDEO clock (zxnext.vhd:5982-5986,
-   zxula_timing.vhd) — at 28 MHz the readback swept the frame 8×
-   per real frame, and in no-audio sessions the per-frame origin
-   stamp (buried in the audio flush) never ran at all, adding a
-   free-running wrap drift. Fixed by deriving the beam from the
-   3.5 MHz-reference timeline against the CPU's own frame origin
-   (`z80.FrameOriginRefTstates`, the same origin the frame-INT
-   assert offset uses, so raster reads and INT placement cannot
-   drift apart). Pinned by `TestBeamPositionTurbo`; the nexttests
-   Copper/ScanlineIRQ suite now passes from the exact frame origin
-   rather than the stale audio stamp. TX-1696's residual failure
-   (IM1 landing while its SP crosses the $2000-$3FFF window during
-   Layer-2-era push-fills — survivable on real hardware, fatal
-   here) is the top open item; see its row for the mechanism map.
+1. **PARTIAL (work items #166/#169, 2026-07-14): TX-1696's install
+   geometry — two more real gaps FIXED (r50), one blocker still
+   open.** The #166 story (r49): `ULA.BeamPosition` divided raw CPU
+   T-states by 228, but the FPGA's cvc counter (NR$1E/$1F, copper
+   WAITs, palette raster stamping) runs on the VIDEO clock
+   (zxnext.vhd:5982-5986, zxula_timing.vhd) — fixed by deriving the
+   beam from the 3.5 MHz-reference timeline against the CPU's own
+   frame origin (`z80.FrameOriginRefTstates`); pinned by
+   `TestBeamPositionTurbo`. #169 (r50) then pinned and fixed two
+   more: (a) the 28 MHz wait state was charged on M1 fetches only —
+   the FPGA waits EVERY memory READ cycle (opcode, prefix, operand,
+   data; writes unwaited — zxnext.vhd:3168-3181; `pkg/z80` readMem
+   chokepoint); (b) the CTC was modelled (`pkg/next/ctc`, golden-
+   tested) but never WIRED — channels 0-3 now sit behind ports
+   $183B-$1F3B (decode a(15:11)="00011" + $3B, channel = a(10:8),
+   zxnext.vhd:2690/4064-4093), NR$C5 int-enables write through to
+   the channel control bits and read back live (vhd:4078/6242), and
+   a ZC/TO on an int-enabled channel drives the legacy pulse-mode
+   INT for 32 CPU cycles (im2_peripheral.vhd:186, zxnext.vhd:
+   2014-2043) via the new `z80.ExtIntFunc` hook (`pkg/next/
+   ctcblock.go`, `TestWireCTCPulseInterrupt`). SD block reads also
+   gained a spec-faithful variable access time (Nac) before the
+   data token. TX-1696 itself remains blocked on a measured ~1.3-
+   line interrupt-vs-slide geometry shortfall that every VHDL and
+   community source contradicts — see its row for the full map and
+   the two candidate resolutions (real 28 MHz write waits, or an
+   earlier INT).
 2. **CLOSED (work item #165, 2026-07-14): runtime data-load failures
    — WOTEF, Aliens Neoplasma and Crowley's panel all unblocked by
    TWO stacked fixes.** (a) `fat32.go appendDirent` extended a full

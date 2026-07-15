@@ -52,7 +52,7 @@ One `package main` holding the machine assembly and every surface.
 
 | Package | Owns |
 | --- | --- |
-| `pkg/next/*` | The Spectrum Next. Children: `nextregs` (dispatcher), `layer2`, `tilemap`, `sprite`, `lores`, `palette`, `compositor`, `copper`, `dma`, `ctc`, `divmmc`, `esxdos`, `sdcard`, `nex`, `rtc`, `uart`, `dac`, `keymap`, `install`. Umbrella files: `wire.go` (all NextReg wiring), `im2.go` (IM2 daisy-chain), `inttiming.go` (frame INT timing). See [next-fpga.md](next-fpga.md). |
+| `pkg/next/*` | The Spectrum Next. Children: `nextregs` (dispatcher), `layer2`, `tilemap`, `sprite`, `lores`, `palette`, `compositor`, `copper`, `dma`, `ctc`, `divmmc`, `esxdos`, `sdcard`, `nex`, `rtc`, `uart`, `dac`, `keymap`, `install`. Umbrella files: `wire.go` (all NextReg wiring), `im2.go` (IM2 daisy-chain), `inttiming.go` (frame INT timing), `ctcblock.go` (the four live CTC channels: port decode, NR$C5, pulse-mode INT line via `z80.CPU.ExtIntFunc`). See [next-fpga.md](next-fpga.md). |
 | `pkg/peripherals` | `PeripheralManager`: one optional instance of each classic device, port-claim priority chain, the $0000-$3FFF overlay precedence (IF2 → Multiface → DISCiPLE → IF1). |
 | `pkg/plus3fdc` | µPD765A FDC + all disk image parsers (DSK/EDSK/UDI/MGT/IMG/SAD/TRD/D40/D80 readers live here and are reused by other controllers). |
 | `pkg/betadisk` | WD1793 + Beta interface + .TRD images. TR-DOS ROM auto-paging itself lives in `pkg/memory` (`BetaPreFetch`). |

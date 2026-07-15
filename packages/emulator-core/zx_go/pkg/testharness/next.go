@@ -131,6 +131,9 @@ func newNext() (*Harness, error) {
 	u.SetNextCompositor(comp)
 	u.SetNextSpritePort(sprites) // port $303B select (write) / status (read); $5B/$57 upload
 	u.SetNextDMA(dmaEngine)
+	// CTC channels + NR$C5 + pulse INT line — harness wiring parity
+	// with cmd/zx_go/next.go.
+	u.SetNextCTC(next.WireCTC(disp, cpu))
 	// zxnDMA bus hooks, mirroring the production wiring in
 	// cmd/zx_go/next.go: IO endpoints route through the ULA's port
 	// dispatch (without this an IO-source transfer reads $FF — the

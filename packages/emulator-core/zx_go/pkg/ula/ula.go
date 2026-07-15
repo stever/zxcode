@@ -296,6 +296,11 @@ type ULA struct {
 	// ModelNext.
 	nextDMA NextDMA
 
+	// nextCTC receives the CTC channel ports — a(15:11)="00011"
+	// with low byte $3B ($183B-$1F3B, channel = a(10:8);
+	// zxnext.vhd:2690). Wired only for ModelNext.
+	nextCTC NextCTC
+
 	// nextSprite receives port $303B traffic: a write selects the
 	// active sprite, a read returns the sprite status (collision /
 	// max-per-line, clear-on-read). Wired only for ModelNext.
@@ -415,6 +420,16 @@ type NextDMA interface {
 	WriteCommand(val byte)
 	ReadCommand() byte
 	SetZilogMode(z bool)
+}
+
+// NextCTC is the Spectrum Next CTC block's port-facing contract:
+// channel port writes (control word / time constant / vector) and
+// reads (the live down-counter). ClaimsPort implements the FPGA's
+// decode — a(15:11)="00011" and low byte $3B (zxnext.vhd:2690).
+type NextCTC interface {
+	ClaimsPort(addr uint16) bool
+	WritePort(addr uint16, val byte)
+	ReadPort(addr uint16) byte
 }
 
 // dmaClaims reports whether the Spectrum Next DMA claims IO address addr
@@ -587,6 +602,10 @@ func (u *ULA) Palette() [16]color.RGBA { return u.palette }
 // 0x0B writes are forwarded as command bytes (the port latching the
 // controller's Zilog-compat mode). Passing nil unhooks.
 func (u *ULA) SetNextDMA(d NextDMA) { u.nextDMA = d }
+
+// SetNextCTC installs the Spectrum Next CTC block. Channel ports
+// $183B-$1F3B (a(15:11)="00011", low byte $3B) route to it.
+func (u *ULA) SetNextCTC(c NextCTC) { u.nextCTC = c }
 
 // SetNextSpritePort installs the sprite engine's $303B select/status
 // port handler. Passing nil unhooks.
@@ -1541,6 +1560,12 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 		return u.nextSprite.ReadStatus(), true
 	}
 
+	// CTC channel ports $183B-$1F3B: the selected channel's live
+	// down-counter (ctc_chan.vhd:168 o_cpu_d).
+	if u.nextCTC != nil && u.nextCTC.ClaimsPort(addr) {
+		return u.nextCTC.ReadPort(addr), true
+	}
+
 	// Port $113B: i2c SDA line read-back (bit 0; upper bits float
 	// high — open-drain bus). Port $103B reads return the SCL latch
 	// the same way on real hardware but NextZXOS never reads it; we
@@ -1881,6 +1906,13 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 			u.nextI2C.WriteSDA(val&0x01 != 0)
 			return
 		}
+	}
+
+	// CTC channel ports $183B-$1F3B (zxnext.vhd:2690): control word /
+	// time constant / vector writes to the selected channel.
+	if u.nextCTC != nil && u.nextCTC.ClaimsPort(addr) {
+		u.nextCTC.WritePort(addr, val)
+		return
 	}
 
 	// Ports 0x6B / 0x0B: zxnDMA command stream. Decoded on low 8 bits only;

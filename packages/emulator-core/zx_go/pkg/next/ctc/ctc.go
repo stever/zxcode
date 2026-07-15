@@ -121,6 +121,148 @@ func (c *Channel) WriteIntEnable(enable bool) {
 // Tick advances the channel by exactly one i_CLK rising edge with i_iowr = 0.
 func (c *Channel) Tick() { c.tick(false, 0, false, false) }
 
+// runningTimer reports whether the channel is actively counting in
+// TIMER mode (prescaler-driven) — the state AdvanceIdle can
+// fast-forward analytically.
+func (c *Channel) runningTimer() bool {
+	return (c.state == sRun || c.state == sRunTC) && !c.cwCounter()
+}
+
+// prescale returns the timer prescaler period in i_CLK ticks (16/256).
+func (c *Channel) prescale() uint64 {
+	if c.cwPre256() {
+		return 256
+	}
+	return 16
+}
+
+// tcPeriod returns the down-counter reload in prescaler fires (TC=0
+// counts as 256, the 8-bit wrap).
+func (c *Channel) tcPeriod() uint64 {
+	if c.timeConst == 0 {
+		return 256
+	}
+	return uint64(c.timeConst)
+}
+
+// steadyIdle reports whether further idle ticks (no write, no trigger
+// change) leave the channel's STATE unchanged: every state except a
+// transitioning S_TRIGGER. A pending trigger edge (clkTrg != clkTrgD)
+// also disqualifies, since the next tick consumes it.
+func (c *Channel) steadyIdle() bool {
+	if c.clkTrg != c.clkTrgD {
+		return false
+	}
+	if c.state != sTrigger {
+		return true
+	}
+	// S_TRIGGER holds only for a timer waiting on its trigger
+	// (ctc_chan.vhd:223); auto-start timers and counters move to
+	// S_RUN on the next tick.
+	return !c.cwCounter() && c.cwWaitTrg()
+}
+
+// AdvanceIdle advances the channel by n idle i_CLK edges (no CPU
+// write, no trigger change) and returns how many ZC/TO pulses fired
+// in that window. Semantically identical to calling Tick() n times;
+// the steady states are computed in O(1) so a per-instruction caller
+// stays cheap. States held by reset_soft (S_RESET / S_RESET_TC /
+// S_TRIGGER waiting on a trigger) don't count (ctc_chan.vhd:117,
+// 132-141,155-166); a COUNTER-mode RUN channel advances only its
+// free-running prescaler register on idle ticks.
+func (c *Channel) AdvanceIdle(n uint64) (zcs uint64) {
+	// Walk any state transitions idle ticks perform (S_TRIGGER →
+	// S_RUN, pending trigger edges) one tick at a time; these are
+	// bounded and cannot themselves ZC... except a counter-mode
+	// trigger edge decrementing tCount to zero — count via ZCTO.
+	for n > 0 && !c.steadyIdle() {
+		c.Tick()
+		if c.zcToD {
+			zcs++
+		}
+		n--
+	}
+	if n == 0 {
+		return zcs
+	}
+	if !c.runningTimer() {
+		if c.resetSoft() {
+			// Held at reload: idle ticks are no-ops beyond the edge-
+			// detect registers.
+			c.zcToD = false
+			c.clkTrgD = c.clkTrg
+			c.iowrD = false
+			return zcs
+		}
+		// COUNTER-mode RUN: no idle counting, but the prescaler
+		// register free-runs (ctc_chan.vhd:132-141 — reset_soft is
+		// the only hold).
+		c.pCount += uint8(n)
+		c.zcToD = false
+		c.clkTrgD = c.clkTrg
+		c.iowrD = false
+		return zcs
+	}
+	presc := c.prescale()
+	// The k-th tick (k=1..n) fires the prescaler when its PRE-increment
+	// pCount ≡ presc-1 (mod presc) (ctc_chan.vhd:143-150). With current
+	// pre-state r0, the first fire is at k1 = presc - r0 (mod presc,
+	// where r0 = pCount mod presc), then every presc ticks.
+	r0 := uint64(c.pCount) % presc
+	k1 := presc - r0
+	var fires uint64
+	if n >= k1 {
+		fires = 1 + (n-k1)/presc
+	}
+	// ZC when a fire decrements tCount from 1 (reload thereafter,
+	// ctc_chan.vhd:152-166). tCount==0 behaves as 256 (byte wrap).
+	t0 := uint64(c.tCount)
+	if t0 == 0 {
+		t0 = 256
+	}
+	period := c.tcPeriod()
+	var lastTickWasZC bool
+	if fires >= t0 {
+		zcs += 1 + (fires-t0)/period
+		// tCount after the last ZC: how many fires since it, counted
+		// down from the reload value.
+		sinceZC := (fires - t0) % period
+		c.tCount = uint8(period - sinceZC) // period==256 wraps to 0 == 256 ✓
+		// Was the very last tick (k=n) a ZC fire?
+		lastFireK := k1 + (fires-1)*presc
+		lastTickWasZC = lastFireK == n && sinceZC == 0
+	} else {
+		c.tCount = uint8(t0 - fires)
+	}
+	c.pCount += uint8(n % 256) // +1 per tick, byte wrap (presc divides 256)
+	c.zcToD = lastTickWasZC
+	c.clkTrgD = c.clkTrg
+	c.iowrD = false
+	return zcs
+}
+
+// TicksToNextZC returns how many idle i_CLK edges from now the next
+// ZC/TO pulse fires, and whether one is scheduled at all (running
+// TIMER mode only — counter-mode and idle channels return false).
+func (c *Channel) TicksToNextZC() (uint64, bool) {
+	if !c.runningTimer() {
+		if c.state == sTrigger && !c.cwCounter() && !c.cwWaitTrg() {
+			// Auto-start timer: one tick to enter RUN, then a full
+			// first period from the reload values.
+			return 1 + c.prescale()*c.tcPeriod(), true
+		}
+		return 0, false
+	}
+	presc := c.prescale()
+	r0 := uint64(c.pCount) % presc
+	k1 := presc - r0
+	t0 := uint64(c.tCount)
+	if t0 == 0 {
+		t0 = 256
+	}
+	return k1 + (t0-1)*presc, true
+}
+
 // tick computes every combinational signal from the CURRENT (pre-edge) state —
 // just as the VHDL processes read the registers' current values — then applies
 // all the clocked register updates atomically, modelling one rising_edge(i_CLK).

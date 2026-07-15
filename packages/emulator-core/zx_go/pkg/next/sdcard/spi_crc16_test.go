@@ -39,7 +39,7 @@ func TestReadBlock_RealCRC(t *testing.T) {
 	}
 	// Poll for the 0xFE data token (past the Nac idle byte).
 	var tok byte = 0xFF
-	for i := 0; i < 8 && tok == 0xFF; i++ {
+	for i := 0; i < 1200 && tok == 0xFF; i++ {
 		tok = c.ReadData()
 	}
 	if tok != 0xFE {

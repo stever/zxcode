@@ -154,12 +154,43 @@ component of the INT origin is below the render's one-line floor; line-INT at
 turbo; IM2 vector table; $C0/$C6 enable gates not all wired to the
 INT generator (the NR$22/$C4/port-$FF ULA-frame + line enables ARE — the
 Axis 4 shared latch, `ula_int_en` vhd:6711).
+✅ CTC pulse-mode interrupts (r50, #169): channels 0-3 wired behind ports
+$183B-$1F3B (decode a(15:11)="00011" + low $3B, sel = a(10:8),
+zxnext.vhd:2690 + 4064-4093 — sel 4-7 hit no channel, reads 0), counting
+CLK_28 (i_CLK => i_CLK_28); NR$C5 writes drive the channels' int-enable
+control bits and reads compose them back (vhd:4078-4079/6242); a ZC/TO on
+an int-enabled channel asserts the legacy pulse INT for 32 CPU cycles
+(im2_peripheral.vhd:186 `o_pulse_en = (int_req and i_int_en) and not
+im2-mode` → pulse_int_n, zxnext.vhd:2014-2043) via `z80.ExtIntFunc`.
+`pkg/next/ctcblock.go`; O(1) batch channel advance pinned tick-exact vs
+the golden channel model (`pkg/next/ctc/advance_test.go`);
+`TestWireCTCPulseInterrupt` / `TestWireCTCIntLineReasserts`.
+⚠️ Not modelled: hardware-IM2 vectored delivery for CTC sources (the
+im2.go daisy chain is still not wired to the CPU's INTACK), the
+counter-mode ZC/TO trigger cascade between channels (vhd:4082), NR$C8-$CA
+status bits for CTC, and port reads of a mid-count channel return the
+batch-advanced counter (exact at observation points).
 
 ## Axis 6 — Z80 / Z80N operations  (FUSE + Sean Young + GHDL gate oracle)
 Tests: canonical T-state tables (iter 266-270), per-op timing batches, flags
 (SCF/CCF/CPL), WZ/MEMPTR for every group, R-register, IM/NEG/RETI mirrors, SLL,
-INT atomicity, 28 MHz M1 wait. **GHDL gate-oracle: bit-exact over 363 bootrom
+INT atomicity, 28 MHz read waits. **GHDL gate-oracle: bit-exact over 363 bootrom
 insns** ([[project_next_cpu_faithful]]). Status: **strongest axis (✅).**
+✅ 28 MHz wait states (r50, #169): one extra CPU T-state on EVERY memory READ
+cycle — opcode/prefix M1 fetches, operand bytes and data reads alike; writes
+and IO unwaited (zxnext.vhd:3168-3181 `sram_wait_n` on `sram_req_t or
+cpu_bank5_sched` with `cpu_rd_n='0'` at `cpu_speed="11"`; specnext wiki:
+"NOP takes 5T"). Was M1-only, which ran multi-byte/multi-read instruction
+streams up to ~15% fast at 28 MHz (`pkg/z80` readMem chokepoint;
+`TestTurbo28MHzM1WaitState` still pins NOP=5T). ✅ REAL-HARDWARE VALIDATED (2026-07-15,
+#169 `_tools/hw-probe` on an owner's Next): 12,000 NOPs span 33 raster
+lines (exactly our 5T model), 6,000 PUSHes span 40 lines vs our 39
+(~12.2T vs 12.0T — writes do NOT wait), ROM-window writes time identically
+to RAM writes, and the frame INT is accepted at raster line 248 (exact).
+The former "do writes wait?" open question is CLOSED: they don't, and
+TX-1696's install geometry cannot close via instruction timing on real
+silicon either — see compatibility.md (suspicion moved to the NextZXOS
+version's effect on the game's slide-entry raster phase).
 
 ## Axis 7 — Memory / paging
 MMU8 ($50-$57) defaults ✅ (this-session $DE/$DF fix), divMMC overlay, config-mode
@@ -179,6 +210,12 @@ chain); RETN mirrors ED 55/65/75 assert neither. Pinned by
 `TestRETNHookFiresForExactED45Only` (pkg/z80). Firing the unmap on RETI was
 the NextZXOS 24.11 five-title loader-class wreck (#163): a game IM2 ISR
 returning mid-RST$08 unmapped the esxDOS overlay.
+✅ SD block-read access time (r50, #169): CMD17/18 now hold DataOut high for
+a variable 4-64 byte-times (SD spec Nac; real cards take tens-hundreds of
+µs, spec ceiling 100 ms) before the $FE data token — a deterministic hash
+of (LBA, read counter), so runs stay reproducible. Hosts must poll for the
+token (TBBLUE.FW/NextZXOS do); register reads (CSD/CID) keep the fixed pad
+their fixed-count readers require.
 ⚠️ Remaining: no port-by-port conformance test pins the automap trigger variants
 or the SPI / CSD command set to the VHDL.
 

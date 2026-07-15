@@ -43,7 +43,7 @@
         <mxCell id="lane-machines" value="Machine-specific stacks" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
           <mxGeometry x="40" y="480" width="1320" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="mach-next" value="pkg/next/* — Spectrum Next FPGA stack&#10;nextregs, wire.go, layer2, tilemap, sprite, copper, palette,&#10;compositor, lores, dma, ctc, im2, divmmc, esxdos, sdcard,&#10;nex, rtc, uart, dac, keymap, install" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+        <mxCell id="mach-next" value="pkg/next/* — Spectrum Next FPGA stack&#10;nextregs, wire.go, layer2, tilemap, sprite, copper, palette,&#10;compositor, lores, dma, ctc + ctcblock.go, im2, divmmc, esxdos,&#10;sdcard, nex, rtc, uart, dac, keymap, install" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
           <mxGeometry x="70" y="515" width="420" height="80" as="geometry" />
         </mxCell>
         <mxCell id="mach-classic" value="pkg/peripherals + devices&#10;plus3fdc, betadisk, disciple, if1,&#10;if2, multiface, microdrive,&#10;kempmouse, zxprinter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
@@ -110,6 +110,9 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e-next-mem" value="MMU / overlays" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.25;exitY=0;entryX=0.25;entryY=1;" edge="1" parent="1" source="mach-next" target="core-memory">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-next-z80" value="CTC pulse INT (cpu.ExtIntFunc)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.05;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="mach-next" target="core-z80">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>

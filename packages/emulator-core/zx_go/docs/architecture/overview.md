@@ -72,7 +72,11 @@ Everything advances in units of one 50 Hz video frame:
    the M1 fetch, the opcode switch, memory contention, and port dispatch
    through the ULA. The frame interrupt is a narrow T-state pulse on the
    Next (VHDL-derived assert point and width) and a frame-start assert on
-   the classics.
+   the classics. Non-raster INT sources hook the same per-instruction
+   sample point through `cpu.ExtIntFunc` — on the Next that is the CTC
+   channels' pulse-mode interrupts (`pkg/next/ctcblock.go`), which
+   batch-advance the channels on the CLK_28 reference timeline and
+   assert the line for the FPGA's 32-CPU-cycle pulse width.
 3. End of frame: `peripherals.Frame()`, `kbd.Tick()`, boot bookkeeping.
 4. `ULA.Render()` builds the frame once: it first flushes the audio events
    recorded during the frame into the ring buffer (event-timed box-filter

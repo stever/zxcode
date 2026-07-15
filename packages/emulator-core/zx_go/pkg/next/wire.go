@@ -1268,6 +1268,36 @@ func Wire(opts WireOpts) {
 	applyTBBLUEFWBootDefaults(opts.Dispatcher)
 }
 
+// WireCTC constructs the Next's four-channel CTC block and wires its
+// NextReg face: NR$C5 "INT EN 1" writes set/clear the channels'
+// interrupt-enable control bits (the i_int_en_wr back door,
+// zxnext.vhd:4078-4079) and reads compose the live bits back
+// (zxnext.vhd:6242); the channels hard-reset on an NR$02-triggered
+// machine reset (i_reset). The block's pulse-mode interrupt line is
+// installed as the CPU's external INT source (peripherals.vhd
+// o_pulse_en → pulse_int_n, zxnext.vhd:2014-2043). The caller attaches
+// the returned block to the ULA's port dispatch (ULA.SetNextCTC) for
+// the $183B-$1F3B channel ports. Must run AFTER Wire so the NR$02
+// reset handler exists to chain onto.
+func WireCTC(d *nextregs.Dispatcher, cpu *z80.CPU) *CTCBlock {
+	b := NewCTCBlock(cpu.Ref8Tstates, cpu.SpeedMultiplier)
+	cpu.ExtIntFunc = b.IntLine
+	d.SetOnWrite(0xC5, func(disp *nextregs.Dispatcher, v byte) {
+		disp.Store(0xC5, v&0x0F)
+		b.WriteIntEnable(v)
+	})
+	d.SetOnRead(0xC5, func(*nextregs.Dispatcher) byte { return b.ReadIntEnable() })
+	if prev := d.OnWriteFn(0x02); prev != nil {
+		d.SetOnWrite(0x02, func(disp *nextregs.Dispatcher, v byte) {
+			if v&0x03 != 0 {
+				b.Reset()
+			}
+			prev(disp, v)
+		})
+	}
+	return b
+}
+
 // clipWindow models a Spectrum Next clip-window register (NR$18 Layer2,
 // $19 sprite, $1A ULA, $1B tilemap). Each holds four sub-coordinates
 // {x1,x2,y1,y2} addressed by a 2-bit index. Per zxnext.vhd 5242-5276 a

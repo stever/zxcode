@@ -174,7 +174,7 @@ func (c *CPU) executeZ80NEDInstruction(opcode byte) bool {
 		return true
 	case 0x90: // OUTINB    output (HL) to (BC); HL++; B unchanged
 		c.mem.ContendPort(c.bc())
-		c.ula.WritePort(c.bc(), c.mem.Read(c.hl()))
+		c.ula.WritePort(c.bc(), c.readMem(c.hl()))
 		c.setHL(c.hl() + 1)
 		c.tstates += 16
 		return true
@@ -249,7 +249,7 @@ func (c *CPU) pixelad() {
 // follow classic LDI: N=0, H=0, P/V from BC after decrement, S/Z
 // preserved, F3/F5 from the (val+A) trick LDI uses.
 func (c *CPU) ldix() {
-	val := c.mem.Read(c.hl())
+	val := c.readMem(c.hl())
 	if val != c.A {
 		c.mem.Write(c.de(), val)
 	}
@@ -268,7 +268,7 @@ func (c *CPU) ldix() {
 // lddx is LDIX with destination decrement. Source (HL) still
 // advances forward; only DE decrements. Same flag pattern as ldix.
 func (c *CPU) lddx() {
-	val := c.mem.Read(c.hl())
+	val := c.readMem(c.hl())
 	if val != c.A {
 		c.mem.Write(c.de(), val)
 	}
@@ -293,7 +293,7 @@ func (c *CPU) lddx() {
 // preserved. This is the same shape as a load that "tests" the
 // transferred value, which matches the common LDWS-in-a-loop idiom.
 func (c *CPU) ldws() {
-	val := c.mem.Read(c.hl())
+	val := c.readMem(c.hl())
 	c.mem.Write(c.de(), val)
 	c.L++
 	// Flags come from the INC D half-step (S/Z/H/PV/F53 of the
@@ -311,7 +311,7 @@ func (c *CPU) ldws() {
 // after decrement, S/Z preserved, F3/F5 from (val + A).
 func (c *CPU) ldpirx() {
 	srcAddr := (c.hl() & 0xFFF8) | (c.de() & 7)
-	val := c.mem.Read(srcAddr)
+	val := c.readMem(srcAddr)
 	if val != c.A {
 		c.mem.Write(c.de(), val)
 	}

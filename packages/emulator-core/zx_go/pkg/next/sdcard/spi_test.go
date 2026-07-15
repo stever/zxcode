@@ -18,7 +18,7 @@ func sendCommand(c *Card, cmd byte, arg uint32) byte {
 	c.WriteData(0xFF) // CRC stub
 	// Poll for non-0xFF response (up to 16 polls).
 	var r byte = 0xFF
-	for i := 0; i < 16 && r == 0xFF; i++ {
+	for i := 0; i < 1200 && r == 0xFF; i++ {
 		r = c.ReadData()
 	}
 	return r
@@ -220,7 +220,7 @@ func TestCard_CMD17_ReadBlock(t *testing.T) {
 		t.Fatalf("CMD17 R1=%02X, want 0x00", r1)
 	}
 	var token byte = 0xFF
-	for i := 0; i < 16 && token == 0xFF; i++ {
+	for i := 0; i < 1200 && token == 0xFF; i++ {
 		token = c.ReadData()
 	}
 	if token != 0xFE {
@@ -433,7 +433,7 @@ func TestCard_CMD9_SendCSD(t *testing.T) {
 	}
 	// Find the 0xFE data token (may be preceded by 0xFF padding).
 	var token byte = 0xFF
-	for i := 0; i < 16 && token == 0xFF; i++ {
+	for i := 0; i < 1200 && token == 0xFF; i++ {
 		token = c.ReadData()
 	}
 	if token != 0xFE {
@@ -460,7 +460,7 @@ func readCSD(t *testing.T, c *Card) []byte {
 		t.Fatalf("CMD9 R1 = $%02X, want $00", r1)
 	}
 	var token byte = 0xFF
-	for i := 0; i < 16 && token == 0xFF; i++ {
+	for i := 0; i < 1200 && token == 0xFF; i++ {
 		token = c.ReadData()
 	}
 	if token != 0xFE {
@@ -527,7 +527,7 @@ func TestCard_CMD10_SendCID(t *testing.T) {
 		t.Fatalf("CMD10 R1 = $%02X, want $00", r1)
 	}
 	var token byte = 0xFF
-	for i := 0; i < 16 && token == 0xFF; i++ {
+	for i := 0; i < 1200 && token == 0xFF; i++ {
 		token = c.ReadData()
 	}
 	if token != 0xFE {
@@ -603,7 +603,7 @@ func TestCard_CMD12_StopTransmission_AfterCMD18(t *testing.T) {
 	}
 	// Drain block 0: 0xFE + 512 + 2 CRC bytes.
 	var token byte = 0xFF
-	for i := 0; i < 16 && token == 0xFF; i++ {
+	for i := 0; i < 1200 && token == 0xFF; i++ {
 		token = c.ReadData()
 	}
 	if token != 0xFE {
@@ -647,7 +647,7 @@ func TestCard_CMD18_AutoNextBlock(t *testing.T) {
 	// Read 2 blocks back-to-back without re-issuing CMD.
 	for b := 0; b < 2; b++ {
 		var token byte = 0xFF
-		for i := 0; i < 16 && token == 0xFF; i++ {
+		for i := 0; i < 1200 && token == 0xFF; i++ {
 			token = c.ReadData()
 		}
 		if token != 0xFE {
@@ -830,7 +830,7 @@ func TestCMD12AbortsInFlightMultiReadStream(t *testing.T) {
 		t.Fatalf("CMD18 R1=%02X, want 0x00", r1)
 	}
 	var tok byte = 0xFF
-	for i := 0; i < 16 && tok == 0xFF; i++ {
+	for i := 0; i < 1200 && tok == 0xFF; i++ {
 		tok = c.ReadData()
 	}
 	if tok != 0xFE {
@@ -916,7 +916,7 @@ func TestCard_CMD18_InterBlockGap(t *testing.T) {
 	for blk := 0; blk < 3; blk++ {
 		// Token poll (skip idle $FF) — bounded.
 		var tok byte = 0xFF
-		for i := 0; i < 16 && tok == 0xFF; i++ {
+		for i := 0; i < 1200 && tok == 0xFF; i++ {
 			tok = c.ReadData()
 		}
 		if tok != 0xFE {
@@ -963,7 +963,7 @@ func TestCard_CMD18_SurvivesCSDeassert(t *testing.T) {
 	}
 	// Block 0: token + data + CRC.
 	var tok byte = 0xFF
-	for i := 0; i < 16 && tok == 0xFF; i++ {
+	for i := 0; i < 1200 && tok == 0xFF; i++ {
 		tok = c.ReadData()
 	}
 	if tok != 0xFE {
@@ -983,7 +983,7 @@ func TestCard_CMD18_SurvivesCSDeassert(t *testing.T) {
 
 	// The stream must continue with block 1.
 	tok = 0xFF
-	for i := 0; i < 16 && tok == 0xFF; i++ {
+	for i := 0; i < 1200 && tok == 0xFF; i++ {
 		tok = c.ReadData()
 	}
 	if tok != 0xFE {

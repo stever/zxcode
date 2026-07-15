@@ -120,6 +120,18 @@ type CPU struct {
 	LineIntOffsetTstates uint64
 	lineIntFired         bool
 
+	// ExtIntFunc, when non-nil, is polled once per instruction at the
+	// M1 INT sample point with the current CPU tstate count; returning
+	// true asserts the maskable INT line for this sample (ORed onto
+	// the same IRQPending latch the frame/line pulses use, matching
+	// the FPGA's z80_int_n = pulse_int_n and im2_int_n composition,
+	// zxnext.vhd:1840). Used for interrupt sources that are not
+	// raster-locked — the Spectrum Next CTC channels' pulse-mode
+	// interrupts (peripherals.vhd o_pulse_en → zxnext.vhd:2014-2043).
+	// The callback owns the pulse-width bookkeeping; the CPU just
+	// samples the line level.
+	ExtIntFunc func(tstates uint64) bool
+
 	// frameOriginRef is the current frame's origin on the 3.5 MHz-
 	// reference timeline (RefTstates units), recorded at each frame
 	// boundary by ExecuteFrame / StepInstructionWithIRQ. It is the
@@ -448,7 +460,7 @@ func (c *CPU) m1(addr uint16) {
 func (c *CPU) rd(addr uint16) byte {
 	c.contendAt(addr)
 	c.tstates += 3
-	return c.mem.Read(addr)
+	return c.readMem(addr)
 }
 
 // wr models a memory-write machine cycle (3 T): contend then write.
@@ -694,6 +706,15 @@ func (c *CPU) foldRefClock() {
 // changes. Identical to Tstates() on models without turbo.
 func (c *CPU) RefTstates() uint64 {
 	return (c.refClock8 + (c.tstates-c.refMark)*8/uint64(c.SpeedMultiplier())) / 8
+}
+
+// Ref8Tstates returns the reference timeline at 28 MHz resolution —
+// 8 ticks per 3.5 MHz reference T-state. This is the CLK_28 domain
+// the Spectrum Next's CTC channels count on (zxnext.vhd:4072,
+// i_CLK => i_CLK_28), exposed so the CTC block can convert CPU time
+// to channel ticks without losing sub-reference precision.
+func (c *CPU) Ref8Tstates() uint64 {
+	return c.refClock8 + (c.tstates-c.refMark)*8/uint64(c.SpeedMultiplier())
 }
 
 // FrameOriginRefTstates returns the current frame's origin on the
@@ -962,6 +983,10 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 		if lineIntAt != 0 && !c.lineIntFired && c.tstates >= lineIntAt {
 			c.IRQPending.Store(true)
 			c.lineIntFired = true
+		}
+		// External (non-raster) INT sources — CTC pulse interrupts.
+		if c.ExtIntFunc != nil && c.ExtIntFunc(c.tstates) {
+			c.IRQPending.Store(true)
 		}
 		// INT sample point — equivalent to the Z80's M1-boundary
 		// check on real hardware. Always evaluated; the HALT branch
@@ -1313,6 +1338,11 @@ func (c *CPU) StepInstructionWithIRQ() {
 		}
 	}
 
+	// External (non-raster) INT sources — CTC pulse interrupts.
+	if c.ExtIntFunc != nil && c.ExtIntFunc(c.tstates) {
+		c.IRQPending.Store(true)
+	}
+
 	// IRQ sample point at M1 boundary
 	if c.IRQPending.Load() && c.IFF1 && !c.eiDelay {
 		c.interrupt()
@@ -1376,7 +1406,7 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 		c.B = c.L
 		c.tstates += 4
 	case 0x46: // LD B,(HL)
-		c.B = c.mem.Read(c.hl())
+		c.B = c.readMem(c.hl())
 		c.tstates += 7
 	case 0x47: // LD B,A
 		c.B = c.A
@@ -1399,7 +1429,7 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 		c.C = c.L
 		c.tstates += 4
 	case 0x4E: // LD C,(HL)
-		c.C = c.mem.Read(c.hl())
+		c.C = c.readMem(c.hl())
 		c.tstates += 7
 	case 0x4F: // LD C,A
 		c.C = c.A
@@ -1422,7 +1452,7 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 		c.D = c.L
 		c.tstates += 4
 	case 0x56: // LD D,(HL)
-		c.D = c.mem.Read(c.hl())
+		c.D = c.readMem(c.hl())
 		c.tstates += 7
 	case 0x57: // LD D,A
 		c.D = c.A
@@ -1445,7 +1475,7 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 		c.E = c.L
 		c.tstates += 4
 	case 0x5E: // LD E,(HL)
-		c.E = c.mem.Read(c.hl())
+		c.E = c.readMem(c.hl())
 		c.tstates += 7
 	case 0x5F: // LD E,A
 		c.E = c.A
@@ -1468,7 +1498,7 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 		c.H = c.L
 		c.tstates += 4
 	case 0x66: // LD H,(HL)
-		c.H = c.mem.Read(c.hl())
+		c.H = c.readMem(c.hl())
 		c.tstates += 7
 	case 0x67: // LD H,A
 		c.H = c.A
@@ -1491,7 +1521,7 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 	case 0x6D: // LD L,L
 		c.tstates += 4
 	case 0x6E: // LD L,(HL)
-		c.L = c.mem.Read(c.hl())
+		c.L = c.readMem(c.hl())
 		c.tstates += 7
 	case 0x6F: // LD L,A
 		c.L = c.A
@@ -2784,14 +2814,14 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 		c.tstates += 20
 	case 0x4B: // LD BC,(nn)
 		addr := c.fetch16()
-		c.C = c.mem.Read(addr)
-		c.B = c.mem.Read(addr + 1)
+		c.C = c.readMem(addr)
+		c.B = c.readMem(addr + 1)
 		c.WZ = addr + 1
 		c.tstates += 20
 	case 0x5B: // LD DE,(nn)
 		addr := c.fetch16()
-		c.E = c.mem.Read(addr)
-		c.D = c.mem.Read(addr + 1)
+		c.E = c.readMem(addr)
+		c.D = c.readMem(addr + 1)
 		c.WZ = addr + 1
 		c.tstates += 20
 	case 0x63: // LD (nn),HL
@@ -2802,8 +2832,8 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 		c.tstates += 20
 	case 0x6B: // LD HL,(nn)
 		addr := c.fetch16()
-		c.L = c.mem.Read(addr)
-		c.H = c.mem.Read(addr + 1)
+		c.L = c.readMem(addr)
+		c.H = c.readMem(addr + 1)
 		c.WZ = addr + 1
 		c.tstates += 20
 
@@ -2849,8 +2879,8 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 	case 0x7B: // LD SP,(nn)
 		oldSP := c.SP
 		addr := c.fetch16()
-		low := c.mem.Read(addr)
-		high := c.mem.Read(addr + 1)
+		low := c.readMem(addr)
+		high := c.readMem(addr + 1)
 		c.SP = uint16(high)<<8 | uint16(low)
 		c.WZ = addr + 1
 		c.tstates += 20
@@ -3130,7 +3160,7 @@ func (c *CPU) executeDDInstruction(opcode byte) {
 		c.tstates += 20
 	case 0x2A: // LD IX,(nn)
 		addr := c.fetch16()
-		c.IX = uint16(c.mem.Read(addr)) | (uint16(c.mem.Read(addr+1)) << 8)
+		c.IX = uint16(c.readMem(addr)) | (uint16(c.readMem(addr+1)) << 8)
 		c.tstates += 20
 
 	// INC/DEC IX
@@ -3249,7 +3279,7 @@ func (c *CPU) executeDDInstruction(opcode byte) {
 	// Exchange
 	case 0xE3: // EX (SP),IX
 		temp := c.IX
-		c.IX = uint16(c.mem.Read(c.SP)) | (uint16(c.mem.Read(c.SP+1)) << 8)
+		c.IX = uint16(c.readMem(c.SP)) | (uint16(c.readMem(c.SP+1)) << 8)
 		c.mem.Write(c.SP, byte(temp))
 		c.mem.Write(c.SP+1, byte(temp>>8))
 		c.WZ = c.IX // per Sean Young §A.1: WZ = new IX
@@ -3509,7 +3539,7 @@ func (c *CPU) executeDDCBInstruction(opcode byte, addr uint16) {
 	// Per Sean Young §3.4, every DDCB instruction sets
 	// MEMPTR = IX + d as part of the effective-address calculation.
 	c.WZ = addr
-	val := c.mem.Read(addr)
+	val := c.readMem(addr)
 	bit := int((opcode >> 3) & 7)
 	reg := int(opcode & 7)
 
@@ -3597,7 +3627,7 @@ func (c *CPU) executeFDInstruction(opcode byte) {
 		c.tstates += 20
 	case 0x2A: // LD IY,(nn)
 		addr := c.fetch16()
-		c.IY = uint16(c.mem.Read(addr)) | (uint16(c.mem.Read(addr+1)) << 8)
+		c.IY = uint16(c.readMem(addr)) | (uint16(c.readMem(addr+1)) << 8)
 		c.tstates += 20
 
 	// INC/DEC IY
@@ -3716,7 +3746,7 @@ func (c *CPU) executeFDInstruction(opcode byte) {
 	// Exchange
 	case 0xE3: // EX (SP),IY
 		temp := c.IY
-		c.IY = uint16(c.mem.Read(c.SP)) | (uint16(c.mem.Read(c.SP+1)) << 8)
+		c.IY = uint16(c.readMem(c.SP)) | (uint16(c.readMem(c.SP+1)) << 8)
 		c.mem.Write(c.SP, byte(temp))
 		c.mem.Write(c.SP+1, byte(temp>>8))
 		c.WZ = c.IY // per Sean Young §A.1: WZ = new IY
@@ -3900,7 +3930,7 @@ func (c *CPU) executeFDCBInstruction(opcode byte, d int8) {
 	// MEMPTR = IY + d as part of the effective-address calculation.
 	addr := uint16(int32(c.IY) + int32(d))
 	c.WZ = addr
-	val := c.mem.Read(addr)
+	val := c.readMem(addr)
 
 	bit := int((opcode >> 3) & 7)
 	reg := int(opcode & 7)
@@ -3961,25 +3991,37 @@ func (c *CPU) executeFDCBInstruction(opcode byte, d int8) {
 }
 
 // fetch reads the next byte at PC and increments R (opcode fetch only).
+// The 28 MHz read wait state is charged by readMem like any other
+// memory read cycle (M1 fetches are read cycles too).
 func (c *CPU) fetch() byte {
-	val := c.mem.Read(c.PC)
+	val := c.readMem(c.PC)
 	c.PC++
 	c.R = (c.R & 0x80) | ((c.R + 1) & 0x7f)
 	c.instructionCount++
-	// 28 MHz Z80N adds one CPU T-state per M1 fetch as a wait
-	// state, modelling the FPGA's slower memory bus relative to
-	// the CPU clock. Only Variant==VariantZ80N at speedSelect==3
-	// (28 MHz) triggers it; every other configuration stays
-	// bit-identical to its prior behaviour.
+	return val
+}
+
+// readMem performs one CPU memory-read machine cycle's bus access.
+// At 28 MHz on the Next the FPGA inserts ONE wait state on EVERY
+// memory READ cycle — opcode/prefix M1 fetches, operand bytes, and
+// data reads alike; writes are unaffected (zxnext.vhd:3168-3181:
+// sram_wait_n asserted when (sram_req_t or cpu_bank5_sched) and
+// cpu_rd_n='0' and cpu_speed="11"). Only Variant==VariantZ80N at
+// speedSelect==3 (28 MHz) triggers it; every other configuration is
+// bit-identical to the unwaited bus. TX-1696's frame-INT-anchored
+// push-slide diversion is timed by this: with the wait applied to M1
+// only, the ~48k-instruction INT→slide stretch ran ~5-10% fast and
+// the slide wrapped $FFFF→$0000 nine lines before the next INT.
+func (c *CPU) readMem(addr uint16) byte {
 	if c.Variant == VariantZ80N && c.speedSelect == 0x03 {
 		c.tstates++
 	}
-	return val
+	return c.mem.Read(addr)
 }
 
 // readOperand reads the next byte at PC without incrementing R (for immediate operands).
 func (c *CPU) readOperand() byte {
-	val := c.mem.Read(c.PC)
+	val := c.readMem(c.PC)
 	c.PC++
 	return val
 }
@@ -4064,9 +4106,9 @@ func (c *CPU) push(val uint16) {
 }
 
 func (c *CPU) pop() uint16 {
-	lo := uint16(c.mem.Read(c.SP))
+	lo := uint16(c.readMem(c.SP))
 	c.SP++
-	hi := uint16(c.mem.Read(c.SP))
+	hi := uint16(c.readMem(c.SP))
 	c.SP++
 	return (hi << 8) | lo
 }
@@ -4311,7 +4353,7 @@ func (c *CPU) getRegister8(reg int) byte {
 	case 5:
 		return c.L
 	case 6:
-		return c.mem.Read(c.hl()) // (HL)
+		return c.readMem(c.hl()) // (HL)
 	case 7:
 		return c.A
 	}
@@ -4844,7 +4886,7 @@ func (c *CPU) indr() {
 // Rotate decimal operations
 func (c *CPU) rrd() {
 	// Rotate right decimal. Per Sean Young §3.4: MEMPTR = HL + 1.
-	val := c.mem.Read(c.hl())
+	val := c.readMem(c.hl())
 	temp := c.A
 	c.A = (c.A & 0xF0) | (val & 0x0F)
 	c.mem.Write(c.hl(), (val>>4)|(temp<<4))
@@ -4855,7 +4897,7 @@ func (c *CPU) rrd() {
 
 func (c *CPU) rld() {
 	// Rotate left decimal. Per Sean Young §3.4: MEMPTR = HL + 1.
-	val := c.mem.Read(c.hl())
+	val := c.readMem(c.hl())
 	temp := c.A
 	c.A = (c.A & 0xF0) | (val >> 4)
 	c.mem.Write(c.hl(), (val<<4)|(temp&0x0F))
@@ -4942,8 +4984,8 @@ func (c *CPU) interrupt() {
 		// IM2: Indirect jump using I register and data bus value.
 		// On the ZX Spectrum, the ULA places 0xFF on the bus during INTA.
 		addr := uint16(c.I)<<8 | uint16(c.IM2Vector)
-		low := c.mem.Read(addr)
-		high := c.mem.Read(addr + 1)
+		low := c.readMem(addr)
+		high := c.readMem(addr + 1)
 		c.push(c.PC)
 		c.PC = uint16(high)<<8 | uint16(low)
 		c.tstates += 19

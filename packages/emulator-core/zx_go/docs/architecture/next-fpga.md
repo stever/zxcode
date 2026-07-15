@@ -316,8 +316,23 @@ INT. Pinned by `TestBeamPositionTurbo`.
   it to a T-state offset for the CPU.
 - IM2 daisy-chain (`pkg/next/im2.go`): a port of the FPGA's
   peripherals.vhd chain of 14 devices (line, UART RX/TX, 8 CTC channels,
-  ULA frame INT), priority = vector index, golden-tested. The CTC
-  (`pkg/next/ctc`) is a cycle-accurate ctc_chan.vhd model.
+  ULA frame INT), priority = vector index, golden-tested. NOT yet wired
+  to the CPU's INTACK (hardware-IM2 mode, NR$C0 bit 0).
+- CTC (`pkg/next/ctc` + `pkg/next/ctcblock.go`, r50): four
+  cycle-accurate ctc_chan.vhd channels wired live — ports $183B-$1F3B
+  (decode a(15:11)="00011" + low byte $3B, channel = a(10:8);
+  zxnext.vhd:2690, 4064-4093) route through the ULA's port dispatch
+  (`ULA.SetNextCTC`); NR$C5 writes set/clear the channels'
+  interrupt-enable control bits and reads compose them back live. The
+  channels count CLK_28 lazily: they batch-advance from
+  `z80.Ref8Tstates` at observation points (port access, NR$C5, the
+  per-instruction INT poll) with an O(1) timer fast path pinned
+  tick-exact against the golden model. A ZC/TO on an int-enabled
+  channel asserts the legacy pulse-mode INT for 32 CPU cycles
+  (im2_peripheral.vhd:186 → pulse_int_n, zxnext.vhd:2014-2043) through
+  `z80.CPU.ExtIntFunc`, the CPU's external-INT-line hook. Gaps: no
+  hardware-IM2 vectored delivery for CTC sources, no counter-mode ZC/TO
+  cascade between channels, no NR$C8-$CA CTC status bits.
 - Stackless NMI (NR$C0 bit 3 + NR$C2/$C3 return address) is wired into
   the CPU.
 
