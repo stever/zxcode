@@ -24,7 +24,7 @@ func (b *fat32Builder) readChain(first uint32, size int) []byte {
 		if size-len(out) < n {
 			n = size - len(out)
 		}
-		out = append(out, b.img[off:off+n]...)
+		out = append(out, b.rd(off, n)...)
 	}
 	return out
 }
@@ -33,7 +33,7 @@ func (b *fat32Builder) readFileBytes(dirClus uint32, name83 string) ([]byte, boo
 	want := string(path83To11(name83))
 	for c := dirClus; c >= 2 && c < 0x0FFFFFF8; c = b.getFAT(c) {
 		off := b.clusterOffset(c)
-		cluster := b.img[off : off+b.spc*512]
+		cluster := b.rd(off, b.spc*512)
 		for i := 0; i+32 <= len(cluster); i += 32 {
 			e := cluster[i : i+32]
 			if e[0] == 0 {
@@ -56,7 +56,7 @@ func (b *fat32Builder) readFileBytes(dirClus uint32, name83 string) ([]byte, boo
 // readPath reads /dir/.../NAME.EXT from a FAT32 image for test verification.
 func readPath(t *testing.T, img []byte, dirPath, file83 string) []byte {
 	t.Helper()
-	b, err := openFAT32(img)
+	b, err := openFAT32(byteImage(img))
 	if err != nil {
 		t.Fatalf("openFAT32: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestAddFileToFAT32_RoundTrips(t *testing.T) {
 // and returns the file bytes.
 func readLongPath(t *testing.T, img []byte, dirPath, name string) []byte {
 	t.Helper()
-	b, err := openFAT32(img)
+	b, err := openFAT32(byteImage(img))
 	if err != nil {
 		t.Fatalf("openFAT32: %v", err)
 	}
@@ -144,7 +144,7 @@ func readLongPath(t *testing.T, img []byte, dirPath, name string) []byte {
 	if off < 0 {
 		t.Fatalf("file %q not found in %q", name, dirPath)
 	}
-	e := b.img[off : off+32]
+	e := b.rd(off, 32)
 	size := int(binary.LittleEndian.Uint32(e[28:32]))
 	first := uint32(binary.LittleEndian.Uint16(e[20:22]))<<16 |
 		uint32(binary.LittleEndian.Uint16(e[26:28]))
@@ -180,7 +180,7 @@ func TestWriteFileToFAT32_LongNames(t *testing.T) {
 	if got := readLongPath(t, img, "spr/really long dir", "sprites_enemigos_a0.spr"); !bytes.Equal(got, want2) {
 		t.Errorf("overwrite readback = %q, want %q", got, want2)
 	}
-	b, _ := openFAT32(img)
+	b, _ := openFAT32(byteImage(img))
 	dirClus := b.findSubdir(2, "spr")
 	dirClus = b.findSubdir(dirClus, "really long dir")
 	count := 0
@@ -276,7 +276,7 @@ func TestWriteFileToFAT32_DirtyFreeClusters(t *testing.T) {
 	// Dirty every free cluster with a pattern that mixes zero and
 	// nonzero first bytes across 32-byte dirent slots, like real
 	// deleted-file remnants.
-	b, err := openFAT32(img)
+	b, err := openFAT32(byteImage(img))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestWriteFileToFAT32_DirtyFreeClusters(t *testing.T) {
 	}
 	for c := uint32(2); c < b.clusters+2; c++ {
 		if b.getFAT(c) == 0 {
-			copy(b.img[b.clusterOffset(c):], junk)
+			b.wr(b.clusterOffset(c), junk)
 		}
 	}
 

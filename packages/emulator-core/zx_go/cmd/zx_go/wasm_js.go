@@ -18,6 +18,12 @@ import (
 
 var wasmEmu *emulator
 
+// In-progress sparse SD ingest (zxSdIngestBegin/Chunk → zxBootNext()).
+var (
+	sdIngestSrc *sdcard.SparseSource
+	sdIngestOff int64
+)
+
 // wasmTapeTraps mirrors the host page's "instant tape loading" toggle: when
 // true (the default, matching the site UI) the LD-BYTES fast-load trap is
 // installed on every boot; when false tapes load in real time through the
@@ -74,7 +80,41 @@ func setupWasmExports() {
 		return nil
 	}))
 
-	// zxBootNext(sd Uint8Array) -> "". Construction calls audio.New(), which
+	// zxSdIngestBegin(virtualSizeBytes) -> "" | error. Starts a streamed,
+	// SPARSE card ingest: the page feeds the (zip-inflated) image in
+	// chunks via zxSdIngestChunk and never materialises the flat image —
+	// all-zero spans allocate nothing, so a mostly-empty multi-hundred-MB
+	// card costs only its real bytes in RAM. Chunks are written
+	// sequentially from offset 0. zxBootNext() with no argument then
+	// mounts the ingested card.
+	g.Set("zxSdIngestBegin", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) < 1 {
+			return "zxSdIngestBegin: missing size"
+		}
+		src, err := sdcard.NewSparseSource(int64(a[0].Float()))
+		if err != nil {
+			return "zxSdIngestBegin: " + err.Error()
+		}
+		sdIngestSrc, sdIngestOff = src, 0
+		return ""
+	}))
+	g.Set("zxSdIngestChunk", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if sdIngestSrc == nil {
+			return "zxSdIngestChunk: no ingest in progress"
+		}
+		if len(a) < 1 || a[0].IsUndefined() || a[0].IsNull() {
+			return "zxSdIngestChunk: missing data"
+		}
+		buf := make([]byte, a[0].Get("length").Int())
+		js.CopyBytesToGo(buf, a[0])
+		sdIngestSrc.WriteAt(buf, sdIngestOff)
+		sdIngestOff += int64(len(buf))
+		return ""
+	}))
+
+	// zxBootNext(sd? Uint8Array) -> "". With an argument, mounts the flat
+	// image (legacy path); with none, mounts the card streamed in through
+	// zxSdIngestBegin/Chunk. Construction calls audio.New(), which
 	// blocks on oto's Web Audio "ready" channel; that channel only fires when
 	// the JS event loop turns, so the boot must run in a goroutine and let the
 	// synchronous js callback return. wasmEmu is set when the machine is up;
@@ -85,6 +125,8 @@ func setupWasmExports() {
 			sd = make([]byte, a[0].Get("length").Int())
 			js.CopyBytesToGo(sd, a[0])
 		}
+		ingest := sdIngestSrc
+		sdIngestSrc, sdIngestOff = nil, 0
 		go func() {
 			e, err := newNextEmulator()
 			if err != nil {
@@ -93,15 +135,23 @@ func setupWasmExports() {
 			}
 			// next.go's disk SD auto-load is skipped on wasm (SDCardImage()==""),
 			// so mount the passed image here, mirroring next.go's mount sequence.
+			var src sdImageStore
 			if sd != nil {
-				if src, serr := sdcard.NewImageSource(sd, false); serr == nil {
-					e.sdImageSrc = src
-					card := sdcard.NewCard(src)
-					if p, ok := e.ula.NextDivMMC().(*divmmc.Pager); ok {
-						p.SetCard(card)
-					}
+				if is, serr := sdcard.NewImageSource(sd, false); serr == nil {
+					src = is
 				} else {
 					js.Global().Get("console").Call("error", "zxBootNext sd: "+serr.Error())
+				}
+			} else if ingest != nil {
+				js.Global().Get("console").Call("log",
+					"zxBootNext: sparse SD card mounted, resident bytes:", ingest.ResidentBytes())
+				src = ingest
+			}
+			if src != nil {
+				e.sdImageSrc = src
+				card := sdcard.NewCard(src)
+				if p, ok := e.ula.NextDivMMC().(*divmmc.Pager); ok {
+					p.SetCard(card)
 				}
 			}
 			wasmEmu = e

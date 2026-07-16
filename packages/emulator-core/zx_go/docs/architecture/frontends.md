@@ -86,8 +86,15 @@ replacement for the JSSpeccy3 Emulator class:
   modules).
 - Keyboard: a worker-shaped shim feeds the JSSpeccy3 KeyboardHandler's
   `{row, mask}` messages into `zxMatrixKey`.
-- Assets: NextZXOS ROMs and the zipped SD image fetched from `/next/`,
-  inflated with JSZip, registered, then `zxBootNext`.
+- Assets: NextZXOS ROMs and the zipped SD image fetched from `/next/`.
+  The image is STREAMED into a sparse card (r55): JSZip's
+  `internalStream` feeds chunks to `zxSdIngestBegin/Chunk` and
+  `zxBootNext()` mounts the result — the flat image (512 MB shipped
+  geometry) is never materialised; only its real content (~5 MB) is
+  resident. The zipped bytes are kept and re-inflated per boot so a
+  machine switch gets a fresh card. Fallbacks: a zip without size
+  metadata inflates flat; deployments with only the raw `tbblue.mmc`
+  mount it flat via `zxBootNext(bytes)`.
 - `ENGINE_REV` is logged at boot; bump it on engine or translator
   changes (webpack-dev-server does not reliably rebuild workspace
   package edits).

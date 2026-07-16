@@ -13,6 +13,16 @@ import (
 // reached an interactive prompt.
 const nextMenuLoopPC = 0x0c90
 
+// sdImageStore is the writable card backing store the import/staging
+// paths (importAndRunNex/Bas, putSDFile) write through: the flat
+// ImageSource on desktop, the SparseSource in the browser. It is both
+// the SPI card's BlockSource and the FAT machinery's Image.
+type sdImageStore interface {
+	sdcard.BlockSource
+	sdcard.Image
+	Dirty() bool
+}
+
 // nexKeyMatrix maps the characters needed to type a NextZXOS command line onto
 // Spectrum keyboard-matrix (row, mask) presses. Symbols use SYMBOL SHIFT
 // (row 7, 0x02) plus the symbol's key. Paths are typed lowercase — the SD card
@@ -267,7 +277,7 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 	e.paused.Store(true)
 	// Disarm any auto-running autoexec.bas left by importAndRunBas — the
 	// macro below reboots, and a stale program would run over it.
-	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "nextzxos", "autoexec.bas", neutralAutoexec()); err != nil {
+	if _, err := sdcard.WriteFileToImage(e.sdImageSrc, "nextzxos", "autoexec.bas", neutralAutoexec()); err != nil {
 		slog.Warn("nex import: could not neutralise autoexec.bas", "err", err)
 	}
 	// Always import to one fixed, short 8.3 name at the card ROOT and OVERWRITE
@@ -280,7 +290,7 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 	// filename is irrelevant to the game; saves are game-managed, e.g.
 	// lonewolf.sav.)
 	const importedNexName = "zx.nex"
-	sdPath, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "", importedNexName, data)
+	sdPath, err := sdcard.WriteFileToImage(e.sdImageSrc, "", importedNexName, data)
 	if err != nil {
 		e.paused.Store(false)
 		slog.Error("nex import: copy to SD card failed", "file", fileName, "err", err)
@@ -288,8 +298,8 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 		return
 	}
 	// Persist so the imported game survives restarts (race-free while paused).
-	if e.sdImagePath != "" {
-		if err := e.sdImageSrc.WriteBackTo(e.sdImagePath); err != nil {
+	if flat, ok := e.sdImageSrc.(*sdcard.ImageSource); ok && e.sdImagePath != "" {
+		if err := flat.WriteBackTo(e.sdImagePath); err != nil {
 			slog.Warn("nex import: persisting to the SD image failed", "err", err)
 		}
 	}
@@ -313,19 +323,19 @@ func (e *emulator) importAndRunBas(data []byte) error {
 	}
 	e.paused.Store(true)
 	// Self-heal any auto-running autoexec.bas left by the earlier approach.
-	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "nextzxos", "autoexec.bas", neutralAutoexec()); err != nil {
+	if _, err := sdcard.WriteFileToImage(e.sdImageSrc, "nextzxos", "autoexec.bas", neutralAutoexec()); err != nil {
 		slog.Warn("bas import: could not neutralise autoexec.bas", "err", err)
 	}
 	// Root-level, fixed short name (mirrors the .nex import): keeps the typed
 	// `load "/zx.bas"` as short as possible so the keystroke macro finishes
 	// quicker than the old `/imported/program.bas`.
-	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), "", "zx.bas", data); err != nil {
+	if _, err := sdcard.WriteFileToImage(e.sdImageSrc, "", "zx.bas", data); err != nil {
 		e.paused.Store(false)
 		return fmt.Errorf("write zx.bas: %w", err)
 	}
 	// Persist so the program survives restarts (no-op on wasm: sdImagePath == "").
-	if e.sdImagePath != "" {
-		if err := e.sdImageSrc.WriteBackTo(e.sdImagePath); err != nil {
+	if flat, ok := e.sdImageSrc.(*sdcard.ImageSource); ok && e.sdImagePath != "" {
+		if err := flat.WriteBackTo(e.sdImagePath); err != nil {
 			slog.Warn("bas import: persisting to the SD image failed", "err", err)
 		}
 	}
@@ -361,11 +371,11 @@ func (e *emulator) putSDFile(filePath string, data []byte) error {
 	fileName := segments[len(segments)-1]
 	e.paused.Store(true)
 	defer e.paused.Store(false)
-	if _, err := sdcard.WriteFileToFAT32(e.sdImageSrc.Bytes(), dirPath, fileName, data); err != nil {
+	if _, err := sdcard.WriteFileToImage(e.sdImageSrc, dirPath, fileName, data); err != nil {
 		return err
 	}
-	if e.sdImagePath != "" {
-		if err := e.sdImageSrc.WriteBackTo(e.sdImagePath); err != nil {
+	if flat, ok := e.sdImageSrc.(*sdcard.ImageSource); ok && e.sdImagePath != "" {
+		if err := flat.WriteBackTo(e.sdImagePath); err != nil {
 			slog.Warn("sd put: persisting to the SD image failed", "file", filePath, "err", err)
 		}
 	}

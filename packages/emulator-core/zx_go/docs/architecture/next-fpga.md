@@ -434,10 +434,20 @@ raster instant (known-gaps.md).
   ReadAt-backed with guest writes captured in a RAM overlay, the file
   never modified; auto-selected by the desktop/headless loader for
   `ZX_GO_NEXT_SD_IMG` files over 1 GiB, e.g. a dd of a real card;
-  the .nex import path needs `ImageSource` so it is unavailable in
-  this mode), or a FAT32 image built from a host directory tree
-  (`BuildFAT32`, VFAT long names with ~N aliasing, the format
-  NextZXOS actually boots).
+  the .nex import path needs a writable store so it is unavailable in
+  this mode), a SPARSE image (`SparseSource`, r55 — only touched
+  16 KiB pages are resident, absent pages read as zeros and all-zero
+  writes allocate nothing, so a large-geometry card costs only its
+  real content in RAM; this is the browser's card: the wasm
+  `zxSdIngestBegin/Chunk` exports stream the zip-inflated shipped
+  image in without ever materialising it flat, and the 512 MB /
+  4 KB-cluster card mounts at ~5 MB resident), or a FAT32 image built
+  from a host directory tree (`BuildFAT32`, VFAT long names with ~N
+  aliasing, the format NextZXOS actually boots). The FAT staging
+  machinery (`WriteFileToImage`/`AddFileToImage`, used by .nex/.bas
+  import and `zxPutFile`) runs against any of these through the
+  `sdcard.Image` interface (ReadAt/WriteAt/Size); the historical
+  []byte entry points wrap it.
   `AddFileToFAT32`/`WriteFileToFAT32` insert or replace files in an
   existing image (this is what `zxPutFile` and .NEX import use). A
   directory grown past its first cluster gets its extension cluster

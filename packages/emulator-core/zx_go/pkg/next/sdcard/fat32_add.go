@@ -18,7 +18,13 @@ import (
 // directory, so re-importing the same name produces a fresh entry rather than
 // corrupting the directory.
 func AddFileToFAT32(img []byte, dirPath, fileName string, data []byte) (string, error) {
-	b, err := openFAT32(img)
+	return AddFileToImage(byteImage(img), dirPath, fileName, data)
+}
+
+// AddFileToImage is AddFileToFAT32 over any Image backing store
+// (flat or sparse).
+func AddFileToImage(dev Image, dirPath, fileName string, data []byte) (string, error) {
+	b, err := openFAT32(dev)
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +74,13 @@ func AddFileToFAT32(img []byte, dirPath, fileName string, data []byte) (string, 
 // match for replacement is the long name, case-insensitively, the way VFAT
 // matches. Returns the absolute SD-card path (short names).
 func WriteFileToFAT32(img []byte, dirPath, fileName string, data []byte) (string, error) {
-	b, err := openFAT32(img)
+	return WriteFileToImage(byteImage(img), dirPath, fileName, data)
+}
+
+// WriteFileToImage is WriteFileToFAT32 over any Image backing store
+// (flat or sparse).
+func WriteFileToImage(dev Image, dirPath, fileName string, data []byte) (string, error) {
+	b, err := openFAT32(dev)
 	if err != nil {
 		return "", err
 	}
@@ -100,7 +112,7 @@ func WriteFileToFAT32(img []byte, dirPath, fileName string, data []byte) (string
 	var name11 []byte
 	if off := b.findDirent(dirClus, fileName, false); off >= 0 {
 		b.repointDirent(off, first, uint32(n))
-		name11 = append([]byte(nil), b.img[off:off+11]...)
+		name11 = b.rd(off, 11)
 	} else {
 		short11, needLFN := shortAlias(fileName, b.collectUsed(dirClus))
 		if needLFN {
@@ -120,13 +132,14 @@ func WriteFileToFAT32(img []byte, dirPath, fileName string, data []byte) (string
 // offset off and repoints it at a freshly written chain (first/size),
 // keeping the entry (and any LFN chain ahead of it) in place.
 func (b *fat32Builder) repointDirent(off int, first, size uint32) {
-	e := b.img[off : off+32]
+	e := b.rd(off, 32)
 	old := uint32(binary.LittleEndian.Uint16(e[20:22]))<<16 |
 		uint32(binary.LittleEndian.Uint16(e[26:28]))
 	b.freeChain(old)
 	binary.LittleEndian.PutUint16(e[20:22], uint16(first>>16))
 	binary.LittleEndian.PutUint16(e[26:28], uint16(first&0xFFFF))
 	binary.LittleEndian.PutUint32(e[28:32], size)
+	b.wr(off, e)
 }
 
 // forEachDirent walks the live short entries of the directory chain at
@@ -142,7 +155,7 @@ func (b *fat32Builder) forEachDirent(dirClus uint32, fn func(off int, long strin
 	for c := dirClus; c >= 2 && c < 0x0FFFFFF8; c = b.getFAT(c) {
 		base := b.clusterOffset(c)
 		for i := 0; i+32 <= b.spc*512; i += 32 {
-			e := b.img[base+i : base+i+32]
+			e := b.rd(base+i, 32)
 			switch {
 			case e[0] == 0x00:
 				return // end of directory
@@ -214,7 +227,7 @@ func (b *fat32Builder) findDirent(dirClus uint32, name string, wantDir bool) int
 	}
 	found := -1
 	b.forEachDirent(dirClus, func(off int, long string) bool {
-		e := b.img[off : off+32]
+		e := b.rd(off, 32)
 		if e[11]&attrVolume != 0 || (e[11]&attrDir != 0) != wantDir {
 			return false
 		}
@@ -240,20 +253,24 @@ func (b *fat32Builder) freeChain(first uint32) {
 // openFAT32 reconstructs a builder over an existing FAT32 image so files can be
 // appended: it reads the BPB at the partition start, derives the FAT and data
 // offsets, and locates the first free cluster by scanning the FAT.
-func openFAT32(img []byte) (*fat32Builder, error) {
-	if len(img) < 512 || img[510] != 0x55 || img[511] != 0xAA {
+func openFAT32(dev Image) (*fat32Builder, error) {
+	mbr := make([]byte, 512)
+	if _, err := dev.ReadAt(mbr, 0); err != nil || mbr[510] != 0x55 || mbr[511] != 0xAA {
 		return nil, fmt.Errorf("sdcard: no MBR signature")
 	}
 	// The first partition's start LBA — don't assume the 1 MB-aligned
 	// value BuildFAT32 uses; real cards vary.
-	partLBA := int(binary.LittleEndian.Uint32(img[454:458]))
+	partLBA := int(binary.LittleEndian.Uint32(mbr[454:458]))
 	if partLBA == 0 {
 		partLBA = fat32PartLBA
 	}
-	if len(img) < (partLBA+1)*512 {
+	if dev.Size() < int64(partLBA+1)*512 {
 		return nil, fmt.Errorf("sdcard: image too small for its FAT32 partition")
 	}
-	bpb := img[partLBA*512:]
+	bpb := make([]byte, 512)
+	if _, err := dev.ReadAt(bpb, int64(partLBA)*512); err != nil {
+		return nil, fmt.Errorf("sdcard: reading FAT32 BPB: %w", err)
+	}
 	if bpb[510] != 0x55 || bpb[511] != 0xAA {
 		return nil, fmt.Errorf("sdcard: no boot signature at the FAT32 partition start (LBA %d)", partLBA)
 	}
@@ -271,10 +288,10 @@ func openFAT32(img []byte) (*fat32Builder, error) {
 	}
 	clusters := uint32((partSectors - reserved - numFATs*fatsz) / spc)
 	b := &fat32Builder{
-		img:          img,
+		dev:          dev,
 		spc:          spc,
 		fatsz:        fatsz,
-		totalSectors: len(img) / 512,
+		totalSectors: int(dev.Size() / 512),
 		clusters:     clusters,
 		fatOffset:    (partLBA + reserved) * 512,
 		dataOffset:   (partLBA + reserved + numFATs*fatsz) * 512,
@@ -299,7 +316,7 @@ func (b *fat32Builder) findSubdir(dirClus uint32, name string) uint32 {
 	if off < 0 {
 		return 0
 	}
-	e := b.img[off : off+32]
+	e := b.rd(off, 32)
 	return uint32(binary.LittleEndian.Uint16(e[20:22]))<<16 |
 		uint32(binary.LittleEndian.Uint16(e[26:28]))
 }
@@ -315,7 +332,7 @@ func (b *fat32Builder) createSubdir(dirClus uint32, name string) uint32 {
 	b.zeroCluster(sub)
 	dot := rawDirent([]byte(padFAT(".", 11)), attrDir, sub, 0)
 	dotdot := rawDirent([]byte(padFAT("..", 11)), attrDir, parentForDotDot(dirClus), 0)
-	copy(b.img[b.clusterOffset(sub):], append(dot, dotdot...))
+	b.wr(b.clusterOffset(sub), append(dot, dotdot...))
 	short11, needLFN := shortAlias(name, b.collectUsed(dirClus))
 	if needLFN {
 		b.writeLFN(dirClus, name, short11)
@@ -351,7 +368,7 @@ func (b *fat32Builder) writeData(data []byte) (uint32, int) {
 		if len(rem) < chunk {
 			chunk = len(rem)
 		}
-		copy(b.img[b.clusterOffset(c):], rem[:chunk])
+		b.wr(b.clusterOffset(c), rem[:chunk])
 		rem = rem[chunk:]
 	}
 	return first, len(data)
@@ -363,7 +380,7 @@ func (b *fat32Builder) collectUsed(dirClus uint32) map[string]bool {
 	used := map[string]bool{}
 	for c := dirClus; c >= 2 && c < 0x0FFFFFF8; c = b.getFAT(c) {
 		off := b.clusterOffset(c)
-		cluster := b.img[off : off+b.spc*512]
+		cluster := b.rd(off, b.spc*512)
 		for i := 0; i+32 <= len(cluster); i += 32 {
 			e := cluster[i : i+32]
 			if e[0] == 0x00 {
@@ -380,9 +397,7 @@ func (b *fat32Builder) collectUsed(dirClus uint32) map[string]bool {
 
 func (b *fat32Builder) zeroCluster(c uint32) {
 	off := b.clusterOffset(c)
-	for i := 0; i < b.spc*512; i++ {
-		b.img[off+i] = 0
-	}
+	b.wr(off, make([]byte, b.spc*512))
 }
 
 // name83ToPath turns an 11-byte 8.3 dirent name into a "NAME.EXT" path segment.

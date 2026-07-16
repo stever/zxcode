@@ -40,7 +40,7 @@ func TestNexImportAndLoadIfPresent(t *testing.T) {
 
 	// Insert into the live in-memory image (no WriteBackTo: the on-disk
 	// image is not modified).
-	sdPath, err := sdcard.AddFileToFAT32(emu.sdImageSrc.Bytes(), "imported", "warhawk.nex", data)
+	sdPath, err := sdcard.AddFileToImage(emu.sdImageSrc, "imported", "warhawk.nex", data)
 	if err != nil {
 		t.Fatalf("AddFileToFAT32: %v", err)
 	}

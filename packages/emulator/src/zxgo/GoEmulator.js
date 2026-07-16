@@ -196,7 +196,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r54-next-hw-im2-vectored';
+        const ENGINE_REV = 'r55-sparse-sd-card';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -617,30 +617,53 @@ export class GoEmulator extends EventEmitter {
                 if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
                 return new Uint8Array(await r.arrayBuffer());
             };
-            // The SD image is 64MB but mostly empty space — the staged zip is a
-            // ~2.3MB download. Deployments staged before the zip existed only
-            // have the raw image, so fall back to it when the zip is absent.
-            const fetchSd = async () => {
-                const zipped = await fetchBin('tbblue.mmc.zip');
-                if (zipped) {
-                    const zip = await JSZip.loadAsync(zipped);
-                    const entry = zip.file('tbblue.mmc') ||
-                        zip.filter((path) => path.toLowerCase().endsWith('.mmc'))[0];
-                    if (!entry) throw new Error('tbblue.mmc.zip: no .mmc image inside');
-                    return entry.async('uint8array');
-                }
-                return fetchBin('tbblue.mmc');
-            };
-            const [zx, mmc, sd] = await Promise.all(
-                [fetchBin('enNextZX.rom'), fetchBin('enNxtmmc.rom'), fetchSd()]);
-            if (!zx || !mmc || !sd) {
+            // The SD image is mostly empty space — the staged zip is a few-MB
+            // download whatever the card's virtual size. Keep the ZIPPED bytes
+            // and re-inflate per boot (each boot gets a fresh card), streaming
+            // the image into the core's SPARSE card so the flat image is never
+            // materialised — that is what allows a large-geometry card (big
+            // FAT32 clusters, room for big game payloads) at a RAM cost of
+            // only its real content. Deployments staged before the zip existed
+            // only have the raw image; fall back to it (flat mount) then.
+            const [zx, mmc, sdZip] = await Promise.all(
+                [fetchBin('enNextZX.rom'), fetchBin('enNxtmmc.rom'), fetchBin('tbblue.mmc.zip')]);
+            const sdRaw = sdZip ? null : await fetchBin('tbblue.mmc');
+            if (!zx || !mmc || (!sdZip && !sdRaw)) {
                 throw new Error('Next system assets missing from /next/ — stage them (packages/emulator-core/scripts/stage-zxnext-assets.sh)');
             }
-            this.nextAssets = { zx, mmc, sd };
+            this.nextAssets = { zx, mmc, sdZip, sdRaw };
         }
         globalThis.zxRegisterROM('enNextZX.rom', this.nextAssets.zx);
         globalThis.zxRegisterROM('enNxtmmc.rom', this.nextAssets.mmc);
-        const err = globalThis.zxBootNext(this.nextAssets.sd);
+        let err;
+        const { sdZip, sdRaw } = this.nextAssets;
+        if (sdZip) {
+            const zip = await JSZip.loadAsync(sdZip);
+            const entry = zip.file('tbblue.mmc') ||
+                zip.filter((path) => path.toLowerCase().endsWith('.mmc'))[0];
+            if (!entry) throw new Error('tbblue.mmc.zip: no .mmc image inside');
+            const size = entry._data && entry._data.uncompressedSize;
+            if (size && globalThis.zxSdIngestBegin) {
+                const beginErr = globalThis.zxSdIngestBegin(size);
+                if (beginErr) throw new Error(beginErr);
+                await new Promise((resolve, reject) => {
+                    entry.internalStream('uint8array')
+                        .on('data', (chunk) => {
+                            const e = globalThis.zxSdIngestChunk(chunk);
+                            if (e) reject(new Error(e));
+                        })
+                        .on('error', reject)
+                        .on('end', resolve)
+                        .resume();
+                });
+                err = globalThis.zxBootNext();
+            } else {
+                // No streamable size metadata: inflate flat (legacy mount).
+                err = globalThis.zxBootNext(await entry.async('uint8array'));
+            }
+        } else {
+            err = globalThis.zxBootNext(sdRaw);
+        }
         if (err) throw new Error(err);
         // Wait for the Next machine to replace the previous one (goroutine).
         await this.waitForModel('Next');

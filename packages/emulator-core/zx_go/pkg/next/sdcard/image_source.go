@@ -84,3 +84,23 @@ func (s *ImageSource) Capacity() uint32 {
 // want to inspect contents (e.g. for verifying a NextZXOS write
 // landed at the right LBA) use this.
 func (s *ImageSource) Bytes() []byte { return s.data }
+
+// ReadAt/WriteAt/Size implement the Image interface so the FAT
+// staging machinery (WriteFileToImage etc.) writes through the same
+// backing store the guest reads.
+func (s *ImageSource) ReadAt(p []byte, off int64) (int, error) {
+	return byteImage(s.data).ReadAt(p, off)
+}
+
+func (s *ImageSource) WriteAt(p []byte, off int64) (int, error) {
+	if s.readOnly {
+		return 0, fmt.Errorf("sdcard: image is read-only")
+	}
+	n, err := byteImage(s.data).WriteAt(p, off)
+	if n > 0 {
+		s.dirty = true
+	}
+	return n, err
+}
+
+func (s *ImageSource) Size() int64 { return int64(len(s.data)) }

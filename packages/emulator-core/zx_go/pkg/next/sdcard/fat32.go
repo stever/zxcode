@@ -54,6 +54,60 @@ const (
 	fat32Reserved = 32   // reserved sectors
 )
 
+// Image is the byte-addressable card image the FAT machinery works
+// on: a flat in-memory slice (ImageSource / a plain []byte via
+// byteImage) or a sparse page store (SparseSource) whose virtual
+// size far exceeds its resident bytes. Offsets are absolute image
+// bytes (LBA*512).
+type Image interface {
+	io.ReaderAt
+	io.WriterAt
+	// Size is the virtual image size in bytes.
+	Size() int64
+}
+
+// byteImage adapts a flat []byte to the Image interface for the
+// existing []byte-based entry points.
+type byteImage []byte
+
+func (b byteImage) ReadAt(p []byte, off int64) (int, error) {
+	if off >= int64(len(b)) {
+		return 0, io.EOF
+	}
+	n := copy(p, b[off:])
+	if n < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+func (b byteImage) WriteAt(p []byte, off int64) (int, error) {
+	if off >= int64(len(b)) {
+		return 0, io.ErrShortWrite
+	}
+	n := copy(b[off:], p)
+	if n < len(p) {
+		return n, io.ErrShortWrite
+	}
+	return n, nil
+}
+
+func (b byteImage) Size() int64 { return int64(len(b)) }
+
+// rd copies n bytes at off out of the image. Short reads (past the
+// virtual end) return zero-filled tails — matching how absent sparse
+// pages read.
+func (b *fat32Builder) rd(off, n int) []byte {
+	p := make([]byte, n)
+	b.dev.ReadAt(p, int64(off))
+	return p
+}
+
+// wr copies p into the image at off.
+func (b *fat32Builder) wr(off int, p []byte) {
+	b.dev.WriteAt(p, int64(off))
+}
+
 // BuildFAT32 walks dir and produces a FAT32-LBA image containing
 // every file and subdirectory under it (macOS metadata skipped).
 func BuildFAT32(dir string, opts FAT32Opts) ([]byte, error) {
@@ -93,7 +147,7 @@ func BuildFAT32(dir string, opts FAT32Opts) ([]byte, error) {
 
 	img := make([]byte, totalSectors*sectorSize)
 	b := &fat32Builder{
-		img:          img,
+		dev:          byteImage(img),
 		spc:          spc,
 		fatsz:        fatsz,
 		totalSectors: totalSectors,
@@ -136,7 +190,7 @@ func clustersFor(partSectors, spc int) uint32 {
 }
 
 type fat32Builder struct {
-	img          []byte
+	dev          Image
 	spc          int
 	fatsz        int
 	totalSectors int
@@ -157,19 +211,21 @@ type fat32Builder struct {
 }
 
 func (b *fat32Builder) writeMBR() {
-	pte := b.img[446:462]
+	s := b.rd(0, 512)
+	pte := s[446:462]
 	pte[0] = 0x00
 	pte[1], pte[2], pte[3] = 0x00, 0x21, 0x20 // CHS first (ignored)
 	pte[4] = 0x0C                             // FAT32 LBA
 	pte[5], pte[6], pte[7] = 0xFE, 0xFF, 0xFF // CHS last (ignored)
 	binary.LittleEndian.PutUint32(pte[8:12], fat32PartLBA)
 	binary.LittleEndian.PutUint32(pte[12:16], uint32(b.totalSectors-fat32PartLBA))
-	b.img[510], b.img[511] = 0x55, 0xAA
+	s[510], s[511] = 0x55, 0xAA
+	b.wr(0, s)
 }
 
 func (b *fat32Builder) writeBPB(sector int) {
 	off := (fat32PartLBA + sector) * 512
-	s := b.img[off : off+512]
+	s := make([]byte, 512)
 	partSectors := b.totalSectors - fat32PartLBA
 	s[0], s[1], s[2] = 0xEB, 0x58, 0x90
 	copy(s[3:11], []byte("MSWIN4.1"))
@@ -195,16 +251,18 @@ func (b *fat32Builder) writeBPB(sector int) {
 	copy(s[71:82], padFAT(b.label, 11))
 	copy(s[82:90], []byte("FAT32   "))
 	s[510], s[511] = 0x55, 0xAA
+	b.wr(off, s)
 }
 
 func (b *fat32Builder) writeFSInfo(sector int) {
 	off := (fat32PartLBA + sector) * 512
-	s := b.img[off : off+512]
+	s := make([]byte, 512)
 	binary.LittleEndian.PutUint32(s[0:4], 0x41615252)
 	binary.LittleEndian.PutUint32(s[484:488], 0x61417272)
 	binary.LittleEndian.PutUint32(s[488:492], 0xFFFFFFFF) // free count unknown
 	binary.LittleEndian.PutUint32(s[492:496], 0xFFFFFFFF) // next free unknown
 	binary.LittleEndian.PutUint32(s[508:512], 0xAA550000)
+	b.wr(off, s)
 }
 
 func (b *fat32Builder) initFAT() {
@@ -214,18 +272,27 @@ func (b *fat32Builder) initFAT() {
 
 func (b *fat32Builder) setFAT(c, v uint32) {
 	off := b.fatOffset + int(c)*4
-	cur := binary.LittleEndian.Uint32(b.img[off : off+4])
-	binary.LittleEndian.PutUint32(b.img[off:off+4], cur&0xF0000000|v&0x0FFFFFFF)
+	e := b.rd(off, 4)
+	cur := binary.LittleEndian.Uint32(e)
+	binary.LittleEndian.PutUint32(e, cur&0xF0000000|v&0x0FFFFFFF)
+	b.wr(off, e)
 }
 
 func (b *fat32Builder) getFAT(c uint32) uint32 {
 	off := b.fatOffset + int(c)*4
-	return binary.LittleEndian.Uint32(b.img[off:off+4]) & 0x0FFFFFFF
+	return binary.LittleEndian.Uint32(b.rd(off, 4)) & 0x0FFFFFFF
 }
 
 func (b *fat32Builder) mirrorFAT() {
-	src := b.img[b.fatOffset : b.fatOffset+b.fatsz*512]
-	copy(b.img[b.fatOffset+b.fatsz*512:], src)
+	// Chunked copy so a sparse image never materialises the whole FAT.
+	const chunk = 64 * 1024
+	for done := 0; done < b.fatsz*512; done += chunk {
+		n := b.fatsz*512 - done
+		if n > chunk {
+			n = chunk
+		}
+		b.wr(b.fatOffset+b.fatsz*512+done, b.rd(b.fatOffset+done, n))
+	}
 }
 
 func (b *fat32Builder) allocCluster() uint32 {
@@ -265,10 +332,10 @@ func (b *fat32Builder) appendDirent(dirClus uint32, ent []byte) bool {
 	c := dirClus
 	for {
 		off := b.clusterOffset(c)
-		clusterBytes := b.img[off : off+b.spc*512]
+		clusterBytes := b.rd(off, b.spc*512)
 		for i := 0; i+32 <= len(clusterBytes); i += 32 {
 			if clusterBytes[i] == 0 {
-				copy(clusterBytes[i:i+32], ent)
+				b.wr(off+i, ent)
 				return true
 			}
 		}
@@ -337,7 +404,7 @@ func (b *fat32Builder) addTree(hostPath string, dirClus uint32) error {
 			// "." and ".." first, per spec.
 			dot := rawDirent([]byte(padFAT(".", 11)), attrDir, sub, 0)
 			dotdot := rawDirent([]byte(padFAT("..", 11)), attrDir, parentForDotDot(dirClus), 0)
-			copy(b.img[b.clusterOffset(sub):], append(dot, dotdot...))
+			b.wr(b.clusterOffset(sub), append(dot, dotdot...))
 			if needLFN {
 				b.writeLFN(dirClus, name, short11)
 			}
@@ -419,9 +486,11 @@ func (b *fat32Builder) writeFile(path string, size int64) (uint32, int64) {
 		// in (and shift the rest of) a multi-cluster file while the
 		// loop advances `remaining` by the full chunk — silent
 		// corruption of any file larger than one short read.
-		if _, err := io.ReadFull(f, b.img[off:off+int(chunk)]); err != nil {
+		buf := make([]byte, chunk)
+		if _, err := io.ReadFull(f, buf); err != nil {
 			return 0, 0
 		}
+		b.wr(off, buf)
 		remaining -= chunk
 	}
 	return first, size

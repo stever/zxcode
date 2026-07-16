@@ -140,11 +140,13 @@ type emulator struct {
 	tapeReadActive bool
 	tapeIdleTicks  int // consecutive ticks the loader has been idle (auto-pause)
 
-	// SD write-back (opt-in via --sd-writeback): the mounted image
-	// source + its file path, so guest writes can be persisted at
-	// exit. nil/"" when the flag is off or no file-backed image is
-	// mounted.
-	sdImageSrc  *sdcard.ImageSource
+	// sdImageSrc is the live card backing store the import/staging
+	// paths write through (.nex/.bas import, zxPutFile): a flat
+	// ImageSource on desktop or a SparseSource in the browser. nil
+	// when no writable card image is mounted (folder mode without an
+	// image, classic machines). sdImagePath is the opt-in write-back
+	// path (--sd-writeback, flat images only).
+	sdImageSrc  sdImageStore
 	sdImagePath string
 	ula         *ula.ULA
 	kbd         *keyboard.Keyboard
@@ -980,10 +982,11 @@ func writeScreenshotPNG(emu *emulator, w io.Writer) error {
 // .bak (see ImageSource.WriteBackTo). No-op when the flag is off,
 // no image is mounted, or the guest never wrote.
 func (e *emulator) flushSDWriteback() {
-	if e.sdImageSrc == nil || e.sdImagePath == "" || !e.sdImageSrc.Dirty() {
+	flat, ok := e.sdImageSrc.(*sdcard.ImageSource)
+	if !ok || e.sdImagePath == "" || !flat.Dirty() {
 		return
 	}
-	if err := e.sdImageSrc.WriteBackTo(e.sdImagePath); err != nil {
+	if err := flat.WriteBackTo(e.sdImagePath); err != nil {
 		slog.Error("sd-writeback failed", "path", e.sdImagePath, "err", err)
 		return
 	}
