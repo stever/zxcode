@@ -176,6 +176,9 @@ export class GoEmulator extends EventEmitter {
         this.pendingBoot = null;
         this.isReady = false;
         this.onReadyHandlers = [];
+        // Loading overlay state (see showLoading/doneLoading below).
+        this.loadingHold = false;
+        this.macroWatch = null;
 
         // Frame buffer (sized on the first frame the core reports).
         this.frameW = 0; this.frameH = 0;
@@ -196,7 +199,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r56-browser-nex-launch';
+        const ENGINE_REV = 'r56-browser-nex-launch+spinner';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -694,15 +697,22 @@ export class GoEmulator extends EventEmitter {
         const gameDir = dirParts.length
             ? dirParts[dirParts.length - 1]
             : (nexName.replace(/\.nex$/i, '') || 'game');
+        let staged = 0;
         for (const { path, file } of entries) {
             if (path === nexEntry.path) continue; // zxRunNex stages the .nex itself
+            // The count updates between files (JSZip's inflate yields to the
+            // event loop), so the overlay shows staging progress even though
+            // the emulator's own rendering is starved.
+            this.showLoading(`Loading ${gameDir}… (${++staged}/${entries.length - 1} files)`);
             const rel = path.startsWith(nexDir) ? path.slice(nexDir.length) : path;
             const err = globalThis.zxPutFile(`${gameDir}/${rel}`, await file.async('uint8array'));
             if (err) console.warn(`zxplay: SD stage skipped "${gameDir}/${rel}": ${err}`);
         }
+        this.showLoading(`Starting ${nexName}…`);
         const err = globalThis.zxRunNex(
             `${gameDir}/${nexName}`, await nexEntry.file.async('uint8array'));
         if (err) throw new Error(err);
+        this.watchMacroThenDoneLoading();
         return { mediaType: 'nex' };
     }
 
@@ -715,8 +725,10 @@ export class GoEmulator extends EventEmitter {
         // whether to boot — otherwise machineType lags and we double-boot.
         await this.whenMachineReady();
         if (this.machineType !== 'next') await this.bootNext();
+        this.showLoading(`Starting ${name || 'game.nex'}…`);
         const err = globalThis.zxRunNex(name || 'game.nex', data);
         if (err) throw new Error(err);
+        this.watchMacroThenDoneLoading();
         return { mediaType: 'nex' };
     }
 
@@ -886,11 +898,46 @@ export class GoEmulator extends EventEmitter {
         }
     }
 
+    // Loading overlay drivers. 'loading' shows the spinner pill (or updates
+    // its text); 'loadingDone' removes it. UIController renders them; the
+    // spinner is CSS-animated so it keeps moving even while the main thread
+    // is saturated (large-zip staging blocks rendering for minutes and the
+    // canvas freezes — without this the page looks dead).
+    showLoading(message) {
+        this.emit('loading', message);
+    }
+
+    doneLoading() {
+        this.loadingHold = false;
+        if (this.macroWatch) { clearInterval(this.macroWatch); this.macroWatch = null; }
+        this.emit('loadingDone');
+    }
+
+    // Keep the overlay up (message already set by the caller) until the
+    // core's launch macro finishes driving NextZXOS — the stretch between
+    // zxRunNex and the game actually starting, where the screen shows a
+    // reboot the user didn't ask for. loadingHold tells openFile/openUrl
+    // not to hide the overlay when their opener resolves.
+    watchMacroThenDoneLoading() {
+        this.loadingHold = true;
+        if (this.macroWatch) clearInterval(this.macroWatch);
+        const t0 = Date.now();
+        this.macroWatch = setInterval(() => {
+            const active = globalThis.zxMacroActive && globalThis.zxMacroActive();
+            if (!active || Date.now() - t0 > 180000) this.doneLoading();
+        }, 300);
+    }
+
     async openFile(file) {
         const opener = this.getFileOpener(file.name);
         if (opener) {
-            const buf = await file.arrayBuffer();
-            return opener(buf).catch(err => { alert(err); });
+            this.showLoading('Loading…');
+            try {
+                const buf = await file.arrayBuffer();
+                return await opener(buf).catch(err => { alert(err); });
+            } finally {
+                if (!this.loadingHold) this.doneLoading();
+            }
         } else {
             throw 'Unrecognised file type: ' + file.name;
         }
@@ -899,9 +946,14 @@ export class GoEmulator extends EventEmitter {
     async openUrl(url) {
         const opener = this.getFileOpener(url.toString());
         if (opener) {
-            const response = await fetch(url);
-            const buf = await response.arrayBuffer();
-            return opener(buf);
+            this.showLoading('Downloading…');
+            try {
+                const response = await fetch(url);
+                const buf = await response.arrayBuffer();
+                return await opener(buf);
+            } finally {
+                if (!this.loadingHold) this.doneLoading();
+            }
         } else {
             throw 'Unrecognised file type: ' + url.split('/').pop();
         }

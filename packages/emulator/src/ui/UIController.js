@@ -75,6 +75,56 @@ export class UIController extends EventEmitter {
             emulator.start();
         });
 
+        /* loading overlay: a spinner pill over the top of the display,
+        driven by the emulator's 'loading' / 'loadingDone' events. Large
+        game imports stage files on the main thread for minutes, freezing
+        the canvas — the spinner is CSS-animated (compositor thread) so it
+        keeps moving through the grind and the page doesn't look dead. */
+        if (!document.getElementById('jsspeccy-spin-style')) {
+            const style = document.createElement('style');
+            style.id = 'jsspeccy-spin-style';
+            style.textContent =
+                '@keyframes jsspeccy-spin { to { transform: rotate(360deg); } }';
+            document.head.appendChild(style);
+        }
+        this.loadingPill = document.createElement('div');
+        this.appContainer.appendChild(this.loadingPill);
+        this.loadingPill.style.display = 'none';
+        this.loadingPill.style.position = 'absolute';
+        this.loadingPill.style.top = '40px';
+        this.loadingPill.style.left = '50%';
+        this.loadingPill.style.transform = 'translateX(-50%)';
+        this.loadingPill.style.alignItems = 'center';
+        this.loadingPill.style.gap = '10px';
+        this.loadingPill.style.padding = '8px 16px';
+        this.loadingPill.style.backgroundColor = 'rgba(32, 32, 32, 0.85)';
+        this.loadingPill.style.color = '#fff';
+        this.loadingPill.style.borderRadius = '17px';
+        this.loadingPill.style.font = '14px sans-serif';
+        this.loadingPill.style.whiteSpace = 'nowrap';
+        this.loadingPill.style.pointerEvents = 'none';
+        this.loadingPill.style.zIndex = '90';
+        const spinner = document.createElement('div');
+        this.loadingPill.appendChild(spinner);
+        spinner.style.width = '16px';
+        spinner.style.height = '16px';
+        spinner.style.flex = 'none';
+        spinner.style.border = '3px solid rgba(255, 255, 255, 0.3)';
+        spinner.style.borderTopColor = '#fff';
+        spinner.style.borderRadius = '50%';
+        spinner.style.animation = 'jsspeccy-spin 0.9s linear infinite';
+        this.loadingText = document.createElement('span');
+        this.loadingPill.appendChild(this.loadingText);
+
+        emulator.on('loading', (message) => {
+            this.loadingText.textContent = message || 'Loading…';
+            this.loadingPill.style.display = 'flex';
+        });
+
+        emulator.on('loadingDone', () => {
+            this.loadingPill.style.display = 'none';
+        });
+
         emulator.on('start', () => {
             this.startButton.style.display = 'none';
         });
