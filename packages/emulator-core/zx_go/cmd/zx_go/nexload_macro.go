@@ -90,6 +90,14 @@ type macroStep struct {
 	// (see progress); required for the condition-driven steps whose
 	// frames field is 0.
 	estFrames int
+	// waitLoad runs until the guest has read loadBytes worth of SD data
+	// blocks since the step began (or a size-scaled timeout): the
+	// .nexload file transfer triggered by the macro's final ENTER. The
+	// step's in-progress fraction is byte-based, so the loading ring
+	// tracks the actual file transfer; it also keeps the macro (and the
+	// boot fast-forward, which ends at the tail) covering the load.
+	waitLoad  bool
+	loadBytes int
 }
 
 // nextMenuCursorAddr is the logical address NextZXOS keeps the main-menu
@@ -134,6 +142,51 @@ type nexloadMacro struct {
 	// SPACE that dismisses the welcome) must watch the transition leave
 	// and come back before a short streak counts (see tick).
 	menuSawAway bool
+	// waitLoad bookkeeping: the card's data-block counter at step entry,
+	// the bytes observed since, and the step-frame of the last increase
+	// (idle detection) — see tick / progress.
+	loadBase     uint64
+	loadSeen     int
+	loadLastMove int
+}
+
+// nexLoadableSize returns how many bytes of a .nex file NextZXOS's .nexload
+// actually reads: the 512-byte header, the loading-screen blocks its flags
+// announce, and 16K per bank to load. Self-streaming games append payload
+// the loader never touches (Atic Atac: a 111MB appendix after 3 banks), so
+// the FILE size wildly overstates the launch transfer. V1.3-only screen
+// types (bits 5-6) are not sized here — an undercount only makes the ring
+// finish early, and the waitLoad idle detection closes the gap. Anything
+// unparseable reports the file size.
+func nexLoadableSize(data []byte) int {
+	if len(data) < 512 || string(data[0:4]) != "Next" {
+		return len(data)
+	}
+	n := 512
+	flags := data[10]
+	if flags&0x80 == 0 && flags&(0x01|0x04) != 0 {
+		n += 512 // palette block (Layer 2 / LoRes screens without no-palette)
+	}
+	if flags&0x01 != 0 {
+		n += 49152 // Layer 2 256x192 loading screen
+	}
+	if flags&0x02 != 0 {
+		n += 6912 // ULA screen
+	}
+	if flags&0x04 != 0 {
+		n += 12288 // LoRes
+	}
+	if flags&0x08 != 0 {
+		n += 12288 // Timex HiRes
+	}
+	if flags&0x10 != 0 {
+		n += 12288 // Timex HiCol
+	}
+	n += int(data[9]) * 16384
+	if n > len(data) {
+		n = len(data)
+	}
+	return n
 }
 
 // macroPromptSettleFrames is the settle pad after ENTER on "Command Line",
@@ -237,7 +290,7 @@ const browserDownGapFrames = 12
 // key-wait PC and the menu cursor byte both give ambiguous readings
 // through the welcome→menu transition, so state divination is avoided;
 // the pads are absorbed by the boot fast-forward in the browser.
-func newBrowserLaunchMacro(dirDowns, fileDowns int) *nexloadMacro {
+func newBrowserLaunchMacro(dirDowns, fileDowns, loadBytes int) *nexloadMacro {
 	var steps []macroStep
 	hold := func(keys [][2]int, frames int) { steps = append(steps, macroStep{keys: keys, frames: frames}) }
 	wait := func(frames int) { steps = append(steps, macroStep{frames: frames}) }
@@ -272,7 +325,19 @@ func newBrowserLaunchMacro(dirDowns, fileDowns int) *nexloadMacro {
 	wait(browserSettleFrames) // folder directory read
 	down(fileDowns)           // cursor to the .nex
 	enter()                   // launch: the OS runs .nexload on it
-	wait(100)                 // tail
+	// Meter the actual .nexload file transfer: SD data blocks since the
+	// ENTER, against the file's size. This is the ring's home stretch —
+	// and because the boot fast-forward runs until the macro's tail, the
+	// load itself is time-compressed too. The nominal weight makes big
+	// files own most of the bar (their transfer IS most of the launch).
+	if loadBytes > 0 {
+		est := loadBytes / 2048
+		if est < 100 {
+			est = 100
+		}
+		steps = append(steps, macroStep{waitLoad: true, loadBytes: loadBytes, estFrames: est})
+	}
+	wait(100) // tail: the loaded program is running
 
 	return &nexloadMacro{steps: steps}
 }
@@ -298,12 +363,20 @@ func (m *nexloadMacro) progress() float64 {
 	}
 	total, done := 0, 0
 	for i := range m.steps {
-		n := nominal(&m.steps[i])
+		s := &m.steps[i]
+		n := nominal(s)
 		total += n
 		if i < m.idx {
 			done += n
 		} else if i == m.idx {
-			if m.frame < n {
+			if s.waitLoad && s.loadBytes > 0 {
+				// Byte-based: the ring tracks the actual file transfer.
+				f := float64(m.loadSeen) / float64(s.loadBytes)
+				if f > 1 {
+					f = 1
+				}
+				done += int(f * float64(n))
+			} else if m.frame < n {
 				done += m.frame
 			} else {
 				done += n
@@ -378,6 +451,33 @@ func (m *nexloadMacro) tick(e *emulator) bool {
 			slog.Debug("macro: waitMenu done", "idx", m.idx, "stepFrames", m.frame, "pc", fmt.Sprintf("$%04X", e.cpu.PC))
 			m.menuStreak = 0
 			m.menuSawAway = false
+			m.idx++
+			m.frame = 0
+		}
+		return false
+	}
+	if s.waitLoad {
+		if m.frame == 1 && e.sdCard != nil {
+			m.loadBase = e.sdCard.DataBlocksRead()
+			m.loadLastMove = 1
+		}
+		if e.sdCard != nil {
+			if seen := int(e.sdCard.DataBlocksRead()-m.loadBase) * 512; seen > m.loadSeen {
+				m.loadSeen = seen
+				m.loadLastMove = m.frame
+			}
+		}
+		// Complete when the loadable bytes have streamed (FAT and
+		// directory reads overcount slightly — harmless, the tail wait
+		// follows), when a started transfer goes SD-idle for 3 seconds
+		// (the loader read less than estimated — e.g. a V1.3 screen
+		// block not sized by nexLoadableSize, or a load error), when no
+		// card can be observed, or on a size-scaled timeout so a launch
+		// that never reads degrades to the old fixed-tail behaviour
+		// instead of wedging the macro.
+		idle := m.loadSeen > 0 && m.frame-m.loadLastMove > 150
+		if e.sdCard == nil || m.loadSeen >= s.loadBytes || idle || m.frame > 6000+s.loadBytes/512 {
+			slog.Debug("macro: waitLoad done", "idx", m.idx, "stepFrames", m.frame, "bytes", m.loadSeen)
 			m.idx++
 			m.frame = 0
 		}
@@ -518,7 +618,7 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 	}
 	slog.Info("nex import: loading via the NextZXOS Browser",
 		"file", fileName, "sdPath", sdPath, "dirDowns", dirDowns, "fileDowns", fileDowns)
-	e.startBrowserLaunchMacro(dirDowns, fileDowns)
+	e.startBrowserLaunchMacro(dirDowns, fileDowns, nexLoadableSize(data))
 }
 
 // browserRowsFor computes the cursor-DOWN counts the Browser macro needs
@@ -645,13 +745,13 @@ func (e *emulator) startNexloadMacro(sdPath string) {
 // runs its own .nexload on it exactly as when a user selects a .nex on
 // real hardware. The reboot guarantees a fresh OS state regardless of
 // what was running before.
-func (e *emulator) startBrowserLaunchMacro(dirDowns, fileDowns int) {
+func (e *emulator) startBrowserLaunchMacro(dirDowns, fileDowns, loadBytes int) {
 	e.reboot()
 	// Arm the macro before releasing pause: the emulation goroutine's
 	// run loop checks e.nexloadMacro on every frame it executes, so
 	// setting it first avoids a window where an unpaused frame runs
 	// with no macro driving it yet.
-	e.nexloadMacro = newBrowserLaunchMacro(dirDowns, fileDowns)
+	e.nexloadMacro = newBrowserLaunchMacro(dirDowns, fileDowns, loadBytes)
 	e.paused.Store(false)
 }
 

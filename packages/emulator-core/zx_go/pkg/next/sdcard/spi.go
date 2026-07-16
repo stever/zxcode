@@ -153,6 +153,11 @@ type Card struct {
 	// FPGA-bootrom path which expects SDHC addressing.
 	advertiseSDHC bool
 
+	// dataBlocksRead counts every 512-byte data block served to the
+	// guest (CMD17 single reads and each CMD18 streamed block alike).
+	// Pure telemetry: the .nex launch macro compares its delta against
+	// the file's size to meter load progress (DataBlocksRead).
+	dataBlocksRead uint64
 	// readCount seeds the per-read access-time (Nac) hash in
 	// handleReadBlock so consecutive reads of the same LBA still see
 	// different (deterministic) access times, like a real card's
@@ -167,6 +172,16 @@ func (c *Card) SetSDHC(on bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.advertiseSDHC = on
+}
+
+// DataBlocksRead returns the running count of 512-byte data blocks the
+// guest has read from this card (CMD17 and CMD18 alike). Deltas of this
+// meter guest-visible transfer volume — the .nex launch macro uses it to
+// report load progress against the launched file's size.
+func (c *Card) DataBlocksRead() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.dataBlocksRead
 }
 
 // SetLogger installs a per-command callback for debugging. Pass
@@ -330,6 +345,7 @@ func (c *Card) ReadData() byte {
 		c.rxQueue = append(c.rxQueue, 0xFF, 0xFF)
 		c.queueRawDataBlock(buf)
 		c.multiReadLBA++
+		c.dataBlocksRead++
 	}
 	var b byte = 0xFF
 	if len(c.rxQueue) > 0 {
@@ -613,6 +629,7 @@ func (c *Card) handleReadBlock(arg uint32) {
 	// the install re-locks its raster phase on an NR$1F poll each
 	// pass, so SD timing washes out. Kept small and faithful.)
 	c.readCount++
+	c.dataBlocksRead++
 	h := c.argToLBA(arg)*2654435761 ^ c.readCount*0x9E3779B9
 	h ^= h >> 16
 	nac := int(4 + h%61) // 4..64 byte-times

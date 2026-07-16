@@ -1407,6 +1407,7 @@ func wireNextSubsystems(e *emulator) error {
 			if os.Getenv("ZX_GO_NEXT_SDSC") == "" {
 				card.SetSDHC(true)
 			}
+			e.sdCard = card
 			pager.SetCard(card)
 			goto sdReady
 		}
@@ -1468,6 +1469,7 @@ func wireNextSubsystems(e *emulator) error {
 			if os.Getenv("ZX_GO_NEXT_SDSC") == "" {
 				card.SetSDHC(true)
 			}
+			e.sdCard = card
 			pager.SetCard(card)
 		}
 	} else {

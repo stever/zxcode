@@ -150,6 +150,7 @@ func setupWasmExports() {
 			if src != nil {
 				e.sdImageSrc = src
 				card := sdcard.NewCard(src)
+				e.sdCard = card
 				if p, ok := e.ula.NextDivMMC().(*divmmc.Pager); ok {
 					p.SetCard(card)
 				}

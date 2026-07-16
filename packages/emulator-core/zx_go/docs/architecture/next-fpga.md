@@ -462,7 +462,11 @@ raster instant (known-gaps.md).
   palette, loading screens, banks in the canonical load order).
   Bank/SP/PC application is the caller's job; in production the file is
   written onto the SD card and NextZXOS's own loader runs it via a typed
-  menu macro (`nexload_macro.go`), which keeps loading faithful.
+  menu macro (`nexload_macro.go`), which keeps loading faithful. The
+  macro's final step meters the loader's SD reads (the card's
+  `DataBlocksRead` counter) against the header-derived loader-visible
+  size (`nexLoadableSize` — self-streaming games append payload
+  `.nexload` never reads), feeding `zxMacroProgress()`.
 
 ## Peripheral blocks
 

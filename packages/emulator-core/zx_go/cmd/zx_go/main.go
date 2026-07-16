@@ -148,6 +148,9 @@ type emulator struct {
 	// path (--sd-writeback, flat images only).
 	sdImageSrc  sdImageStore
 	sdImagePath string
+	// sdCard is the live SPI card (when one is mounted); the .nex launch
+	// macro reads its DataBlocksRead counter to meter load progress.
+	sdCard *sdcard.Card
 	ula         *ula.ULA
 	kbd         *keyboard.Keyboard
 	peripherals *peripherals.PeripheralManager
