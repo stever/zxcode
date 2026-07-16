@@ -27,12 +27,12 @@ import (
 //     4078-4079, ctc_chan.vhd:270-271); NR$C5 reads compose the live
 //     bits back (zxnext.vhd:6242).
 //
-// Not modelled (documented gaps): the hardware-IM2 vectored mode for CTC
-// sources (the daisy chain in im2.go is not yet wired — NextZXOS and the
-// titles exercised so far run the CTC in legacy pulse mode), and the
-// channel-to-channel ZC/TO trigger cascade for COUNTER-mode channels
-// (i_clk_trg chaining, zxnext.vhd:4082) — a counter-mode channel
-// currently never sees edges.
+// The hardware-IM2 vectored mode (NR$C0 bit 0) is wired by IM2Block
+// (im2block.go), which suppresses this block's pulse line and feeds the
+// raw per-channel ZC/TO pulses (ConsumeZC) into the im2 daisy chain
+// instead. Not modelled (documented gap): the channel-to-channel ZC/TO
+// trigger cascade for COUNTER-mode channels (i_clk_trg chaining,
+// zxnext.vhd:4082) — a counter-mode channel currently never sees edges.
 type CTCBlock struct {
 	ch [4]*ctc.Channel
 
@@ -62,6 +62,12 @@ type CTCBlock struct {
 	// The FPGA's pulse_count runs on i_CLK_CPU, so the width in
 	// CLK_28 ticks is pulseTstates*8/speedMult.
 	pulseTstates uint64
+
+	// zcMask accumulates the channels that fired a ZC/TO since the
+	// last ConsumeZC — the RAW ctc_zc_to pulses (zxnext.vhd:1938),
+	// not gated by the channels' int enables (the im2 daisy chain
+	// applies its own i_int_en gating). Bit n = channel n.
+	zcMask byte
 }
 
 // NewCTCBlock builds the four hard-reset channels. clk28 supplies the
@@ -103,13 +109,30 @@ func (b *CTCBlock) catchUp() bool {
 	d := now - b.last28
 	b.last28 = now
 	fired := false
-	for _, c := range b.ch {
+	for i, c := range b.ch {
 		zcs := c.AdvanceIdle(d)
-		if zcs > 0 && c.IntEnabled() {
-			fired = true
+		if zcs > 0 {
+			b.zcMask |= 1 << uint(i)
+			if c.IntEnabled() {
+				fired = true
+			}
 		}
 	}
 	return fired
+}
+
+// ConsumeZC advances the channels to now and returns-and-clears the
+// mask of channels that fired a ZC/TO since the last consume (raw
+// pulses, bit n = channel n). The hardware-IM2 block polls this per
+// instruction to feed the im2 daisy chain's CTC request inputs.
+func (b *CTCBlock) ConsumeZC() byte {
+	b.catchUp()
+	m := b.zcMask
+	b.zcMask = 0
+	if m != 0 {
+		b.reschedule()
+	}
+	return m
 }
 
 // reschedule recomputes the earliest int-enabled ZC deadline.

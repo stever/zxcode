@@ -133,7 +133,9 @@ func newNext() (*Harness, error) {
 	u.SetNextDMA(dmaEngine)
 	// CTC channels + NR$C5 + pulse INT line — harness wiring parity
 	// with cmd/zx_go/next.go.
-	u.SetNextCTC(next.WireCTC(disp, cpu))
+	ctcBlk := next.WireCTC(disp, cpu)
+	u.SetNextCTC(ctcBlk)
+	next.WireIM2(disp, cpu, ctcBlk)
 	// zxnDMA bus hooks, mirroring the production wiring in
 	// cmd/zx_go/next.go: IO endpoints route through the ULA's port
 	// dispatch (without this an IO-source transfer reads $FF — the

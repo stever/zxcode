@@ -31,6 +31,12 @@ const (
 	VariantZ80N
 )
 
+// RouteIntFunc source identifiers.
+const (
+	IntSourceFrame = 0 // ULA frame INT pulse leading edge
+	IntSourceLine  = 1 // NR$22/$23 line INT pulse leading edge
+)
+
 // NextRegSink is the integration point for the Spectrum Next's
 // NextReg register file from the CPU side. The Z80N NEXTREG opcodes
 // (NEXTREG r,n and NEXTREG r,A) dispatch writes through this
@@ -131,6 +137,33 @@ type CPU struct {
 	// The callback owns the pulse-width bookkeeping; the CPU just
 	// samples the line level.
 	ExtIntFunc func(tstates uint64) bool
+
+	// IntAckFunc, when non-nil, is consulted at IM 2 interrupt
+	// acceptance for the data-bus vector byte. On the Spectrum Next
+	// in hardware-IM2 vectored mode (NR$C0 bit 0) the im2 daisy chain
+	// drives the bus during the INT-ack M1 cycle with
+	// `nr_c0_im2_vector & vector & '0'` (zxnext.vhd:1870/1999)
+	// instead of the classic open-bus $FF. Returning ok=false falls
+	// back to IM2Vector (pulse-mode acceptance, classic machines).
+	// The callback also advances the chain's ACK/ISR state.
+	IntAckFunc func() (vector byte, ok bool)
+
+	// OnRETI fires when the EXACT opcode pair ED 4D executes — the
+	// only encoding im2_control.vhd recognises as reti (line 234);
+	// the ED 5D/6D/7D mirrors behave as RETI on the Z80 but do not
+	// assert reti_seen. The Next's im2 daisy chain uses this as the
+	// end-of-interrupt that releases the in-service peripheral.
+	OnRETI func()
+
+	// RouteIntFunc, when non-nil, receives the leading edge of the
+	// ULA frame INT pulse (IntSourceFrame) or the NR$22/$23 line INT
+	// pulse (IntSourceLine) INSTEAD of the pulse latching IRQPending.
+	// Returning true consumes the event (the Next's hardware-IM2 mode
+	// routes it into the im2 daisy chain, which asserts the INT line
+	// itself via ExtIntFunc); returning false falls back to the
+	// legacy IRQPending latch (pulse mode, or the ULA exception when
+	// the Z80 is not in IM 2 — im2_peripheral.vhd:190-194).
+	RouteIntFunc func(source int) bool
 
 	// frameOriginRef is the current frame's origin on the 3.5 MHz-
 	// reference timeline (RefTstates units), recorded at each frame
@@ -879,7 +912,12 @@ func (c *CPU) frameIntPulse(frameStart uint64) {
 	switch {
 	case !c.frameIntFired && c.tstates >= assertAt:
 		c.frameIntFired = true
-		if c.tstates < assertAt+c.IntPulseTstates {
+		if c.RouteIntFunc != nil && c.RouteIntFunc(IntSourceFrame) {
+			// Consumed by the hardware-IM2 router (the im2 daisy chain
+			// latches the request and asserts INT itself); no level
+			// pulse to track.
+			c.frameIntDeasct = true
+		} else if c.tstates < assertAt+c.IntPulseTstates {
 			c.IRQPending.Store(true)
 		} else {
 			// The whole pulse window elapsed inside one instruction
@@ -981,7 +1019,9 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 		// interrupt uses — the CPU's M1 sample point handles both
 		// identically.
 		if lineIntAt != 0 && !c.lineIntFired && c.tstates >= lineIntAt {
-			c.IRQPending.Store(true)
+			if c.RouteIntFunc == nil || !c.RouteIntFunc(IntSourceLine) {
+				c.IRQPending.Store(true)
+			}
 			c.lineIntFired = true
 		}
 		// External (non-raster) INT sources — CTC pulse interrupts.
@@ -1333,7 +1373,9 @@ func (c *CPU) StepInstructionWithIRQ() {
 	if c.LineIntOffsetTstates > 0 && !c.lineIntFired {
 		frameStart := c.nextFrameBoundary - frameBudget
 		if c.tstates >= frameStart+c.LineIntOffsetTstates {
-			c.IRQPending.Store(true)
+			if c.RouteIntFunc == nil || !c.RouteIntFunc(IntSourceLine) {
+				c.IRQPending.Store(true)
+			}
 			c.lineIntFired = true
 		}
 	}
@@ -3100,6 +3142,11 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 		// leaves the divMMC automap latch alone. A game IM2 handler
 		// ending in RETI while the esxDOS overlay is paged in must NOT
 		// unmap it (see SetRETNHook).
+		// reti_seen (im2_control.vhd:234) is likewise the EXACT pair
+		// ED 4D — the mirrors do not release the im2 daisy chain.
+		if opcode == 0x4D && c.OnRETI != nil {
+			c.OnRETI()
+		}
 	case 0x45, 0x55, 0x65, 0x75: // RETN mirrors
 		popped := c.pop() // always pop (SP stays correct)
 		if c.NMIStackless && c.StacklessReadNR != nil {
@@ -4982,8 +5029,16 @@ func (c *CPU) interrupt() {
 		c.tstates += 13
 	case 2:
 		// IM2: Indirect jump using I register and data bus value.
-		// On the ZX Spectrum, the ULA places 0xFF on the bus during INTA.
-		addr := uint16(c.I)<<8 | uint16(c.IM2Vector)
+		// On the ZX Spectrum, the ULA places 0xFF on the bus during
+		// INTA; the Next's hardware-IM2 mode supplies a generated
+		// vector via IntAckFunc (zxnext.vhd:1870/1999).
+		vec := c.IM2Vector
+		if c.IntAckFunc != nil {
+			if v, ok := c.IntAckFunc(); ok {
+				vec = v
+			}
+		}
+		addr := uint16(c.I)<<8 | uint16(vec)
 		low := c.readMem(addr)
 		high := c.readMem(addr + 1)
 		c.push(c.PC)

@@ -176,11 +176,32 @@ im2-mode` → pulse_int_n, zxnext.vhd:2014-2043) via `z80.ExtIntFunc`.
 `pkg/next/ctcblock.go`; O(1) batch channel advance pinned tick-exact vs
 the golden channel model (`pkg/next/ctc/advance_test.go`);
 `TestWireCTCPulseInterrupt` / `TestWireCTCIntLineReasserts`.
-⚠️ Not modelled: hardware-IM2 vectored delivery for CTC sources (the
-im2.go daisy chain is still not wired to the CPU's INTACK), the
-counter-mode ZC/TO trigger cascade between channels (vhd:4082), NR$C8-$CA
-status bits for CTC, and port reads of a mid-count channel return the
-batch-advanced counter (exact at observation points).
+✅ Hardware-IM2 vectored interrupts (r54, #169): NR$C0 bit 0 switches the
+maskable-INT scheme from pulse to the im2 daisy chain
+(nr_c0_int_mode_pulse_0_im2_1) — `pkg/next/im2block.go` wires the
+golden-tested chain (im2.go ⇄ device/peripherals.vhd/im2_peripheral.vhd/
+im2_device.vhd) into the machine: line INT = vector 0, CTC 0-3 =
+vectors 3-6, ULA frame INT = vector 11 (priority = vector number,
+zxnext.vhd:1929-1944); requests latch per source until serviced; the
+Z80's IM2 acknowledge takes `NR$C0[7:5] & vector & '0'` from the chain
+(vhd:1870/1999, z80.CPU.IntAckFunc) instead of the open-bus $FF; the
+exact pair ED 4D is the end-of-interrupt (im2_control.vhd:234,
+z80.CPU.OnRETI); the ULA is the single EXCEPTION source that still
+pulses when the Z80 is not in IM 2 (im2_peripheral.vhd:190-194,
+vhd:1965); NR$20 injects unqualified requests (vhd:1946) and NR$C8/$C9
+expose sticky status with write-1-to-clear (vhd:1953). Root-caused and
+then verified against real silicon via the joy-port serial debugger
+(hwdebug/): TX-1696's audio install arms CTC ch0 + hw-IM2 and is caught
+mid-PUSH-slide — the game now loads and plays. TestWireIM2VectoredCTC-
+CatchesSlide / TestWireIM2RetiReleasesInService / TestWireIM2ULA-
+ExceptionWhenNotIM2 / TestWireIM2ULAVectoredWhenIM2 /
+TestWireIM2PulseModeUnchanged.
+⚠️ Not modelled: the counter-mode ZC/TO trigger cascade between channels
+(vhd:4082), UART interrupt sources (vectors 1, 2, 12, 13 — the UART
+generates no interrupts), NR$CC-$CE DMA-interrupt enables, pulse-mode
+sticky status (the chain is held reset in pulse mode), and port reads of
+a mid-count channel return the batch-advanced counter (exact at
+observation points).
 
 ## Axis 6 — Z80 / Z80N operations  (FUSE + Sean Young + GHDL gate oracle)
 Tests: canonical T-state tables (iter 266-270), per-op timing batches, flags

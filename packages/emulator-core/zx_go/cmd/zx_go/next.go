@@ -1195,7 +1195,9 @@ func wireNextSubsystems(e *emulator) error {
 	// pulse-mode interrupt line (zxnext.vhd:4064-4093 + 2014-2043).
 	// TX-1696 hands its whole interrupt system to CTC ch0 (control $85,
 	// TC from ($C002)) once its install hook runs.
-	u.SetNextCTC(next.WireCTC(disp, cpu))
+	ctcBlk := next.WireCTC(disp, cpu)
+	u.SetNextCTC(ctcBlk)
+	next.WireIM2(disp, cpu, ctcBlk)
 	// zxnDMA IO endpoints: a port configured as an IO endpoint (WR1/WR2 D3)
 	// transfers to/from a real port — sprite-image ($5B), Layer 2 ($253B),
 	// DAC, etc. Route those through the ULA's port dispatch.

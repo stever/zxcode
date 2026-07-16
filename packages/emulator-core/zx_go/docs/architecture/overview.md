@@ -76,7 +76,14 @@ Everything advances in units of one 50 Hz video frame:
    sample point through `cpu.ExtIntFunc` — on the Next that is the CTC
    channels' pulse-mode interrupts (`pkg/next/ctcblock.go`), which
    batch-advance the channels on the CLK_28 reference timeline and
-   assert the line for the FPGA's 32-CPU-cycle pulse width.
+   assert the line for the FPGA's 32-CPU-cycle pulse width. With the
+   Next's hardware-IM2 vectored mode on (NR$C0 bit 0), the IM2Block
+   (`pkg/next/im2block.go`) wraps that hook: frame/line pulses are
+   rerouted into the im2 daisy chain (`cpu.RouteIntFunc`), CTC ZC/TO
+   pulses feed it raw, the chain asserts the line as a level held until
+   serviced, IM 2 acceptance takes the hardware-generated vector from
+   `cpu.IntAckFunc`, and the exact pair ED 4D (`cpu.OnRETI`) is the
+   end-of-interrupt.
 3. End of frame: `peripherals.Frame()`, `kbd.Tick()`, boot bookkeeping.
 4. `ULA.Render()` builds the frame once: it first flushes the audio events
    recorded during the frame into the ring buffer (event-timed box-filter

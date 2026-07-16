@@ -1298,6 +1298,70 @@ func WireCTC(d *nextregs.Dispatcher, cpu *z80.CPU) *CTCBlock {
 	return b
 }
 
+// WireIM2 constructs the hardware-IM2 vectored-interrupt block (NR$C0
+// bit 0 — see IM2Block) and hooks it into the CPU and the NextReg face.
+// Must run AFTER WireInterruptControl (chains onto the NR$C0 handler),
+// WireCTC (takes over the CPU's ExtIntFunc from the CTC block, which it
+// wraps) and the NR$02 reset handler.
+//
+//   - NR$C0 write: bit 0 selects pulse/hw-im2 mode, bits 7:5 the vector
+//     base; read-back gains the live bits 2:1 = current Z80 IM mode
+//     (zxnext.vhd:6230).
+//   - NR$20 write: software-generated (unqualified) interrupt requests.
+//   - NR$C8/$C9 read the sticky per-source interrupt status; writes are
+//     write-1-to-clear (zxnext.vhd:1953-1956). NR$CA (UART) reads 0 —
+//     the emulator's UART generates no interrupts (documented gap).
+func WireIM2(d *nextregs.Dispatcher, cpu *z80.CPU, ctcBlock *CTCBlock) *IM2Block {
+	blk := NewIM2Block(cpu, ctcBlock, d)
+
+	cpu.ExtIntFunc = blk.IntLine
+	cpu.IntAckFunc = blk.Ack
+	cpu.OnRETI = blk.Reti
+	cpu.RouteIntFunc = blk.RouteInt
+
+	if prev := d.OnWriteFn(0xC0); prev != nil {
+		d.SetOnWrite(0xC0, func(disp *nextregs.Dispatcher, v byte) {
+			prev(disp, v)
+			blk.SetControl(v)
+		})
+	} else {
+		// Partial wirings (tests) without WireInterruptControl: store
+		// with the read-only IM bits masked, then apply.
+		d.SetOnWrite(0xC0, func(disp *nextregs.Dispatcher, v byte) {
+			disp.Store(0xC0, v&^0x06)
+			blk.SetControl(v)
+		})
+	}
+	// NR$C0 read composition (zxnext.vhd:6230): vector base, 0,
+	// stackless-NMI enable, the LIVE Z80 IM mode (bits 2:1), int mode.
+	d.SetOnRead(0xC0, func(disp *nextregs.Dispatcher) byte {
+		v := disp.Raw(0xC0) &^ 0x06
+		v |= (cpu.IM & 0x03) << 1
+		return v
+	})
+
+	d.SetOnWrite(0x20, func(disp *nextregs.Dispatcher, v byte) {
+		blk.Unq(v)
+	})
+
+	d.SetOnWrite(0xC8, func(disp *nextregs.Dispatcher, v byte) { blk.ClearC8(v) })
+	d.SetOnRead(0xC8, func(*nextregs.Dispatcher) byte { return blk.StatusC8() })
+	d.SetOnWrite(0xC9, func(disp *nextregs.Dispatcher, v byte) { blk.ClearC9(v) })
+	d.SetOnRead(0xC9, func(*nextregs.Dispatcher) byte { return blk.StatusC9() })
+	d.SetOnWrite(0xCA, func(*nextregs.Dispatcher, byte) {})
+	d.SetOnRead(0xCA, func(*nextregs.Dispatcher) byte { return 0 })
+
+	if prev := d.OnWriteFn(0x02); prev != nil {
+		d.SetOnWrite(0x02, func(disp *nextregs.Dispatcher, v byte) {
+			if v&0x03 != 0 {
+				blk.Reset()
+			}
+			prev(disp, v)
+		})
+	}
+	return blk
+}
+
 // clipWindow models a Spectrum Next clip-window register (NR$18 Layer2,
 // $19 sprite, $1A ULA, $1B tilemap). Each holds four sub-coordinates
 // {x1,x2,y1,y2} addressed by a 2-bit index. Per zxnext.vhd 5242-5276 a
