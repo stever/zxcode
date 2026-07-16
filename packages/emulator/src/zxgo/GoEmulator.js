@@ -196,7 +196,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r55-sparse-sd-card';
+        const ENGINE_REV = 'r56-browser-nex-launch';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -672,28 +672,36 @@ export class GoEmulator extends EventEmitter {
     }
 
     // Open a folder-distributed Next game: a zip holding one .nex plus its
-    // data files — the layout a player unzips onto a real card and runs from
-    // the game's own folder. Stage every non-.nex entry onto the SD card at
-    // its path relative to the .nex's folder: the imported game runs from the
-    // card root (importAndRunNex copies it to /zx.nex), so its relative LOADs
-    // resolve against the same layout. Staging happens before zxRunNex — its
-    // reboot re-reads the card. Long names land as VFAT LFN entries (like a
-    // real card), so games load them literally; a rejected file (FAT-illegal
-    // path, full card) is skipped with a warning rather than failing the
-    // whole load — it only matters if the game LOADs it, which then fails
-    // visibly in-game.
+    // data files — the layout a player unzips onto a real card and runs
+    // from the game's own folder. Stage EVERY entry (the .nex included)
+    // under the GAME'S OWN FOLDER on the card — the zip's folder name when
+    // it has one, else a folder named after the .nex — and launch the .nex
+    // by its original name inside it (importAndRunNex + the Browser
+    // macro). Preserving the real folder/filename matters: some games
+    // verify their location or build data paths from it, and self-
+    // streaming titles F_OPEN their own .nex by name (#178). Staging
+    // happens before zxRunNex — its reboot re-reads the card. Long names
+    // land as VFAT LFN entries (like a real card), so games load them
+    // literally; a rejected file (FAT-illegal path, full card) is skipped
+    // with a warning rather than failing the whole load — it only matters
+    // if the game LOADs it, which then fails visibly in-game.
     async openNexGameZip(entries, nexEntry) {
         await this.whenMachineReady();
         if (this.machineType !== 'next') await this.bootNext();
         const nexDir = nexEntry.path.slice(0, nexEntry.path.lastIndexOf('/') + 1);
+        const nexName = nexEntry.path.split('/').pop();
+        const dirParts = nexDir.split('/').filter(Boolean);
+        const gameDir = dirParts.length
+            ? dirParts[dirParts.length - 1]
+            : (nexName.replace(/\.nex$/i, '') || 'game');
         for (const { path, file } of entries) {
-            if (path === nexEntry.path) continue;
+            if (path === nexEntry.path) continue; // zxRunNex stages the .nex itself
             const rel = path.startsWith(nexDir) ? path.slice(nexDir.length) : path;
-            const err = globalThis.zxPutFile(rel, await file.async('uint8array'));
-            if (err) console.warn(`zxplay: SD stage skipped "${rel}": ${err}`);
+            const err = globalThis.zxPutFile(`${gameDir}/${rel}`, await file.async('uint8array'));
+            if (err) console.warn(`zxplay: SD stage skipped "${gameDir}/${rel}": ${err}`);
         }
         const err = globalThis.zxRunNex(
-            nexEntry.path.split('/').pop(), await nexEntry.file.async('uint8array'));
+            `${gameDir}/${nexName}`, await nexEntry.file.async('uint8array'));
         if (err) throw new Error(err);
         return { mediaType: 'nex' };
     }
@@ -774,7 +782,10 @@ export class GoEmulator extends EventEmitter {
             if (this.machineType !== 'next') await this.bootNext();
             const ferr = this.stageSdFiles(sdFiles);
             if (ferr) return Promise.reject('Next: ' + ferr);
-            const err = globalThis.zxRunNex('program.nex', data);
+            // Root-anchored name: IDE contract — the program runs from the
+            // card root where stageSdFiles put its assets (typed .nexload
+            // launch in the core, not the Browser game launch).
+            const err = globalThis.zxRunNex('/program.nex', data);
             if (err) return Promise.reject('Next: ' + err);
             this.emit('openedTapeFile');
             return Promise.resolve({ mediaType: 'nex' });
@@ -789,9 +800,10 @@ export class GoEmulator extends EventEmitter {
                     const ferr = this.stageSdFiles(sdFiles);
                     if (ferr) throw new Error(ferr);
                     const next = tapToNext(data);
+                    // Root-anchored .nex name: IDE contract (see above).
                     const err = (next.kind === 'bas')
                         ? globalThis.zxRunBas(next.name, next.data)
-                        : globalThis.zxRunNex(next.name, next.data);
+                        : globalThis.zxRunNex('/' + next.name, next.data);
                     if (err) return Promise.reject(err);
                     this.emit('openedTapeFile');
                     return Promise.resolve({ mediaType: 'tape' });
@@ -836,7 +848,9 @@ export class GoEmulator extends EventEmitter {
         } else if (cleanName.endsWith('.tap') || cleanName.endsWith('.tzx')) {
             return arrayBuffer => this.openTapeBytes(arrayBuffer);
         } else if (cleanName.endsWith('.nex')) {
-            const baseName = cleanName.split('/').pop();
+            // Original case: the name (and the folder derived from it on
+            // the card) is what the game sees.
+            const baseName = filename.split('/').pop();
             return arrayBuffer => this.openNEXFile(arrayBuffer, baseName);
         } else if (cleanName.endsWith('.zip')) {
             return async arrayBuffer => {

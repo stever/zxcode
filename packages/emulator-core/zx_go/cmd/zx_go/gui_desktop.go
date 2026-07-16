@@ -2807,7 +2807,7 @@ func (e *emulator) confirmImportNex(fileName string, data []byte) {
 		return
 	}
 	msg := fmt.Sprintf(
-		"To load %q the way a real Spectrum Next does — through NextZXOS's own loader, so games that depend on the operating system work correctly — a copy must be written to your SD card (under /imported/).\n\n"+
+		"To load %q the way a real Spectrum Next does — through NextZXOS's own loader, so games that depend on the operating system work correctly — a copy must be written to your SD card (in a folder named after the file).\n\n"+
 			"Your original file is left untouched. The machine will reset to load it.\n\n"+
 			"Copy to the SD card and load now?",
 		fileName)

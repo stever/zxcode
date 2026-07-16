@@ -92,8 +92,13 @@ const menuItemCommandLine = 1
 
 // waitCursorCap bounds a waitCursor step so a menu that never presents (bad
 // SD/boot) can't wedge the macro; on the cap it advances anyway (degraded,
-// caught by the cycle tests) rather than hanging.
-const waitCursorCap = 600
+// caught by the cycle tests) rather than hanging. Sized to ride out the
+// whole welcome→menu transition: $F700 holds GARBAGE until the menu first
+// draws (values like 70/99 observed on the r55 card), so the step must
+// keep holding its key until the real cursor appears and reaches the
+// target — a 600-frame cap expired mid-transition and ran the macro out
+// before the menu existed.
+const waitCursorCap = 2500
 
 // nexloadMacro drives the genuine NextZXOS `.nexload` dot command from the GUI
 // run loop, one step per frame: it reaches the menu, opens the Command Line,
@@ -106,6 +111,16 @@ type nexloadMacro struct {
 	idx   int
 	frame int
 	keyOn bool
+	// menuStreak counts consecutive per-frame samples at the menu
+	// key-wait PC during a waitMenu step (see tick) — a run proves the
+	// menu is really up; single hits occur transiently mid-boot.
+	menuStreak int
+	// menuSawAway records that this waitMenu step has observed the CPU
+	// AWAY from the key-wait loop: a step entered while the PREVIOUS
+	// screen's key-wait is still winding down (e.g. right after the
+	// SPACE that dismisses the welcome) must watch the transition leave
+	// and come back before a short streak counts (see tick).
+	menuSawAway bool
 }
 
 // macroPromptSettleFrames is the settle pad after ENTER on "Command Line",
@@ -162,16 +177,73 @@ func newCommandLineMacro(cmd string, tailFrames int) *nexloadMacro {
 	return &nexloadMacro{steps: steps}
 }
 
-// newNexloadMacro builds the macro that loads sdPath (an absolute SD-card path,
-// e.g. "/games/Next/Sonic/sonic.nex") via the genuine `.nexload` dot command.
-// Spaces are typed literally (NEXLOAD takes the rest of the line as the
-// filename, so no quoting is needed).
+// newNexloadMacro builds the TYPED launch: Command Line + `.nexload sdPath`.
+// The import flow no longer uses it (newBrowserLaunchMacro gives games the
+// Browser context real hardware launches from — #178); it remains for the
+// oracle bisect tooling (`img.mmc!nexload=...` specs match ZEsarUX's typed
+// side) and the typed-path tests.
 func newNexloadMacro(sdPath string) *nexloadMacro {
-	// Short tail: the macro's job ends at the typed ENTER (keys are released
-	// on entering the tail step); the machine runs on regardless. Headless
-	// renderers poll zxMacroActive to know when the typing is over, so a
-	// long tail would just delay their capture start.
 	return newCommandLineMacro(".nexload "+sdPath, 100)
+}
+
+// browserSettleFrames pads between opening the Browser and launching the
+// first entry: the Browser reads the directory and draws its panel before
+// it accepts ENTER. The headless Browser-navigation experiments (#178)
+// pressed follow-up keys 300 frames after opening; 200 keeps margin while
+// staying inside the boot fast-forward window.
+const browserSettleFrames = 200
+
+// newBrowserLaunchMacro launches a .nex through the NextZXOS Browser —
+// the same launch a real Next user performs, which is the point (#178):
+// a .nex started from the Browser gets the OS's fully-initialised menu
+// context, where the NextZXOS personality/mode switches games request
+// succeed, AND it keeps its ORIGINAL folder + filename, which some
+// games verify or build data paths from (TX-1696 exits unless launched
+// as <its folder>/main.nex). Both of the old synthetic entry points
+// fail for such games: a boot-time autoexec leaves the mode switch
+// retrying forever, and a typed Command-Line `.nexload` (with the
+// renamed /zx.nex) errors back to the menu. Neither is how real
+// hardware launches anything.
+//
+// dirDowns / fileDowns are the cursor-DOWN counts computed from the
+// card's actual sorted listings (sdcard.ListDir): the Browser opens at
+// the root with its cursor on the first row, and a subdirectory opens
+// with the cursor on its "." row, so the game folder's row index and
+// the .nex's row index (2 + sorted position, after "." and "..") are
+// exactly the presses needed. No typing — filenames need not be
+// typeable, and 8.3 aliasing is irrelevant.
+//
+// The welcome screen (shown on browser builds) is crossed with SPACE
+// ("Start NextZXOS", a no-op if the menu is already up) followed by a
+// fixed pad: the key-wait PC and the menu cursor byte both give
+// ambiguous readings through the welcome→menu transition, so state
+// divination is avoided; the pads are absorbed by the boot
+// fast-forward in the browser.
+func newBrowserLaunchMacro(dirDowns, fileDowns int) *nexloadMacro {
+	var steps []macroStep
+	hold := func(keys [][2]int, frames int) { steps = append(steps, macroStep{keys: keys, frames: frames}) }
+	wait := func(frames int) { steps = append(steps, macroStep{frames: frames}) }
+	down := func(n int) {
+		for i := 0; i < n; i++ {
+			hold([][2]int{{0, 0x01}, {4, 0x10}}, 4) // CAPS SHIFT + 6 = cursor DOWN
+			wait(20)
+		}
+	}
+	enter := func() { hold([][2]int{{6, 0x01}}, 6) }
+
+	steps = append(steps, macroStep{waitMenu: true}) // boot to welcome/menu key-wait
+	hold([][2]int{{7, 0x01}}, 40)                    // SPACE -> "Start NextZXOS" (no-op at the menu)
+	wait(600)                                        // ride out the welcome->menu transition
+	enter()                                          // open the Browser (menu cursor sits on it)
+	wait(browserSettleFrames)                        // root directory read + panel draw
+	down(dirDowns)                                   // cursor to the game folder
+	enter()                                          // enter it
+	wait(browserSettleFrames)                        // folder directory read
+	down(fileDowns)                                  // cursor to the .nex
+	enter()                                          // launch: the OS runs .nexload on it
+	wait(100)                                        // tail
+
+	return &nexloadMacro{steps: steps}
 }
 
 // inTail reports whether the macro has reached its final step — the tail
@@ -204,9 +276,34 @@ func (m *nexloadMacro) tick(e *emulator) bool {
 	}
 	m.frame++
 	if s.waitMenu {
-		// Safety timeout so a failed/absent boot can't wedge the macro. A
-		// cold NextZXOS boot can take ~2500 frames; allow ample margin.
-		if e.cpu.PC == nextMenuLoopPC || m.frame > 4000 {
+		// The menu/welcome key-wait spins at nextMenuLoopPC continuously,
+		// so demand a RUN of consecutive per-frame samples there AND the
+		// menu cursor byte reading 0: a single PC hit is not proof —
+		// mid-boot code passes through $0C90 transiently, and some boot
+		// phases spin at it long enough to fake a streak (observed on
+		// the r55 card: the macro's key presses all fired mid-boot and
+		// were eaten, leaving the machine idle at the menu). $F700 holds
+		// nonzero garbage through those phases and 0 at the welcome and
+		// at the freshly-drawn menu, so the pair discriminates. Safety
+		// timeout so a failed/absent boot can't wedge the macro; a cold
+		// NextZXOS boot takes ~2500 frames.
+		if e.cpu.PC == nextMenuLoopPC && e.mem.Read(nextMenuCursorAddr) == 0 {
+			m.menuStreak++
+		} else {
+			m.menuStreak = 0
+			m.menuSawAway = true
+		}
+		// A short streak only counts after the step has seen the CPU
+		// away from the key-wait: a waitMenu entered while the previous
+		// screen's loop is still running (right after the welcome's
+		// SPACE) would otherwise fire before the transition even starts.
+		// A LONG unbroken streak counts regardless — the step began at
+		// an already-stable interactive screen (headless boots skip the
+		// welcome, so no transition ever happens).
+		if (m.menuSawAway && m.menuStreak >= 30) || m.menuStreak >= 600 || m.frame > 4000 {
+			slog.Debug("macro: waitMenu done", "idx", m.idx, "stepFrames", m.frame, "pc", fmt.Sprintf("$%04X", e.cpu.PC))
+			m.menuStreak = 0
+			m.menuSawAway = false
 			m.idx++
 			m.frame = 0
 		}
@@ -221,6 +318,7 @@ func (m *nexloadMacro) tick(e *emulator) bool {
 		// scan loop to auto-repeat the still-held key past the target (the
 		// cursor read Command Line but ENTER landed on NextBASIC).
 		if e.mem.Read(nextMenuCursorAddr) == s.cursorTarget || m.frame > waitCursorCap {
+			slog.Debug("macro: waitCursor done", "idx", m.idx, "stepFrames", m.frame, "cursor", e.mem.Read(nextMenuCursorAddr))
 			m.releaseAll(e)
 			m.idx++
 			m.frame = 0
@@ -228,6 +326,9 @@ func (m *nexloadMacro) tick(e *emulator) bool {
 		return false
 	}
 	if m.frame >= s.frames {
+		if len(s.keys) > 0 {
+			slog.Debug("macro: key step done", "idx", m.idx, "frames", s.frames)
+		}
 		m.idx++
 		m.frame = 0
 	}
@@ -280,17 +381,44 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 	if _, err := sdcard.WriteFileToImage(e.sdImageSrc, "nextzxos", "autoexec.bas", neutralAutoexec()); err != nil {
 		slog.Warn("nex import: could not neutralise autoexec.bas", "err", err)
 	}
-	// Always import to one fixed, short 8.3 name at the card ROOT and OVERWRITE
-	// it in place — never preserve the source name. AddFileToFAT32 would mint a
-	// unique alias when re-importing into an already-populated card
-	// (LONEWOLF.NEX -> LONEWO~1.NEX), and the typing macro cannot produce '~':
-	// it typed "lonewo1.nex" and NextZXOS answered "No such file or dir". A
-	// fixed root-level name makes the typed `.nexload /zx.nex` as short as
-	// possible, so the keystroke macro finishes far quicker. (The .nex's own
-	// filename is irrelevant to the game; saves are game-managed, e.g.
-	// lonewolf.sav.)
-	const importedNexName = "zx.nex"
-	sdPath, err := sdcard.WriteFileToImage(e.sdImageSrc, "", importedNexName, data)
+	// A ROOT-ANCHORED name ("/program.nex") is the IDE contract: compiled
+	// programs stage their project assets root-relative (putSDFile), so
+	// the program must run from the root — write it there and drive the
+	// typed `.nexload` launch, leaving the current directory at the root.
+	if strings.HasPrefix(fileName, "/") {
+		name := fileName[strings.LastIndex(fileName, "/")+1:]
+		sdPath, err := sdcard.WriteFileToImage(e.sdImageSrc, "", name, data)
+		if err != nil {
+			e.paused.Store(false)
+			slog.Error("nex import: copy to SD card failed", "file", fileName, "err", err)
+			e.showGUIError(fmt.Errorf("copy %q to SD card: %w", fileName, err))
+			return
+		}
+		slog.Info("nex import: launching via typed .nexload", "sdPath", sdPath)
+		e.startNexloadMacro(sdPath)
+		return
+	}
+	// Stage the .nex under its ORIGINAL folder and filename — some games
+	// verify their location or build data paths from it (TX-1696 exits
+	// unless it runs as <its folder>/main.nex; Atic Atac F_OPENs its own
+	// filename). fileName is the game-relative path from the zip flow
+	// ("TX-1696/main.nex"); a bare name gets a folder derived from its
+	// basename so the launch is never from the root (root launches break
+	// the games' <dir>/ data resolution). Overwrite in place so
+	// re-imports don't mint ~N aliases.
+	relPath := strings.Trim(strings.ReplaceAll(fileName, "\\", "/"), "/")
+	nexName := relPath
+	gameDir := ""
+	if i := strings.LastIndex(relPath, "/"); i >= 0 {
+		gameDir, nexName = relPath[:i], relPath[i+1:]
+	}
+	if gameDir == "" {
+		gameDir = strings.TrimSuffix(nexName, ".nex")
+		if gameDir == "" || strings.EqualFold(gameDir, nexName) {
+			gameDir = "game"
+		}
+	}
+	sdPath, err := sdcard.WriteFileToImage(e.sdImageSrc, gameDir, nexName, data)
 	if err != nil {
 		e.paused.Store(false)
 		slog.Error("nex import: copy to SD card failed", "file", fileName, "err", err)
@@ -303,8 +431,55 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 			slog.Warn("nex import: persisting to the SD image failed", "err", err)
 		}
 	}
-	slog.Info("nex import: loading via NextZXOS", "file", fileName, "sdPath", sdPath)
-	e.startNexloadMacro(sdPath)
+	// Compute the Browser cursor positions from the card's real sorted
+	// listings (the Browser opens at the root, cursor on row 0; a
+	// subdirectory opens with the cursor on ".", so its entries start
+	// at row 2).
+	dirDowns, fileDowns, derr := browserRowsFor(e.sdImageSrc, gameDir, nexName)
+	if derr != nil {
+		e.paused.Store(false)
+		slog.Error("nex import: browser row computation failed", "err", derr)
+		e.showGUIError(derr)
+		return
+	}
+	slog.Info("nex import: loading via the NextZXOS Browser",
+		"file", fileName, "sdPath", sdPath, "dirDowns", dirDowns, "fileDowns", fileDowns)
+	e.startBrowserLaunchMacro(dirDowns, fileDowns)
+}
+
+// browserRowsFor computes the cursor-DOWN counts the Browser macro needs
+// to reach gameDir at the root and nexName inside it, from the card's
+// actual listings in Browser sort order.
+func browserRowsFor(dev sdcard.Image, gameDir, nexName string) (int, int, error) {
+	rootNames, err := sdcard.ListDir(dev, "")
+	if err != nil {
+		return 0, 0, fmt.Errorf("nex import: list root: %w", err)
+	}
+	dirDowns := -1
+	for i, n := range rootNames {
+		if strings.EqualFold(n, gameDir) {
+			dirDowns = i
+			break
+		}
+	}
+	if dirDowns < 0 {
+		return 0, 0, fmt.Errorf("nex import: folder %q not in root listing", gameDir)
+	}
+	dirNames, err := sdcard.ListDir(dev, gameDir)
+	if err != nil {
+		return 0, 0, fmt.Errorf("nex import: list %q: %w", gameDir, err)
+	}
+	fileDowns := -1
+	for i, n := range dirNames {
+		if strings.EqualFold(n, nexName) {
+			fileDowns = 2 + i // after the "." and ".." rows
+			break
+		}
+	}
+	if fileDowns < 0 {
+		return 0, 0, fmt.Errorf("nex import: %q not in %q listing", nexName, gameDir)
+	}
+	return dirDowns, fileDowns, nil
 }
 
 // importAndRunBas writes data — a PLUS3DOS-headered, autostart-lined NextBASIC
@@ -382,17 +557,27 @@ func (e *emulator) putSDFile(filePath string, data []byte) error {
 	return nil
 }
 
-// startNexloadMacro reboots into a clean NextZXOS and begins driving the
-// .nexload command to load the .nex at sdPath (an absolute SD-card path) via
-// the genuine OS loader. The reboot guarantees a fresh OS state regardless of
-// what was running before.
+// startNexloadMacro reboots and drives the TYPED `.nexload sdPath` launch
+// (see newNexloadMacro) — kept for callers that must launch a .nex at an
+// arbitrary card path (typed-path tests, oracle tooling).
 func (e *emulator) startNexloadMacro(sdPath string) {
+	e.reboot()
+	e.nexloadMacro = newNexloadMacro(sdPath)
+	e.paused.Store(false)
+}
+
+// startBrowserLaunchMacro reboots into a clean NextZXOS and drives the
+// Browser to launch the staged .nex (see newBrowserLaunchMacro) — the OS
+// runs its own .nexload on it exactly as when a user selects a .nex on
+// real hardware. The reboot guarantees a fresh OS state regardless of
+// what was running before.
+func (e *emulator) startBrowserLaunchMacro(dirDowns, fileDowns int) {
 	e.reboot()
 	// Arm the macro before releasing pause: the emulation goroutine's
 	// run loop checks e.nexloadMacro on every frame it executes, so
 	// setting it first avoids a window where an unpaused frame runs
 	// with no macro driving it yet.
-	e.nexloadMacro = newNexloadMacro(sdPath)
+	e.nexloadMacro = newBrowserLaunchMacro(dirDowns, fileDowns)
 	e.paused.Store(false)
 }
 

@@ -44,10 +44,10 @@ detection, crash-detect heuristics, time-travel, snapshot-every, and
 trace channels. Env hooks reproduce browser behaviours headlessly
 (`ZX_GO_RUN_BAS_FILE` runs the same importAndRunBas path the Play page
 uses; `ZX_GO_RUN_NEX_FILE=path[@frame]` runs the same importAndRunNex
-.nexload path the GUI/browser .nex open uses — the runner behind the
-Next game-compatibility triage in docs/compatibility.md). This is the
-CI surface: the boot tests, screenshot oracles and soak tests all run
-through it.
+path the GUI/browser .nex open uses, staging the file under its parent
+directory's name — the runner behind the Next game-compatibility triage
+in docs/compatibility.md). This is the CI surface: the boot tests,
+screenshot oracles and soak tests all run through it.
 
 ## The wasm surface
 
@@ -71,8 +71,17 @@ Exports (`wasm_js.go`, all globals; `zxReady` is set last):
 Boot calls run in goroutines (audio setup blocks until the JS loop
 turns), so the page polls `zxModel()` for completion. `zxPutFile` stages
 files onto the SD image before `zxRunBas`/`zxRunNex` (their reboot
-re-reads the card). On js builds `pkg/next/install` disables disk access
-and takes ROMs via `InjectROM`.
+re-reads the card). `zxRunNex` picks its launch route from the name: a
+relative name ("TX-1696/main.nex", or a bare name that gets a folder
+derived from its basename) stages the file under that folder and drives
+the NextZXOS BROWSER to launch it — cursor rows computed from the
+card's real sorted listings (`sdcard.ListDir`) — because some games
+only run as `<original folder>/<original name>` (TX-1696) or F_OPEN
+their own filename; a ROOT-ANCHORED name ("/program.nex", the IDE
+compile flow) stages at the card root and drives the typed `.nexload`
+command line so the program's directory stays the root its
+`zxPutFile`-staged assets resolve against. On js builds
+`pkg/next/install` disables disk access and takes ROMs via `InjectROM`.
 
 The consumer, `packages/emulator/src/zxgo/GoEmulator.js`, is a drop-in
 replacement for the JSSpeccy3 Emulator class:

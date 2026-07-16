@@ -51,11 +51,12 @@ func minimalNex(code []byte) []byte {
 }
 
 // TestImportAndRunNexCycle mirrors TestImportAndRunBasCycle for the .nex
-// route: importAndRunNex writes /zx.nex to the in-memory SD card, reboots,
-// and the macro drives the genuine `.nexload` dot command — the path the
-// site uses for sjasmplus/z88dk output. The loaded code POKEs a sentinel,
-// proving the divMMC dot-command machinery works end to end under whichever
-// boot mode the environment selects.
+// route: a ROOT-ANCHORED name makes importAndRunNex write /zx.nex to the
+// in-memory SD card, reboot, and drive the genuine `.nexload` dot command —
+// the path the site uses for sjasmplus/z88dk output (whose project assets
+// are staged root-relative, so the program must run from the root). The
+// loaded code POKEs a sentinel, proving the divMMC dot-command machinery
+// works end to end under whichever boot mode the environment selects.
 func TestImportAndRunNexCycle(t *testing.T) {
 	prev := cliFlagsActive
 	nf := cliFlags{}
@@ -75,7 +76,7 @@ func TestImportAndRunNexCycle(t *testing.T) {
 	}
 
 	// LD A,123 ; LD ($8000),A ; JR $ — running at $C000, writes bank 2[0].
-	emu.importAndRunNex("zx.nex", minimalNex([]byte{0x3E, 0x7B, 0x32, 0x00, 0x80, 0x18, 0xFE}))
+	emu.importAndRunNex("/zx.nex", minimalNex([]byte{0x3E, 0x7B, 0x32, 0x00, 0x80, 0x18, 0xFE}))
 	if emu.nexloadMacro == nil {
 		t.Fatal("importAndRunNex did not arm the nexload macro")
 	}

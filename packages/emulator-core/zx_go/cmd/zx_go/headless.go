@@ -1019,9 +1019,12 @@ func runHeadless(f *cliFlags) {
 				}
 			}
 			// ZX_GO_RUN_NEX_FILE=path[@frame]: invoke the real importAndRunNex
-			// flow (stage /zx.nex on the SD card + reboot + .nexload macro) at
-			// the given frame — reproduces the GUI/browser .nex open path
-			// headlessly. Synchronous (unlike the GUI's goroutine) so the
+			// flow (stage <folder>/<name> on the SD card + reboot +
+			// Browser-launch macro) at the given frame — reproduces the
+			// GUI/browser .nex open path headlessly. The staged folder name
+			// is the host file's parent directory name, matching how the
+			// zip flow preserves a game's own folder (some games require
+			// it — #178). Synchronous (unlike the GUI's goroutine) so the
 			// macro is armed before the next frame runs.
 			if spec := os.Getenv("ZX_GO_RUN_NEX_FILE"); spec != "" {
 				path, at := spec, 3000
@@ -1034,7 +1037,8 @@ func runHeadless(f *cliFlags) {
 					if data, rerr := os.ReadFile(path); rerr != nil {
 						slog.Error("headless run-nex: read failed", "path", path, "err", rerr)
 					} else {
-						emu.importAndRunNex(filepath.Base(path), data)
+						rel := filepath.Join(filepath.Base(filepath.Dir(path)), filepath.Base(path))
+						emu.importAndRunNex(rel, data)
 						slog.Info("headless run-nex triggered", "frame", i, "path", path)
 					}
 				}
