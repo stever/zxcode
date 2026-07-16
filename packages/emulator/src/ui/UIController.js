@@ -75,11 +75,14 @@ export class UIController extends EventEmitter {
             emulator.start();
         });
 
-        /* loading overlay: a spinner pill over the top of the display,
-        driven by the emulator's 'loading' / 'loadingDone' events. Large
-        game imports stage files on the main thread for minutes, freezing
-        the canvas — the spinner is CSS-animated (compositor thread) so it
-        keeps moving through the grind and the page doesn't look dead. */
+        /* loading pill: floats over the top of the display, driven by the
+        emulator's 'loading' / 'loadingDone' events, and shows a circular
+        progress ring when the emulator reports a 0..1 fraction (staging a
+        game's files byte-by-byte) or an indeterminate spinner otherwise
+        (downloading, driving the NextZXOS launch). The display stays
+        visible underneath — the machine automation is part of the show —
+        and the ring is CSS-animated (compositor thread) so it keeps moving
+        even when staging busies the main thread. */
         if (!document.getElementById('jsspeccy-spin-style')) {
             const style = document.createElement('style');
             style.id = 'jsspeccy-spin-style';
@@ -104,20 +107,50 @@ export class UIController extends EventEmitter {
         this.loadingPill.style.whiteSpace = 'nowrap';
         this.loadingPill.style.pointerEvents = 'none';
         this.loadingPill.style.zIndex = '90';
-        const spinner = document.createElement('div');
-        this.loadingPill.appendChild(spinner);
-        spinner.style.width = '16px';
-        spinner.style.height = '16px';
-        spinner.style.flex = 'none';
-        spinner.style.border = '3px solid rgba(255, 255, 255, 0.3)';
-        spinner.style.borderTopColor = '#fff';
-        spinner.style.borderRadius = '50%';
-        spinner.style.animation = 'jsspeccy-spin 0.9s linear infinite';
+        /* the ring: an SVG circle pair — full track plus a progress arc
+        whose stroke-dashoffset tracks the fraction. Indeterminate mode
+        fixes the arc at a quarter turn and spins the whole SVG. */
+        const RING_R = 8, RING_C = 2 * Math.PI * RING_R;
+        const svgNS = 'http://www.w3.org/2000/svg';
+        this.loadingRing = document.createElementNS(svgNS, 'svg');
+        this.loadingPill.appendChild(this.loadingRing);
+        this.loadingRing.setAttribute('viewBox', '0 0 20 20');
+        this.loadingRing.style.width = '18px';
+        this.loadingRing.style.height = '18px';
+        this.loadingRing.style.flex = 'none';
+        const track = document.createElementNS(svgNS, 'circle');
+        this.loadingRing.appendChild(track);
+        track.setAttribute('cx', '10');
+        track.setAttribute('cy', '10');
+        track.setAttribute('r', String(RING_R));
+        track.setAttribute('fill', 'none');
+        track.setAttribute('stroke', 'rgba(255, 255, 255, 0.3)');
+        track.setAttribute('stroke-width', '3');
+        this.loadingArc = document.createElementNS(svgNS, 'circle');
+        this.loadingRing.appendChild(this.loadingArc);
+        this.loadingArc.setAttribute('cx', '10');
+        this.loadingArc.setAttribute('cy', '10');
+        this.loadingArc.setAttribute('r', String(RING_R));
+        this.loadingArc.setAttribute('fill', 'none');
+        this.loadingArc.setAttribute('stroke', '#fff');
+        this.loadingArc.setAttribute('stroke-width', '3');
+        this.loadingArc.setAttribute('stroke-linecap', 'round');
+        this.loadingArc.setAttribute('stroke-dasharray', String(RING_C));
+        /* start the arc at 12 o'clock */
+        this.loadingArc.setAttribute('transform', 'rotate(-90 10 10)');
         this.loadingText = document.createElement('span');
         this.loadingPill.appendChild(this.loadingText);
 
-        emulator.on('loading', (message) => {
+        emulator.on('loading', (message, progress) => {
             this.loadingText.textContent = message || 'Loading…';
+            if (progress === null || progress === undefined) {
+                this.loadingArc.setAttribute('stroke-dashoffset', String(RING_C * 0.75));
+                this.loadingRing.style.animation = 'jsspeccy-spin 0.9s linear infinite';
+            } else {
+                const f = Math.min(Math.max(progress, 0), 1);
+                this.loadingArc.setAttribute('stroke-dashoffset', String(RING_C * (1 - f)));
+                this.loadingRing.style.animation = '';
+            }
             this.loadingPill.style.display = 'flex';
         });
 

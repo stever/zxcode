@@ -27,6 +27,7 @@ import JSZip from 'jszip';
 import { StandardKeyboardHandler, RecreatedZXSpectrumHandler } from '../KeyboardHandler.js';
 import { tapToNext } from './tapToNext.js';
 import { assetUrl } from './assetManifest.js';
+import { nativeZipEntries } from './zipExtract.js';
 
 const scriptUrl = document.currentScript.src;
 
@@ -179,6 +180,8 @@ export class GoEmulator extends EventEmitter {
         // Loading overlay state (see showLoading/doneLoading below).
         this.loadingHold = false;
         this.macroWatch = null;
+        // Frame-loop hold during game imports (see openNexGameZip/loop).
+        this.frameHold = false;
 
         // Frame buffer (sized on the first frame the core reports).
         this.frameW = 0; this.frameH = 0;
@@ -199,7 +202,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r56-browser-nex-launch+spinner';
+        const ENGINE_REV = 'r56-browser-nex-launch+quiet-menu';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -364,6 +367,16 @@ export class GoEmulator extends EventEmitter {
     // briefly instead of bursting.
     loop(t) {
         if (!this.isRunning) return;
+        // Import hold: a game import is staging files — run no frames (the
+        // machine reboots when the import launches, so nothing shown now
+        // would survive anyway) and keep the pacing anchors reset so frames
+        // resume cleanly, without a catch-up burst, when the hold lifts.
+        if (this.frameHold) {
+            this.audioBase = null;
+            this.acc = 0; this.lastTick = t;
+            this.rafId = window.requestAnimationFrame((tt) => this.loop(tt));
+            return;
+        }
         // Boot fast-forward: while the core reports the Next still booting
         // (or its load macro still typing keystrokes — zx_go fastboot.go),
         // run as many frames as fit a ~10ms budget per displayed frame
@@ -689,31 +702,41 @@ export class GoEmulator extends EventEmitter {
     // with a warning rather than failing the whole load — it only matters
     // if the game LOADs it, which then fails visibly in-game.
     async openNexGameZip(entries, nexEntry) {
-        await this.whenMachineReady();
-        if (this.machineType !== 'next') await this.bootNext();
-        const nexDir = nexEntry.path.slice(0, nexEntry.path.lastIndexOf('/') + 1);
-        const nexName = nexEntry.path.split('/').pop();
-        const dirParts = nexDir.split('/').filter(Boolean);
-        const gameDir = dirParts.length
-            ? dirParts[dirParts.length - 1]
-            : (nexName.replace(/\.nex$/i, '') || 'game');
-        let staged = 0;
-        for (const { path, file } of entries) {
-            if (path === nexEntry.path) continue; // zxRunNex stages the .nex itself
-            // The count updates between files (JSZip's inflate yields to the
-            // event loop), so the overlay shows staging progress even though
-            // the emulator's own rendering is starved.
-            this.showLoading(`Loading ${gameDir}… (${++staged}/${entries.length - 1} files)`);
-            const rel = path.startsWith(nexDir) ? path.slice(nexDir.length) : path;
-            const err = globalThis.zxPutFile(`${gameDir}/${rel}`, await file.async('uint8array'));
-            if (err) console.warn(`zxplay: SD stage skipped "${gameDir}/${rel}": ${err}`);
+        // Hold the frame loop for the whole import: the user never sees the
+        // preliminary boot-to-menu that used to precede the launch reboot
+        // (the confusing "double entry"), and the emulator stops competing
+        // with the inflater for the main thread. zxPutFile/zxRunNex are pure
+        // data calls — no frames needed. The launch macro's reboot is the
+        // one boot that gets displayed (fast-forwarded by loop()).
+        this.frameHold = true;
+        try {
+            await this.whenMachineReady();
+            if (this.machineType !== 'next') await this.bootNext();
+            const nexDir = nexEntry.path.slice(0, nexEntry.path.lastIndexOf('/') + 1);
+            const nexName = nexEntry.path.split('/').pop();
+            const dirParts = nexDir.split('/').filter(Boolean);
+            const gameDir = dirParts.length
+                ? dirParts[dirParts.length - 1]
+                : (nexName.replace(/\.nex$/i, '') || 'game');
+            const totalBytes = entries.reduce((sum, e) => sum + (e.size || 0), 0);
+            let doneBytes = 0;
+            for (const entry of entries) {
+                if (entry.path === nexEntry.path) continue; // zxRunNex stages the .nex itself
+                this.showLoading(`Loading ${gameDir}…`,
+                    totalBytes ? doneBytes / totalBytes : null);
+                const rel = entry.path.startsWith(nexDir) ? entry.path.slice(nexDir.length) : entry.path;
+                const err = globalThis.zxPutFile(`${gameDir}/${rel}`, await entry.bytes());
+                if (err) console.warn(`zxplay: SD stage skipped "${gameDir}/${rel}": ${err}`);
+                doneBytes += entry.size || 0;
+            }
+            this.showLoading(`Starting ${nexName}…`);
+            const err = globalThis.zxRunNex(`${gameDir}/${nexName}`, await nexEntry.bytes());
+            if (err) throw new Error(err);
+            this.watchMacroThenDoneLoading();
+            return { mediaType: 'nex' };
+        } finally {
+            this.frameHold = false;
         }
-        this.showLoading(`Starting ${nexName}…`);
-        const err = globalThis.zxRunNex(
-            `${gameDir}/${nexName}`, await nexEntry.file.async('uint8array'));
-        if (err) throw new Error(err);
-        this.watchMacroThenDoneLoading();
-        return { mediaType: 'nex' };
     }
 
     // Open a .nex: needs the Next, so switch to it first if required, then
@@ -721,15 +744,20 @@ export class GoEmulator extends EventEmitter {
     // NextZXOS's own .nexload command to run it (expect a short reboot).
     async openNEXFile(arrayBuffer, name) {
         const data = new Uint8Array(arrayBuffer);
-        // Wait out a boot already started by setMachine('next') before deciding
-        // whether to boot — otherwise machineType lags and we double-boot.
-        await this.whenMachineReady();
-        if (this.machineType !== 'next') await this.bootNext();
-        this.showLoading(`Starting ${name || 'game.nex'}…`);
-        const err = globalThis.zxRunNex(name || 'game.nex', data);
-        if (err) throw new Error(err);
-        this.watchMacroThenDoneLoading();
-        return { mediaType: 'nex' };
+        this.frameHold = true; // see openNexGameZip
+        try {
+            // Wait out a boot already started by setMachine('next') before deciding
+            // whether to boot — otherwise machineType lags and we double-boot.
+            await this.whenMachineReady();
+            if (this.machineType !== 'next') await this.bootNext();
+            this.showLoading(`Starting ${name || 'game.nex'}…`);
+            const err = globalThis.zxRunNex(name || 'game.nex', data);
+            if (err) throw new Error(err);
+            this.watchMacroThenDoneLoading();
+            return { mediaType: 'nex' };
+        } finally {
+            this.frameHold = false;
+        }
     }
 
     reset() {
@@ -866,12 +894,25 @@ export class GoEmulator extends EventEmitter {
             return arrayBuffer => this.openNEXFile(arrayBuffer, baseName);
         } else if (cleanName.endsWith('.zip')) {
             return async arrayBuffer => {
-                const zip = await JSZip.loadAsync(arrayBuffer);
-                const entries = [];
-                zip.forEach((path, file) => {
-                    if (file.dir || path.startsWith('__MACOSX/')) return;
-                    entries.push({ path, file });
-                });
+                // Prefer the native extractor (DecompressionStream — native
+                // inflate, so big game zips stage in seconds); JSZip covers
+                // the zips it can't parse (zip64, encryption, odd methods).
+                // Both produce {path, size, bytes: async () => Uint8Array}.
+                let entries = nativeZipEntries(arrayBuffer);
+                if (entries) {
+                    entries = entries.filter((e) => !e.path.startsWith('__MACOSX/'));
+                } else {
+                    const zip = await JSZip.loadAsync(arrayBuffer);
+                    entries = [];
+                    zip.forEach((path, file) => {
+                        if (file.dir || path.startsWith('__MACOSX/')) return;
+                        entries.push({
+                            path,
+                            size: (file._data && file._data.uncompressedSize) || 0,
+                            bytes: () => file.async('uint8array'),
+                        });
+                    });
+                }
                 // A zip holding exactly one .nex is a folder-distributed Next
                 // game: its other entries are the game's data files, staged
                 // onto the SD card before the .nex runs. Anything else keeps
@@ -881,10 +922,17 @@ export class GoEmulator extends EventEmitter {
                     return this.openNexGameZip(entries, nexes[0]);
                 }
                 const openers = [];
-                for (const { path, file } of entries) {
-                    const opener = this.getFileOpener(path);
+                for (const entry of entries) {
+                    const opener = this.getFileOpener(entry.path);
                     if (opener) {
-                        openers.push(async () => opener(await file.async('arraybuffer')));
+                        openers.push(async () => {
+                            // Openers take an ArrayBuffer; a stored native
+                            // entry views into the zip's buffer, so detach
+                            // it into an exact one first.
+                            const u8 = await entry.bytes();
+                            const exact = (u8.byteOffset === 0 && u8.byteLength === u8.buffer.byteLength);
+                            return opener(exact ? u8.buffer : u8.slice().buffer);
+                        });
                     }
                 }
                 if (openers.length == 1) {
@@ -898,13 +946,13 @@ export class GoEmulator extends EventEmitter {
         }
     }
 
-    // Loading overlay drivers. 'loading' shows the spinner pill (or updates
-    // its text); 'loadingDone' removes it. UIController renders them; the
-    // spinner is CSS-animated so it keeps moving even while the main thread
-    // is saturated (large-zip staging blocks rendering for minutes and the
-    // canvas freezes — without this the page looks dead).
-    showLoading(message) {
-        this.emit('loading', message);
+    // Loading overlay drivers. 'loading' shows the loading pill (or updates
+    // it); 'loadingDone' removes it. UIController renders them. progress is
+    // a 0..1 fraction for the circular progress ring, or null/undefined for
+    // an indeterminate spinner (the ring is CSS-animated so it keeps moving
+    // even when the main thread is busy).
+    showLoading(message, progress) {
+        this.emit('loading', message, (progress === undefined) ? null : progress);
     }
 
     doneLoading() {
