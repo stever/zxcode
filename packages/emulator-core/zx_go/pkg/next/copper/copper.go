@@ -314,18 +314,26 @@ func (c *Copper) RunToCycle(vcount uint16, cycle int) {
 	}
 }
 
-// Step advances the copper by at most maxInstr instructions
-// against the supplied raster position. Returns the number of
-// MOVE instructions actually executed. MOVE writes go through
-// the RegWriter; WAITs that haven't been satisfied leave pc
-// parked and stop the step. HALT stops the copper.
+// Step advances the copper by at most cycleBudget copper cycles
+// against the supplied raster position, at the FPGA's per-cycle
+// costs: a MOVE takes 2 cycles (write pulse + bubble,
+// copper.vhd:87-110), a NOOP 1, a WAIT release 1. An instruction
+// whose cost overruns the remaining budget still completes (the
+// budget gates STARTING an instruction), so a budget of 1 executes
+// exactly one instruction — the contract the per-tick golden-trace
+// driver relies on. Returns the number of MOVE instructions
+// actually executed. MOVE writes go through the RegWriter; a WAIT
+// that isn't satisfied leaves pc parked and stops the step, as does
+// HALT ($FFFF — a WAIT that can never be satisfied; the StartOnVBL
+// frame-origin reset un-parks it).
 //
-// maxInstr lets callers spread instruction execution across
-// scanlines as real hardware does (one Copper cycle per CPU
-// cycle, roughly). Pass 1 from a per-scanline render loop and
-// the copper executes at most one instruction per call. Passing
-// a larger number is useful for tests that want to "fast-forward"
-// to a stable state.
+// The instruction address is the FPGA's 10-bit counter: it WRAPS at
+// the 1024-entry list end in every running mode (copper.vhd's
+// copper_list_addr_s + 1 on a 10-bit vector). A free-running looped
+// list (mode 01) that ends without HALT re-executes from entry 0
+// forever — Atic Atac's sample pacer is exactly this: 1023
+// NOOP/MOVE-pad entries and a final MOVE NR$02,$04 firing one
+// divMMC NMI per wrap.
 //
 // Re-entry guard: if a MOVE writes to NextRegs that mutate the
 // Copper's own state (0x60-0x62), the writes are buffered through
@@ -338,7 +346,7 @@ func (c *Copper) RunToCycle(vcount uint16, cycle int) {
 // hcount_i carries; a WAIT releases at hcount >= (x<<3)+12 on its target
 // line (see WaitHThreshold). A per-scanline caller passes the end-of-line
 // hcount (>= 511) so every WAIT on the line releases on that line.
-func (c *Copper) Step(scanline uint16, hcount uint16, maxInstr int) int {
+func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 	// VBL auto-restart: in StartOnVBL the program counter resets to 0 at
 	// the start of each frame, i.e. when the raster wraps back to the top.
 	if c.mode == StartOnVBL && scanline < c.lastScanline {
@@ -349,14 +357,15 @@ func (c *Copper) Step(scanline uint16, hcount uint16, maxInstr int) int {
 		return 0
 	}
 	executed := 0
-	for n := 0; n < maxInstr && c.pc < MaxInstructions; n++ {
-		inst := Decode(c.program[c.pc])
+	for spent := 0; spent < cycleBudget; {
+		inst := Decode(c.program[c.pc&(MaxInstructions-1)])
 		switch inst.Op {
 		case OpMOVE:
 			if c.regs != nil {
 				c.regs.WriteReg(inst.Reg, inst.Val)
 			}
-			c.pc++
+			c.pc = (c.pc + 1) & (MaxInstructions - 1)
+			spent += 2
 			executed++
 		case OpWAIT:
 			// Release when the raster reaches the target line and the
@@ -368,28 +377,21 @@ func (c *Copper) Step(scanline uint16, hcount uint16, maxInstr int) int {
 			// line hits Y exactly, so this only matters if a line is skipped).
 			if scanline > inst.Y ||
 				(scanline == inst.Y && hcount >= WaitHThreshold(inst.X)) {
-				c.pc++
+				c.pc = (c.pc + 1) & (MaxInstructions - 1)
+				spent++
 				continue
 			}
 			// Not yet — park here.
 			return executed
 		case OpHALT:
-			c.stopped = true
+			// Park, don't stop: HALT is a WAIT that can never be
+			// satisfied. In StartOnVBL the frame-origin reset at Step
+			// entry un-parks it; a stopped latch would keep the copper
+			// dead across frames (RunToCycle parks the same way).
 			return executed
 		case OpNOOP:
-			c.pc++
-		}
-	}
-	// Did we run off the end?
-	if c.pc >= MaxInstructions {
-		if c.mode == StartOnVBL {
-			// Park at the end of the list; the program counter is reset
-			// to 0 at the start of the next frame by the VBL check at
-			// Step entry (so the list restarts precisely on the raster
-			// wrap, not when it happens to run off the end).
-			c.pc = MaxInstructions
-		} else {
-			c.stopped = true
+			c.pc = (c.pc + 1) & (MaxInstructions - 1)
+			spent++
 		}
 	}
 	return executed

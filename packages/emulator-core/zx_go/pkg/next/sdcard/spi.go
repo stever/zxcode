@@ -147,10 +147,11 @@ type Card struct {
 
 	// advertiseSDHC selects whether CMD58's OCR response sets CCS
 	// (Card Capacity Status, bit 30 of the 32-bit OCR). When true
-	// we advertise SDHC/SDXC (block-addressed); when false SDSC
-	// (byte-addressed). Default false to match the legacy
-	// NextZXOS bank-2 SD driver path; set true to investigate the
-	// FPGA-bootrom path which expects SDHC addressing.
+	// we advertise SDHC/SDXC (block-addressed, CSD v2); when false
+	// SDSC (byte-addressed, CSD v1). The zero value is SDSC, but
+	// every mount site (desktop image/folder and the wasm mounts)
+	// sets SDHC unless $ZX_GO_NEXT_SDSC=1: real Next cards are
+	// SDHC, and card-class-probing games require it.
 	advertiseSDHC bool
 
 	// dataBlocksRead counts every 512-byte data block served to the
@@ -601,14 +602,12 @@ func (c *Card) queueDataBlock(data []byte, n int) {
 // one 0xFF Ncr pad → R1 (0x00) → 0xFE data token → 512 bytes
 // of payload → 0xFF 0xFF CRC.
 //
-// SD ADDRESSING: SDSC cards (which we advertise via OCR CCS=0)
-// expect the CMD17 argument to be a BYTE address — the host
-// multiplies the desired sector by 512 before issuing the
-// command. Our `src.ReadBlock` API takes LBA, so we divide back
-// out. SDHC would skip that step (the arg is the LBA directly),
-// but we never advertise SDHC: the canonical MMC SPI implementation comment
-// records that CCS=1 breaks NextZXOS, and we matched that
-// decision in our OCR.
+// SD ADDRESSING: an SDSC card (OCR CCS=0) expects the CMD17
+// argument to be a BYTE address — the host multiplies the desired
+// sector by 512 before issuing the command — while an SDHC card
+// (CCS=1, the wiring default at every mount site since the CSD v2
+// pairing landed) takes the LBA directly. argToLBA resolves either
+// to the LBA `src.ReadBlock` wants, per the advertised class.
 func (c *Card) handleReadBlock(arg uint32) {
 	c.respondR1(0x00) // respondR1 supplies the Ncr pad
 	buf := make([]byte, 512)

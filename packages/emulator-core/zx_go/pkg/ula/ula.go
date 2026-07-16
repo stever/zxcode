@@ -2197,11 +2197,13 @@ func (u *ULA) Close() {
 func (u *ULA) applyNextCompositor(stale bool) {
 	const w = 256
 	const h = 192
-	// At 3.5 MHz the Copper runs ~one instruction per 4 CPU
-	// T-states. A scanline is 228 T-states, so ~57 instructions
-	// per scanline. Round to 64 for headroom; programs heavy on
-	// WAITs typically execute far fewer.
-	const copperInstrPerScanline = 64
+	// The copper runs at 28 MHz, one cycle per NOOP / two per MOVE
+	// (device/copper.vhd). A scanline is 448 hcounts x 4 cycles =
+	// 1792 copper cycles — Step's budget is in those cycles, so a
+	// free-running looped list (Atic Atac's NMI sample pacer: 1024
+	// entries ≈ 1361 cycles) wraps at the hardware rate (~20 kHz).
+	// WAIT-heavy programs park early and spend almost none of it.
+	const copperCyclesPerScanline = 448 * 4
 	// Raster geometry for the cycle-paced copper interleave. hcount
 	// counts 7MHz pixels (448 per 48K-timing line); the copper runs 4
 	// cycles per hcount (28 MHz, copper.CyclesPerHcount). Display pixel
@@ -2340,7 +2342,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			if scrollCap != nil {
 				scrollCap.CaptureTilemapRowScroll(64 + y)
 			}
-			u.nextCopper.Step(uint16(y), 511, copperInstrPerScanline)
+			u.nextCopper.Step(uint16(y), 511, copperCyclesPerScanline)
 		} else if scrollCap != nil {
 			scrollCap.CaptureTilemapRowScroll(64 + y)
 		}
@@ -2451,7 +2453,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			} else if u.nextCopper != nil {
 				// Non-live flow (the paper walk used per-row Step): keep
 				// stepping so line-192..311 WAITs release on their line.
-				u.nextCopper.Step(uint16(v), 511, copperInstrPerScanline)
+				u.nextCopper.Step(uint16(v), 511, copperCyclesPerScanline)
 			}
 			if imgRow >= 0 {
 				if liveULA {

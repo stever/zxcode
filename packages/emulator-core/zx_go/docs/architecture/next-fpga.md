@@ -273,8 +273,16 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   wrap. The border-line sweep runs even when the live-ULA render is
   off (NR$68 bit 7 ULA-disabled content — RAMS): the copper's
   192..311 WAITs must release on their lines regardless, via the
-  per-row Step fallback. The legacy per-scanline `Step` remains for the golden replay
-  and non-live fallback paths.
+  per-row Step fallback. The per-scanline `Step` engine (golden replay
+  and non-live fallback paths) shares RunToCycle's semantics: a
+  1792-cycle-per-line budget at the same MOVE=2/NOOP=1 costs, the
+  10-bit list address WRAPPING at 1024 in every running mode, and
+  HALT parking (not stopping — the StartOnVBL frame reset un-parks
+  it). The wrap is load-bearing: a free-running mode-01 list that
+  ends without HALT loops forever, and a copper MOVE to NR$02 goes
+  through the shared dispatcher, so bit 2 fires the divMMC NMI —
+  Atic Atac's sample pacer is a 1024-entry looped list whose last
+  entry is MOVE NR$02,$04, one NMI per wrap (~20 kHz).
 - Live-palette ULA render (`pkg/ula` renderNextULARow +
   `Compositor.ULARGBA`): on the Next, ULA inner-screen and border
   pixels resolve through the LIVE ULA palette exactly like the FPGA's

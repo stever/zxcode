@@ -3,6 +3,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"syscall/js"
 
@@ -150,6 +151,14 @@ func setupWasmExports() {
 			if src != nil {
 				e.sdImageSrc = src
 				card := sdcard.NewCard(src)
+				// Default to SDHC (block-addressed), matching next.go's
+				// desktop mounts: real Next cards are SDHC, and games
+				// that probe the card class refuse SDSC outright (Atic
+				// Atac's "SDHC OR BETTER REQUIRED", #167). Same
+				// $ZX_GO_NEXT_SDSC escape hatch, settable via go.env.
+				if os.Getenv("ZX_GO_NEXT_SDSC") == "" {
+					card.SetSDHC(true)
+				}
 				e.sdCard = card
 				if p, ok := e.ula.NextDivMMC().(*divmmc.Pager); ok {
 					p.SetCard(card)

@@ -384,6 +384,12 @@ func (sc *snapshotConfig) emit() {
 		slog.Debug("snapshot.mmu", "frame", sc.frameIdx,
 			"slots", fmt.Sprintf("%02X %02X %02X %02X %02X %02X %02X %02X",
 				mmu[0], mmu[1], mmu[2], mmu[3], mmu[4], mmu[5], mmu[6], mmu[7]))
+		if emu.sdCard != nil {
+			// SD transfer telemetry: a delta between snapshots shows
+			// whether guest streaming (open CMD18s included) is flowing.
+			slog.Debug("snapshot.sd", "frame", sc.frameIdx,
+				"data_blocks_read", emu.sdCard.DataBlocksRead())
+		}
 	}
 
 	if len(sc.watch) > 0 {

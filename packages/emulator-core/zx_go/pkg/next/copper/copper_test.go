@@ -101,14 +101,18 @@ func TestStartFromZeroRunsProgram(t *testing.T) {
 	c.SetRegWriter(rw)
 	// Start from zero (mode 1).
 	c.SetWritePtrHighAndMode(byte(StartFromZero) << 6)
-	// maxInstr=2 lets MOVE then HALT both execute in one Step.
-	c.Step(0, 0, 2)
+	// Budget 4 cycles: the MOVE (2 cycles) executes and the copper
+	// parks on the HALT.
+	c.Step(0, 0, 4)
 
 	if len(rw.writes) != 1 || rw.writes[0].reg != 0x07 || rw.writes[0].val != 0x02 {
 		t.Errorf("MOVE not executed: writes = %+v", rw.writes)
 	}
-	if !c.stopped {
-		t.Errorf("HALT should stop the copper")
+	// HALT parks (a WAIT that can never be satisfied) — further Steps
+	// execute nothing.
+	c.Step(0, 511, 64)
+	if len(rw.writes) != 1 {
+		t.Errorf("HALT should park the copper; extra writes = %+v", rw.writes[1:])
 	}
 }
 
@@ -214,8 +218,8 @@ func TestMOVEIntoCopperOwnRegistersDoesNotCrash(t *testing.T) {
 	// which calls c.WriteData (mutating writePtr) — does NOT
 	// disturb the outer Step's pc.
 	c.Step(0, 0, 4)
-	if !c.stopped {
-		t.Errorf("Copper should have run MOVE then HALT and stopped")
+	if c.pc != 1 {
+		t.Errorf("Copper should have run MOVE then parked on HALT; pc = %d, want 1", c.pc)
 	}
 }
 
