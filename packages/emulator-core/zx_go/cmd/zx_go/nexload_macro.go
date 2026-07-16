@@ -145,8 +145,8 @@ func newCommandLineMacro(cmd string, tailFrames int) *nexloadMacro {
 	hold := func(keys [][2]int, frames int) { steps = append(steps, macroStep{keys: keys, frames: frames}) }
 	wait := func(frames int) { steps = append(steps, macroStep{frames: frames}) }
 
-	steps = append(steps, macroStep{waitMenu: true}) // boot to the welcome screen
-	hold([][2]int{{7, 0x01}}, 40)                    // SPACE -> "Start NextZXOS"
+	steps = append(steps, macroStep{waitMenu: true}) // boot to the welcome/menu key-wait
+	hold([][2]int{{3, 0x01}}, 40)                    // digit 1: dismisses a welcome, inert at the menu (see newBrowserLaunchMacro)
 	// Cursor-feedback: hold DOWN until the menu cursor ($F700) lands on
 	// Command Line. Self-times through the menu appearing and can't overshoot
 	// the target — no fixed menu-settle pad needed.
@@ -213,12 +213,11 @@ const browserSettleFrames = 200
 // exactly the presses needed. No typing — filenames need not be
 // typeable, and 8.3 aliasing is irrelevant.
 //
-// The welcome screen (shown on browser builds) is crossed with SPACE
-// ("Start NextZXOS", a no-op if the menu is already up) followed by a
-// fixed pad: the key-wait PC and the menu cursor byte both give
-// ambiguous readings through the welcome→menu transition, so state
-// divination is avoided; the pads are absorbed by the boot
-// fast-forward in the browser.
+// Any welcome screen is crossed with a digit press (inert if the menu
+// is already up — see the step comment) followed by a fixed pad: the
+// key-wait PC and the menu cursor byte both give ambiguous readings
+// through the welcome→menu transition, so state divination is avoided;
+// the pads are absorbed by the boot fast-forward in the browser.
 func newBrowserLaunchMacro(dirDowns, fileDowns int) *nexloadMacro {
 	var steps []macroStep
 	hold := func(keys [][2]int, frames int) { steps = append(steps, macroStep{keys: keys, frames: frames}) }
@@ -232,8 +231,15 @@ func newBrowserLaunchMacro(dirDowns, fileDowns int) *nexloadMacro {
 	enter := func() { hold([][2]int{{6, 0x01}}, 6) }
 
 	steps = append(steps, macroStep{waitMenu: true}) // boot to welcome/menu key-wait
-	hold([][2]int{{7, 0x01}}, 40)                    // SPACE -> "Start NextZXOS" (no-op at the menu)
-	wait(600)                                        // ride out the welcome->menu transition
+	// Dismiss a welcome screen if one is up. The key must be a DIGIT, not
+	// SPACE: every card in the current fleet reboots straight to the main
+	// menu (no welcome), and there SPACE pages to the "More..." menu — a
+	// visible page-flip-and-back that confused users, kept harmless only
+	// by the key repeat happening to toggle an even number of times. A
+	// digit is "any key" to the welcome's key-wait but does nothing at the
+	// menu (verified headless: screenshot identical with and without it).
+	hold([][2]int{{3, 0x01}}, 40) // digit 1
+	wait(600)                     // ride out the welcome->menu transition
 	enter()                                          // open the Browser (menu cursor sits on it)
 	wait(browserSettleFrames)                        // root directory read + panel draw
 	down(dirDowns)                                   // cursor to the game folder
