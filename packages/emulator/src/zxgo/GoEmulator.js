@@ -202,7 +202,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r56-browser-nex-launch+quiet-menu';
+        const ENGINE_REV = 'r56-browser-nex-launch+fast-macro';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -952,6 +952,7 @@ export class GoEmulator extends EventEmitter {
     // an indeterminate spinner (the ring is CSS-animated so it keeps moving
     // even when the main thread is busy).
     showLoading(message, progress) {
+        this.lastLoadingMessage = message;
         this.emit('loading', message, (progress === undefined) ? null : progress);
     }
 
@@ -970,9 +971,20 @@ export class GoEmulator extends EventEmitter {
         this.loadingHold = true;
         if (this.macroWatch) clearInterval(this.macroWatch);
         const t0 = Date.now();
+        let best = 0; // keep the ring monotonic across estimate jitter
         this.macroWatch = setInterval(() => {
             const active = globalThis.zxMacroActive && globalThis.zxMacroActive();
-            if (!active || Date.now() - t0 > 180000) this.doneLoading();
+            if (!active || Date.now() - t0 > 180000) {
+                this.doneLoading();
+                return;
+            }
+            // Fill the ring with the macro's own progress through its
+            // script (boot + menu + Browser navigation).
+            const p = globalThis.zxMacroProgress ? globalThis.zxMacroProgress() : -1;
+            if (p >= 0) {
+                best = Math.max(best, p);
+                this.showLoading(this.lastLoadingMessage, best);
+            }
         }, 300);
     }
 

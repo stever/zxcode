@@ -534,6 +534,19 @@ func setupWasmExports() {
 		return e != nil && e.nexloadMacro != nil
 	}))
 
+	// zxMacroProgress() -> 0..1 fraction of the active keystroke macro's
+	// script, or -1 when no macro is driving. The page's loading indicator
+	// fills its ring with this through the launch (boot + menu + Browser
+	// navigation); condition-driven steps report against nominal durations,
+	// so it is an estimate that never runs backwards.
+	g.Set("zxMacroProgress", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		e := wasmEmu
+		if e == nil || e.nexloadMacro == nil {
+			return -1.0
+		}
+		return e.nexloadMacro.progress()
+	}))
+
 	// zxFastBoot() -> bool. True while the Spectrum Next is still booting
 	// (or a load macro is still typing) and the page should fast-forward:
 	// run extra zxFrame calls per displayed frame and discard the audio.

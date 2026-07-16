@@ -77,6 +77,19 @@ type macroStep struct {
 	waitMenu     bool
 	waitCursor   bool
 	cursorTarget byte
+	// menuLongStreak overrides the unbroken-streak threshold that lets a
+	// waitMenu step pass WITHOUT having seen the CPU away from the
+	// key-wait (0 = the 600-frame default). The first waitMenu of a boot
+	// needs the long default — some boot phases fake stability — but a
+	// SECOND waitMenu that follows an already-proven key-wait plus an
+	// inert keypress only has to distinguish "still at the menu" from a
+	// welcome→menu transition in flight, so a short threshold is safe
+	// and saves ~10s of emulated time on the common no-welcome path.
+	menuLongStreak int
+	// estFrames is this step's nominal duration for progress reporting
+	// (see progress); required for the condition-driven steps whose
+	// frames field is 0.
+	estFrames int
 }
 
 // nextMenuCursorAddr is the logical address NextZXOS keeps the main-menu
@@ -186,12 +199,18 @@ func newNexloadMacro(sdPath string) *nexloadMacro {
 	return newCommandLineMacro(".nexload "+sdPath, 100)
 }
 
-// browserSettleFrames pads between opening the Browser and launching the
-// first entry: the Browser reads the directory and draws its panel before
-// it accepts ENTER. The headless Browser-navigation experiments (#178)
-// pressed follow-up keys 300 frames after opening; 200 keeps margin while
-// staying inside the boot fast-forward window.
-const browserSettleFrames = 200
+// browserSettleFrames pads between opening the Browser (or entering a
+// directory) and the next keypress: the Browser reads the directory and
+// draws its panel before it accepts input, and presses during the draw are
+// eaten. 100 holds 2x margin over the observed floor (the cycle test and a
+// real TX-1696 launch still navigate correctly at 50) while keeping the
+// user-visible launch short — this pad runs on camera now.
+const browserSettleFrames = 100
+
+// browserDownGapFrames separates the Browser cursor-DOWN presses so each
+// registers as its own keypress (no auto-repeat involvement). 12 holds 2x
+// margin over the observed floor of 6.
+const browserDownGapFrames = 12
 
 // newBrowserLaunchMacro launches a .nex through the NextZXOS Browser —
 // the same launch a real Next user performs, which is the point (#178):
@@ -225,12 +244,12 @@ func newBrowserLaunchMacro(dirDowns, fileDowns int) *nexloadMacro {
 	down := func(n int) {
 		for i := 0; i < n; i++ {
 			hold([][2]int{{0, 0x01}, {4, 0x10}}, 4) // CAPS SHIFT + 6 = cursor DOWN
-			wait(20)
+			wait(browserDownGapFrames)
 		}
 	}
 	enter := func() { hold([][2]int{{6, 0x01}}, 6) }
 
-	steps = append(steps, macroStep{waitMenu: true}) // boot to welcome/menu key-wait
+	steps = append(steps, macroStep{waitMenu: true, estFrames: 1200}) // boot to welcome/menu key-wait
 	// Dismiss a welcome screen if one is up. The key must be a DIGIT, not
 	// SPACE: every card in the current fleet reboots straight to the main
 	// menu (no welcome), and there SPACE pages to the "More..." menu — a
@@ -239,17 +258,62 @@ func newBrowserLaunchMacro(dirDowns, fileDowns int) *nexloadMacro {
 	// digit is "any key" to the welcome's key-wait but does nothing at the
 	// menu (verified headless: screenshot identical with and without it).
 	hold([][2]int{{3, 0x01}}, 40) // digit 1
-	wait(600)                     // ride out the welcome->menu transition
-	enter()                                          // open the Browser (menu cursor sits on it)
-	wait(browserSettleFrames)                        // root directory read + panel draw
-	down(dirDowns)                                   // cursor to the game folder
-	enter()                                          // enter it
-	wait(browserSettleFrames)                        // folder directory read
-	down(fileDowns)                                  // cursor to the .nex
-	enter()                                          // launch: the OS runs .nexload on it
-	wait(100)                                        // tail
+	// Ride out a possible welcome->menu transition with feedback instead
+	// of a fixed pad: if the digit dismissed a welcome the CPU has already
+	// left the key-wait (the 40-frame hold is ample), so the away-and-back
+	// path applies; on the common menu-direct boot the key was inert and a
+	// short unbroken streak right after an already-proven key-wait is
+	// enough — worth ~550 frames over the old wait(600).
+	steps = append(steps, macroStep{waitMenu: true, menuLongStreak: 60, estFrames: 80})
+	enter()                   // open the Browser (menu cursor sits on it)
+	wait(browserSettleFrames) // root directory read + panel draw
+	down(dirDowns)            // cursor to the game folder
+	enter()                   // enter it
+	wait(browserSettleFrames) // folder directory read
+	down(fileDowns)           // cursor to the .nex
+	enter()                   // launch: the OS runs .nexload on it
+	wait(100)                 // tail
 
 	return &nexloadMacro{steps: steps}
+}
+
+// progress reports how far through its script the macro is, 0..1, for the
+// host's loading indicator. Each step contributes its nominal duration —
+// frames for timed steps, estFrames for the condition-driven ones (whose
+// real duration varies with boot speed) — and the current step counts its
+// elapsed frames capped at that nominal, so a slow boot parks the bar at
+// its slice instead of running it off the end. Monotonic by construction.
+func (m *nexloadMacro) progress() float64 {
+	nominal := func(s *macroStep) int {
+		if s.frames > 0 {
+			return s.frames
+		}
+		if s.estFrames > 0 {
+			return s.estFrames
+		}
+		if s.waitMenu || s.waitCursor {
+			return 300 // condition step without an estimate
+		}
+		return 1
+	}
+	total, done := 0, 0
+	for i := range m.steps {
+		n := nominal(&m.steps[i])
+		total += n
+		if i < m.idx {
+			done += n
+		} else if i == m.idx {
+			if m.frame < n {
+				done += m.frame
+			} else {
+				done += n
+			}
+		}
+	}
+	if total == 0 || m.idx >= len(m.steps) {
+		return 1
+	}
+	return float64(done) / float64(total)
 }
 
 // inTail reports whether the macro has reached its final step — the tail
@@ -302,11 +366,15 @@ func (m *nexloadMacro) tick(e *emulator) bool {
 		// A short streak only counts after the step has seen the CPU
 		// away from the key-wait: a waitMenu entered while the previous
 		// screen's loop is still running (right after the welcome's
-		// SPACE) would otherwise fire before the transition even starts.
-		// A LONG unbroken streak counts regardless — the step began at
-		// an already-stable interactive screen (headless boots skip the
-		// welcome, so no transition ever happens).
-		if (m.menuSawAway && m.menuStreak >= 30) || m.menuStreak >= 600 || m.frame > 4000 {
+		// dismissal keypress) would otherwise fire before the transition
+		// even starts. A LONG unbroken streak counts regardless — the
+		// step began at an already-stable interactive screen (headless
+		// boots skip the welcome, so no transition ever happens).
+		longStreak := s.menuLongStreak
+		if longStreak == 0 {
+			longStreak = 600
+		}
+		if (m.menuSawAway && m.menuStreak >= 30) || m.menuStreak >= longStreak || m.frame > 4000 {
 			slog.Debug("macro: waitMenu done", "idx", m.idx, "stepFrames", m.frame, "pc", fmt.Sprintf("$%04X", e.cpu.PC))
 			m.menuStreak = 0
 			m.menuSawAway = false

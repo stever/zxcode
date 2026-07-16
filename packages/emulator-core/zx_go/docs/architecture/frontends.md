@@ -61,7 +61,7 @@ Exports (`wasm_js.go`, all globals; `zxReady` is set last):
 | Group | Exports |
 | --- | --- |
 | Boot / machine | `zxRegisterROM(name, bytes)`, `zxBootNext(sd)`, `zxBoot48()`, `zxBoot128()`, `zxBoot(model)`, `zxReset()`, `zxModel()` |
-| Frame / audio | `zxFrame(dst?) → {w,h,debug,paused,pc}`, `zxPullAudio(dst) → n`, `zxFastBoot()`, `zxMacroActive()` |
+| Frame / audio | `zxFrame(dst?) → {w,h,debug,paused,pc}`, `zxPullAudio(dst) → n`, `zxFastBoot()`, `zxMacroActive()`, `zxMacroProgress() → 0..1 \| -1` |
 | Input | `zxMatrixKey(row, mask, down)`, `zxType(rune)`, `zxKeyName(name, down, shift)` |
 | Tape | `zxLoadTap`, `zxTapeInsert`, `zxTapePlay`, `zxTapeStop`, `zxTapeStatus`, `zxTapeTraps` |
 | Programs / files | `zxLoadSnapshot(bytes, ext)`, `zxRunNex(name, bytes)`, `zxRunBas(name, bytes)`, `zxPutFile(path, bytes)` |
