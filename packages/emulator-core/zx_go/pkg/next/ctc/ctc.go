@@ -241,6 +241,38 @@ func (c *Channel) AdvanceIdle(n uint64) (zcs uint64) {
 	return zcs
 }
 
+// TriggerSensitive reports whether pulses on the CLK/TRG input can
+// change this channel's observable state: a COUNTER-mode channel
+// counts them, and a channel parked in S_TRIGGER starts on one. A
+// running TIMER ignores its trigger, so feeding pulses to it is a
+// wasted no-op the caller can skip.
+func (c *Channel) TriggerSensitive() bool {
+	return c.cwCounter() || c.state == sTrigger
+}
+
+// PulseTrigger models ONE pulse arriving on the CLK/TRG input — the
+// Next's channel-to-channel ZC/TO cascade (zxnext.vhd:4082: ch N's
+// i_clk_trg is ch (N-1) mod 4's zc_to, a one-i_CLK-wide pulse). The
+// level rises for one tick and falls on the next, so both trigger
+// polarities see their edge. Returns the ZC/TO pulses THIS channel
+// fired during the two ticks (a counter at 1 reloads and pulses).
+// The two ticks advance the channel's own clock by 2 — at the block's
+// lazy-advance granularity that drift is negligible and only occurs
+// while a cascade is actively fed.
+func (c *Channel) PulseTrigger() (zcs uint64) {
+	c.SetTrigger(true)
+	c.Tick()
+	if c.zcToD {
+		zcs++
+	}
+	c.SetTrigger(false)
+	c.Tick()
+	if c.zcToD {
+		zcs++
+	}
+	return zcs
+}
+
 // TicksToNextZC returns how many idle i_CLK edges from now the next
 // ZC/TO pulse fires, and whether one is scheduled at all (running
 // TIMER mode only — counter-mode and idle channels return false).

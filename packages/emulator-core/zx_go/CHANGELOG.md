@@ -29,6 +29,12 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **CTC channel cascade (#158 Axis 5).** Channel N's CLK/TRG input is
+  now channel (N-1) mod 4's ZC/TO pulse (`zxnext.vhd:4082`), fed
+  through the golden-pinned channel's own trigger path — counter-mode
+  channels divide their upstream neighbour (the classic long-timer
+  chain) and wait-on-trigger timers start on the upstream's pulse.
+  Previously a counter-mode channel never saw an edge.
 - **Paging-priority walk (#158 Axis 7).** A canary test walks every
   $0000-$3FFF layer up and down against the FPGA memory mux: bootrom
   read mask > divMMC > Multiface > config-mode RAMPAGE > Alt-ROM

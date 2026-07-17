@@ -244,9 +244,18 @@ mid-PUSH-slide — the game now loads and plays. TestWireIM2VectoredCTC-
 CatchesSlide / TestWireIM2RetiReleasesInService / TestWireIM2ULA-
 ExceptionWhenNotIM2 / TestWireIM2ULAVectoredWhenIM2 /
 TestWireIM2PulseModeUnchanged.
-⚠️ Not modelled: the counter-mode ZC/TO trigger cascade between channels
-(vhd:4082), UART interrupt sources (vectors 1, 2, 12, 13 — the UART
-generates no interrupts), NR$CC-$CE DMA-interrupt enables, pulse-mode
+✅ CTC channel-to-channel ZC/TO cascade (#158): ch N's CLK/TRG input is
+ch (N-1) mod 4's ZC/TO pulse (vhd:4082 i_clk_trg <= zc_to(2:0) &
+zc_to(3)) — a COUNTER-mode channel divides its upstream neighbour and
+a wait-on-trigger timer starts on the upstream's pulse, fed through
+the golden-pinned channel's own trigger path (ctc.Channel.PulseTrigger)
+in CTCBlock.catchUp, ring-iterated so multi-stage divider chains settle.
+`TestCTCCascade*` (÷3 divider residual count, running-timer immunity,
+waiting-timer start). Granularity: pulses land at the block's lazy
+observation points (per instruction in practice).
+⚠️ Not modelled: UART interrupt sources (vectors 1, 2, 12, 13 — the UART
+generates no interrupts), NR$CC-$CE DMA-interrupt enables (the DMA
+generates no interrupts — known-gaps zxnDMA row), pulse-mode
 sticky status (the chain is held reset in pulse mode), and port reads of
 a mid-count channel return the batch-advanced counter (exact at
 observation points).

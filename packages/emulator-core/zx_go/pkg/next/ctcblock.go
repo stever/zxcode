@@ -30,9 +30,12 @@ import (
 // The hardware-IM2 vectored mode (NR$C0 bit 0) is wired by IM2Block
 // (im2block.go), which suppresses this block's pulse line and feeds the
 // raw per-channel ZC/TO pulses (ConsumeZC) into the im2 daisy chain
-// instead. Not modelled (documented gap): the channel-to-channel ZC/TO
-// trigger cascade for COUNTER-mode channels (i_clk_trg chaining,
-// zxnext.vhd:4082) — a counter-mode channel currently never sees edges.
+// instead. The channel-to-channel ZC/TO trigger cascade is modelled
+// (#158 Axis 5): channel N's CLK/TRG input is channel (N-1) mod 4's
+// ZC/TO pulse (zxnext.vhd:4082 i_clk_trg <= ctc_zc_to(2:0) &
+// ctc_zc_to(3)), fed in catchUp — a COUNTER-mode channel divides its
+// upstream neighbour (timer chains longer than 8 bits), and a
+// waiting-on-trigger timer starts on the upstream's pulse.
 type CTCBlock struct {
 	ch [4]*ctc.Channel
 
@@ -101,6 +104,13 @@ func (b *CTCBlock) Channel(n int) *ctc.Channel { return b.ch[n&3] }
 
 // catchUp advances every channel to the current CLK_28 time and
 // returns true if any int-enabled channel fired a ZC in the window.
+// After the idle advance it feeds the channel-to-channel ZC/TO
+// cascade: channel N's CLK/TRG input is channel (N-1) mod 4's ZC/TO
+// pulse (zxnext.vhd:4082 i_clk_trg <= ctc_zc_to(2:0) & ctc_zc_to(3)),
+// so a COUNTER-mode channel divides its upstream neighbour and a
+// waiting timer starts on it. The ring is iterated until no new
+// pulses appear, so a multi-stage divider chain settles within the
+// window (each stage divides, so the pass count is bounded).
 func (b *CTCBlock) catchUp() bool {
 	now := b.clk28()
 	if now <= b.last28 {
@@ -109,13 +119,42 @@ func (b *CTCBlock) catchUp() bool {
 	d := now - b.last28
 	b.last28 = now
 	fired := false
-	for i, c := range b.ch {
-		zcs := c.AdvanceIdle(d)
+	record := func(i int, zcs uint64) {
 		if zcs > 0 {
 			b.zcMask |= 1 << uint(i)
-			if c.IntEnabled() {
+			if b.ch[i].IntEnabled() {
 				fired = true
 			}
+		}
+	}
+	// pending[i]: upstream pulses produced for channel i, not yet fed.
+	var pending [4]uint64
+	for i, c := range b.ch {
+		zcs := c.AdvanceIdle(d)
+		record(i, zcs)
+		pending[(i+1)&3] += zcs
+	}
+	for pass := 0; pass < 8; pass++ {
+		progressed := false
+		for i, c := range b.ch {
+			k := pending[i]
+			if k == 0 {
+				continue
+			}
+			pending[i] = 0
+			if !c.TriggerSensitive() {
+				continue // a running timer ignores its trigger
+			}
+			progressed = true
+			var zcs uint64
+			for ; k > 0; k-- {
+				zcs += c.PulseTrigger()
+			}
+			record(i, zcs)
+			pending[(i+1)&3] += zcs
+		}
+		if !progressed {
+			break
 		}
 	}
 	return fired
@@ -135,17 +174,30 @@ func (b *CTCBlock) ConsumeZC() byte {
 	return m
 }
 
-// reschedule recomputes the earliest int-enabled ZC deadline.
+// reschedule recomputes the earliest int-enabled ZC deadline. A
+// cascade-fed channel (int-enabled, trigger-sensitive, with a
+// running-timer upstream neighbour) arms a CONSERVATIVE deadline at
+// the upstream's next ZC — IntLine catches up there and the cascade
+// feed in catchUp decides whether the downstream actually fired.
 func (b *CTCBlock) reschedule() {
 	b.nextZC28 = 0
-	for _, c := range b.ch {
+	arm := func(ticks uint64) {
+		at := b.last28 + ticks
+		if b.nextZC28 == 0 || at < b.nextZC28 {
+			b.nextZC28 = at
+		}
+	}
+	for i, c := range b.ch {
 		if !c.IntEnabled() {
 			continue
 		}
 		if ticks, ok := c.TicksToNextZC(); ok {
-			at := b.last28 + ticks
-			if b.nextZC28 == 0 || at < b.nextZC28 {
-				b.nextZC28 = at
+			arm(ticks)
+			continue
+		}
+		if c.TriggerSensitive() {
+			if ticks, ok := b.ch[(i+3)&3].TicksToNextZC(); ok {
+				arm(ticks)
 			}
 		}
 	}
@@ -211,10 +263,15 @@ func (b *CTCBlock) ReadIntEnable() byte {
 func (b *CTCBlock) IntLine(_ uint64) bool {
 	now := b.clk28()
 	if b.nextZC28 != 0 && now >= b.nextZC28 {
-		b.catchUp()
+		fired := b.catchUp()
 		b.reschedule()
-		b.pulseUntil28 = now + b.pulseTstates*8/uint64(b.speedMult())
-		return true
+		// Cascade deadlines are conservative (armed at the UPSTREAM's
+		// next ZC) — assert the pulse only if an int-enabled channel
+		// actually fired in the window.
+		if fired {
+			b.pulseUntil28 = now + b.pulseTstates*8/uint64(b.speedMult())
+			return true
+		}
 	}
 	return now < b.pulseUntil28
 }
