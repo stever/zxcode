@@ -68,8 +68,11 @@ this project used before the zx_go migration.
 Engine highlights:
 
 - 48K and 128K boot from ROMs embedded in zx.wasm; the Spectrum Next boots
-  real NextZXOS from staged ROMs + an SD card image (never committed — see
-  packages/emulator-core/LICENSES.md for the distribution basis).
+  real NextZXOS from the official SpecNext distro, relayed byte-for-byte
+  through a same-origin proxy route — this project distributes no NextZXOS
+  content itself. Locally staged ROMs + SD image are the offline dev/CI
+  fallback, never committed (policy and self-hosting conditions:
+  packages/emulator-core/LICENSES.md).
 - Audio streams from the core into an AudioWorklet (served as
   /dist/zx-feeder.worklet.js: CSP script-src 'self' compatible); the machine
   is paced off the audio clock, so producer and consumer cannot drift.

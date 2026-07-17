@@ -52,9 +52,14 @@ pristine card is normalised in-RAM by the `zxSdPrepDistro` export
 when absent — the shape a once-configured card has on real hardware.
 
 ROMs + an SD image staged by `scripts/` remain the fallback (offline dev,
-CI, and gif-service's Node harness) — licensed content served under The
-Next License; see `LICENSES.md` for the distribution basis and its
-conditions (free access, bare bootable system, attribution).
+CI, and gif-service's Node harness) — licensed content for LOCAL use only:
+the project does not distribute it at all (the deployment hosts no copy;
+the browser gets the content from SpecNext's own server through the
+pass-through route above). See `LICENSES.md` for the policy, and for the
+conditions that apply to anyone self-hosting a staged copy. A minimal
+("supersmall") distro from SpecNext is expected to replace the full zip on
+the pass-through route — bump `SPECNEXT_DISTRO_PATH` and re-verify per
+"Next boot modes" below when it lands.
 
 ## Next boot modes — MAINTENANCE GOTCHA
 

@@ -33,44 +33,53 @@ yourself; source is available).
 - `tbblue.mmc` — FAT32 SD image containing the NextZXOS system files.
 
 These are copyright **Garry Lancaster / SpecNext Ltd**, with portions
-**(c) Amstrad plc**. They are NOT GPL. They are distributed under
+**(c) Amstrad plc**. They are NOT GPL. They are covered by
 [The Next License](https://gitlab.com/thesmog358/tbblue/-/blob/master/LICENSE.md):
 cost-free distribution is permitted (no selling, no duplication fee), copyright
 notices must be retained, and component licenses supersede the umbrella terms.
-A free-to-access deployment of this app may therefore serve them alongside the
-GPLv3 code as separately-licensed data — they are aggregated with, never folded
-into, the GPLv3 grant. They stay out of git regardless (staged by
-`scripts/stage-zxnext-assets.sh` locally, and by the deploy repo's
-`scripts/stage-next-assets.sh` in production).
 
-Two serving routes coexist (r60), each on a different arm of the license:
+**POLICY: this project does not distribute the licensed Next content at
+all.** The files stay out of git and out of the published container
+images, and the deployment serves no copy of them as its source — the
+browser gets the content from SpecNext Ltd's own server (route 1 below).
+The deploy repo's legacy `/next/` offline-fallback mounts are slated for
+removal at the supersmall-distro switchover (see that repo's README); the
+staged copy on the deploy host then exists solely for gif-service's
+private renderer. What remains is:
 
-1. **Official distro pass-through (browser primary).** The sites proxy the
-   OFFICIAL SpecNext emulator distro zip (`/specnext/distro/…` →
-   `www.specnext.com/distro/…`) byte-for-byte: an exact copy of the entire
-   official distribution, served cost-free — squarely the umbrella grant's
-   "distribute exact copies" permission, with the "in its entirety"
-   condition satisfied because nothing is trimmed, added, or modified. The
-   per-title games/demos/tools inside are distributed exactly as SpecNext
-   Ltd distributes them, as part of that entirety. The emulator's boot-time
-   normalisation (deleting the first-boot welcome `autoexec.1st`, seeding
-   `config.ini` — `zxSdPrepDistro`) happens in RAM on the user's machine
-   after download, the same mutations NextZXOS/the firmware perform on a
-   real first-configured card; the distributed copy is untouched.
-2. **Staged bare system (fallback + gif-service).** The trimmed
-   `tbblue.mmc` route below — "only the free parts", per the analysis that
-   follows. Its rules (bare system only, never add per-title content)
-   apply to the STAGED image; they are what makes a *partial* distribution
-   permissible, and are not contradicted by route 1, which is not partial.
+1. **Official distro pass-through (browser primary, r60).** The sites
+   relay the OFFICIAL SpecNext emulator distro zip byte-for-byte through a
+   same-origin proxy route (`/specnext/distro/…` →
+   `www.specnext.com/distro/…`). The route exists only because
+   specnext.com sends no CORS headers and the sites' CSP pins connect-src
+   to 'self'; the content comes from SpecNext Ltd's own server, exactly as
+   they publish it — nothing is hosted, trimmed, added, or modified here.
+   The emulator's boot-time normalisation (deleting the first-boot welcome
+   `autoexec.1st`, seeding `config.ini` — `zxSdPrepDistro`) happens in RAM
+   on the user's machine after download, the same mutations NextZXOS/the
+   firmware perform on a real first-configured card. SWITCHOVER PENDING: a
+   minimal ("supersmall") distro provided by SpecNext (Phoebus Dokos) is
+   expected to replace the full 52 MB zip on this same route — bump
+   `SPECNEXT_DISTRO_PATH` in `GoEmulator.js` and follow the re-verification
+   steps in the emulator-core README ("Next boot modes") when it lands.
+2. **Staged bare system (LOCAL ONLY: offline dev, CI, gif-service's
+   renderer).** `scripts/stage-zxnext-assets.sh` fetches the trimmed
+   assets onto a developer's machine, and the deploy host stages them
+   privately for gif-service's server-side renderer (internal use by the
+   process, not distribution to users). This staged copy is not served to
+   the public. The "free parts" analysis below is retained for anyone who
+   self-hosts and chooses to serve a staged copy — it is not the basis of
+   the official deployment, which distributes nothing.
 
 The Next License requires its notice and the constituent-part licenses to travel
 with every copy. Those texts live in `next-licenses/` (freely distributable, so
-committed) and are served at `/next/licenses/` next to the assets: committed into
-`apps/*/public/next/licenses/` for dev and the images, and copied into
-`/opt/zxplay/next-assets/licenses/` by the deploy stage script for production
-(which serves only that host dir). Keep the copies in sync with `next-licenses/`.
+committed) and are served at `/next/licenses/` wherever staged assets are
+actually served (a dev checkout, or a self-host that chooses to distribute):
+committed into `apps/*/public/next/licenses/`, and copied by the deploy repo's
+stage script next to gif-service's private staging. Keep the copies in sync
+with `next-licenses/`.
 
-Basis per component served:
+Basis per component, for a staged copy that IS served (dev / self-host):
 
 - **ROM images** (`enNextZX.rom`, `enNxtmmc.rom`, `machines/next/*.rom` on the
   image) — Amstrad's long-standing permission for distribution with emulators,
@@ -88,8 +97,9 @@ Basis per component served:
 The "entirety" question. The Next License's "usage on hardware other than
 intended" bullet asks for the distribution "in its entirety", but the same
 bullet expressly permits the alternative: "you could distribute only the free
-parts of this Distribution for another system". That is the route this
-deployment takes. "Free parts" here means the freely-redistributable parts: the
+parts of this Distribution for another system". That is the route a staged
+copy takes when it is served. "Free parts" here means the
+freely-redistributable parts: the
 NextZXOS system is redistributable under the umbrella grant, so it ships; the
 excluded content (per-title games, demos, tools, the QL core) is NOT freely
 redistributable — each is licensed per-title by its own author — so it is
@@ -97,11 +107,12 @@ omitted. Distributing only the free parts needs no further permission precisely
 because the non-free parts are not distributed at all. The umbrella grant's own
 opening words back this: it grants the right to "distribute exact copies", and
 what is served here are exact, unmodified copies of the NextZXOS system files.
-This is the load-bearing argument if the deployment is ever challenged: ship
+This is the load-bearing argument if a staged serving is ever challenged: ship
 only the freely-redistributable system, serve it unmodified, and never add a
-per-title-licensed part.
+per-title-licensed part. The official deployment sidesteps the question
+entirely by not distributing the content at all.
 
-Deployment rules:
+Rules for any deployment that serves a staged copy (self-hosting):
 
 - Keep the app free to access. No paywall, no fee — that is the condition the
   Next License hangs on.
