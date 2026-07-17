@@ -757,14 +757,32 @@ func WireLayer2(d *nextregs.Dispatcher, l *layer2.Layer2) {
 // byte and exposes the decoded ordering mode for the compositor.
 // LayerPriority satisfies compositor.PrioritySource so it can be
 // installed directly via compositor.SetPrioritySource.
-type LayerPriority struct{ raw byte }
+type LayerPriority struct {
+	raw byte
+	// gen counts value-changing writes. The compositor snapshots it at
+	// walk start: a render-time bump (a copper NR$15 MOVE inside the
+	// paced interleave) hands mode selection from the raster-stamped
+	// override back to this live register from that half-pixel on
+	// (#183 stage 3; the FPGA mixer samples NR$15 per i_CLK_14 slot,
+	// zxnext.vhd:6799/:7092-7094).
+	gen uint64
+}
 
 // NewLayerPriority returns a fresh priority store with all-zeros
 // (the SLU "Sprites over Layer 2 over ULA" reset mode).
 func NewLayerPriority() *LayerPriority { return &LayerPriority{} }
 
 // Set updates the stored byte.
-func (p *LayerPriority) Set(v byte) { p.raw = v }
+func (p *LayerPriority) Set(v byte) {
+	if p.raw != v {
+		p.gen++
+	}
+	p.raw = v
+}
+
+// WriteGeneration returns the count of value-changing NR$15 writes —
+// the compositor's live-vs-override arbitration clock (see Set).
+func (p *LayerPriority) WriteGeneration() uint64 { return p.gen }
 
 // Get returns the raw byte.
 func (p *LayerPriority) Get() byte { return p.raw }

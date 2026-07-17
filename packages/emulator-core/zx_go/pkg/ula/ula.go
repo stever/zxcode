@@ -571,6 +571,21 @@ type nextCopperLinePeek interface {
 	CanRetireOnLine(vcount uint16) bool
 }
 
+// nextLiveRowComposer is the optional compositor contract for the FUSED
+// half-pixel compose (#183 stage 3): the ULA's paced row loop calls
+// ComposeLiveHalfPixel once per 14 MHz slot INSIDE the copper
+// interleave, so every layer's palette lookup and the mixer state
+// (NR$15 priority, NR$68 blend, NR$14 transparency, NR$43 selects) are
+// read at that half-pixel's own copper time — the FPGA's grain
+// (zxnext.vhd:6799-6832 per-slot mixer input registers, :6981/:7033
+// per-half-pixel palette BRAM lookups). Layer index buffers stay
+// per-row (BeginLiveRow), which is itself the hardware grain for
+// sprites (line-buffer build-ahead, sprites.vhd:537-540).
+type nextLiveRowComposer interface {
+	BeginLiveRow(y int)
+	ComposeLiveHalfPixel(sx int, ula [4]byte) [4]byte
+}
+
 // nextULAPaletteResolver is the optional compositor contract for resolving
 // a ULA palette index (0..255) through the LIVE Next ULA palette, the way
 // the FPGA feeds every ULA pixel through the palette SRAM. transparent
@@ -2441,8 +2456,11 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		paced, _ = u.nextCopper.(nextCopperCyclePaced)
 		copperPeek, _ = u.nextCopper.(nextCopperLinePeek)
 	}
-	// The 512-half-pixel compose pass (sub=2). Absent only on reduced
-	// test mocks, which then keep the coalesced 256 stride.
+	// The 512-half-pixel compose passes: the FUSED live pass (state read
+	// per half-pixel inside the copper interleave — the real
+	// compositor) and the sub=2 row pass (reduced test mocks). Mocks
+	// with neither keep the coalesced 256 stride.
+	liveComp, _ := u.nextCompositor.(nextLiveRowComposer)
 	hiComp, _ := u.nextCompositor.(interface {
 		ComposeHiResScanline(y int, ulaRGBA []byte, dst []byte)
 	})
@@ -2582,7 +2600,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		if paced != nil && (copperPeek == nil || copperPeek.CanRetireOnLine(uint16(y))) {
 			rowPaced = true
 		}
-		rowHalf := (rowPaced || u.ulaFineScrollX) && hiComp != nil
+		rowHalf := (rowPaced || u.ulaFineScrollX) && (liveComp != nil || hiComp != nil)
 		if liveULA {
 			st := u.ulaVideoLine[u.borderTop+y]
 			pushSelect(st.ulaPalSecond)
@@ -2606,7 +2624,24 @@ func (u *ULA) applyNextCompositor(stale bool) {
 					u.paintImagePixel(y, bx, u.nextBorderRGBA(u.borderTop+y, resolver))
 				}
 			}
-			u.renderNextULARow(y, ulaScan, resolver, paced, halfCycle, st, rowHalf, rowPaced)
+			var fuse func(i int, pix [4]byte)
+			if rowHalf && liveComp != nil {
+				// FUSED half-pixel compose: each ULA half-pixel is
+				// composed against the LIVE layer/mixer state at its
+				// own copper time and stored straight into the frame.
+				liveComp.BeginLiveRow(y)
+				img := u.img
+				liveComp := liveComp
+				fuse = func(i int, pix [4]byte) {
+					out := liveComp.ComposeLiveHalfPixel(i, pix)
+					off := rowStart + i*4
+					img.Pix[off+0] = out[0]
+					img.Pix[off+1] = out[1]
+					img.Pix[off+2] = out[2]
+					img.Pix[off+3] = out[3]
+				}
+			}
+			u.renderNextULARow(y, ulaScan, resolver, paced, halfCycle, st, rowHalf, rowPaced, fuse)
 		} else {
 			// Non-live fallback: recover the logical 256 pixels from the
 			// pre-rendered (xs-doubled) row.
@@ -2615,12 +2650,15 @@ func (u *ULA) applyNextCompositor(stale bool) {
 				copy(ulaScan[x*4:x*4+4], u.img.Pix[s:s+4])
 			}
 		}
-		if liveULA && rowHalf {
-			// Half-pixel row: 512-wide ULA scan through the sub=2
-			// compose, stored natively (one output pixel per half).
+		switch {
+		case liveULA && rowHalf && liveComp != nil:
+			// Fused rows composed and stored inside the loop above.
+		case liveULA && rowHalf:
+			// Half-pixel row on a reduced mock: 512-wide ULA scan
+			// through the sub=2 row compose, stored natively.
 			hiComp.ComposeHiResScanline(y, ulaScan, composed)
 			copy(u.img.Pix[rowStart:rowStart+2*w*4], composed[:2*w*4])
-		} else {
+		default:
 			u.nextCompositor.ComposeScanline(y, ulaScan, composed)
 			u.storeComposedRow(rowStart, composed, w)
 		}
@@ -2964,8 +3002,13 @@ func (u *ULA) putPix(x, y int, c color.RGBA) {
 // map: the ULA barrel shifter shifts at 14 MHz and the fine bit is the
 // LSB of its shift amount (zxula.vhd:199 px(8), :353 scroll_0 <=
 // px(2:0) & px(8), applied at the shift-register load :395).
+// fuse, when non-nil (the stage-3 fused live compose), receives each
+// computed half-pixel IN PLACE of the dst store — called inside the
+// copper interleave so the compositor reads live state at the
+// half-pixel's own copper time.
 func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
-	paced nextCopperCyclePaced, halfCycle func(int) int, st ulaVideoState, half, rowPaced bool) {
+	paced nextCopperCyclePaced, halfCycle func(int) int, st ulaVideoState, half, rowPaced bool,
+	fuse func(i int, pix [4]byte)) {
 	screenMem := u.mem.GetPage(u.mem.ScreenPage)
 	fallback := u.ulaDisabledFill()
 	paperShift := ulaNextPaperShift(st.ulaNextFormat)
@@ -3129,15 +3172,19 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 		default:
 			r, g, b, transparent = res.ULARGBA(idx)
 		}
+		a := byte(0xFF)
+		if transparent {
+			a = 0
+		}
+		if fuse != nil {
+			fuse(i, [4]byte{r, g, b, a})
+			continue
+		}
 		off := i * 4
 		dst[off+0] = r
 		dst[off+1] = g
 		dst[off+2] = b
-		if transparent {
-			dst[off+3] = 0
-		} else {
-			dst[off+3] = 0xFF
-		}
+		dst[off+3] = a
 	}
 }
 
