@@ -5,81 +5,66 @@ import (
 	"testing"
 )
 
+// send pushes a command string byte-by-byte into the TX port.
+func send(u *UART, s string) {
+	for _, b := range []byte(s) {
+		u.PortWrite(RegTx, b)
+	}
+}
+
+// drain pops the RX FIFO until the status reports empty.
+func drain(u *UART) string {
+	var buf []byte
+	for u.PortRead(RegTx)&StatusRxAvail != 0 {
+		buf = append(buf, u.PortRead(RegRx))
+	}
+	return string(buf)
+}
+
 func TestStartEmpty(t *testing.T) {
 	u := New()
-	if got := u.Status(); got != StatusTXReady {
-		t.Errorf("Status on fresh UART = %#x, want %#x (TX-ready only)", got, StatusTXReady)
+	if got := u.PortRead(RegTx); got != StatusTxEmpty {
+		t.Errorf("status on fresh UART = %#x, want %#x (TX-empty only)", got, StatusTxEmpty)
 	}
-	if u.ReadData() != 0 {
-		t.Errorf("ReadData on empty UART should return 0")
+	if u.PortRead(RegRx) != 0 {
+		t.Errorf("RX read on empty UART should return 0 (uart.vhd:352)")
 	}
 }
 
 func TestATReturnsOK(t *testing.T) {
 	u := New()
-	for _, b := range []byte("AT\r") {
-		u.WriteData(b)
+	send(u, "AT\r")
+	if u.PortRead(RegTx)&StatusRxAvail == 0 {
+		t.Errorf("status after AT\\r should have RX-avail bit set")
 	}
-	// After AT\r, status should report RX available.
-	if u.Status()&StatusRXReady == 0 {
-		t.Errorf("Status after AT\\r should have RXReady bit set")
+	if got := drain(u); got != "OK\r\n" {
+		t.Errorf("response = %q, want OK\\r\\n", got)
 	}
-	want := "OK\r\n"
-	got := make([]byte, len(want))
-	for i := range got {
-		got[i] = u.ReadData()
-	}
-	if string(got) != want {
-		t.Errorf("response = %q, want %q", got, want)
-	}
-	if u.Status()&StatusRXReady != 0 {
-		t.Errorf("Status after reading response should clear RXReady")
+	if u.PortRead(RegTx)&StatusRxAvail != 0 {
+		t.Errorf("status after reading response should clear RX-avail")
 	}
 }
 
 func TestNonATCommandsReturnError(t *testing.T) {
 	u := New()
-	for _, b := range []byte("HELLO\r") {
-		u.WriteData(b)
-	}
-	if u.Status()&StatusRXReady == 0 {
-		t.Errorf("non-AT command should queue ERROR response")
-	}
-	got := make([]byte, len("ERROR\r\n"))
-	for i := range got {
-		got[i] = u.ReadData()
-	}
-	if string(got) != "ERROR\r\n" {
+	send(u, "HELLO\r")
+	if got := drain(u); got != "ERROR\r\n" {
 		t.Errorf("got %q, want ERROR\\r\\n", got)
 	}
 }
 
 func TestATPlusCommandReturnsOK(t *testing.T) {
 	u := New()
-	for _, b := range []byte("AT+CWMODE=1\r") {
-		u.WriteData(b)
-	}
-	want := "OK\r\n"
-	got := make([]byte, len(want))
-	for i := range got {
-		got[i] = u.ReadData()
-	}
-	if string(got) != want {
-		t.Errorf("AT+CWMODE response = %q, want %q", got, want)
+	send(u, "AT+CWMODE=1\r")
+	if got := drain(u); got != "OK\r\n" {
+		t.Errorf("AT+CWMODE response = %q, want OK\\r\\n", got)
 	}
 }
 
 func TestATGMRReturnsIdentity(t *testing.T) {
 	u := New()
-	for _, b := range []byte("AT+GMR\r") {
-		u.WriteData(b)
-	}
-	// Drain the RX FIFO; we expect identity string followed by OK.
-	var buf []byte
-	for u.Status()&StatusRXReady != 0 {
-		buf = append(buf, u.ReadData())
-	}
-	s := string(buf)
+	send(u, "AT+GMR\r")
+	s := drain(u)
 	if !strings.Contains(s, "zx_go") || !strings.Contains(s, "OK") {
 		t.Errorf("AT+GMR response = %q, want identity + OK", s)
 	}
@@ -87,106 +72,123 @@ func TestATGMRReturnsIdentity(t *testing.T) {
 
 func TestATCIPSENDReturnsPrompt(t *testing.T) {
 	u := New()
-	for _, b := range []byte("AT+CIPSEND=4\r") {
-		u.WriteData(b)
-	}
-	want := ">\r\n"
-	got := make([]byte, len(want))
-	for i := range got {
-		got[i] = u.ReadData()
-	}
-	if string(got) != want {
-		t.Errorf("AT+CIPSEND response = %q, want %q", got, want)
+	send(u, "AT+CIPSEND=4\r")
+	if got := drain(u); got != ">\r\n" {
+		t.Errorf("AT+CIPSEND response = %q, want >\\r\\n", got)
 	}
 }
 
 func TestATCaseInsensitive(t *testing.T) {
 	u := New()
-	for _, b := range []byte("at\r") {
-		u.WriteData(b)
-	}
-	if u.Status()&StatusRXReady == 0 {
+	send(u, "at\r")
+	if u.PortRead(RegTx)&StatusRxAvail == 0 {
 		t.Errorf("lowercase at\\r should also queue OK")
 	}
 }
 
-// TestStatusTXAlwaysReady documents the stub's "TX FIFO has space"
-// invariant — we drop everything so there's always room.
-func TestStatusTXAlwaysReady(t *testing.T) {
+// TestStatusTXAlwaysEmpty documents the stub's instant-transmit
+// invariant — TX never reports full.
+func TestStatusTXAlwaysEmpty(t *testing.T) {
 	u := New()
-	if u.Status()&StatusTXReady == 0 {
-		t.Error("default Status: TX-ready bit not set")
-	}
 	for i := 0; i < 100; i++ {
-		u.WriteData(byte(i))
+		u.PortWrite(RegTx, byte(i))
 	}
-	if u.Status()&StatusTXReady == 0 {
-		t.Error("after 100 writes: TX-ready cleared (stub should always be ready)")
+	if u.PortRead(RegTx)&StatusTxEmpty == 0 {
+		t.Error("after 100 writes: TX-empty cleared (stub transmits instantly)")
 	}
 }
 
-// TestATGMRUsesSetVersion verifies SetVersion replaces the identity
-// string returned by AT+GMR.
 func TestATGMRUsesSetVersion(t *testing.T) {
 	u := New()
 	u.SetVersion("my-build-1.0")
-	for _, b := range []byte("AT+GMR\r") {
-		u.WriteData(b)
-	}
-	var buf []byte
-	for u.Status()&StatusRXReady != 0 {
-		buf = append(buf, u.ReadData())
-	}
-	if !strings.Contains(string(buf), "my-build-1.0") {
-		t.Errorf("AT+GMR response %q doesn't contain custom version", buf)
+	send(u, "AT+GMR\r")
+	if s := drain(u); !strings.Contains(s, "my-build-1.0") {
+		t.Errorf("AT+GMR response %q doesn't contain custom version", s)
 	}
 }
 
-// TestBareCRIsNoOp — sending "\r" alone shouldn't queue anything.
 func TestBareCRIsNoOp(t *testing.T) {
 	u := New()
-	u.WriteData('\r')
-	if u.Status()&StatusRXReady != 0 {
+	u.PortWrite(RegTx, '\r')
+	if u.PortRead(RegTx)&StatusRxAvail != 0 {
 		t.Error("bare CR queued a response — should be no-op")
 	}
 }
 
-// TestATPlusGenericPrefix verifies arbitrary AT+xxx commands return OK
-// even when not specifically matched (the AT+ catch-all branch).
 func TestATPlusGenericPrefix(t *testing.T) {
 	u := New()
-	for _, b := range []byte("AT+CWJAP=\"net\",\"pw\"\r") {
-		u.WriteData(b)
-	}
-	var buf []byte
-	for u.Status()&StatusRXReady != 0 {
-		buf = append(buf, u.ReadData())
-	}
-	if !strings.Contains(string(buf), "OK") {
-		t.Errorf("AT+CWJAP response = %q, want OK", buf)
+	send(u, "AT+CWJAP=\"net\",\"pw\"\r")
+	if s := drain(u); !strings.Contains(s, "OK") {
+		t.Errorf("AT+CWJAP response = %q, want OK", s)
 	}
 }
 
-// TestMultipleCommandsInSequence verifies the TX-buffer resets after
-// each \r, so subsequent commands don't merge with prior bytes.
 func TestMultipleCommandsInSequence(t *testing.T) {
 	u := New()
-	for _, b := range []byte("AT\r") {
-		u.WriteData(b)
+	send(u, "AT\r")
+	drain(u)
+	send(u, "BAD\r")
+	if s := drain(u); !strings.Contains(s, "ERROR") {
+		t.Errorf("second command response = %q, want ERROR (TX-buffer state leaked?)", s)
 	}
-	// Drain.
-	for u.Status()&StatusRXReady != 0 {
-		u.ReadData()
+}
+
+// TestSelectRegister pins the $153B semantics (uart.vhd:279-287 write,
+// :355/:371 read): bit 6 selects the UART and reads back at bit 6;
+// bit 4 gates a prescaler-MSB write whose 3 bits read back at 2:0,
+// held per-UART.
+func TestSelectRegister(t *testing.T) {
+	u := New()
+	if got := u.PortRead(RegSelect); got != 0x00 {
+		t.Errorf("default $153B read = %#x, want 0 (uart0, MSB 0)", got)
 	}
-	// Second command.
-	for _, b := range []byte("BAD\r") {
-		u.WriteData(b)
+	// Write MSB=5 to uart0 (bit 4 set, bit 6 clear).
+	u.PortWrite(RegSelect, 0x15)
+	if got := u.PortRead(RegSelect); got != 0x05 {
+		t.Errorf("$153B after MSB write = %#x, want $05", got)
 	}
-	var buf []byte
-	for u.Status()&StatusRXReady != 0 {
-		buf = append(buf, u.ReadData())
+	// Select uart1 without bit 4: MSB write gated off.
+	u.PortWrite(RegSelect, 0x47)
+	if got := u.PortRead(RegSelect); got != 0x40 {
+		t.Errorf("$153B on uart1 = %#x, want $40 (uart1 bit + its own zero MSB)", got)
 	}
-	if !strings.Contains(string(buf), "ERROR") {
-		t.Errorf("second command response = %q, want ERROR (TX-buffer state leaked?)", buf)
+	// Back to uart0: its MSB survived.
+	u.PortWrite(RegSelect, 0x00)
+	if got := u.PortRead(RegSelect); got != 0x05 {
+		t.Errorf("$153B back on uart0 = %#x, want $05 (per-UART MSB)", got)
+	}
+}
+
+// TestFrameRegister pins the $163B framing register: reset $18
+// (uart.vhd:298-299), full-byte store per UART.
+func TestFrameRegister(t *testing.T) {
+	u := New()
+	if got := u.PortRead(RegFrame); got != 0x18 {
+		t.Errorf("default $163B read = %#x, want $18", got)
+	}
+	u.PortWrite(RegFrame, 0xA5)
+	if got := u.PortRead(RegFrame); got != 0xA5 {
+		t.Errorf("$163B after write = %#x, want $A5", got)
+	}
+	// uart1's framing register is independent.
+	u.PortWrite(RegSelect, 0x40)
+	if got := u.PortRead(RegFrame); got != 0x18 {
+		t.Errorf("uart1 $163B = %#x, want its own $18 default", got)
+	}
+}
+
+// TestUART1RxIdle: with the Pi UART selected, TX bytes are dropped
+// and RX stays empty — the AT responder serves the ESP only.
+func TestUART1RxIdle(t *testing.T) {
+	u := New()
+	u.PortWrite(RegSelect, 0x40)
+	send(u, "AT\r")
+	if got := u.PortRead(RegTx); got != StatusTxEmpty {
+		t.Errorf("uart1 status after AT = %#x, want %#x (no RX)", got, StatusTxEmpty)
+	}
+	// The ESP side must not have seen the bytes either.
+	u.PortWrite(RegSelect, 0x00)
+	if u.PortRead(RegTx)&StatusRxAvail != 0 {
+		t.Error("uart0 RX has bytes after uart1-directed AT — select leaked")
 	}
 }

@@ -110,7 +110,6 @@ func newNext() (*Harness, error) {
 		Sprites:    sprites,
 		Copper:     cop,
 		RTC:        rtcEngine,
-		UART:       uartEngine,
 		Keymap:     keymapEngine,
 		Tilemap:    tilemapLayer,
 		ULANext:    u,
@@ -118,6 +117,9 @@ func newNext() (*Harness, error) {
 	cpu.NextRegs = disp
 	u.SetNextRegs(disp)
 	u.SetNextAY(ayEngine)
+	// UART at its real ports $133B-$163B, matching the production
+	// wiring (NR$A8/$A9 are the ESP GPIO registers, WireESPGPIO).
+	u.SetNextUART(uartEngine)
 	comp := compositor.New(pal, l2)
 	comp.SetSprites(sprites)
 	comp.SetTilemap(tilemapLayer)

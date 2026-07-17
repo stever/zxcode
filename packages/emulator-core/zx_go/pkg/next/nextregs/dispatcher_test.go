@@ -62,6 +62,7 @@ func TestNewDispatcherDefaults(t *testing.T) {
 		0x89: 0x8F,
 		0x98: 0xFF, // Pi GPIO output (zxnext.vhd:5070 nr_98_pi_gpio_o <= X"FF")
 		0x99: 0x01, // Pi GPIO output (zxnext.vhd:5071 nr_99_pi_gpio_o <= X"01")
+		0xA2: 0x02, // Pi I2S control: read bit 1 is hard '1' (zxnext.vhd:6192)
 		0xB8: 0x83,
 		0xBB: 0xCD,
 		// NR$C4 = INT EN 0. nextreg.txt documents "soft reset = 0x81"
@@ -333,6 +334,7 @@ func TestResetRestoresDefaults(t *testing.T) {
 		0x89: 0x8F,
 		0x98: 0xFF, // Pi GPIO output (zxnext.vhd:5070)
 		0x99: 0x01, // Pi GPIO output (zxnext.vhd:5071)
+		0xA2: 0x02, // Pi I2S control: read bit 1 is hard '1' (zxnext.vhd:6192)
 		0xB8: 0x83,
 		0xBB: 0xCD,
 		0xC4: 0x81, // INT EN 0 — nextreg.txt soft reset = 0x81

@@ -313,6 +313,10 @@ type ULA struct {
 	// zxnext.vhd:2690). Wired only for ModelNext.
 	nextCTC NextCTC
 
+	// nextUART receives the UART ports $133B/$143B/$153B/$163B
+	// (zxnext.vhd:2639). Wired only for ModelNext.
+	nextUART NextUART
+
 	// nextSprite receives port $303B traffic: a write selects the
 	// active sprite, a read returns the sprite status (collision /
 	// max-per-line, clear-on-read). Wired only for ModelNext.
@@ -448,6 +452,32 @@ type NextCTC interface {
 	ClaimsPort(addr uint16) bool
 	WritePort(addr uint16, val byte)
 	ReadPort(addr uint16) byte
+}
+
+// NextUART is the Spectrum Next UART's port-facing contract. The four
+// ports $133B/$143B/$153B/$163B share one decode (zxnext.vhd:2639:
+// a(15:11)="00010", a10 xor (a9 and a8) = '1', low byte $3B); the
+// 2-bit register select is address bits 9:8 (uart.vhd:44 — "00" Rx,
+// "01" select, "10" frame, "11" Tx/status). pkg/next/uart.UART
+// satisfies it.
+type NextUART interface {
+	PortRead(reg byte) byte
+	PortWrite(reg, val byte)
+}
+
+// uartClaims reports whether the Next UART claims IO address addr,
+// per the FPGA decode above. Returns the 2-bit register select.
+func (u *ULA) uartClaims(addr uint16) (byte, bool) {
+	if u.nextUART == nil || addr&0xFF != 0x3B || addr&0xF800 != 0x1000 {
+		return 0, false
+	}
+	a10 := addr >> 10 & 1
+	a9 := addr >> 9 & 1
+	a8 := addr >> 8 & 1
+	if a10^(a9&a8) != 1 {
+		return 0, false
+	}
+	return byte(addr >> 8 & 0x03), true
 }
 
 // dmaClaims reports whether the Spectrum Next DMA claims IO address addr
@@ -653,6 +683,10 @@ func (u *ULA) SetNextDMA(d NextDMA) { u.nextDMA = d }
 // SetNextCTC installs the Spectrum Next CTC block. Channel ports
 // $183B-$1F3B (a(15:11)="00011", low byte $3B) route to it.
 func (u *ULA) SetNextCTC(c NextCTC) { u.nextCTC = c }
+
+// SetNextUART installs the Spectrum Next UART. Ports
+// $133B/$143B/$153B/$163B (zxnext.vhd:2639) route to it.
+func (u *ULA) SetNextUART(nu NextUART) { u.nextUART = nu }
 
 // SetNextSpritePort installs the sprite engine's $303B select/status
 // port handler. Passing nil unhooks.
@@ -1590,6 +1624,12 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 		return u.nextCTC.ReadPort(addr), true
 	}
 
+	// UART ports $133B (status) / $143B (RX) / $153B (select) /
+	// $163B (frame) — zxnext.vhd:2639 decode, uart.vhd register map.
+	if reg, ok := u.uartClaims(addr); ok {
+		return u.nextUART.PortRead(reg), true
+	}
+
 	// Port $113B: i2c SDA line read-back (bit 0; upper bits float
 	// high — open-drain bus). Port $103B reads return the SCL latch
 	// the same way on real hardware but NextZXOS never reads it; we
@@ -1982,6 +2022,13 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// time constant / vector writes to the selected channel.
 	if u.nextCTC != nil && u.nextCTC.ClaimsPort(addr) {
 		u.nextCTC.WritePort(addr, val)
+		return
+	}
+
+	// UART ports $133B (TX) / $143B (prescaler) / $153B (select) /
+	// $163B (frame) — zxnext.vhd:2639 decode, uart.vhd register map.
+	if reg, ok := u.uartClaims(addr); ok {
+		u.nextUART.PortWrite(reg, val)
 		return
 	}
 

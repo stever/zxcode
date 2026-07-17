@@ -8,9 +8,8 @@ package uart
 //   fifop.vhd    -> FIFOP (FIFO pointer/flag manager)
 //
 // These complement the higher-level AT-command ESP stub (UART, above) which
-// models the application surface at NextReg 0xA8/0xA9. The types here model the
-// bit-level serial PHY and FIFO geometry the real UART registers ($133B etc.)
-// expose. They are clocked one i_CLK at a time so the per-clock golden vectors
+// models the application surface at the UART ports $133B-$163B. The types here
+// model the bit-level serial PHY and FIFO geometry beneath those registers. They are clocked one i_CLK at a time so the per-clock golden vectors
 // captured under GHDL (see fpga_golden_test.go) replay exactly.
 //
 // Frame byte layout (uart_tx.vhd:34-42, uart_rx.vhd:41-49):

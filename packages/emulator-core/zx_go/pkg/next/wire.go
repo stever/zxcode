@@ -16,7 +16,6 @@ import (
 	"github.com/conorarmstrong/zx_go/pkg/next/rtc"
 	"github.com/conorarmstrong/zx_go/pkg/next/sprite"
 	"github.com/conorarmstrong/zx_go/pkg/next/tilemap"
-	"github.com/conorarmstrong/zx_go/pkg/next/uart"
 	"github.com/conorarmstrong/zx_go/pkg/z80"
 )
 
@@ -293,10 +292,14 @@ func WireJoystickMode(d *nextregs.Dispatcher) {
 		//   [1]=joy1[2] [0]=eff scandouble.
 		// The write decode (:5156-5158) places joy0/joy1 at exactly those
 		// positions, so the joystick-mode bits read back where they were
-		// written; only bits 2 and 0 reflect effective video config (not
-		// modelled in NR$05), so the read is the written byte with those
-		// two bits masked to 0.
-		disp.Store(0x05, val&0xFA)
+		// written. Bits 2 and 0 ALSO store on write — nr_05_5060 and
+		// nr_05_scandouble_en have their own write processes
+		// (zxnext.vhd:5837-5838 / :5848-5849) — and read back through
+		// the eff_* frame-latched copies (:6700). We model the eff
+		// latch as immediate (the F3 50/60 hotkey toggle and the
+		// Pentagon-timing 50 Hz force, :5836/:5840, are not modelled),
+		// so the whole byte round-trips.
+		disp.Store(0x05, val)
 	})
 }
 
@@ -441,10 +444,11 @@ func WireMachineType(d *nextregs.Dispatcher, mem *memory.Memory) {
 	// "NEXTREG \$03,\$B0" write (bits 2:0 = 000) leaves
 	// nr_03_machine_type intact, matching the FPGA's behaviour.
 	//
-	// Read format (bit 7 → 0): nr_palette_sub_idx[7] || timing[6:4] ||
-	// user_dt_lock[3] || machine_type[2:0]. We don't model
-	// nr_palette_sub_idx (NR$43-derived), so bit 7 reads as the last
-	// written bit-7 value (typically 1 for "ZXN tag").
+	// Read format: nr_palette_sub_idx[7] || timing[6:4] ||
+	// user_dt_lock[3] || machine_type[2:0]. Bit 7 is the LIVE NR$44
+	// half-pair latch — WirePalette chains onto this read and
+	// recomposes it from the palette bank; the closure's topBit is
+	// only the fallback for palette-less partial wirings.
 	//
 	// Defaults from zxnext.vhd:1099-1103:
 	//   nr_03_machine_timing = "011" (= $03, +3 mode timing)
@@ -501,10 +505,11 @@ func WireMachineType(d *nextregs.Dispatcher, mem *memory.Memory) {
 		default:
 			mem.ClearConfigMode()
 		}
-		// Top bit (nr_palette_sub_idx) — track the written value so
-		// reads return what was last written. Real FPGA derives this
-		// from NR$43; we don't model that, so mirror what NextZXOS
-		// expects (always 1 for the ZXN signature).
+		// Top bit: on the FPGA the read's bit 7 is the LIVE
+		// nr_palette_sub_idx (the NR$44 half-pair latch) — WirePalette
+		// chains onto this read and recomposes it from the palette
+		// bank. The written value is tracked here only as a fallback
+		// for partial wirings without a palette.
 		topBit = (val >> 7) & 1
 		// Bootrom mask clears on the very first write to NR$03 (any
 		// value). zxnext.vhd:5122.
@@ -875,7 +880,15 @@ func WireULAControl(d *nextregs.Dispatcher, sink ULAVideoSink, l2 *layer2.Layer2
 		pushScroll(disp)
 	})
 	d.SetOnWrite(0x68, func(disp *nextregs.Dispatcher, val byte) {
-		disp.Store(0x68, val)
+		// Read-back shape per zxnext.vhd:6093: (not ula_en) & blend(6:5)
+		// & cancel_extended_keys(4) & port_ff3b_ulap_en(3) & fine_scroll(2)
+		// & '0'(1) & stencil(0). The write (:5444-5450) inverts bit 7
+		// twice (write NOT, read NOT — net identity) and does NOT store
+		// bit 3: that read bit is the LIVE ULA+ enable owned by port
+		// $FF3B (the ULA+ ports are not modelled, so it idles 0) — the
+		// FPGA's own nr_68_ulap_en write is commented out (:5448). Bit 1
+		// is hard zero.
+		disp.Store(0x68, val&0xF5)
 		if sink != nil {
 			sink.SetULAOutputDisabled(val&0x80 != 0)
 			sink.SetULAFineScrollX(val&0x04 != 0)
@@ -1132,6 +1145,27 @@ func WirePalette(d *nextregs.Dispatcher, b *palette.Bank, ulaNext ULANextSink) {
 	d.SetOnRead(0x44, func(_ *nextregs.Dispatcher) byte {
 		return b.ReadNR44()
 	})
+	// NR$28 read = nr_stored_palette_value (zxnext.vhd:6004) — the byte
+	// last staged by an NR$44 first-half write. NOT the PS/2 keymap
+	// address MSB an NR$28 WRITE sets (WireKeymap): the FPGA quirkily
+	// splits this register's read and write between two subsystems.
+	d.SetOnRead(0x28, func(_ *nextregs.Dispatcher) byte {
+		return b.StoredPaletteValue()
+	})
+	// NR$03 read bit 7 is the LIVE nr_palette_sub_idx (zxnext.vhd:5894)
+	// — the NR$44 half-pair latch — not a stored bit. Chain onto the
+	// WireMachineType read (installed earlier in Wire) and recompose
+	// bit 7 from the bank's latch. Partial wirings without a machine
+	// type keep their behaviour (prev == nil).
+	if prev := d.OnReadFn(0x03); prev != nil {
+		d.SetOnRead(0x03, func(disp *nextregs.Dispatcher) byte {
+			v := prev(disp) & 0x7F
+			if b.SubIdx() {
+				v |= 0x80
+			}
+			return v
+		})
+	}
 }
 
 // WireOpts is the configuration struct for the Wire umbrella.
@@ -1158,7 +1192,6 @@ type WireOpts struct {
 	Sprites    *sprite.Engine
 	Copper     *copper.Copper
 	RTC        *rtc.RTC
-	UART       *uart.UART
 	Keymap     *keymap.Map
 	Tilemap    *tilemap.Tilemap
 	// ULANext, if set, receives the NR$42/$43 ULANext decode state
@@ -1204,6 +1237,7 @@ func Wire(opts WireOpts) {
 	WirePeripheral2(opts.Dispatcher, opts.AYEngine, opts.DivMMCPager, opts.Memory)
 	WirePeripheral1(opts.Dispatcher, opts.DivMMCPager, opts.Memory)
 	WireVideoTiming(opts.Dispatcher, opts.Memory)
+	WireCoreID(opts.Dispatcher)
 	WireJoystickMode(opts.Dispatcher)
 	WireJoystickIOMode(opts.Dispatcher)
 	// NR $B0-$B2 extended keys / MD pad — the ULA carries the live
@@ -1249,9 +1283,10 @@ func Wire(opts WireOpts) {
 	if opts.RTC != nil {
 		WireRTC(opts.Dispatcher, opts.RTC)
 	}
-	if opts.UART != nil {
-		WireUART(opts.Dispatcher, opts.UART)
-	}
+	// NR$A8/$A9 are the ESP GPIO registers on real hardware; the UART
+	// itself is port-mapped ($133B-$163B) and wired through
+	// ULA.SetNextUART by the machine constructor, like the CTC/DMA.
+	WireESPGPIO(opts.Dispatcher)
 	if opts.Keymap != nil {
 		WireKeymap(opts.Dispatcher, opts.Keymap)
 	}
@@ -1265,6 +1300,10 @@ func Wire(opts WireOpts) {
 	opts.Memory.SpeedMultiplier = opts.CPU.SpeedMultiplier
 	opts.Memory.RefTstates = opts.CPU.RefTstates
 	opts.Memory.FrameOriginRef = opts.CPU.FrameOriginRefTstates
+	// Registers outside the FPGA read mux read $00 on hardware
+	// (`others => '0'`); installed last so it documents the full
+	// decode without overriding any composed read above.
+	WireZeroReads(opts.Dispatcher)
 	applyTBBLUEFWBootDefaults(opts.Dispatcher)
 }
 
@@ -1343,6 +1382,9 @@ func WireIM2(d *nextregs.Dispatcher, cpu *z80.CPU, ctcBlock *CTCBlock) *IM2Block
 	d.SetOnWrite(0x20, func(disp *nextregs.Dispatcher, v byte) {
 		blk.Unq(v)
 	})
+	// NR$20 read composes the live interrupt status (zxnext.vhd:5989),
+	// same source bits NR$C8/$C9 expose — NOT the written request byte.
+	d.SetOnRead(0x20, func(*nextregs.Dispatcher) byte { return blk.Status20() })
 
 	d.SetOnWrite(0xC8, func(disp *nextregs.Dispatcher, v byte) { blk.ClearC8(v) })
 	d.SetOnRead(0xC8, func(*nextregs.Dispatcher) byte { return blk.StatusC8() })
@@ -1543,6 +1585,37 @@ func WirePeripheralMasks(d *nextregs.Dispatcher) {
 		// nr_da_iotrap_cause are stored; bits 7:2 reserved.
 		disp.Store(0xDA, val&0x03)
 	})
+	d.SetOnWrite(0x8F, func(disp *nextregs.Dispatcher, val byte) {
+		// Per zxnext.vhd:3790-3791 only bits 1:0 store
+		// (nr_8f_mapping_mode); read at :6162 = "000000" & mode. The
+		// mapping-mode BEHAVIOUR (profi/pentagon layouts, :3797-3799)
+		// is not modelled — pentagon paging is a classic-line concern.
+		disp.Store(0x8F, val&0x03)
+	})
+	d.SetOnWrite(0x90, func(disp *nextregs.Dispatcher, val byte) {
+		// Pi GPIO output-enable 0: bits 1:0 forced off
+		// (zxnext.vhd:5537 — "not enabling output on GPIO 1:0").
+		disp.Store(0x90, val&0xFC)
+	})
+	d.SetOnWrite(0x93, func(disp *nextregs.Dispatcher, val byte) {
+		// Pi GPIO output-enable 3: 4 bits (zxnext.vhd:5546, read :6174).
+		disp.Store(0x93, val&0x0F)
+	})
+	d.SetOnWrite(0x9B, func(disp *nextregs.Dispatcher, val byte) {
+		// Pi GPIO 27:24: 4 bits (zxnext.vhd:5558, read :6186).
+		disp.Store(0x9B, val&0x0F)
+	})
+	d.SetOnWrite(0xA0, func(disp *nextregs.Dispatcher, val byte) {
+		// Pi peripheral enable: the write stores 8 bits (:5561) but the
+		// read exposes only "00" & en(5:3) & "00" & en(0) (:6189) — the
+		// masked shape is what guests can observe.
+		disp.Store(0xA0, val&0x39)
+	})
+	d.SetOnWrite(0xA2, func(disp *nextregs.Dispatcher, val byte) {
+		// Pi I2S control: read = ctl(7:6) & '0' & ctl(4:2) & '1' &
+		// ctl(0) (:6192) — bit 5 hard zero, bit 1 hard ONE.
+		disp.Store(0xA2, val&0xDD|0x02)
+	})
 	// NR$6A (LoRes control) is wired in WireULAControl, which pushes it
 	// into the ULA's LoRes layer state.
 }
@@ -1720,38 +1793,66 @@ func WireCopper(d *nextregs.Dispatcher, c *copper.Copper) {
 	d.SetOnReset(c.ResetCursor)
 }
 
-// WireRTC installs NextReg 0x10 / 0x11 storage handlers for the
-// real-time-clock SCL / SDA i2c lines. We do NOT implement full i2c
-// packet decoding — the bytes are stored verbatim so guest
-// software that probes the registers gets stable behaviour, but
-// software that bit-bangs a real i2c read of the DS1307 register
-// set will not see RTC data through these registers.
+// WireRTC exists for wiring symmetry; the DS1307 RTC itself lives
+// behind the bit-banged i2c ports $103B/$113B (see pkg/ula's NextI2C),
+// not behind any NextReg. Guest software that wants the host clock
+// uses the esxDOS M_GETDATE API (pkg/next/esxdos), which reads
+// rtc.RTC directly.
 //
-// Guest software that wants the host clock should instead use the
-// esxDOS M_GETDATE API (handler in pkg/next/esxdos), which reads
-// rtc.RTC directly. WireRTC is here for completeness so the
-// registers themselves don't fall into the "read returns 0xFF"
-// unknown-register path.
-func WireRTC(d *nextregs.Dispatcher, _ *rtc.RTC) {
-	// Storage-only handler for NR$10 (Anti-Brick reset / i2c SCL —
-	// version-dependent; we don't model either, just store).
-	//
-	// NR$11 is NOT i2c — it's the video-timing register per
-	// zxnext.vhd:5208-5217. It's wired by WireVideoTiming, NOT here.
+// (NR$10 is NOT an RTC register — it's the coreid/button register,
+// wired by WireCoreID; NR$11 is the video-timing register, wired by
+// WireVideoTiming.)
+func WireRTC(_ *nextregs.Dispatcher, _ *rtc.RTC) {}
+
+// WireCoreID installs the NextReg $10 handlers. The read composes
+// '0' & nr_10_coreid & i_SPKEY_BUTTONS(1:0) (zxnext.vhd:5924): the
+// 5-bit core identity ("00001", :1133) and the live DRIVE/M1 button
+// states, which idle 0 (no frontend maps the physical buttons), so a
+// read returns $04 — matching MAME 0.282 on core 3.2 and the grid's
+// documented NR$10 deviation.
+//
+// Writes: bit 7 is the flashboot trigger and the low bits rewrite
+// the coreid in config mode only (:5680-5684) — both are
+// core-reflashing territory the emulator does not model, so writes
+// are stored for Raw()/debug visibility but never affect the read.
+func WireCoreID(d *nextregs.Dispatcher) {
 	d.SetOnWrite(0x10, func(disp *nextregs.Dispatcher, val byte) { disp.Store(0x10, val) })
+	d.SetOnRead(0x10, func(_ *nextregs.Dispatcher) byte {
+		const coreid = 0x01 // zxnext.vhd:1133 "00001"
+		return coreid << 2  // buttons (bits 1:0) idle 0
+	})
 }
 
-// WireUART installs NextReg 0xA8 / 0xA9 OnWrite + OnRead handlers
-// for the ESP UART. 0xA8 is the data byte (writes append to the
-// outgoing FIFO; reads pop the incoming FIFO). 0xA9 is the status
-// byte (read-only).
-func WireUART(d *nextregs.Dispatcher, u *uart.UART) {
+// WireESPGPIO installs the NextReg $A8 / $A9 ESP GPIO handlers.
+// These registers are NOT the UART (the UART lives at ports
+// $133B-$163B, routed via ULA.SetNextUART): per the FPGA,
+//
+//   - NR$A8 stores only bit 0, the ESP GPIO0 output enable
+//     (zxnext.vhd:5570 write, :6198 read "0000000" & en, reset 0
+//     :5084).
+//   - NR$A9 write latches bit 0 as the GPIO0 output value
+//     (:5573, reset 1 :5085); the read returns the LIVE pins:
+//     "00000" & i_ESP_GPIO_20(2) & '0' & i_ESP_GPIO_20(0) (:6201).
+//
+// No ESP is modelled, so the pins idle at their pull-ups (1) —
+// default read $05 — and GPIO0 reads the driven latch only while
+// the NR$A8 output enable is on. GPIO2 has no output path in this
+// register (the FPGA write stores bit 0 only), so it always reads 1.
+func WireESPGPIO(d *nextregs.Dispatcher) {
+	gpio0Out := byte(1) // nr_a9_esp_gpio0 reset value (zxnext.vhd:5085)
 	d.SetOnWrite(0xA8, func(disp *nextregs.Dispatcher, val byte) {
-		u.WriteData(val)
-		disp.Store(0xA8, val)
+		disp.Store(0xA8, val&0x01)
 	})
-	d.SetOnRead(0xA8, func(_ *nextregs.Dispatcher) byte { return u.ReadData() })
-	d.SetOnRead(0xA9, func(_ *nextregs.Dispatcher) byte { return u.Status() })
+	d.SetOnWrite(0xA9, func(disp *nextregs.Dispatcher, val byte) {
+		gpio0Out = val & 0x01
+	})
+	d.SetOnRead(0xA9, func(disp *nextregs.Dispatcher) byte {
+		v := byte(0x05) // both pins pulled up
+		if disp.Raw(0xA8)&0x01 != 0 && gpio0Out == 0 {
+			v &^= 0x01 // output enabled and driven low
+		}
+		return v
+	})
 }
 
 // WireCPUSpeed installs the NextReg 0x07 OnWrite handler that

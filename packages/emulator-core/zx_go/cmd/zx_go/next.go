@@ -1022,7 +1022,6 @@ func wireNextSubsystems(e *emulator) error {
 		Sprites:     sprites,
 		Copper:      cop,
 		RTC:         rtcEngine,
-		UART:        uartEngine,
 		Keymap:      keymapEngine,
 		Tilemap:     tilemapLayer,
 		ULANext:     u,
@@ -1030,6 +1029,10 @@ func wireNextSubsystems(e *emulator) error {
 	})
 	cpu.NextRegs = disp
 	u.SetNextRegs(disp)
+	// UART at its real ports $133B-$163B (zxnext.vhd:2639), like the
+	// CTC/DMA port blocks. NR$A8/$A9 are the ESP GPIO registers,
+	// wired inside next.Wire (WireESPGPIO).
+	u.SetNextUART(uartEngine)
 
 	// FPGA bootrom mode — the hardware-faithful path. Real Spectrum
 	// Next hardware always boots through the FPGA loader at

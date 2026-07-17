@@ -193,6 +193,10 @@ func applyResetDefaults(regs *[256]byte) {
 	// (the Pi accelerator port), but a read-back faithfulness fix.
 	regs[0x98] = 0xFF
 	regs[0x99] = 0x01
+	// NR$A2 (Pi I2S control) reads bit 1 as a hard '1'
+	// (zxnext.vhd:6192: ... & '1' & ctl(0)), so its power-on read is
+	// $02 even though the backing register resets to zero.
+	regs[0xA2] = 0x02
 	// NR$C4 = INT EN 0. nextreg.txt: "soft reset = 0x81" — bit 7 expansion-bus
 	// /INT enable, bit 0 ULA interrupt enable, both default ON (bit 1 line-int
 	// off). ours previously left it $00, mis-reporting the interrupt-enable
@@ -244,6 +248,14 @@ func (d *Dispatcher) SetOnWrite(reg byte, fn func(*Dispatcher, byte)) {
 // first, then add their own side-effect, then re-install).
 func (d *Dispatcher) OnWriteFn(reg byte) func(*Dispatcher, byte) {
 	return d.onWrite[reg]
+}
+
+// OnReadFn returns the currently-installed OnRead callback for the
+// given register, or nil if none. Used by callers that want to chain
+// a new composition onto an existing handler (e.g. WirePalette
+// recomposing NR$03's bit 7 from the live palette sub-index).
+func (d *Dispatcher) OnReadFn(reg byte) func(*Dispatcher) byte {
+	return d.onRead[reg]
 }
 
 // SetOnRead installs a read-side computation for the given register.

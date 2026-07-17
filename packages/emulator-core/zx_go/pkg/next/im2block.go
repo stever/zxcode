@@ -285,6 +285,27 @@ func (b *IM2Block) StatusC9() byte {
 	return v
 }
 
+// Status20 composes the NR$20 read (zxnext.vhd:5989:
+// im2_int_status(0) & im2_int_status(11) & "00" & im2_int_status(6:3)):
+// bit 7 = line INT (source 0), bit 6 = ULA frame (source 11),
+// bits 3:0 = CTC channels 3:0 (sources 6:3).
+func (b *IM2Block) Status20() byte {
+	st := b.chain.Status()
+	var v byte
+	if st[0] {
+		v |= 0x80
+	}
+	if st[11] {
+		v |= 0x40
+	}
+	for ch := 0; ch < 4; ch++ {
+		if st[3+ch] {
+			v |= 1 << uint(ch)
+		}
+	}
+	return v
+}
+
 // ClearC8 applies an NR$C8 write-1-to-clear: bit 0 clears ULA, bit 1
 // clears line (im2_status_clear, zxnext.vhd:1953-1956). Applied with an
 // immediate chain tick so a following read sees the cleared bit.

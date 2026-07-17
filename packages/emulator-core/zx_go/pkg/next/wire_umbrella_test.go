@@ -14,7 +14,6 @@ import (
 	"github.com/conorarmstrong/zx_go/pkg/next/palette"
 	"github.com/conorarmstrong/zx_go/pkg/next/rtc"
 	"github.com/conorarmstrong/zx_go/pkg/next/sprite"
-	"github.com/conorarmstrong/zx_go/pkg/next/uart"
 	"github.com/conorarmstrong/zx_go/pkg/roms"
 	"github.com/conorarmstrong/zx_go/pkg/z80"
 )
@@ -59,7 +58,6 @@ func TestWireUmbrellaInstallsAllHandlers(t *testing.T) {
 	sprites := sprite.New()
 	cop := copper.New()
 	rtcEngine := rtc.New()
-	uartEngine := uart.New()
 
 	Wire(WireOpts{
 		Dispatcher: disp,
@@ -72,7 +70,6 @@ func TestWireUmbrellaInstallsAllHandlers(t *testing.T) {
 		Sprites:    sprites,
 		Copper:     cop,
 		RTC:        rtcEngine,
-		UART:       uartEngine,
 	})
 
 	// 0x07: CPU speed -> cpu.SpeedSelect
@@ -229,22 +226,20 @@ func TestWireUmbrellaInstallsAllHandlers(t *testing.T) {
 	disp.Select(0x11)
 	disp.WriteData(0x55)
 
-	// 0xA8 / 0xA9: UART. Send "AT\r" through the dispatcher
-	// and read back "OK\r\n".
-	for _, ch := range []byte("AT\r") {
-		disp.Select(0xA8)
-		disp.WriteData(ch)
-	}
+	// 0xA8 / 0xA9: ESP GPIO (the UART is port-mapped at $133B-$163B,
+	// not NextReg-mapped). $A9 idles at $05 (both pins pulled up,
+	// zxnext.vhd:6201); driving GPIO0 low with the $A8 output enable
+	// on pulls bit 0 down.
 	disp.Select(0xA9)
-	if status := disp.ReadData(); status&uart.StatusRXReady == 0 {
-		t.Errorf("UART after AT\\r: status %#x, want RXReady set", status)
+	if got := disp.ReadData(); got != 0x05 {
+		t.Errorf("NR$A9 idle read = %#x, want $05 (pins pulled up)", got)
 	}
 	disp.Select(0xA8)
-	want := []byte("OK\r\n")
-	for i, w := range want {
-		if got := disp.ReadData(); got != w {
-			t.Errorf("UART response byte %d = %#x, want %#x", i, got, w)
-		}
+	disp.WriteData(0x01) // GPIO0 output enable
+	disp.Select(0xA9)
+	disp.WriteData(0x00) // drive GPIO0 low
+	if got := disp.ReadData(); got != 0x04 {
+		t.Errorf("NR$A9 with GPIO0 driven low = %#x, want $04", got)
 	}
 }
 

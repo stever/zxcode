@@ -503,6 +503,17 @@ func (b *Bank) WriteNR44(val byte) {
 	b.have9 = false
 }
 
+// StoredPaletteValue returns the FPGA's nr_stored_palette_value — the
+// byte last staged by an NR$44 first-half write (zxnext.vhd:5398-5399).
+// NR$28's read mux exposes it verbatim (zxnext.vhd:6004).
+func (b *Bank) StoredPaletteValue() byte { return b.pending9 }
+
+// SubIdx returns the FPGA's nr_palette_sub_idx — '1' while an NR$44
+// pair is half-written (set by the first $44 byte, cleared by the
+// second and by $40/$41/$43 writes, zxnext.vhd:5376-5403). NR$03's
+// read mux exposes it as bit 7 (zxnext.vhd:5894).
+func (b *Bank) SubIdx() bool { return b.have9 }
+
 // ResetWriteLatches drops the half-completed NR$44 pending-pair
 // state. Called from the emulator's Reboot path so a stale half-
 // pair from the previous boot doesn't redirect the first NR$44
