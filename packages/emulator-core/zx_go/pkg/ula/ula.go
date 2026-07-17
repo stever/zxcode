@@ -117,16 +117,6 @@ type ULA struct {
 	// generator mirror stays current. Nil on classic models: a plain
 	// 48K/128K has no SCLD, so port $FF bit 6 must not gate its INT.
 	frameIntDisableSink func(bool)
-	// timexModeChanged flags any CHANGE to the Timex mode since the last
-	// executed frame's render (CPU port/NR$69 writes between renders, or
-	// copper writes during the compose walk). timexMixedFrame latches it
-	// per executed frame: a frame whose Timex mode changed mid-frame
-	// (the NReg0x69 copper bands) renders through the 320 path with
-	// per-row decimated hi-res, while a STABLE hi-res frame renders the
-	// native 512-wide composite (renderWideTimexHiRes).
-	timexModeChanged bool
-	timexMixedFrame  bool
-
 	// ULANext attribute-decode state (Spectrum Next only), pushed by the
 	// NextReg wiring: NR$43 bit 0 enables ULANext, NR$42 is the ink
 	// colour mask. Consumed by the live-palette row render
@@ -1113,11 +1103,7 @@ func (u *ULA) SetULAClipWindow(x1, x2, y1, y2 byte) {
 // mode alias (zxnext.vhd:3617-3618 — nr_69_we writes port_ff_reg(5:0)).
 // Bits 7:6 of the live port-$FF state are preserved.
 func (u *ULA) SetTimexVideoMode(v byte) {
-	nv := u.timexVideoMode&0xC0 | v&0x3F
-	if u.timexVideoMode != nv {
-		u.timexModeChanged = true
-	}
-	u.timexVideoMode = nv
+	u.timexVideoMode = u.timexVideoMode&0xC0 | v&0x3F
 }
 
 // TimexVideoMode returns the live port-$FF Timex video state's low six
@@ -1393,21 +1379,11 @@ func (u *ULA) Render() *image.RGBA {
 			// 80-column tilemap = 640px wide; render the wide frame.
 			return u.renderWide()
 		}
-		// Timex hi-res through the compositor: a STABLE hi-res frame
-		// re-renders the paper at its native 512 half-pixels and
-		// composites at that granularity; a mixed-mode frame (copper
-		// switching NR$69 per band) already rendered decimated hi-res
-		// rows in the 320 walk above.
-		if !stale {
-			u.timexMixedFrame = u.timexModeChanged
-			u.timexModeChanged = false
-		}
-		if u.timexHiResActive() && !u.timexMixedFrame {
-			return u.renderWideTimexHiRes()
-		}
-		if u.timexHiResActive() {
-			return u.img
-		}
+		// Timex hi-res rows (stable frames and copper-banded mixed
+		// frames alike) composed natively at 512 half-pixels inside the
+		// walk above (#183 stage 4 — the per-character mode latch in
+		// renderNextULARow); the img IS the full 640×256 wide frame.
+		return u.img
 	}
 
 	// Timex 512x192 8x1 hi-res (port $FF mode 110) without a Next
@@ -1416,10 +1392,6 @@ func (u *ULA) Render() *image.RGBA {
 		return u.renderTimexHiRes()
 	}
 
-	// The Next's img is already the full 320×256 wide frame (paper at
-	// 32,32 — SetNextCompositor switched the geometry), so over-border
-	// sprites/tilemap rows were composited in place by the border
-	// passes; nothing to crop or extend.
 	return u.img
 }
 
@@ -2102,12 +2074,6 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// connected the sink. Stored here; rendered by renderTimexHiRes. Falls
 	// through so any other $FF semantics are unaffected.
 	if (addr & 0xFF) == 0xFF {
-		// Mixed-frame detection watches the VIDEO bits only — a write
-		// that just toggles the INT-disable latch must not demote a
-		// stable hi-res frame to the decimated 320 path.
-		if (u.timexVideoMode^val)&0x3F != 0 {
-			u.timexModeChanged = true
-		}
 		u.timexVideoMode = val
 		if u.frameIntDisableSink != nil {
 			u.frameIntDisableSink(val&0x40 != 0)
@@ -2600,7 +2566,12 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		if paced != nil && (copperPeek == nil || copperPeek.CanRetireOnLine(uint16(y))) {
 			rowPaced = true
 		}
-		rowHalf := (rowPaced || u.ulaFineScrollX) && (liveComp != nil || hiComp != nil)
+		// Half-pixel-distinct content: fine-scroll-X shifts the source
+		// stream by one 14 MHz slot, and a Timex hi-res row (mode bit 2,
+		// unless the shadow display forces mode 000) IS a native
+		// 512-wide pixel stream (zxula.vhd:389).
+		hiResRow := u.timexVideoMode&0x04 != 0 && u.mem.ScreenPage != 7
+		rowHalf := (rowPaced || u.ulaFineScrollX || hiResRow) && (liveComp != nil || hiComp != nil)
 		if liveULA {
 			st := u.ulaVideoLine[u.borderTop+y]
 			pushSelect(st.ulaPalSecond)
@@ -3012,39 +2983,6 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 	screenMem := u.mem.GetPage(u.mem.ScreenPage)
 	fallback := u.ulaDisabledFill()
 	paperShift := ulaNextPaperShift(st.ulaNextFormat)
-	// Timex display mode (port $FF bits 2:0, zxula.vhd:191): bit 0
-	// selects display file 2 (+$2000, "screen 1"), bit 1 the 8x1
-	// hi-colour attributes. With the ULA shadow display active the mode
-	// is forced to 000 (bank 7 only has 8K BRAM on the FPGA — same
-	// line). Hi-res (bit 2) renders through the wide path, not here.
-	// Read live (not raster-stamped): the copper interleave updates it
-	// through the NR$69 fan-out before each row's render, giving the
-	// row granularity the NReg0x69 scanline-switch test expects.
-	mode := u.timexVideoMode & 0x07
-	if u.mem.ScreenPage == 7 {
-		mode = 0
-	}
-	pixBase := 0
-	if mode&0x01 != 0 {
-		pixBase = 0x2000 // vram_a bit 13 = screen_mode(0), zxula.vhd:235
-	}
-	hiCol := mode&0x02 != 0
-	// Timex hi-res inside a MIXED-mode frame (a copper switching NR$69
-	// per band — renderWideTimexHiRes handles the stable whole-frame
-	// case): decimate to 256 pixels by sampling the even half-pixels
-	// (display file 1) and decode through the synthesized hi-res
-	// attribute "01" & NOT(colour) & colour (zxula.vhd:419).
-	hiRes := mode&0x04 != 0
-	var hiResAttr byte
-	if hiRes {
-		colour := (u.timexVideoMode >> 3) & 0x07
-		hiResAttr = 0x40 | (^colour&0x07)<<3 | colour
-		hiCol = false
-	}
-	// Classic attributes live at +$1800 of the SELECTED display file
-	// (screen 1 attrs at $7800: vram_a = screen_mode(0) & "110" & …,
-	// zxula.vhd:239-241).
-	attrMem := screenMem[pixBase+0x1800:]
 	// LoRes/Radastan layer (NR$15 bit 7): while enabled, the LoRes pixel
 	// replaces the classic ULA pixel wherever the shared NR$1A clip
 	// admits it (zxnext.vhd:6980 — ulalores_pixel_1 <= lores_pixel when
@@ -3068,14 +3006,55 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 	// zxula.vhd:192 (py_s = vc + scroll_y) folded back into 0..191 at
 	// :201-208. Attributes fetch through the same scrolled row (:222-223).
 	srcY := (y + int(u.ulaScrollY)) % ScreenHeight
-	attrRow := attrMem[(srcY>>3)*32:]
 	rowClipped := y < int(u.ulaClipY1) || y > int(u.ulaClipY2)
 	fine := 0
 	if u.ulaFineScrollX {
 		fine = 1
 	}
+	// Timex display mode latch (port $FF bits 2:0 / NR$69, zxula.vhd:191):
+	// bit 0 selects display file 2 (+$2000, "screen 1"), bit 1 the 8x1
+	// hi-colour attributes, bit 2 the 512-wide hi-res stream. With the
+	// ULA shadow display active the mode is forced to 000 (bank 7 only
+	// has 8K BRAM on the FPGA — same line). Re-latched per CHARACTER
+	// cell inside the walk: the FPGA samples the mode registers once per
+	// 8-pixel fetch cell (i_hc(3:0) = 0x3/0xB, zxula.vhd:191-214), so a
+	// copper NR$69 MOVE mid-row switches mode — hi-res included, which
+	// renders NATIVE half-pixels here (#183 stage 4: no decimation, no
+	// dedicated stable-frame pass) — from the next cell on the SAME
+	// line. Classic attributes live at +$1800 of the SELECTED display
+	// file (screen 1 attrs at $7800: vram_a = screen_mode(0) & "110" &
+	// …, zxula.vhd:239-241).
+	var mode byte
+	var pixBase int
+	var hiCol, hiRes bool
+	var hiResAttr byte
+	var attrRow []byte
+	latchMode := func() {
+		mode = u.timexVideoMode & 0x07
+		if u.mem.ScreenPage == 7 {
+			mode = 0
+		}
+		pixBase = 0
+		if mode&0x01 != 0 {
+			pixBase = 0x2000 // vram_a bit 13 = screen_mode(0), zxula.vhd:235
+		}
+		hiCol = mode&0x02 != 0
+		hiRes = mode&0x04 != 0
+		if hiRes {
+			// Synthesized hi-res attribute "01" & NOT(colour) & colour
+			// (border_clr_tmx, zxula.vhd:419, applied :425-427).
+			colour := (u.timexVideoMode >> 3) & 0x07
+			hiResAttr = 0x40 | (^colour&0x07)<<3 | colour
+			hiCol = false
+		}
+		attrRow = screenMem[pixBase+0x1800+(srcY>>3)*32:]
+	}
+	// One character cell = 8 pixels: 16 half-pixel slots in the half
+	// stride, 8 iterations in the coalesced one.
+	cellMask := 7
 	n := ScreenWidth // coalesced stride: one compute per 7 MHz pixel
 	if half {
+		cellMask = 15
 		n = 2 * ScreenWidth
 	}
 	for i := 0; i < n; i++ {
@@ -3088,6 +3067,9 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 		}
 		if rowPaced && paced != nil {
 			paced.RunToCycle(uint16(y), halfCycle(sx))
+		}
+		if i&cellMask == 0 {
+			latchMode()
 		}
 		x := sx >> 1
 		// ULA X hardware scroll (NR$26) + fine-scroll-X (NR$68 bit 2):
@@ -3111,21 +3093,41 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 			}
 			_, idx, _ = loresCfg.Pixel(uint16(x), uint16(y), data)
 		} else {
-			pixels := screenMem[pixBase+screenAddrForRowCol(srcY, srcX>>3)]
+			var on bool
 			var attr byte
-			switch {
-			case hiRes:
-				attr = hiResAttr // display file 1 already sampled above
-			case hiCol:
-				// Timex hi-colour: the attribute byte fetches through the
-				// PIXEL address layout with vram_a bit 13 = 1 — one
-				// attribute per 8x1 pixel row (zxula.vhd:238-239 '1' &
-				// addr_p_spc_12_5).
-				attr = screenMem[0x2000+screenAddrForRowCol(srcY, srcX>>3)]
-			default:
-				attr = attrRow[srcX>>3]
+			if hiRes && half {
+				// Native hi-res half-pixel stream (zxula.vhd:389): the
+				// 32-bit shift register loads BOTH fetched bytes as
+				// pixel data — the two display files interleave byte by
+				// byte (even display byte = file 1, odd = file 2), one
+				// bit per 14 MHz tick, 512 across. Every half-pixel
+				// decodes through the synthesized hi-res attribute.
+				dpByte := srcHalf >> 3 // 0..63 display bytes per row
+				fileOff := 0
+				if dpByte&1 == 1 {
+					fileOff = 0x2000 // odd display bytes come from file 2
+				}
+				on = screenMem[fileOff+screenAddrForRowCol(srcY, dpByte>>1)]&(0x80>>uint(srcHalf&7)) != 0
+				attr = hiResAttr
+			} else {
+				pixels := screenMem[pixBase+screenAddrForRowCol(srcY, srcX>>3)]
+				switch {
+				case hiRes:
+					// Coalesced-stride hi-res (only reachable on reduced
+					// test mocks without a 512-wide compose): decimate by
+					// sampling display file 1's even half-pixels.
+					attr = hiResAttr
+				case hiCol:
+					// Timex hi-colour: the attribute byte fetches through the
+					// PIXEL address layout with vram_a bit 13 = 1 — one
+					// attribute per 8x1 pixel row (zxula.vhd:238-239 '1' &
+					// addr_p_spc_12_5).
+					attr = screenMem[0x2000+screenAddrForRowCol(srcY, srcX>>3)]
+				default:
+					attr = attrRow[srcX>>3]
+				}
+				on = pixels&(0x80>>uint(srcX&7)) != 0
 			}
-			on := pixels&(0x80>>uint(srcX&7)) != 0
 			switch {
 			case st.ulaNextEnabled:
 				if on {
@@ -3186,126 +3188,6 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 		dst[off+2] = b
 		dst[off+3] = a
 	}
-}
-
-// renderNextTimexHiResRow renders one 512-half-pixel Timex hi-res ULA
-// row through the live palette. Pixel stream per zxula.vhd:389 — in
-// hi-res the shift register interleaves the two display files byte by
-// byte (even display byte = file 1, odd = file 2), so half-pixel h maps
-// to display byte h>>3 (file = byte&1) bit h&7. Every half-pixel decodes
-// through the SYNTHESIZED hi-res attribute "01" & NOT(colour) & colour
-// (border_clr_tmx, zxula.vhd:419/425-427) via the normal ULANext /
-// standard paths, then the palette — the ReadMe-documented "ink 5,
-// paper 138" decomposition for colour code 5 under ink-mask 7 falls out
-// of exactly this. The ULA X scroll shifts by classic pixels (two
-// half-pixels); Y scroll and the NR$1A clip fold as in the 256 render.
-func (u *ULA) renderNextTimexHiResRow(y int, dst []byte, res nextULAPaletteResolver, st ulaVideoState) {
-	screenMem := u.mem.GetPage(u.mem.ScreenPage)
-	fallback := u.ulaDisabledFill()
-	paperShift := ulaNextPaperShift(st.ulaNextFormat)
-	colour := (u.timexVideoMode >> 3) & 0x07
-	attr := 0x40 | (^colour&0x07)<<3 | colour
-	srcY := (y + int(u.ulaScrollY)) % ScreenHeight
-	rowClipped := y < int(u.ulaClipY1) || y > int(u.ulaClipY2)
-	for sx := 0; sx < 2*ScreenWidth; sx++ {
-		// Scroll at classic-pixel granularity = two half-pixels.
-		hsrc := (sx + 2*int(u.ulaScrollX)) & 0x1FF
-		dpByte := hsrc >> 3 // 0..63 display bytes per row
-		fileOff := 0
-		if dpByte&1 == 1 {
-			fileOff = 0x2000 // odd display bytes come from file 2
-		}
-		pixels := screenMem[fileOff+screenAddrForRowCol(srcY, dpByte>>1)]
-		on := pixels&(0x80>>uint(hsrc&7)) != 0
-		var idx byte
-		background := false
-		if st.ulaNextEnabled {
-			if on {
-				idx = attr & st.ulaNextFormat
-			} else if paperShift == 0 {
-				background = true
-			} else {
-				idx = 128 | attr>>paperShift
-			}
-		} else {
-			bright := (attr >> 6) & 1
-			if on {
-				idx = bright<<3 | attr&7
-			} else {
-				idx = 16 | bright<<3 | (attr>>3)&7
-			}
-		}
-		var r, g, b byte
-		var transparent bool
-		cx := sx >> 1 // classic-pixel coordinate for the clip window
-		switch {
-		case rowClipped || cx < int(u.ulaClipX1) || cx > int(u.ulaClipX2):
-			r, g, b = fallback.R, fallback.G, fallback.B
-			transparent = true
-		case background:
-			r, g, b = fallback.R, fallback.G, fallback.B
-		default:
-			r, g, b, transparent = res.ULARGBA(idx)
-		}
-		off := sx * 4
-		dst[off+0] = r
-		dst[off+1] = g
-		dst[off+2] = b
-		if transparent {
-			dst[off+3] = 0
-		} else {
-			dst[off+3] = 0xFF
-		}
-	}
-}
-
-// renderWideTimexHiRes finishes a STABLE Timex hi-res frame on the
-// Next: the frame already holds the composed doubled base (borders,
-// sprite strips — and the decimated paper, which this pass replaces);
-// each paper row is re-rendered at its native 512 half-pixels and
-// re-composited against the layer stack at half-pixel granularity (the
-// FPGA mixes at its full pixel clock, so a sprite or Layer 2 pixel
-// covers two ULA half-pixels — the LayersMixingHiRes checker rows
-// exercise exactly this). Falls back to the doubled base when the
-// compositor lacks the hi-res pass.
-func (u *ULA) renderWideTimexHiRes() *image.RGBA {
-	res, okRes := u.nextCompositor.(nextULAPaletteResolver)
-	comp, okComp := u.nextCompositor.(interface {
-		ComposeHiResScanline(y int, ulaRGBA []byte, dst []byte)
-	})
-	if !okRes || !okComp {
-		return u.img
-	}
-	// Raster-stamped replay for the re-composite, as in the 320 walk.
-	selector, _ := u.nextCompositor.(nextULAPaletteSelector)
-	prioOverride, _ := u.nextCompositor.(interface {
-		SetPriorityModeOverride(byte)
-		ClearPriorityModeOverride()
-	})
-	defer func() {
-		if selector != nil {
-			selector.SetULAActivePalette(u.ulaPalSecond)
-		}
-		if prioOverride != nil {
-			prioOverride.ClearPriorityModeOverride()
-		}
-	}()
-	scan := make([]byte, 2*ScreenWidth*4)
-	composed := make([]byte, 2*ScreenWidth*4)
-	for y := 0; y < ScreenHeight; y++ {
-		st := u.ulaVideoLine[u.borderTop+y]
-		if selector != nil {
-			selector.SetULAActivePalette(st.ulaPalSecond)
-		}
-		if prioOverride != nil {
-			prioOverride.SetPriorityModeOverride((st.nr15 >> 2) & 0x07)
-		}
-		u.renderNextTimexHiResRow(y, scan, res, st)
-		comp.ComposeHiResScanline(y, scan, composed)
-		dstStart := (u.borderTop+y)*u.img.Stride + u.xs*BorderLeft*4
-		copy(u.img.Pix[dstStart:dstStart+2*ScreenWidth*4], composed)
-	}
-	return u.img
 }
 
 // StartRecording begins capturing the audio output to a WAV file. Returns

@@ -115,6 +115,97 @@ func TestCopperMidRowNR15FlipHalfPixel(t *testing.T) {
 	}
 }
 
+// TestCopperMidRowNR69HiResBand — the mixed-frame Timex hi-res pin
+// (#183 stage 4): a copper NR$69 MOVE switches the ULA into 512-wide
+// hi-res MID-FRAME and mid-row, and the band renders NATIVE half-pixels
+// — no decimation. The mode re-latches per character cell
+// (zxula.vhd:191-214 sample the mode once per 8-pixel fetch cell), and
+// in hi-res the shift register loads BOTH display files' bytes as
+// pixel data, one bit per 14 MHz tick (zxula.vhd:389) — so a $AA byte
+// draws strokes HALF a pixel wide, and the two files alternate per
+// 8-half-pixel group.
+func TestCopperMidRowNR69HiResBand(t *testing.T) {
+	h := newHalfPixelLiveHarness(t, nil)
+	// Pure ULA scene: Layer 2 off for the whole test (mid-row LAYER
+	// ENABLE flips are a different, per-row-prefetch grain — the layer
+	// index buffers are per-line by design; this pin is about the ULA
+	// mode re-latch and the native hi-res stream).
+	h.ULA().WritePort(0x243B, 0x69)
+	h.ULA().WritePort(0x253B, 0x00)
+	mem := h.MemoryBus()
+	bank5 := mem.GetPage(5)
+	// Band rows 40..47: display file 1 = $AA (alternating bits), file 2
+	// = $00 (all paper). charScreenAddr is ROM-address based; -0x4000
+	// rebases into the bank.
+	for y := 40; y < 48; y++ {
+		for col := 0; col < 32; col++ {
+			a := int(charScreenAddr(col, y>>3, y&7)) - 0x4000
+			bank5[a] = 0xAA
+			bank5[0x2000+a] = 0x00
+		}
+	}
+	writeReg := func(reg, val byte) {
+		h.ULA().WritePort(0x243B, reg)
+		h.ULA().WritePort(0x253B, val)
+	}
+	writeReg(0x62, 0)
+	writeReg(0x61, 0)
+	for _, w := range []uint16{
+		0x8000 | 4<<9 | 40, // WAIT line 40, X=4 (pixel 32 = a cell boundary)
+		0x6906,             // MOVE NR$69, $06 (hi-res, colour 0)
+		0x8000 | 0<<9 | 48, // WAIT line 48, X=0
+		0x6900,             // MOVE NR$69, $00 (classic mode)
+		0xFFFF,             // HALT
+	} {
+		writeReg(0x60, byte(w>>8))
+		writeReg(0x60, byte(w))
+	}
+	writeReg(0x61, 0)
+	writeReg(0x62, 0xC0)
+	h.RunFrames(4)
+
+	classicWhite := [3]byte{182, 182, 182} // paper 7 via the classic ULA palette
+	hiResWhite := [3]byte{255, 255, 255}   // hi-res paper: NOT(colour 0) = bright white
+	black := [3]byte{0, 0, 0}
+
+	// Row 39: classic white paper (zero bitmap, attr $38).
+	if got := halfAtPaper(h, 200, 39); got != classicWhite {
+		t.Errorf("row 39 = %v, want classic white paper", got)
+	}
+	// Row 40 before the flip (classic): $AA at pixel width — even
+	// pixels ink black (two output halves each), odd pixels paper
+	// white through the classic palette.
+	for hx, want := range map[int][3]byte{56: black, 57: black, 62: classicWhite, 63: classicWhite} {
+		if got := halfAtPaper(h, hx, 40); got != want {
+			t.Errorf("row 40 classic half %d = %v, want %v", hx, got, want)
+		}
+	}
+	// Row 40 from half 64 (cell 4, where the NR$69 MOVE lands): NATIVE
+	// hi-res — the same $AA now draws half-pixel-wide strokes, and the
+	// next 8-half-pixel group comes from display file 2 (all paper).
+	for hx, want := range map[int][3]byte{
+		64: black, 65: hiResWhite, 66: black, 67: hiResWhite,
+		72: hiResWhite, 73: hiResWhite, 78: hiResWhite,
+	} {
+		if got := halfAtPaper(h, hx, 40); got != want {
+			t.Errorf("row 40 hi-res half %d = %v, want %v (native half-width strokes)", hx, got, want)
+		}
+	}
+	// Row 44 (fully inside the band): file-1 group alternates per
+	// half-pixel from half 0, file-2 group all paper.
+	for hx, want := range map[int][3]byte{0: black, 1: hiResWhite, 2: black, 8: hiResWhite, 15: hiResWhite} {
+		if got := halfAtPaper(h, hx, 44); got != want {
+			t.Errorf("row 44 half %d = %v, want %v", hx, got, want)
+		}
+	}
+	// Row 48: classic restored from its first pixel (the X=0 WAIT's
+	// MOVE lands before the row's first cell latch); the zero bitmap
+	// renders classic white again.
+	if got := halfAtPaper(h, 200, 48); got != classicWhite {
+		t.Errorf("row 48 = %v, want classic white (restore)", got)
+	}
+}
+
 // TestCopperMidRowPaletteMoveRecoloursLayer2 — §4.4: a copper palette
 // MOVE recolours LAYER 2 pixels from its landing half-pixel — the
 // two-BRAM multiplex resolves L2 through the palette once per
