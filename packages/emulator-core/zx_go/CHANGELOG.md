@@ -29,6 +29,16 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **ULA+ implemented (#158).** Ports `$BF3B`/`$FF3B` per the FPGA:
+  group/index register, palette data with the GGGRRRBB ↔ RRRGGGBB
+  swizzle into ULA-palette entries 192-255 (the half NR$43's
+  write-select bit 2 picks), mode-group enable — the same live latch
+  every `NR$68` write's bit 3 drives and its read composes (so the
+  audit's "bit 3 idles 0" masking is gone: the bit round-trips like
+  hardware). The ULA row render gains the ULA+ attribute decode
+  (`zxula.vhd:531-541`: four 16-colour CLUTs by the old flash/bright
+  bits, flash disabled, border at entry `$C8+colour`), raster-stamped
+  like the ULANext state.
 - **Copper engine equivalence (#179).** The two copper engines — the
   per-scanline functional `Step` and the cycle-paced `RunToCycle` —
   are now pinned to each other by a standing equivalence suite

@@ -125,6 +125,16 @@ type ULA struct {
 	ulaNextEnabled bool
 	ulaNextFormat  byte
 
+	// ULA+ (ports $BF3B/$FF3B, zxnext.vhd:4525-4583): the register
+	// port's group select + palette index, the live enable latch
+	// (shared with NR$68 bit 3), and the palette access closures the
+	// wiring installs (SetULAPlusPaletteAccess).
+	ulaPlusEnabled bool
+	ulapMode       byte
+	ulapIndex      byte
+	ulapWrite      func(second bool, index byte, value uint16)
+	ulapRead       func(second bool, index byte) uint16
+
 	// ulaPalSecond mirrors NR$43 bit 1 — which ULA palette (first or
 	// second) the display resolves through. Kept here (not just in the
 	// palette bank) so mid-frame flips raster-stamp like border changes.
@@ -810,6 +820,10 @@ type ulaVideoState struct {
 	// 32-line raster band from the CPU — each band must composite with
 	// the mode active at its raster line, not the frame-final value.
 	nr15 byte
+	// ulaPlusEnabled is the live port_ff3b_ulap_en latch (port $FF3B
+	// mode group bit 0 / NR$68 bit 3). ULANext wins when both are on
+	// (zxula.vhd:483 `if i_ulanext_en … elsif i_ulap_en`).
+	ulaPlusEnabled bool
 }
 
 // ulaVideoChange records a mid-frame ulaVideoState transition at the
@@ -912,6 +926,51 @@ func (u *ULA) SetULANext(enabled bool, format byte) {
 	u.recordULAVideoChange()
 }
 
+// SetULAPlusEnabled sets the live ULA+ enable latch — the FPGA's
+// port_ff3b_ulap_en, written by a port $FF3B mode-group write (bit 0,
+// zxnext.vhd:4548-4549) AND by every NR$68 write (bit 3, :4550-4551),
+// and read back at NR$68 bit 3 (:6093). Raster-stamped like the
+// ULANext state so a mid-frame switch re-decodes from its raster line.
+func (u *ULA) SetULAPlusEnabled(on bool) {
+	if u.ulaPlusEnabled == on {
+		return
+	}
+	u.ulaPlusEnabled = on
+	u.recordULAVideoChange()
+}
+
+// ULAPlusEnabled returns the live ULA+ enable latch (for the NR$68
+// bit 3 read composition).
+func (u *ULA) ULAPlusEnabled() bool { return u.ulaPlusEnabled }
+
+// SetULAPlusPaletteAccess installs the palette read/write closures the
+// ULA+ data port uses. The FPGA routes $FF3B palette traffic through
+// the NextReg palette stream as virtual register $FF (zxnext.vhd:4741/
+// 4906) into ULA-palette entry 192+index, first/second selected by
+// NR$43's write-select bit 2 (:6958). Wired by pkg/next.Wire against
+// the palette bank; nil access degrades palette-group traffic to
+// no-ops (reads 0).
+func (u *ULA) SetULAPlusPaletteAccess(write func(second bool, index byte, value uint16), read func(second bool, index byte) uint16) {
+	u.ulapWrite = write
+	u.ulapRead = read
+}
+
+// ResetULAPlus restores the ULA+ port latches to their reset state
+// (zxnext.vhd:4529-4530/:4547): mode group 0, index 0, enable off.
+// Called from the NR$02 reset path.
+func (u *ULA) ResetULAPlus() {
+	u.ulapMode = 0
+	u.ulapIndex = 0
+	u.SetULAPlusEnabled(false)
+}
+
+// ulapSecond reports which ULA palette (first/second) the ULA+ data
+// port targets: NR$43's palette-write-select bit 2 (zxnext.vhd:6958
+// nr_palette_index_utm bit 8 = nr_43_palette_write_select(2)).
+func (u *ULA) ulapSecond() bool {
+	return u.nextRegs != nil && u.nextRegs.ReadReg(0x43)&0x40 != 0
+}
+
 // SetULAPaletteSecond mirrors NR$43 bit 1 — the displayed ULA palette.
 // Raster-stamped like SetULANext: the MrKWatkins ULA/ClassicPaletized
 // test flips it at mid-screen every frame, expecting the top half of
@@ -941,7 +1000,7 @@ func (u *ULA) recordULAVideoChange() {
 
 // liveULAVideoState snapshots the current raster-stamped video state.
 func (u *ULA) liveULAVideoState() ulaVideoState {
-	return ulaVideoState{u.ulaNextEnabled, u.ulaNextFormat, u.ulaPalSecond, u.layerControl}
+	return ulaVideoState{u.ulaNextEnabled, u.ulaNextFormat, u.ulaPalSecond, u.layerControl, u.ulaPlusEnabled}
 }
 
 // SetLayerControl mirrors the raw NR$15 layer-control byte (priority /
@@ -1630,6 +1689,30 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 		return u.nextUART.PortRead(reg), true
 	}
 
+	// ULA+ ports (zxnext.vhd:2668-2669 decode; :4555-4567 read).
+	// $FF3B palette group reads the palette entry swizzled back to
+	// GGGRRRBB (:4563); any other group reads "0000000" & ulap_en.
+	// $BF3B is decoded (claims the bus) but has no read data source —
+	// it returns the port mux's idle $00.
+	if u.nextRegs != nil && (addr == 0xFF3B || addr == 0xBF3B) {
+		if addr == 0xBF3B {
+			return 0x00, true
+		}
+		if u.ulapMode == 0 {
+			var v uint16
+			if u.ulapRead != nil {
+				v = u.ulapRead(u.ulapSecond(), 0xC0|u.ulapIndex)
+			}
+			// 9-bit RRRGGGBBB → GGGRRRBB: dat(5:3) & dat(8:6) & dat(2:1)
+			return byte(v>>3&0x07)<<5 | byte(v>>6&0x07)<<2 | byte(v>>1&0x03), true
+		}
+		var v byte
+		if u.ulaPlusEnabled {
+			v = 0x01
+		}
+		return v, true
+	}
+
 	// Port $113B: i2c SDA line read-back (bit 0; upper bits float
 	// high — open-drain bus). Port $103B reads return the SCL latch
 	// the same way on real hardware but NextZXOS never reads it; we
@@ -2016,6 +2099,39 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 			u.nextI2C.WriteSDA(val&0x01 != 0)
 			return
 		}
+	}
+
+	// ULA+ ports. $BF3B (register) selects the group in bits 7:6 and,
+	// for the palette group, the 6-bit palette index (zxnext.vhd:
+	// 4528-4536). $FF3B (data): palette group writes route through the
+	// NextReg palette stream into ULA-palette entry 192+index with the
+	// GGGRRRBB byte swizzled to RRRGGGBB + or-blue (:4741/:4746/:4919/
+	// :6958); mode group writes drive the live ULA+ enable (:4548-4549)
+	// that NR$68 bit 3 shares.
+	if u.nextRegs != nil && (addr == 0xBF3B || addr == 0xFF3B) {
+		if addr == 0xBF3B {
+			u.ulapMode = val >> 6 & 0x03
+			if u.ulapMode == 0 {
+				u.ulapIndex = val & 0x3F
+			}
+			return
+		}
+		if u.ulapMode == 0 {
+			if u.ulapWrite != nil {
+				// GGGRRRBB → 9-bit RRRGGGBBB: do(4:2) & do(7:5) & do(1:0)
+				// & (do(1) or do(0)) — zxnext.vhd:4746 + :4919.
+				rgb := uint16(val>>2&0x07)<<6 | uint16(val>>5&0x07)<<3 | uint16(val&0x03)<<1
+				if val&0x03 != 0 {
+					rgb |= 1
+				}
+				u.ulapWrite(u.ulapSecond(), 0xC0|u.ulapIndex, rgb)
+			}
+			return
+		}
+		if u.ulapMode == 1 {
+			u.SetULAPlusEnabled(val&0x01 != 0)
+		}
+		return
 	}
 
 	// CTC channel ports $183B-$1F3B (zxnext.vhd:2690): control word /
@@ -2644,13 +2760,19 @@ func (u *ULA) nextBorderColourRGBA(borderColour byte, res nextULAPaletteResolver
 	}
 	var r, g, b byte
 	var transparent bool
-	if st.ulaNextEnabled {
+	switch {
+	case st.ulaNextEnabled:
 		if st.ulaNextFormat == 0xFF {
 			transparent = true
 		} else {
 			r, g, b, transparent = res.ULARGBA(128 + border)
 		}
-	} else {
+	case st.ulaPlusEnabled:
+		// ULA+ border: the border attribute is "00" & border & border
+		// (zxula.vhd:418), decoded through the ULA+ paper path
+		// (:531-541) → entry "11" & "00" & '1' & border = $C8+border.
+		r, g, b, transparent = res.ULARGBA(0xC8 + border)
+	default:
 		r, g, b, transparent = res.ULARGBA(16 + border)
 	}
 	if transparent {
@@ -2798,7 +2920,8 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 				attr = attrRow[srcX>>3]
 			}
 			on := pixels&(0x80>>uint(srcX&7)) != 0
-			if st.ulaNextEnabled {
+			switch {
+			case st.ulaNextEnabled:
 				if on {
 					idx = attr & st.ulaNextFormat
 				} else if paperShift == 0 {
@@ -2806,7 +2929,18 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 				} else {
 					idx = 128 | attr>>paperShift
 				}
-			} else {
+			case st.ulaPlusEnabled:
+				// ULA+ (zxula.vhd:531-541): palette entry "11" &
+				// attr(7:6) & paper-bit & colour — the 64-entry ULA+
+				// palette at 192-255 of the ULA palette, four 16-entry
+				// CLUTs selected by the old flash/bright bits. Flash
+				// never swaps (zxula.vhd:470 gates it on NOT ulap_en).
+				if on {
+					idx = 0xC0 | attr>>2&0x30 | attr&7
+				} else {
+					idx = 0xC0 | attr>>2&0x30 | 0x08 | attr>>3&7
+				}
+			default:
 				if u.flash && attr&0x80 != 0 {
 					on = !on
 				}

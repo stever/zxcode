@@ -54,6 +54,7 @@ type nrStubULA struct {
 	joyL, joyR       uint16
 	timexMode        byte
 	frameIntDisabled bool
+	ulaPlus          bool
 }
 
 func (s *nrStubULA) SetULANext(bool, byte)              {}
@@ -69,6 +70,9 @@ func (s *nrStubULA) MDJoyLeft() uint16                  { return s.joyL }
 func (s *nrStubULA) MDJoyRight() uint16                 { return s.joyR }
 func (s *nrStubULA) SetULAFrameIntDisable(disable bool) { s.frameIntDisabled = disable }
 func (s *nrStubULA) ULAFrameIntDisabled() bool          { return s.frameIntDisabled }
+func (s *nrStubULA) SetULAPlusEnabled(on bool)          { s.ulaPlus = on }
+func (s *nrStubULA) ULAPlusEnabled() bool               { return s.ulaPlus }
+func (s *nrStubULA) ResetULAPlus()                      { s.ulaPlus = false }
 
 type nrMachine struct {
 	disp *nextregs.Dispatcher
@@ -456,7 +460,7 @@ var nrDecodeCases = map[byte]nrCase{
 			}
 		}},
 	0x64: storedReg(":6090 copper vertical offset", 0xFF, 0),
-	0x68: storedReg(":6093; bit 3 = live ULA+ enable (ports unmodelled, idles 0), bit 1 zero", 0xF5, 0),
+	0x68: storedReg(":6093; bit 3 = the live ULA+ enable latch EVERY write drives (:4550-4551) — round-trips; bit 1 hard zero", 0xFD, 0),
 	0x69: storedReg(":6096 composed from port $123B / $7FFD shadow / port $FF Timex — live alias", 0xFF, 0),
 	0x6A: storedReg(":6099 '00' & radastan & xor & palette offset", 0x3F, 0),
 	0x6B: storedReg(":6102 tm_en & tm_control", 0xFF, 0),

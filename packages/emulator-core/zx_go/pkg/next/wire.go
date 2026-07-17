@@ -883,12 +883,15 @@ func WireULAControl(d *nextregs.Dispatcher, sink ULAVideoSink, l2 *layer2.Layer2
 		// Read-back shape per zxnext.vhd:6093: (not ula_en) & blend(6:5)
 		// & cancel_extended_keys(4) & port_ff3b_ulap_en(3) & fine_scroll(2)
 		// & '0'(1) & stencil(0). The write (:5444-5450) inverts bit 7
-		// twice (write NOT, read NOT — net identity) and does NOT store
-		// bit 3: that read bit is the LIVE ULA+ enable owned by port
-		// $FF3B (the ULA+ ports are not modelled, so it idles 0) — the
-		// FPGA's own nr_68_ulap_en write is commented out (:5448). Bit 1
-		// is hard zero.
+		// twice (write NOT, read NOT — net identity). Bit 3 is NOT its
+		// own storage: every NR$68 write drives the LIVE ULA+ enable
+		// latch shared with port $FF3B's mode group (zxnext.vhd:
+		// 4550-4551), and the read composes that latch back (the OnRead
+		// below). Bit 1 is hard zero.
 		disp.Store(0x68, val&0xF5)
+		if up, ok := sink.(interface{ SetULAPlusEnabled(bool) }); ok {
+			up.SetULAPlusEnabled(val&0x08 != 0)
+		}
 		if sink != nil {
 			sink.SetULAOutputDisabled(val&0x80 != 0)
 			sink.SetULAFineScrollX(val&0x04 != 0)
@@ -953,6 +956,20 @@ func WireULAControl(d *nextregs.Dispatcher, sink ULAVideoSink, l2 *layer2.Layer2
 		d.SetOnRead(0x1F, func(*nextregs.Dispatcher) byte { return byte(vl.ActiveVideoLine()) })
 		d.SetOnRead(0x1E, func(*nextregs.Dispatcher) byte { return byte(vl.ActiveVideoLine()>>8) & 0x01 })
 	}
+	// NR$68 read bit 3 is the LIVE ULA+ enable (port_ff3b_ulap_en,
+	// zxnext.vhd:6093) — a port $FF3B mode-group write must be visible
+	// here and vice versa. Composed when the sink carries the latch;
+	// partial wirings without one read the stored (masked-0) bit.
+	if up, ok := sink.(interface{ ULAPlusEnabled() bool }); ok {
+		d.SetOnRead(0x68, func(disp *nextregs.Dispatcher) byte {
+			v := disp.Raw(0x68) & 0xF5
+			if up.ULAPlusEnabled() {
+				v |= 0x08
+			}
+			return v
+		})
+	}
+
 	// NR$69 read is COMPOSED from the three live registers it aliases
 	// (zxnext.vhd:6096: port_123b_layer2_en & port_7ffd_shadow &
 	// port_ff_reg(5:0)) — a guest that writes port $123B / $7FFD /
@@ -1266,6 +1283,29 @@ func Wire(opts WireOpts) {
 	}
 	if opts.Palette != nil {
 		WirePalette(opts.Dispatcher, opts.Palette, opts.ULANext)
+		// ULA+ data-port palette access: $FF3B palette-group traffic
+		// lands in ULA-palette entries 192-255 (first/second selected
+		// by NR$43's write-select bit 2) via the NextReg palette
+		// stream (zxnext.vhd:4741/:6958). The ULA owns the port
+		// decode; the bank owns the storage.
+		if up, ok := opts.ULANext.(interface {
+			SetULAPlusPaletteAccess(func(bool, byte, uint16), func(bool, byte) uint16)
+		}); ok {
+			bank := opts.Palette
+			ulaPal := func(second bool) byte {
+				if second {
+					return byte(palette.PaletteULASecond)
+				}
+				return byte(palette.PaletteULAFirst)
+			}
+			up.SetULAPlusPaletteAccess(
+				func(second bool, index byte, value uint16) {
+					bank.WriteEntry(ulaPal(second), index, value)
+				},
+				func(second bool, index byte) uint16 {
+					return bank.Palette(int(ulaPal(second))).Get(index)
+				})
+		}
 	}
 	if opts.Priority != nil {
 		var ulaSink interface{ SetLayerControl(byte) }
@@ -2248,6 +2288,11 @@ func WireReset(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcS
 				latch.SetULAFrameIntDisable(false)
 			} else {
 				cpu.FrameIntDisabled = false
+			}
+			// ULA+ latches reset on both reset types (zxnext.vhd:
+			// 4529-4530 mode/index, :4547 enable).
+			if up, ok := latch.(interface{ ResetULAPlus() }); ok {
+				up.ResetULAPlus()
 			}
 			// NR$8C Alt-ROM staged-nibble promote (zxnext.vhd:2255): the
 			// core `reset` signal — asserted for BOTH reset types

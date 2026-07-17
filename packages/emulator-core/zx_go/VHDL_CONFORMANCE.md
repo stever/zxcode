@@ -167,6 +167,18 @@ $18) per uart.vhd:279-299. The AT responder serves UART 0 (ESP); UART 1
 (Pi) reads empty. NR$A8/$A9 are the ESP GPIO registers (read mux
 :6197-6201), not the UART — the old NR-mapped UART was an invention,
 removed. `pkg/next/uart` port-face tests + TestNRDecodeConformance.
+✅ ULA+ ports **$BF3B/$FF3B** (#158): register port groups + 6-bit
+palette index (:4528-4536), data port palette writes through the
+NextReg stream into ULA-palette entries 192-255 with the GGGRRRBB ↔
+RRRGGGBB swizzle + or-blue (:4741/:4746/:4919), targeting the ULA
+half NR$43's write-select bit 2 picks (:6958); read-back swizzles the
+entry back (:4563); the mode group's bit 0 drives the LIVE ULA+
+enable — the same latch every NR$68 write's bit 3 sets (:4548-4551)
+and NR$68 bit 3 reads (:6093), reset-cleared (:4529/:4547). The ULA+
+RENDER decodes per zxula.vhd:531-541 ("11" & attr(7:6) & paper &
+colour, flash disabled :470, border $C8+colour, ULANext wins) —
+`pkg/ula/ulaplus_next_test.go` + the render branch in
+renderNextULARow.
 ⚠️ $FE,$7FFD,$1FFD,$243B/$253B,$E3/$E7/$EB,$6B,$DFFD,AY ports present
 but no port-by-port VHDL decode conformance test (the NEXTREG register
 decode is now exhaustively tested — Axes 2/3; this row is the I/O port

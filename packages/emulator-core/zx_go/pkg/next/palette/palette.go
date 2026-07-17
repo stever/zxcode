@@ -503,6 +503,16 @@ func (b *Bank) WriteNR44(val byte) {
 	b.have9 = false
 }
 
+// WriteEntry stores a 9-bit value directly into palette pal at index —
+// the ULA+ data port's write path ($FF3B routed through the NextReg
+// stream as register $FF, zxnext.vhd:4741/:6958). Bypasses the cursor,
+// auto-increment and the per-frame raster write log (a mid-frame ULA+
+// recolour resolves at end-of-frame — same precision class as the
+// hi-res palette rows).
+func (b *Bank) WriteEntry(pal, index byte, value uint16) {
+	b.palettes[pal&0x07].Set(index, value)
+}
+
 // StoredPaletteValue returns the FPGA's nr_stored_palette_value — the
 // byte last staged by an NR$44 first-half write (zxnext.vhd:5398-5399).
 // NR$28's read mux exposes it verbatim (zxnext.vhd:6004).
