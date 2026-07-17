@@ -214,7 +214,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r61-boot-progress';
+        const ENGINE_REV = 'r62-bare-nex-cmdline';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -926,9 +926,12 @@ export class GoEmulator extends EventEmitter {
         }
     }
 
-    // Open a .nex: needs the Next, so switch to it first if required, then
-    // hand the file to the core — it copies it onto the SD card and drives
-    // NextZXOS's own .nexload command to run it (expect a short reboot).
+    // Open a bare .nex: needs the Next, so switch to it first if required,
+    // then hand the file to the core under its BARE basename — the core
+    // imports it as the fixed root /zx.nex and drives the typed Command
+    // Line `.nexload` launch (#184; expect a short reboot). Games that need
+    // their own folder/filename are folder-distributed: openNexGameZip's
+    // folder-qualified name selects the Browser-launch route instead.
     async openNEXFile(arrayBuffer, name) {
         const data = new Uint8Array(arrayBuffer);
         this.frameHold = true; // see openNexGameZip
@@ -1075,8 +1078,9 @@ export class GoEmulator extends EventEmitter {
         } else if (cleanName.endsWith('.tap') || cleanName.endsWith('.tzx')) {
             return arrayBuffer => this.openTapeBytes(arrayBuffer);
         } else if (cleanName.endsWith('.nex')) {
-            // Original case: the name (and the folder derived from it on
-            // the card) is what the game sees.
+            // Bare basename: the core imports it as /zx.nex and launches
+            // via the typed Command Line (#184); the name only labels the
+            // loading pill.
             const baseName = filename.split('/').pop();
             return arrayBuffer => this.openNEXFile(arrayBuffer, baseName);
         } else if (cleanName.endsWith('.zip')) {

@@ -244,10 +244,10 @@ func newCommandLineMacro(cmd string, tailFrames int) *nexloadMacro {
 }
 
 // newNexloadMacro builds the TYPED launch: Command Line + `.nexload sdPath`.
-// The import flow no longer uses it (newBrowserLaunchMacro gives games the
-// Browser context real hardware launches from — #178); it remains for the
-// oracle bisect tooling (`img.mmc!nexload=...` specs match ZEsarUX's typed
-// side) and the typed-path tests.
+// It carries the root-anchored IDE deliveries and bare .nex opens (#184);
+// folder-qualified game imports use newBrowserLaunchMacro instead (#178).
+// Also used by the oracle bisect tooling (`img.mmc!nexload=...` specs match
+// ZEsarUX's typed side).
 func newNexloadMacro(sdPath string) *nexloadMacro {
 	return newCommandLineMacro(".nexload "+sdPath, 100)
 }
@@ -572,26 +572,48 @@ func (e *emulator) importAndRunNex(fileName string, data []byte) {
 		e.startNexloadMacro(sdPath)
 		return
 	}
-	// Stage the .nex under its ORIGINAL folder and filename — some games
-	// verify their location or build data paths from it (TX-1696 exits
-	// unless it runs as <its folder>/main.nex; Atic Atac F_OPENs its own
-	// filename). fileName is the game-relative path from the zip flow
-	// ("TX-1696/main.nex"); a bare name gets a folder derived from its
-	// basename so the launch is never from the root (root launches break
-	// the games' <dir>/ data resolution). Overwrite in place so
-	// re-imports don't mint ~N aliases.
 	relPath := strings.Trim(strings.ReplaceAll(fileName, "\\", "/"), "/")
-	nexName := relPath
-	gameDir := ""
-	if i := strings.LastIndex(relPath, "/"); i >= 0 {
-		gameDir, nexName = relPath[:i], relPath[i+1:]
-	}
-	if gameDir == "" {
-		gameDir = strings.TrimSuffix(nexName, ".nex")
-		if gameDir == "" || strings.EqualFold(gameDir, nexName) {
-			gameDir = "game"
+	i := strings.LastIndex(relPath, "/")
+	if i < 0 {
+		// A BARE name is a plain .nex opened directly (File->Open, a ?u=
+		// .nex link) — not a folder-distributed game, so it gets the fast
+		// typed Command Line launch (#184), not the Browser navigation the
+		// zip flow needs. Import to one fixed, short 8.3 name at the card
+		// ROOT and OVERWRITE it in place — never preserve the source name:
+		// a fresh long name would mint a ~N alias (LONEWOLF.NEX ->
+		// LONEWO~1.NEX) and the typing macro cannot produce '~' (it typed
+		// "lonewo1.nex" and NextZXOS answered "No such file or dir"). The
+		// fixed root-level name also keeps the typed `.nexload /zx.nex` as
+		// short as possible. A game that needs its own folder/filename
+		// (TX-1696 verifies it; Atic Atac F_OPENs its own name) is
+		// folder-distributed — deliver it as a zip to take the Browser
+		// route below.
+		const importedNexName = "zx.nex"
+		sdPath, err := sdcard.WriteFileToImage(e.sdImageSrc, "", importedNexName, data)
+		if err != nil {
+			e.paused.Store(false)
+			slog.Error("nex import: copy to SD card failed", "file", fileName, "err", err)
+			e.showGUIError(fmt.Errorf("copy %q to SD card: %w", fileName, err))
+			return
 		}
+		// Persist so the imported game survives restarts (race-free while paused).
+		if flat, ok := e.sdImageSrc.(*sdcard.ImageSource); ok && e.sdImagePath != "" {
+			if err := flat.WriteBackTo(e.sdImagePath); err != nil {
+				slog.Warn("nex import: persisting to the SD image failed", "err", err)
+			}
+		}
+		slog.Info("nex import: launching via typed .nexload", "file", fileName, "sdPath", sdPath)
+		e.startNexloadMacro(sdPath)
+		return
 	}
+	// A FOLDER-QUALIFIED name is the game flow (a zip unpacked onto the
+	// card, or headless ZX_GO_RUN_NEX_FILE): stage the .nex under its
+	// ORIGINAL folder and filename — some games verify their location or
+	// build data paths from it (TX-1696 exits unless it runs as
+	// <its folder>/main.nex; Atic Atac F_OPENs its own filename) — and
+	// launch it through the NextZXOS Browser. Overwrite in place so
+	// re-imports don't mint ~N aliases.
+	gameDir, nexName := relPath[:i], relPath[i+1:]
 	sdPath, err := sdcard.WriteFileToImage(e.sdImageSrc, gameDir, nexName, data)
 	if err != nil {
 		e.paused.Store(false)
@@ -732,8 +754,8 @@ func (e *emulator) putSDFile(filePath string, data []byte) error {
 }
 
 // startNexloadMacro reboots and drives the TYPED `.nexload sdPath` launch
-// (see newNexloadMacro) — kept for callers that must launch a .nex at an
-// arbitrary card path (typed-path tests, oracle tooling).
+// (see newNexloadMacro) — the route for root-anchored IDE deliveries, bare
+// .nex opens (#184), the typed-path tests and the oracle tooling.
 func (e *emulator) startNexloadMacro(sdPath string) {
 	e.reboot()
 	e.nexloadMacro = newNexloadMacro(sdPath)

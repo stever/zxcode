@@ -64,6 +64,16 @@ func TestFolderGameZipDiag(t *testing.T) {
 	if nexData == nil {
 		t.Fatal("no .nex in zip")
 	}
+	// The game's own folder on the card: the zip's folder name, else the
+	// .nex basename — mirroring openNexGameZip. A bare name would take the
+	// typed /zx.nex route (#184), not the game flow under test here.
+	gameDir := ""
+	if parts := strings.Split(strings.Trim(nexDir, "/"), "/"); len(parts) > 0 && parts[len(parts)-1] != "" {
+		gameDir = parts[len(parts)-1]
+	}
+	if gameDir == "" {
+		gameDir = strings.TrimSuffix(nexName, ".nex")
+	}
 	staged := 0
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() || strings.HasPrefix(f.Name, "__MACOSX/") ||
@@ -74,15 +84,15 @@ func TestFolderGameZipDiag(t *testing.T) {
 		rc, _ := f.Open()
 		data, _ := io.ReadAll(rc)
 		_ = rc.Close()
-		if err := emu.putSDFile(rel, data); err != nil {
-			t.Errorf("putSDFile %q: %v", rel, err)
+		if err := emu.putSDFile(gameDir+"/"+rel, data); err != nil {
+			t.Errorf("putSDFile %q: %v", gameDir+"/"+rel, err)
 			continue
 		}
 		staged++
 	}
-	t.Logf("staged %d files (nex=%q dir=%q)", staged, nexName, nexDir)
+	t.Logf("staged %d files (nex=%q gameDir=%q)", staged, nexName, gameDir)
 
-	emu.importAndRunNex(nexName, nexData)
+	emu.importAndRunNex(gameDir+"/"+nexName, nexData)
 
 	entered := false
 	entry := uint16(uint16(nexData[15])<<8 | uint16(nexData[14])) // .nex header PC

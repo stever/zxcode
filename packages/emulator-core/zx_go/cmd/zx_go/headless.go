@@ -1021,11 +1021,13 @@ func runHeadless(f *cliFlags) {
 			// ZX_GO_RUN_NEX_FILE=path[@frame]: invoke the real importAndRunNex
 			// flow (stage <folder>/<name> on the SD card + reboot +
 			// Browser-launch macro) at the given frame — reproduces the
-			// GUI/browser .nex open path headlessly. The staged folder name
-			// is the host file's parent directory name, matching how the
-			// zip flow preserves a game's own folder (some games require
-			// it — #178). Synchronous (unlike the GUI's goroutine) so the
-			// macro is armed before the next frame runs.
+			// browser's game-zip .nex open path headlessly. The staged
+			// folder name is the host file's parent directory name,
+			// matching how the zip flow preserves a game's own folder
+			// (some games require it — #178; a bare GUI/browser .nex open
+			// takes the typed /zx.nex route instead, #184). Synchronous
+			// (unlike the GUI's goroutine) so the macro is armed before
+			// the next frame runs.
 			if spec := os.Getenv("ZX_GO_RUN_NEX_FILE"); spec != "" {
 				path, at := spec, 3000
 				if k := strings.LastIndex(spec, "@"); k > 0 {

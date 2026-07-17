@@ -1,8 +1,10 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/conorarmstrong/zx_go/pkg/next/sdcard"
 	"github.com/conorarmstrong/zx_go/pkg/roms"
 )
 
@@ -104,6 +106,79 @@ func TestImportAndRunNexCycle(t *testing.T) {
 			sentinel[0], frame, emu.cpu.PC, emu.nexloadMacro == nil)
 	}
 	t.Logf(".nex delivered and launched after %d frames", frame)
+}
+
+// TestImportAndRunNexBareNameCycle pins the BARE-name route (#184): a name
+// with no folder is a plain .nex opened directly, and takes the typed
+// Command Line launch — imported as the fixed root /zx.nex (never a folder
+// derived from its basename, which was the #178 regression this restores) —
+// not the Browser navigation reserved for folder-qualified game imports.
+// The loaded code POKEs a sentinel, proving the typed route runs it.
+func TestImportAndRunNexBareNameCycle(t *testing.T) {
+	prev := cliFlagsActive
+	nf := cliFlags{}
+	if prev != nil {
+		nf = *prev
+	}
+	nf.noSound = true
+	cliFlagsActive = &nf
+	t.Cleanup(func() { cliFlagsActive = prev })
+
+	emu, err := newNextEmulator()
+	if err != nil {
+		t.Skipf("Next ROMs not installed: %v", err)
+	}
+	if emu.sdImageSrc == nil {
+		t.Skip("no SD image mounted (set ZX_GO_NEXT_SD_IMG); the load path needs one")
+	}
+
+	// LD A,123 ; LD ($8000),A ; JR $ — running at $C000, writes bank 2[0].
+	emu.importAndRunNex("lonewolf.nex", minimalNex([]byte{0x3E, 0x7B, 0x32, 0x00, 0x80, 0x18, 0xFE}))
+	if emu.nexloadMacro == nil {
+		t.Fatal("importAndRunNex did not arm the nexload macro")
+	}
+
+	// The import must land at the fixed root name, with no basename folder.
+	rootNames, err := sdcard.ListDir(emu.sdImageSrc, "")
+	if err != nil {
+		t.Fatalf("list root: %v", err)
+	}
+	sawZxNex := false
+	for _, n := range rootNames {
+		if strings.EqualFold(n, "zx.nex") {
+			sawZxNex = true
+		}
+		if strings.EqualFold(n, "lonewolf") || strings.EqualFold(n, "lonewolf.nex") {
+			t.Fatalf("bare-name import staged %q at the root — the Browser game route leaked back in", n)
+		}
+	}
+	if !sawZxNex {
+		t.Fatalf("bare-name import did not write /zx.nex; root: %v", rootNames)
+	}
+
+	sentinel := emu.mem.GetPage(2)
+	sentinel[0] = 0
+
+	const maxFrames = 6000
+	frame := 0
+	for ; frame < maxFrames && sentinel[0] != 123; frame++ {
+		emu.cpu.ExecuteFrame(frameTStatesForModel(roms.ModelNext))
+		if emu.peripherals != nil {
+			emu.peripherals.Frame()
+		}
+		if emu.kbd != nil {
+			emu.kbd.Tick()
+		}
+		if emu.nexloadMacro != nil && emu.nexloadMacro.tick(emu) {
+			emu.nexloadMacro = nil
+		}
+		emu.noteBootFrame()
+	}
+	if sentinel[0] != 123 {
+		t.Fatalf(".nex never ran: bank2[0]=%d after %d frames (PC=%#04x, macro done=%v)",
+			sentinel[0], frame, emu.cpu.PC, emu.nexloadMacro == nil)
+	}
+	t.Logf("bare .nex imported as /zx.nex and Command Line-launched after %d frames", frame)
 }
 
 // TestPutSDFileRuntimeLoad drives the runtime-asset side of the BAS delivery:

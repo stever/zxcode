@@ -40,7 +40,7 @@
         <mxCell id="sd1" value="SD card (pkg/next/sdcard + pkg/next/divmmc)&#10;SPI command set (CMD0/8/9/17/18/24/25, ACMD41, CSD v1/v2, CRC16)&#10;image source (tbblue.mmc), sparse-ingested official distro card&#10;(prepped: welcome deleted, config.ini seeded), or FAT32 built from a host tree&#10;zxPutFile / AddFileToFAT32 / DeleteFileFromImage — VFAT long names + ~N aliases" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="560" y="380" width="440" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="sd2" value="Program delivery after boot&#10;game .NEX staged as &lt;folder&gt;/&lt;name&gt;, launched via Browser macro&#10;IDE /name.nex via typed .nexload · NextBASIC via typed load &quot;/zx.bas&quot;&#10;(zxRunNex / zxRunBas exports; reboot re-reads the card)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="sd2" value="Program delivery after boot&#10;zip game .NEX staged as &lt;folder&gt;/&lt;name&gt;, launched via Browser macro&#10;IDE /name.nex &amp;amp; bare .NEX (as /zx.nex) via typed .nexload · NextBASIC via typed load &quot;/zx.bas&quot;&#10;(zxRunNex / zxRunBas exports; reboot re-reads the card)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="560" y="495" width="440" height="75" as="geometry" />
         </mxCell>
         <mxCell id="esd1" value="SPI" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="sd1" target="bt2"><mxGeometry relative="1" as="geometry" /></mxCell>
