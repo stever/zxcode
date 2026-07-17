@@ -179,10 +179,20 @@ RENDER decodes per zxula.vhd:531-541 ("11" & attr(7:6) & paper &
 colour, flash disabled :470, border $C8+colour, ULANext wins) —
 `pkg/ula/ulaplus_next_test.go` + the render branch in
 renderNextULARow.
-⚠️ $FE,$7FFD,$1FFD,$243B/$253B,$E3/$E7/$EB,$6B,$DFFD,AY ports present
-but no port-by-port VHDL decode conformance test (the NEXTREG register
-decode is now exhaustively tested — Axes 2/3; this row is the I/O port
-ADDRESS decode, #158).
+✅ Port-decode sweep (#158): `TestNextPortDecode_*` (pkg/ula) pins the
+implemented decode surface to the FPGA predicates (zxnext.vhd:
+2540-2700) — canonical addresses, partial-decode aliases
+($4001→$7FFD, $1001→$1FFD, $D001→$DFFD, $C005→$FFFD alias,
+low-byte-only $57/$5B/$6B/$0B/$1F/$37, $E0F7-$EFF7), near-miss
+rejections ($263B/$173B/$203B/$2001/$C001), and the port-$FF NR$08
+gate. FIXED by the sweep: the Next's AY decode gained its A2=1 term
+(:2646-2647 — $C001/$8001 are NOT AY ports on the Next; the classics
+keep their loose partial decode).
+⚠️ Enumerated deferrals (test doc + known-gaps): MF enable/disable
+port pair (:2612-2616 — MF paging is NMI-driven in our model),
+Kempston mouse $FADF/$FBDF/$FFDF (:2673-2675), +3 float (:2589), FDC
+iotrap $2FFD/$3FFD (:2601-2602), and the internal/bus port-enable
+GATING (NR$82-$89, :2400-2430 — registers faithful, decode not gated).
 
 ## Axis 5 — Interrupts / timing  (zxula_timing.vhd + zxnext.vhd 2014-2033)
 Tests: `pkg/z80/int_timing_test.go` (narrow pulse, DI-across-pulse, speed-scaled

@@ -29,6 +29,16 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **I/O port-decode sweep (#158 Axis 4).** `TestNextPortDecode_*`
+  enumerates the Next port map against the FPGA's decode predicates
+  (`zxnext.vhd:2540-2700`): partial-decode aliases, low-byte-only
+  ports, near-miss rejections, and the enable gates — with the
+  unmodelled ports (Multiface pair, Kempston mouse, +3 float, FDC
+  iotraps, NR$82-$89 decode gating) enumerated as documented
+  deferrals. It caught one real divergence, fixed: the Next's AY
+  decode requires A2=1 (`:2646-2647`) — `$C001`/`$8001` are not AY
+  ports on the Next, unlike the classic machines' loose partial
+  decode.
 - **ULA+ implemented (#158).** Ports `$BF3B`/`$FF3B` per the FPGA:
   group/index register, palette data with the GGGRRRBB ↔ RRRGGGBB
   swizzle into ULA-palette entries 192-255 (the half NR$43's

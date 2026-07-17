@@ -490,6 +490,16 @@ func (u *ULA) uartClaims(addr uint16) (byte, bool) {
 	return byte(addr >> 8 & 0x03), true
 }
 
+// nextAYA2OK applies the Next-only A2=1 term in the FPGA's AY port
+// decode (zxnext.vhd:2646-2647: port_fffd/port_bffd require
+// cpu_a(2)='1'). Classic machines keep their looser partial decode.
+func (u *ULA) nextAYA2OK(addr uint16) bool {
+	if u.mem == nil || u.mem.GetCurrentModel() != roms.ModelNext {
+		return true
+	}
+	return addr&0x0004 != 0
+}
+
 // dmaClaims reports whether the Spectrum Next DMA claims IO address addr
 // (low byte 0x6B or 0x0B — both decoded on the low 8 bits only,
 // zxnext.vhd:2544/2558), latching the controller's Zilog-compatibility
@@ -1760,8 +1770,11 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// AY-3-8912 register read: port 0xFFFD on 128K+ models.
 	// Decoded as A15=1, A14=1, A1=0 (addr & 0xC002 == 0xC000).
 	// On ModelNext this routes through the engine's currently-
-	// active chip (NextReg 0x06 chip-select).
-	if chip := u.activeAY(); chip != nil && (addr&0xC002) == 0xC000 {
+	// active chip (NextReg 0x06 chip-select), and the FPGA's decode
+	// carries an extra A2=1 term (zxnext.vhd:2646 port_fffd:
+	// a15:14="11" and a2='1' and port_fd) the classic machines don't
+	// — $C001 is NOT an AY port on the Next.
+	if chip := u.activeAY(); chip != nil && (addr&0xC002) == 0xC000 && u.nextAYA2OK(addr) {
 		return chip.ReadSelected(), true
 	}
 
@@ -2282,7 +2295,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 				})
 			}
 		}
-	} else if u.nextAY != nil && (addr&0xC002) == 0xC000 && val >= 0xFD {
+	} else if u.nextAY != nil && (addr&0xC002) == 0xC000 && u.nextAYA2OK(addr) && val >= 0xFD {
 		// Spectrum Next TurboSound chip select: writing 0xFF/0xFE/0xFD to
 		// port 0xFFFD selects AY chip 0/1/2 (chip = 0xFF - val). Register
 		// selects are 0x00-0x0F, so there is no overlap. (NextReg 0x06 does
@@ -2305,13 +2318,15 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 		// over AY (ports.txt 0xdffd), or RAM banks >= 8 would be unreachable
 		// via the classic $C000 slot.
 		u.mem.SetDFFD(val)
-	} else if chip := u.activeAY(); chip != nil && (addr&0xC002) == 0xC000 {
+	} else if chip := u.activeAY(); chip != nil && (addr&0xC002) == 0xC000 && u.nextAYA2OK(addr) {
 		// AY-3-8912 register select: port 0xFFFD on 128K+ models.
-		// Decoded as A15=1, A14=1, A1=0.
+		// Decoded as A15=1, A14=1, A1=0 (+ A2=1 on the Next,
+		// zxnext.vhd:2646).
 		chip.SelectRegister(val)
-	} else if chip := u.activeAY(); chip != nil && (addr&0xC002) == 0x8000 {
+	} else if chip := u.activeAY(); chip != nil && (addr&0xC002) == 0x8000 && u.nextAYA2OK(addr) {
 		// AY-3-8912 data write: port 0xBFFD on 128K+ models.
-		// Decoded as A15=1, A14=0, A1=0.
+		// Decoded as A15=1, A14=0, A1=0 (+ A2=1 on the Next,
+		// zxnext.vhd:2647).
 		chip.WriteSelected(val)
 	} else if u.mem.GetCurrentModel() == roms.ModelPlus3 || u.mem.GetCurrentModel() == roms.ModelPlus2A || u.mem.GetCurrentModel() == roms.ModelNext {
 		// +3 / +2A / Next use stricter port decoding to avoid
