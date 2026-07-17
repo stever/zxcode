@@ -116,7 +116,11 @@ replacement for the JSSpeccy3 Emulator class:
   stalls the menu macros) and seeds `machines/next/config.ini` when
   absent (`cmd/zx_go/distro_prep.go`); staged/user images mount
   untouched. The zipped bytes are kept and re-inflated per boot so a
-  machine switch gets a fresh card. Fallbacks: a zip without size
+  machine switch gets a fresh card — and every game load does too
+  (#186): `openNexGameZip`/`openNEXFile` call `bootNext()`
+  unconditionally, so a previous load's staged folders and in-game
+  writes never leak into the next one (a boot already in flight is
+  joined, not duplicated). Fallbacks: a zip without size
   metadata inflates flat; deployments with only the raw `tbblue.mmc`
   mount it flat via `zxBootNext(bytes)`. The boot drives the UI's
   loading pill through its stages with byte-accurate fractions

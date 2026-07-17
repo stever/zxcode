@@ -214,7 +214,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r62-bare-nex-cmdline';
+        const ENGINE_REV = 'r63-fresh-card-per-load';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -897,8 +897,12 @@ export class GoEmulator extends EventEmitter {
         // one boot that gets displayed (fast-forwarded by loop()).
         this.frameHold = true;
         try {
-            await this.whenMachineReady();
-            if (this.machineType !== 'next') await this.bootNext();
+            // Every load starts from a PRISTINE card (#186): bootNext
+            // re-ingests the kept zip, so a previous load's game folder,
+            // /zx.nex and in-game writes never leak into this one. A boot
+            // already in flight (the ?m=next&u= race) is joined, not
+            // duplicated — bootNext coalesces.
+            await this.bootNext();
             const nexDir = nexEntry.path.slice(0, nexEntry.path.lastIndexOf('/') + 1);
             const nexName = nexEntry.path.split('/').pop();
             const dirParts = nexDir.split('/').filter(Boolean);
@@ -936,10 +940,10 @@ export class GoEmulator extends EventEmitter {
         const data = new Uint8Array(arrayBuffer);
         this.frameHold = true; // see openNexGameZip
         try {
-            // Wait out a boot already started by setMachine('next') before deciding
-            // whether to boot — otherwise machineType lags and we double-boot.
-            await this.whenMachineReady();
-            if (this.machineType !== 'next') await this.bootNext();
+            // Fresh card per load (#186) — see openNexGameZip. bootNext
+            // joins a boot already in flight (the ?m=next&u= race), so
+            // there is no double-boot; a settled Next re-ingests.
+            await this.bootNext();
             this.showLoading(`Starting ${name || 'game.nex'}…`);
             const err = globalThis.zxRunNex(name || 'game.nex', data);
             if (err) throw new Error(err);
