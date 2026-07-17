@@ -994,16 +994,35 @@ func (u *ULA) SetULAPaletteSecond(second bool) {
 	u.recordULAVideoChange()
 }
 
+// currentScanline returns the raster line of "now" for stamping
+// mid-frame effects (border changes, video-state flips). On the Next
+// it rides the 3.5 MHz REFERENCE timeline (the same clock
+// BeamPosition and the palette/tilemap raster sources use), which is
+// speed-INDEPENDENT — a CPU running at 14/28 MHz (NR$07) executes
+// more T-states per real scanline, so dividing the CPU-domain
+// T-counter stamped effects 2/4/8× too far down the frame (the
+// Axis 10 "turbo-speed video timing" row, closed by #180). Classic
+// models have no turbo and keep the per-model CPU-clock division.
+func (u *ULA) currentScanline() int {
+	if u.mem == nil {
+		return 0
+	}
+	if u.mem.FrameOriginRef != nil {
+		line, _ := u.BeamPosition()
+		return line
+	}
+	if u.mem.TStates != nil {
+		return int(*u.mem.TStates) / TStatesPerLineFor(u.mem.GetCurrentModel())
+	}
+	return 0
+}
+
 // recordULAVideoChange appends the CURRENT live ulaVideoState to the
 // frame's change log, stamped with the same scanline clock the border
 // change list uses.
 func (u *ULA) recordULAVideoChange() {
-	scanline := 0
-	if u.mem != nil && u.mem.TStates != nil {
-		scanline = int(*u.mem.TStates) / TStatesPerLineFor(u.mem.GetCurrentModel())
-	}
 	u.ulaVideoChanges = append(u.ulaVideoChanges, ulaVideoChange{
-		scanline: scanline,
+		scanline: u.currentScanline(),
 		state:    u.liveULAVideoState(),
 	})
 }
@@ -2267,13 +2286,12 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	if addr&0x01 == 0 { // Port 0xFE
 		newBorder := val & 0x07
 		if newBorder != u.BorderColour {
-			// Record the border change with current scanline for mid-frame rendering.
-			// Per-model line length (224 on 48K, 228 on 128K+) — see
-			// TStatesPerLineFor and its use in floatingBusByte.
-			scanline := 0
-			if u.mem.TStates != nil {
-				scanline = int(*u.mem.TStates) / TStatesPerLineFor(u.mem.GetCurrentModel())
-			}
+			// Record the border change with the current scanline for
+			// mid-frame rendering — on the reference timeline where
+			// wired (speed-independent under NR$07 turbo, #180), else
+			// the per-model CPU-clock division (224 on 48K, 228 on
+			// 128K+ — see TStatesPerLineFor / floatingBusByte).
+			scanline := u.currentScanline()
 			u.borderChanges = append(u.borderChanges, borderChange{scanline: scanline, colour: newBorder})
 			u.BorderColour = newBorder
 			if u.borderTracer != nil {

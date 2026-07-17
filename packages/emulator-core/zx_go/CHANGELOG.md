@@ -29,6 +29,13 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **Turbo-speed video timing (#180, Track B).** Mid-frame raster
+  stamps — border changes and the raster-stamped ULA video state —
+  now ride the speed-independent 3.5 MHz reference timeline (the
+  clock `BeamPosition` and the palette/tilemap raster sources already
+  used) instead of dividing the CPU-domain T-counter, which landed
+  them 2/4/8× too far down the frame under NR$07 turbo. Classic
+  models (no turbo) keep the per-model CPU-clock division.
 - **Per-pixel tilemap tm_below (#154).** The tilemap's below-the-ULA
   arbitration is now the FPGA's per-PIXEL line-buffer bit —
   `(attr_bit0 OR mode_512) AND NOT tm_on_top` (`tilemap.vhd:388`),
