@@ -92,6 +92,10 @@ type Memory struct {
 	// memory (the Pentagon runs at a flat speed). SetTStatePtr and SwitchModel
 	// derive ContentionEnabled from it.
 	contentionDisabled bool
+	// nextMachineTiming mirrors NR$03's machine-timing field (1=48K,
+	// 2=128K, 3=+3, 4=Pentagon), pushed by pkg/next.WireMachineType.
+	// Selects the Next's contended page set (zxnext.vhd:4490-4494).
+	nextMachineTiming byte
 
 	// Beta Disk / TR-DOS ROM auto-paging. When betaEnabled, the Beta hardware
 	// swaps its TR-DOS ROM over $0000-$3FFF when the CPU fetches an instruction
@@ -719,8 +723,62 @@ func (m *Memory) SetTStatePtr(p *uint64) {
 // Contention delay pattern (repeats every 8 T-states in contended region)
 var contentionPattern = [8]uint64{6, 5, 4, 3, 2, 1, 0, 0}
 
-// isContendedAddr returns true if the address is in contended memory (screen RAM).
+// SetNextMachineTiming mirrors NR$03's machine-timing field into the
+// memory (pushed by pkg/next.WireMachineType): 1 = 48K, 2 = 128K,
+// 3 = +3, 4 = Pentagon. The Next's contention rule keys the CONTENDED
+// PAGE SET off this selection (zxnext.vhd:4490-4494), not the CPU
+// address range. Zero = not pushed (classic models).
+func (m *Memory) SetNextMachineTiming(t byte) { m.nextMachineTiming = t & 0x07 }
+
+// NextMachineTiming returns the mirrored NR$03 timing field.
+func (m *Memory) NextMachineTiming() byte { return m.nextMachineTiming }
+
+// contendedPage8k resolves the 8K RAM page an address accesses (the
+// FPGA's mem_active_page): the MMU slot override when armed, else the
+// classic 16K dispatch. ok=false for ROM (never contended — ROM is
+// not in banks 0-7).
+func (m *Memory) contendedPage8k(addr uint16) (byte, bool) {
+	slot8k := addr >> 13
+	if m.mmuOverride[slot8k] {
+		bank8k := m.slotBank[slot8k]
+		if bank8k == 0xFF {
+			return 0, false // ROM half
+		}
+		return bank8k, true
+	}
+	pageIndex := m.memoryPageReadMap[addr>>14]
+	if pageIndex >= 16 {
+		return 0, false // ROM
+	}
+	return byte(pageIndex)<<1 | byte(addr>>13)&1, true
+}
+
+// isContendedAddr returns true if the address accesses contended memory.
+//
+// ModelNext (zxnext.vhd:4490-4494 mem_contend): only 8K pages 0-15
+// (16K banks 0-7) can contend, with the set selected by the NR$03
+// machine timing — 48K: bank 5 only; 128K: odd banks; +3: banks >= 4;
+// Pentagon: none. The rule follows the PAGE wherever it is mapped
+// (MMU8 included), not the CPU address window.
+//
+// Classic models keep the historical $4000-$7FFF (bank 5) window.
 func (m *Memory) isContendedAddr(addr uint16) bool {
+	if m.currentModel == roms.ModelNext {
+		page, ok := m.contendedPage8k(addr)
+		if !ok || page >= 16 {
+			return false
+		}
+		switch m.nextMachineTiming {
+		case 1: // 48K timing: 16K bank 5 (8K pages 10-11)
+			return page>>1 == 5
+		case 2: // 128K timing: odd 16K banks
+			return page&0x02 != 0
+		case 3: // +3 timing: 16K banks 4-7
+			return page&0x08 != 0
+		default: // Pentagon (4) or config: no contention
+			return false
+		}
+	}
 	// 0x4000-0x7FFF is always contended (bank 5 = screen memory).
 	// On 128K, the contended banks are 1, 3, 5, 7 when paged into 0xC000.
 	return addr >= 0x4000 && addr < 0x8000
@@ -756,15 +814,21 @@ func (m *Memory) contentionDelay() uint64 {
 		return 0
 	}
 	tstate := *m.TStates / mult
-	if tstate >= 14335 && tstate < 57344 {
-		line := (tstate - 14335) / 228
+	// Frame position of the first contended fetch. The Next's frame
+	// clock starts 291 T before the INT raster (cvc 248,
+	// FrameIntTiming), putting paper row 0 at t = 291 + 63*228 = 14655
+	// on its 228 T lines; the classic models keep the historical
+	// 48K-anchored 14335.
+	paperStart := uint64(14335)
+	if m.currentModel == roms.ModelNext {
+		paperStart = 14655
+	}
+	if tstate >= paperStart && tstate < paperStart+192*228 {
+		line := (tstate - paperStart) / 228
 		if line < 192 {
-			pos := (tstate - 14335) % 228
+			pos := (tstate - paperStart) % 228
 			if pos < 128 {
-				// Scale the ULA hold (in ULA cycles) up to CPU T-states:
-				// at N× turbo a 6-cycle ULA hold stalls the CPU for 6*N
-				// of its own (faster) T-states. ×1 at 3.5 MHz.
-				return contentionPattern[pos%8] * mult
+				return contentionPattern[pos%8]
 			}
 		}
 	}
@@ -774,6 +838,12 @@ func (m *Memory) contentionDelay() uint64 {
 // ContendMemory adds contention delay if the address is in contended memory.
 func (m *Memory) ContendMemory(addr uint16) {
 	if !m.ContentionEnabled || m.TStates == nil || m.RAMContentionDisabled {
+		return
+	}
+	// Turbo fast path: the FPGA only contends at 3.5 MHz
+	// (i_contention_en ANDs in cpu_speed = "00", zxnext.vhd:4481) —
+	// skip the page resolution entirely above 1×.
+	if m.SpeedMultiplier != nil && m.SpeedMultiplier() > 1 {
 		return
 	}
 	if m.isContendedAddr(addr) {
@@ -792,6 +862,36 @@ func (m *Memory) ContendPort(addr uint16) {
 
 	// +2A/+3 have no ULA port contention
 	if m.currentModel == roms.ModelPlus3 || m.currentModel == roms.ModelPlus2A {
+		return
+	}
+
+	// ModelNext: the FPGA contends ports only under 48K/128K machine
+	// timing (zxula.vhd:596-604 — o_cpu_contend is gated on
+	// i_timing_p3='0'; the +3-timing wait arm is MEMORY-only, the port
+	// term deliberately removed). The Next boots and runs +3 timing
+	// (NR$03 = $B3), so ports are uncontended there; under a guest-
+	// selected 48K/128K timing the port set is a0=0, the $7FFD decode
+	// and the ULA+ ports (zxnext.vhd:4497 port_contend). Only at
+	// 3.5 MHz (i_contention_en, :4481).
+	if m.currentModel == roms.ModelNext {
+		if m.nextMachineTiming != 1 && m.nextMachineTiming != 2 {
+			return
+		}
+		if m.SpeedMultiplier != nil && m.SpeedMultiplier() > 1 {
+			return
+		}
+		// port_7ffd (zxnext.vhd:2594): a15=0 and port_fd (a1:0="01"),
+		// active only under 128K/+3 hw timing — here reachable only in
+		// the 128K-timing arm.
+		is7FFD := m.nextMachineTiming == 2 && addr&0x8003 == 0x0001
+		isULAP := addr == 0xBF3B || addr == 0xFF3B
+		if addr&0x01 == 0 || is7FFD || isULAP {
+			// ULA-port style hold: C:1, C:3 (zxula.vhd port arm).
+			*m.TStates += m.contentionDelay()
+			*m.TStates++
+			*m.TStates += m.contentionDelay()
+			*m.TStates += 3
+		}
 		return
 	}
 

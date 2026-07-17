@@ -29,6 +29,17 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **Per-access ULA memory contention on the Next (#181, Track B).**
+  The CPU's cycle helpers now consult the memory's contention model,
+  gated exactly like the FPGA (`zxnext.vhd:4481`): 3.5 MHz only,
+  NR$08 bit 6 honoured, no contention under Pentagon timing. The
+  contended page set follows the NR$03 machine timing and the PAGE
+  wherever it is mapped — MMU8 included (`:4490-4494`: 48K = bank 5,
+  128K = odd banks, +3 = banks 4-7). Port contention applies only
+  under 48K/128K timing (the +3-timing wait arm is memory-only,
+  `zxula.vhd:604`) — which also removes a spurious +4T the old
+  fallthrough charged on every even-port I/O under the Next's
+  default +3 timing.
 - **Turbo-speed video timing (#180, Track B).** Mid-frame raster
   stamps — border changes and the raster-stamped ULA video state —
   now ride the speed-independent 3.5 MHz reference timeline (the

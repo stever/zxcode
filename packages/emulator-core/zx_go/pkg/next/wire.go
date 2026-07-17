@@ -484,6 +484,10 @@ func WireMachineType(d *nextregs.Dispatcher, mem *memory.Memory) {
 			default:
 				machineTiming = 3
 			}
+			// The contention page-set selection keys off the live
+			// machine timing (zxnext.vhd:4490-4494) — mirror it into
+			// the memory (#181).
+			mem.SetNextMachineTiming(machineTiming)
 		}
 		// user_dt_lock XOR-toggles on every write whose bit 3 = 1.
 		userDTLock ^= (val >> 3) & 1
@@ -523,6 +527,8 @@ func WireMachineType(d *nextregs.Dispatcher, mem *memory.Memory) {
 	// Read handler so explicit nextreg-read returns the reconstructed
 	// byte too, identical to FPGA port_253b_dat behaviour at line 5894.
 	d.SetOnRead(0x03, func(_ *nextregs.Dispatcher) byte { return read() })
+	// Seed the memory's timing mirror with the reset default (+3).
+	mem.SetNextMachineTiming(machineTiming)
 }
 
 // WireConfigModeRAMPage installs the NextReg $04 OnWrite handler.
@@ -1340,6 +1346,12 @@ func Wire(opts WireOpts) {
 	opts.Memory.SpeedMultiplier = opts.CPU.SpeedMultiplier
 	opts.Memory.RefTstates = opts.CPU.RefTstates
 	opts.Memory.FrameOriginRef = opts.CPU.FrameOriginRefTstates
+	// Per-access ULA memory contention (#181, Axis 10): the FPGA holds
+	// the CPU off the timing-selected page set at 3.5 MHz
+	// (zxnext.vhd:4481/4490-4494). The memory side gates on speed,
+	// NR$08 bit 6 and the NR$03 timing mirror; this switch just lets
+	// the CPU's cycle helpers consult it.
+	opts.CPU.MemContend = true
 	// Registers outside the FPGA read mux read $00 on hardware
 	// (`others => '0'`); installed last so it documents the full
 	// decode without overriding any composed read above.
