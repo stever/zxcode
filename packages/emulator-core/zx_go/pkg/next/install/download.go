@@ -165,7 +165,7 @@ func DownloadNextROMs(ctx context.Context, client *http.Client, url string, prog
 	cfgPath := filepath.Join(sdRoot, "machines", "next", "config.ini")
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
 		if mkerr := os.MkdirAll(filepath.Dir(cfgPath), 0o755); mkerr == nil {
-			if werr := os.WriteFile(cfgPath, []byte(defaultNextConfigINI), 0o644); werr == nil {
+			if werr := os.WriteFile(cfgPath, []byte(DefaultNextConfigINI), 0o644); werr == nil {
 				res.SDFiles++
 			}
 		}
@@ -274,12 +274,14 @@ func extractZipFile(f *zip.File, dest string) error {
 	return nil
 }
 
-// defaultNextConfigINI is the machines/next/config.ini we seed when
+// DefaultNextConfigINI is the machines/next/config.ini we seed when
 // the distro doesn't ship one. boot.bin reads it at startup; with it
 // present the cold boot skips the interactive testcard / video-mode
 // wizard and goes straight to the NextZXOS menu. Values mirror a
-// standard "Next, +3 timing, scandoubler on" setup.
-const defaultNextConfigINI = `; ZX Spectrum Next config.ini (seeded by zx_go on ROM download)
+// standard "Next, +3 timing, scandoubler on" setup. Exported so the
+// wasm distro-card prep (cmd/zx_go) seeds the identical file onto an
+// ingested official card image.
+const DefaultNextConfigINI = `; ZX Spectrum Next config.ini (seeded by zx_go on ROM download)
 ;
 ; boot.bin reads this at startup; when present it skips the
 ; interactive testcard / video-mode wizard and boots to the menu.

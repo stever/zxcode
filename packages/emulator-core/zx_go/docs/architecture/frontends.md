@@ -95,12 +95,24 @@ replacement for the JSSpeccy3 Emulator class:
   modules).
 - Keyboard: a worker-shaped shim feeds the JSSpeccy3 KeyboardHandler's
   `{row, mask}` messages into `zxMatrixKey`.
-- Assets: NextZXOS ROMs and the zipped SD image fetched from `/next/`.
-  The image is STREAMED into a sparse card (r55): JSZip's
-  `internalStream` feeds chunks to `zxSdIngestBegin/Chunk` and
-  `zxBootNext()` mounts the result — the flat image (512 MB shipped
-  geometry) is never materialised; only its real content (~5 MB) is
-  resident. The zipped bytes are kept and re-inflated per boot so a
+- Assets: the PRIMARY source (r60) is the official SpecNext distro zip
+  (`sn-emulator-24.11.zip`: the two NextZXOS ROMs + the full 1 GB
+  `cspect-next-1gb.img`), fetched through the same-origin `/specnext/`
+  Caddy proxy route (specnext.com sends no CORS headers; the CSP pins
+  `connect-src 'self'`) and kept in the browser Cache API so the ~52 MB
+  downloads once. Staged `/next/` assets (ROMs + zipped trimmed image)
+  are the automatic fallback — offline dev, and the only source
+  gif-service's Node harness uses. Either way the image is STREAMED
+  into a sparse card (r55): JSZip's `internalStream` feeds chunks to
+  `zxSdIngestBegin/Chunk` and `zxBootNext()` mounts the result — the
+  flat image is never materialised; only its real content is resident
+  (~136 MB for the full official card, ~5 MB for the staged trimmed
+  one). On the distro path `zxSdPrepDistro()` runs between ingest and
+  boot: it deletes the pristine card's `/nextzxos/autoexec.1st`
+  (first-boot welcome pager, re-shown every boot until disabled — it
+  stalls the menu macros) and seeds `machines/next/config.ini` when
+  absent (`cmd/zx_go/distro_prep.go`); staged/user images mount
+  untouched. The zipped bytes are kept and re-inflated per boot so a
   machine switch gets a fresh card. Fallbacks: a zip without size
   metadata inflates flat; deployments with only the raw `tbblue.mmc`
   mount it flat via `zxBootNext(bytes)`.

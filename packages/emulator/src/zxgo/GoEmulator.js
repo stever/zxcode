@@ -31,6 +31,15 @@ import { nativeZipEntries } from './zipExtract.js';
 
 const scriptUrl = document.currentScript.src;
 
+// The official SpecNext distro the Next boots from, fetched through the
+// same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
+// headers, and the CSP pins connect-src to 'self'). The version is PINNED:
+// the direct-boot NextReg seed table and the menu-navigation cursor index
+// are verified against this distro's exact SD content — bumping it means
+// re-running the "Next boot modes" checks in packages/emulator-core's
+// README against the new image. Staged /next/ assets remain the fallback.
+const SPECNEXT_DISTRO_PATH = '/specnext/distro/24.11/sn-emulator-24.11.zip';
+
 // ---- Go wasm runtime singleton --------------------------------------------
 // wasm_exec.js's Go class runs one program per instantiation and the zx_go
 // exports are globals, so the runtime is page-level state shared by every
@@ -202,7 +211,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r59-halfpixel-pipeline';
+        const ENGINE_REV = 'r60-specnext-distro';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -637,46 +646,115 @@ export class GoEmulator extends EventEmitter {
         });
     }
 
-    // Boot (or reboot) the ZX Spectrum Next: fetch the NextZXOS system assets
-    // once (served from /next/ — staged, never committed; see
-    // @zxplay/emulator-core LICENSES.md), register the ROMs and boot off the
-    // SD image. Resolves once the Next machine has actually constructed
-    // (boots run in Go goroutines), so callers can chain zxRunNex safely.
-    async bootNext() {
-        if (!this.nextAssets) {
-            const fetchBin = async (name) => {
-                const r = await fetch(await assetUrl(`/next/${name}`, scriptUrl));
-                // A SPA fallback answers missing files with the index page
-                // (HTTP 200, text/html) — treat that as absent too.
-                if (r.status === 404 || (r.headers.get('Content-Type') || '').includes('text/html')) return null;
-                if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
-                return new Uint8Array(await r.arrayBuffer());
-            };
-            // The SD image is mostly empty space — the staged zip is a few-MB
-            // download whatever the card's virtual size. Keep the ZIPPED bytes
-            // and re-inflate per boot (each boot gets a fresh card), streaming
-            // the image into the core's SPARSE card so the flat image is never
-            // materialised — that is what allows a large-geometry card (big
-            // FAT32 clusters, room for big game payloads) at a RAM cost of
-            // only its real content. Deployments staged before the zip existed
-            // only have the raw image; fall back to it (flat mount) then.
-            const [zx, mmc, sdZip] = await Promise.all(
-                [fetchBin('enNextZX.rom'), fetchBin('enNxtmmc.rom'), fetchBin('tbblue.mmc.zip')]);
-            const sdRaw = sdZip ? null : await fetchBin('tbblue.mmc');
-            if (!zx || !mmc || (!sdZip && !sdRaw)) {
-                throw new Error('Next system assets missing from /next/ — stage them (packages/emulator-core/scripts/stage-zxnext-assets.sh)');
+    // Fetch the official SpecNext distro zip (ROMs + full 1GB card image)
+    // through the same-origin /specnext/ proxy route — specnext.com sends no
+    // CORS headers and the CSP pins connect-src to 'self', so the Caddy
+    // proxy passes /specnext/distro/* through to www.specnext.com. The zip
+    // is kept in the Cache API so the ~52MB download happens once per
+    // browser; the versioned path is its own cache key. Returns the assets
+    // bundle or throws (caller falls back to the staged /next/ assets).
+    async fetchSpecnextDistro() {
+        if (!globalThis.zxSdIngestBegin || !globalThis.zxSdPrepDistro) {
+            throw new Error('core lacks sparse ingest/prep exports');
+        }
+        const url = new URL(SPECNEXT_DISTRO_PATH, scriptUrl).href;
+        let resp = null;
+        let cache = null;
+        try {
+            cache = await caches.open('zx-specnext-distro');
+            resp = await cache.match(url);
+        } catch (e) { /* Cache API unavailable — plain fetch below */ }
+        if (!resp) {
+            console.log('zxgo: downloading the official NextZXOS distro,', SPECNEXT_DISTRO_PATH);
+            resp = await fetch(url);
+            if (!resp.ok || (resp.headers.get('Content-Type') || '').includes('text/html')) {
+                throw new Error(`${SPECNEXT_DISTRO_PATH}: HTTP ${resp.status}`);
             }
-            this.nextAssets = { zx, mmc, sdZip, sdRaw };
+            if (cache) {
+                try { await cache.put(url, resp.clone()); } catch (e) { /* quota — not fatal */ }
+            }
+        }
+        const zipBytes = new Uint8Array(await resp.arrayBuffer());
+        const zip = await JSZip.loadAsync(zipBytes);
+        const entryBytes = async (suffix) => {
+            const entry = zip.filter((p) => p.toLowerCase().endsWith(suffix))[0];
+            return entry ? entry.async('uint8array') : null;
+        };
+        const [zx, mmc] = await Promise.all(
+            [entryBytes('ennextzx.rom'), entryBytes('ennxtmmc.rom')]);
+        const img = zip.filter((p) => /\.(img|mmc)$/i.test(p))[0];
+        if (!zx || !mmc || !img || !(img._data && img._data.uncompressedSize)) {
+            throw new Error(`${SPECNEXT_DISTRO_PATH}: not a Next distro zip (ROMs or streamable card image missing)`);
+        }
+        return { zx, mmc, sdZip: zipBytes, sdRaw: null, distro: true };
+    }
+
+    // Fetch the locally staged NextZXOS assets from /next/ (staged, never
+    // committed; see @zxplay/emulator-core LICENSES.md). The fallback when
+    // the official distro is unreachable — and the only source gif-service's
+    // Node harness uses.
+    async fetchStagedNextAssets() {
+        const fetchBin = async (name) => {
+            const r = await fetch(await assetUrl(`/next/${name}`, scriptUrl));
+            // A SPA fallback answers missing files with the index page
+            // (HTTP 200, text/html) — treat that as absent too.
+            if (r.status === 404 || (r.headers.get('Content-Type') || '').includes('text/html')) return null;
+            if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
+            return new Uint8Array(await r.arrayBuffer());
+        };
+        // The staged SD image is mostly empty space — the zip is a few-MB
+        // download whatever the card's virtual size. Deployments staged
+        // before the zip existed only have the raw image; fall back to it
+        // (flat mount) then.
+        const [zx, mmc, sdZip] = await Promise.all(
+            [fetchBin('enNextZX.rom'), fetchBin('enNxtmmc.rom'), fetchBin('tbblue.mmc.zip')]);
+        const sdRaw = sdZip ? null : await fetchBin('tbblue.mmc');
+        if (!zx || !mmc || (!sdZip && !sdRaw)) {
+            throw new Error('Next system assets missing: the official distro fetch failed and nothing is staged in /next/ (packages/emulator-core/scripts/stage-zxnext-assets.sh)');
+        }
+        return { zx, mmc, sdZip, sdRaw, distro: false };
+    }
+
+    // Boot (or reboot) the ZX Spectrum Next: acquire the NextZXOS system
+    // assets once — the official SpecNext distro first (full card: NextZXOS
+    // plus its bundled games/demos/docs), staged /next/ assets as the
+    // fallback — register the ROMs and boot off the SD image. The ZIPPED
+    // bytes are kept and re-inflated per boot (each boot gets a fresh card),
+    // streamed into the core's SPARSE card so the flat image is never
+    // materialised — RAM cost is only the card's real content. Resolves once
+    // the Next machine has actually constructed (boots run in Go
+    // goroutines), so callers can chain zxRunNex safely.
+    //
+    // Boots are SERIALISED: the ingest state (zxSdIngestBegin/Chunk) is
+    // page-global in the core, so two overlapping boots interleave their
+    // chunk streams and corrupt the card ("no MBR signature"). This happens
+    // in practice — a page whose persisted machine choice auto-boots the
+    // Next while the user clicks the machine menu.
+    bootNext() {
+        this.bootNextQueue = (this.bootNextQueue || Promise.resolve())
+            .catch(() => { /* previous boot's failure is its caller's */ })
+            .then(() => this.bootNextNow());
+        return this.bootNextQueue;
+    }
+
+    async bootNextNow() {
+        if (!this.nextAssets) {
+            try {
+                this.nextAssets = await this.fetchSpecnextDistro();
+            } catch (e) {
+                console.warn('zxgo: official distro unavailable (' + (e.message || e) + '), using staged /next/ assets');
+                this.nextAssets = await this.fetchStagedNextAssets();
+            }
         }
         globalThis.zxRegisterROM('enNextZX.rom', this.nextAssets.zx);
         globalThis.zxRegisterROM('enNxtmmc.rom', this.nextAssets.mmc);
         let err;
-        const { sdZip, sdRaw } = this.nextAssets;
+        const { sdZip, sdRaw, distro } = this.nextAssets;
         if (sdZip) {
             const zip = await JSZip.loadAsync(sdZip);
             const entry = zip.file('tbblue.mmc') ||
-                zip.filter((path) => path.toLowerCase().endsWith('.mmc'))[0];
-            if (!entry) throw new Error('tbblue.mmc.zip: no .mmc image inside');
+                zip.filter((path) => /\.(mmc|img)$/i.test(path))[0];
+            if (!entry) throw new Error('SD zip: no .mmc/.img image inside');
             const size = entry._data && entry._data.uncompressedSize;
             if (size && globalThis.zxSdIngestBegin) {
                 const beginErr = globalThis.zxSdIngestBegin(size);
@@ -691,6 +769,14 @@ export class GoEmulator extends EventEmitter {
                         .on('end', resolve)
                         .resume();
                 });
+                if (distro) {
+                    // A pristine official card re-shows the first-boot
+                    // welcome pager every boot and lacks the config.ini the
+                    // faithful firmware path needs — normalise it to the
+                    // shape a configured card has (see distro_prep.go).
+                    const prepErr = globalThis.zxSdPrepDistro();
+                    if (prepErr) console.error('zxgo:', prepErr);
+                }
                 err = globalThis.zxBootNext();
             } else {
                 // No streamable size metadata: inflate flat (legacy mount).

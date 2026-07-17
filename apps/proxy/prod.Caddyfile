@@ -35,6 +35,20 @@
         reverse_proxy api:8080
     }
 
+    # Official SpecNext NextZXOS distro, passed through same-origin: the
+    # emulator boots the Next from specnext.com's distro zip, but specnext.com
+    # sends no CORS headers and the CSP pins connect-src to 'self', so the
+    # browser fetches /specnext/distro/... from our origin instead. The
+    # versioned path never changes content — cache hard (the page also keeps
+    # it in the Cache API).
+    handle /specnext/distro/* {
+        uri strip_prefix /specnext
+        header Cache-Control "public, max-age=31536000, immutable"
+        reverse_proxy https://www.specnext.com {
+            header_up Host www.specnext.com
+        }
+    }
+
     # Read-only project screenshots (PNG). Only this gif-service path is exposed;
     # the compile /api routes stay internal. Served at /screenshots/<id>.png.
     handle /screenshots/* {

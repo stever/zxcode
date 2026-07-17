@@ -480,9 +480,14 @@ raster instant (known-gaps.md).
   16 KiB pages are resident, absent pages read as zeros and all-zero
   writes allocate nothing, so a large-geometry card costs only its
   real content in RAM; this is the browser's card: the wasm
-  `zxSdIngestBegin/Chunk` exports stream the zip-inflated shipped
-  image in without ever materialising it flat, and the 512 MB /
-  4 KB-cluster card mounts at ~5 MB resident), or a FAT32 image built
+  `zxSdIngestBegin/Chunk` exports stream the zip-inflated image in
+  without ever materialising it flat — the official distro's 1 GB /
+  32 KB-cluster card mounts at ~136 MB resident, the staged trimmed
+  512 MB / 4 KB-cluster fallback at ~5 MB; on the distro path the
+  `zxSdPrepDistro` export then normalises the pristine card before
+  boot — `cmd/zx_go/distro_prep.go` deletes the first-boot welcome
+  `nextzxos/autoexec.1st` and seeds `machines/next/config.ini` when
+  absent), or a FAT32 image built
   from a host directory tree (`BuildFAT32`, VFAT long names with ~N
   aliasing, the format NextZXOS actually boots). The FAT staging
   machinery (`WriteFileToImage`/`AddFileToImage`, used by .nex/.bas
@@ -490,7 +495,10 @@ raster instant (known-gaps.md).
   `sdcard.Image` interface (ReadAt/WriteAt/Size); the historical
   []byte entry points wrap it.
   `AddFileToFAT32`/`WriteFileToFAT32` insert or replace files in an
-  existing image (this is what `zxPutFile` and .NEX import use). A
+  existing image (this is what `zxPutFile` and .NEX import use);
+  `DeleteFileFromImage`/`FileExistsInImage` (r60) tombstone a file —
+  dir entry plus its VFAT LFN chain, data chain returned to the FAT —
+  or probe for one, which is what the distro-card prep uses. A
   directory grown past its first cluster gets its extension cluster
   zeroed — on a real card's dirty free space, stale bytes would
   otherwise interleave with new entries and detach LFN chains from

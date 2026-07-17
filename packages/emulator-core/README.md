@@ -39,9 +39,22 @@ the wasm port is gated behind `//go:build js` / `!js` tags.
 ## Machines
 
 48K and 128K boot from ROMs embedded in the binary. The Spectrum Next boots
-real NextZXOS from ROMs + an SD image staged by `scripts/` — licensed content
-served under The Next License; see `LICENSES.md` for the distribution basis
-and its conditions (free access, bare bootable system, attribution).
+real NextZXOS. The BROWSER's primary source (r60) is the official SpecNext
+distro zip (`sn-emulator-24.11.zip`: both NextZXOS ROMs + the full 1 GB
+card image), fetched through the same-origin `/specnext/` Caddy proxy route
+(specnext.com sends no CORS headers; the sites' CSP pins connect-src to
+'self') and kept in the browser Cache API. The version is PINNED in
+`GoEmulator.js` (`SPECNEXT_DISTRO_PATH`) because the boot accelerators are
+verified per distro version — see "Next boot modes" below. Before boot the
+pristine card is normalised in-RAM by the `zxSdPrepDistro` export
+(`cmd/zx_go/distro_prep.go`): the first-boot welcome pager
+(`nextzxos/autoexec.1st`) is deleted and `machines/next/config.ini` seeded
+when absent — the shape a once-configured card has on real hardware.
+
+ROMs + an SD image staged by `scripts/` remain the fallback (offline dev,
+CI, and gif-service's Node harness) — licensed content served under The
+Next License; see `LICENSES.md` for the distribution basis and its
+conditions (free access, bare bootable system, attribution).
 
 ## Next boot modes — MAINTENANCE GOTCHA
 
@@ -56,7 +69,8 @@ that, the page fast-forwards emulation until the NextZXOS menu wait loop
 drops from ~384 to ~80 frames, all of it time-compressed.
 
 Two things are coupled to the exact SD distro version and both fail on a
-future `tbblue.mmc` / NextZXOS update:
+future distro update (the pinned `SPECNEXT_DISTRO_PATH` in `GoEmulator.js`
+or a restaged `tbblue.mmc`):
 
 1. **The `next_directboot.go` NextReg seed table** — captured from a live
    NextZXOS boot. If it drifts the failure mode is a boot hang, not an error.
@@ -65,11 +79,19 @@ future `tbblue.mmc` / NextZXOS update:
    cursor index at `$F700` reaches `menuItemCommandLine` (= 1 on this distro).
    A menu reorder makes it select the wrong item.
 
-After restaging Next assets, re-run (covers both, in both boot modes):
+After bumping the pinned distro version (or restaging), verify against the
+image the browser will actually boot. For the official distro path, first
+produce the PREPPED card (what `zxSdPrepDistro` mounts):
 
-    ZX_GO_NEXT_SD_IMG=<staged tbblue.mmc> \
+    unzip sn-emulator-<ver>.zip cspect-next-1gb.img
+    ZX_GO_DISTRO_IMG=cspect-next-1gb.img ZX_GO_DISTRO_IMG_OUT=prepped.img \
+      go test ./cmd/zx_go/ -run 'TestPrepDistroCard_OfficialImage' -v
+
+then re-run (covers seeds + menu navigation, in both boot modes):
+
+    ZX_GO_NEXT_SD_IMG=<prepped.img or staged tbblue.mmc> \
       go test ./cmd/zx_go/ -run 'TestDirectBootSurvivesReboot|TestImportAndRun|TestMenuCursorNavigation'
-    ZX_GO_NEXT_SD_IMG=<staged tbblue.mmc> ZX_GO_NO_FPGA_BOOTROM=1 \
+    ZX_GO_NEXT_SD_IMG=<prepped.img or staged tbblue.mmc> ZX_GO_NO_FPGA_BOOTROM=1 \
       ZX_GO_NEXT_DIRECT_BOOT=1 go test ./cmd/zx_go/ \
       -run 'TestDirectBootSurvivesReboot|TestImportAndRun|TestMenuCursorNavigation'
 
@@ -80,3 +102,14 @@ fast-forwarded, just ~300 frames slower. If `TestMenuCursorNavigation` fails,
 update `menuItemCommandLine` to the new index (the test message reports where
 the cursor actually landed). The desktop build always uses the faithful path
 and is unaffected.
+
+Known gap (r60, see docs/architecture/known-gaps.md): the faithful firmware
+path currently does NOT boot the official distro card geometry to the menu
+in our emulation (it lands in the config tool with "Error opening
+'menu.ini/.def'" — every firmware file open fails on that card, while
+NextZXOS itself reads it fine; not the partition offset, firmware bytes or
+config.ini, all ruled out). Direct boot — the only mode the browser uses —
+passes all the tests above against the prepped 24.11 image. Consequence:
+the faithful-path leg of the verification only applies to staged
+tbblue.mmc-geometry cards, and the "delete the go.env lines" fallback is
+not currently available while the official distro is the browser's source.

@@ -113,6 +113,27 @@ func setupWasmExports() {
 		return ""
 	}))
 
+	// zxSdPrepDistro() -> "" | error. Normalise the just-ingested OFFICIAL
+	// distro card between the last zxSdIngestChunk and zxBootNext(): drop
+	// the first-boot welcome pager (nextzxos/autoexec.1st, re-shown every
+	// boot until disabled — it stalls the menu-driving macros) and seed
+	// machines/next/config.ini when absent so the faithful firmware path
+	// boots to the menu instead of the first-run wizard (distro_prep.go).
+	// The page calls this ONLY for cards it sourced from the official
+	// specnext.com distro — staged/user images are mounted untouched.
+	g.Set("zxSdPrepDistro", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		if sdIngestSrc == nil {
+			return "zxSdPrepDistro: no ingest in progress"
+		}
+		deletedWelcome, seededConfig, err := prepDistroCard(sdIngestSrc)
+		if err != nil {
+			return "zxSdPrepDistro: " + err.Error()
+		}
+		js.Global().Get("console").Call("log",
+			"zxSdPrepDistro: welcome deleted:", deletedWelcome, "config seeded:", seededConfig)
+		return ""
+	}))
+
 	// zxBootNext(sd? Uint8Array) -> "". With an argument, mounts the flat
 	// image (legacy path); with none, mounts the card streamed in through
 	// zxSdIngestBegin/Chunk. Construction calls audio.New(), which

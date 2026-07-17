@@ -95,6 +95,7 @@ This is a body of work, not a single gap.
 | Desktop run loop does not use the fastboot fast-forward (browser only) | deferred | `cmd/zx_go/fastboot.go` |
 | The Next cannot tape-load in the browser player; .tap on the Next falls back to the 128K | deferred | `GoEmulator.js` |
 | Browser direct-boot seed table and the nexload menu-index are coupled to the SD distro version; re-verification procedure documented | maintenance coupling | `packages/emulator-core/README.md` |
+| Faithful firmware boot (FPGA bootrom → TBBLUE.FW) of the OFFICIAL distro card geometry (1 GB, 32 KB clusters, partition at LBA 63) lands in the config tool with "Error opening 'menu.ini/.def'" — every firmware file open fails, while NextZXOS itself reads the same card fine. Not the partition offset (rebasing to LBA 2048 reproduces), not firmware content or config.ini (byte-identical to the staged card, which boots). The browser's direct-boot path is unaffected (all boot regression tests pass against the prepped official image), but the "delete the go.env lines" fallback does not currently work on the official card | open (r60) | `cmd/zx_go/distro_prep.go`, `packages/emulator-core/README.md` |
 | Warm-boot path (`--warm-boot`) uses captured reference dumps; non-faithful by design, default off | dev tool | `cmd/zx_go/next.go` |
 
 ## How gaps get closed

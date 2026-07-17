@@ -43,6 +43,26 @@ into, the GPLv3 grant. They stay out of git regardless (staged by
 `scripts/stage-zxnext-assets.sh` locally, and by the deploy repo's
 `scripts/stage-next-assets.sh` in production).
 
+Two serving routes coexist (r60), each on a different arm of the license:
+
+1. **Official distro pass-through (browser primary).** The sites proxy the
+   OFFICIAL SpecNext emulator distro zip (`/specnext/distro/…` →
+   `www.specnext.com/distro/…`) byte-for-byte: an exact copy of the entire
+   official distribution, served cost-free — squarely the umbrella grant's
+   "distribute exact copies" permission, with the "in its entirety"
+   condition satisfied because nothing is trimmed, added, or modified. The
+   per-title games/demos/tools inside are distributed exactly as SpecNext
+   Ltd distributes them, as part of that entirety. The emulator's boot-time
+   normalisation (deleting the first-boot welcome `autoexec.1st`, seeding
+   `config.ini` — `zxSdPrepDistro`) happens in RAM on the user's machine
+   after download, the same mutations NextZXOS/the firmware perform on a
+   real first-configured card; the distributed copy is untouched.
+2. **Staged bare system (fallback + gif-service).** The trimmed
+   `tbblue.mmc` route below — "only the free parts", per the analysis that
+   follows. Its rules (bare system only, never add per-title content)
+   apply to the STAGED image; they are what makes a *partial* distribution
+   permissible, and are not contradicted by route 1, which is not partial.
+
 The Next License requires its notice and the constituent-part licenses to travel
 with every copy. Those texts live in `next-licenses/` (freely distributable, so
 committed) and are served at `/next/licenses/` next to the assets: committed into

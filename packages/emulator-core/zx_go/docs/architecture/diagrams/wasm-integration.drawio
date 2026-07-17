@@ -19,7 +19,7 @@
         <mxCell id="js4" value="KeyboardHandler (JSSpeccy3 heritage)&#10;worker-shaped shim: postMessage {keyDown,row,mask}&#10;→ setMatrixKey → zxMatrixKey; blur releases held keys" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="70" y="395" width="380" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="js5" value="Asset staging&#10;/next/: enNextZX.rom, enNxtmmc.rom,&#10;tbblue.mmc.zip (JSZip inflate, raw fallback)&#10;stageSdFiles / openNexGameZip for project files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+        <mxCell id="js5" value="Asset acquisition&#10;primary: official /specnext/ distro zip (proxied,&#10;Cache API) — ROMs + card image, zxSdPrepDistro&#10;fallback: staged /next/ ROMs + tbblue.mmc.zip&#10;JSZip stream → zxSdIngestBegin/Chunk (sparse)&#10;stageSdFiles / openNexGameZip for project files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="70" y="495" width="380" height="90" as="geometry" />
         </mxCell>
         <mxCell id="lane-exports" value="wasm exports (cmd/zx_go/wasm_js.go — js.FuncOf globals)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
