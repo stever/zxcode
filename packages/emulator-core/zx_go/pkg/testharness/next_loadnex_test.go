@@ -20,7 +20,7 @@ import (
 // AssertSandboxed guard fails the test loudly otherwise, since
 // without the redirect this would write into the developer's real
 // install directory.
-func installFakeDistroForLoad(t *testing.T) {
+func installFakeDistroForLoad(t testing.TB) {
 	t.Helper()
 	installtest.AssertSandboxed(t)
 	dir, err := install.Path()
