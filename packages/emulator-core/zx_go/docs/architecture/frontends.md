@@ -115,7 +115,11 @@ replacement for the JSSpeccy3 Emulator class:
   untouched. The zipped bytes are kept and re-inflated per boot so a
   machine switch gets a fresh card. Fallbacks: a zip without size
   metadata inflates flat; deployments with only the raw `tbblue.mmc`
-  mount it flat via `zxBootNext(bytes)`.
+  mount it flat via `zxBootNext(bytes)`. The boot drives the UI's
+  loading pill through its stages with byte-accurate fractions
+  (Downloading NextZXOS → Preparing SD card → Starting NextZXOS, r61);
+  a boot that opened the pill closes it, one running under a
+  game-launch overlay leaves closing to that flow.
 - `ENGINE_REV` is logged at boot; bump it on engine or translator
   changes (webpack-dev-server does not reliably rebuild workspace
   package edits).

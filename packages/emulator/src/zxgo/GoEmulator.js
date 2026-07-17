@@ -188,7 +188,10 @@ export class GoEmulator extends EventEmitter {
         this.onReadyHandlers = [];
         // Loading overlay state (see showLoading/doneLoading below).
         this.loadingHold = false;
+        this.loadingVisible = false;
         this.macroWatch = null;
+        // Coalesced Next boots (see bootNext).
+        this.bootNextInFlight = null;
         // Frame-loop hold during game imports (see openNexGameZip/loop).
         this.frameHold = false;
 
@@ -211,7 +214,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r60-specnext-distro';
+        const ENGINE_REV = 'r61-boot-progress';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -664,17 +667,26 @@ export class GoEmulator extends EventEmitter {
             cache = await caches.open('zx-specnext-distro');
             resp = await cache.match(url);
         } catch (e) { /* Cache API unavailable — plain fetch below */ }
-        if (!resp) {
+        let zipBytes;
+        if (resp) {
+            this.showLoading('Loading NextZXOS…');
+            zipBytes = new Uint8Array(await resp.arrayBuffer());
+        } else {
             console.log('zxgo: downloading the official NextZXOS distro,', SPECNEXT_DISTRO_PATH);
             resp = await fetch(url);
             if (!resp.ok || (resp.headers.get('Content-Type') || '').includes('text/html')) {
                 throw new Error(`${SPECNEXT_DISTRO_PATH}: HTTP ${resp.status}`);
             }
+            zipBytes = await this.readResponseWithProgress(resp, 'Downloading NextZXOS…');
             if (cache) {
-                try { await cache.put(url, resp.clone()); } catch (e) { /* quota — not fatal */ }
+                // The body was consumed by the streamed read, so cache the
+                // assembled bytes (Response copies its BufferSource body).
+                try {
+                    await cache.put(url, new Response(zipBytes,
+                        { headers: { 'Content-Type': 'application/zip' } }));
+                } catch (e) { /* quota — not fatal */ }
             }
         }
-        const zipBytes = new Uint8Array(await resp.arrayBuffer());
         const zip = await JSZip.loadAsync(zipBytes);
         const entryBytes = async (suffix) => {
             const entry = zip.filter((p) => p.toLowerCase().endsWith(suffix))[0];
@@ -689,11 +701,49 @@ export class GoEmulator extends EventEmitter {
         return { zx, mmc, sdZip: zipBytes, sdRaw: null, distro: true };
     }
 
+    // Read a fetch response body to completion, driving the loading pill
+    // with a byte-accurate fraction from Content-Length (indeterminate when
+    // the server doesn't send one). Ring updates are throttled to whole
+    // percents so a chunky stream doesn't spam the DOM.
+    async readResponseWithProgress(resp, message) {
+        if (!resp.body || !resp.body.getReader) {
+            this.showLoading(message);
+            return new Uint8Array(await resp.arrayBuffer());
+        }
+        const total = Number(resp.headers.get('Content-Length')) || 0;
+        this.showLoading(message, total ? 0 : null);
+        const reader = resp.body.getReader();
+        const parts = [];
+        let received = 0;
+        let lastPct = -1;
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            parts.push(value);
+            received += value.length;
+            if (total) {
+                const pct = Math.floor((received / total) * 100);
+                if (pct !== lastPct) {
+                    lastPct = pct;
+                    this.showLoading(message, received / total);
+                }
+            }
+        }
+        const out = new Uint8Array(received);
+        let off = 0;
+        for (const p of parts) {
+            out.set(p, off);
+            off += p.length;
+        }
+        return out;
+    }
+
     // Fetch the locally staged NextZXOS assets from /next/ (staged, never
     // committed; see @zxplay/emulator-core LICENSES.md). The fallback when
     // the official distro is unreachable — and the only source gif-service's
     // Node harness uses.
     async fetchStagedNextAssets() {
+        this.showLoading('Loading NextZXOS…');
         const fetchBin = async (name) => {
             const r = await fetch(await assetUrl(`/next/${name}`, scriptUrl));
             // A SPA fallback answers missing files with the index page
@@ -725,19 +775,41 @@ export class GoEmulator extends EventEmitter {
     // the Next machine has actually constructed (boots run in Go
     // goroutines), so callers can chain zxRunNex safely.
     //
-    // Boots are SERIALISED: the ingest state (zxSdIngestBegin/Chunk) is
+    // Boots are COALESCED: the ingest state (zxSdIngestBegin/Chunk) is
     // page-global in the core, so two overlapping boots interleave their
     // chunk streams and corrupt the card ("no MBR signature"). This happens
     // in practice — a page whose persisted machine choice auto-boots the
-    // Next while the user clicks the machine menu.
+    // Next while the user clicks the machine menu. The second caller wants
+    // a running Next, not a second boot, so it gets the in-flight promise
+    // (queueing a back-to-back reboot instead would also crawl: an ingest
+    // run under the first boot's fastboot fast-forward is starved of main
+    // thread). A call arriving AFTER the boot settled starts a fresh boot —
+    // that is the reboot semantics of re-selecting the machine.
     bootNext() {
-        this.bootNextQueue = (this.bootNextQueue || Promise.resolve())
-            .catch(() => { /* previous boot's failure is its caller's */ })
-            .then(() => this.bootNextNow());
-        return this.bootNextQueue;
+        if (this.bootNextInFlight) return this.bootNextInFlight;
+        this.bootNextInFlight = this.bootNextNow().finally(() => {
+            this.bootNextInFlight = null;
+        });
+        return this.bootNextInFlight;
     }
 
+    // The boot drives the loading pill through its stages (Downloading /
+    // Loading → Preparing SD card → Starting). Pill ownership: when the
+    // overlay was already up (a game-launch opener showed it and will keep
+    // driving it), the stage messages just update it and the owner closes
+    // it; when this boot opened it (the machine-menu path, which used to
+    // show nothing through a multi-second download+ingest), it closes it —
+    // unless a launch macro took the loadingHold in the meantime.
     async bootNextNow() {
+        const ownsPill = !this.loadingVisible;
+        try {
+            await this.bootNextStages();
+        } finally {
+            if (ownsPill && !this.loadingHold) this.doneLoading();
+        }
+    }
+
+    async bootNextStages() {
         if (!this.nextAssets) {
             try {
                 this.nextAssets = await this.fetchSpecnextDistro();
@@ -759,11 +831,20 @@ export class GoEmulator extends EventEmitter {
             if (size && globalThis.zxSdIngestBegin) {
                 const beginErr = globalThis.zxSdIngestBegin(size);
                 if (beginErr) throw new Error(beginErr);
+                this.showLoading('Preparing SD card…', 0);
+                let fed = 0;
+                let lastPct = -1;
                 await new Promise((resolve, reject) => {
                     entry.internalStream('uint8array')
                         .on('data', (chunk) => {
                             const e = globalThis.zxSdIngestChunk(chunk);
                             if (e) reject(new Error(e));
+                            fed += chunk.length;
+                            const pct = Math.floor((fed / size) * 100);
+                            if (pct !== lastPct) {
+                                lastPct = pct;
+                                this.showLoading('Preparing SD card…', fed / size);
+                            }
                         })
                         .on('error', reject)
                         .on('end', resolve)
@@ -786,6 +867,7 @@ export class GoEmulator extends EventEmitter {
             err = globalThis.zxBootNext(sdRaw);
         }
         if (err) throw new Error(err);
+        this.showLoading('Starting NextZXOS…');
         // Wait for the Next machine to replace the previous one (goroutine).
         await this.waitForModel('Next');
         this.machineType = 'next';
@@ -1058,11 +1140,13 @@ export class GoEmulator extends EventEmitter {
     // even when the main thread is busy).
     showLoading(message, progress) {
         this.lastLoadingMessage = message;
+        this.loadingVisible = true;
         this.emit('loading', message, (progress === undefined) ? null : progress);
     }
 
     doneLoading() {
         this.loadingHold = false;
+        this.loadingVisible = false;
         if (this.macroWatch) { clearInterval(this.macroWatch); this.macroWatch = null; }
         this.emit('loadingDone');
     }
