@@ -321,7 +321,7 @@ func setupWasmDebugExports(g js.Value) {
 			return "ERR not paused"
 		}
 		d.paused.Store(false)
-		e.cpu.ExecuteFrame(frameTStatesForModel(e.model))
+		e.cpu.ExecuteFrame(e.frameTStates())
 		if e.peripherals != nil {
 			e.peripherals.Frame()
 		}

@@ -303,6 +303,91 @@ func WireJoystickMode(d *nextregs.Dispatcher) {
 	})
 }
 
+// WireFrameGeometry makes guest NR$03 machine-timing / NR$05 bit-2
+// (50/60 Hz) writes retune the LIVE frame geometry — frame length,
+// T-states per line, frame-INT position/pulse and the contention paper
+// anchor — per the FPGA's per-mode constant table
+// (video/zxula_timing.vhd:146-311, transcribed by FrameGeometryFor).
+//
+// It chains onto the NR$03 and NR$05 OnWrite handlers (so install it
+// AFTER WireMachineType / WireJoystickMode / WireLineInterrupt) and on
+// a geometry-changing write pushes:
+//
+//   - mem.SetNextFrameGeometry — the mirror the contention window
+//     (memory.contentionDelay), the ULA beam/NR$1E/$1F counters and
+//     the frame loops (Memory.FrameTStates) read;
+//   - cpu.IntAssertTstate / IntPulseTstates / StepFrameTstates — the
+//     CPU samples these at each frame origin, which models the FPGA's
+//     effective-timing latch: "changes to video timing occur during
+//     vsync" (zxnext.vhd:6693-6706), so a mid-frame retune only takes
+//     effect from the next frame;
+//   - lineIntRecompute — WireLineInterrupt's recompute closure, so a
+//     programmed NR$22/$23 line INT re-derives its T-state offset from
+//     the new line length / min_vactive.
+//
+// While Pentagon timing is selected the FPGA holds the stored NR$05
+// 50/60 flag at 0 — "Pentagon is always 50 Hz" (zxnext.vhd:5834-5836) —
+// so entering Pentagon timing (or writing NR$05 under it) clears the
+// stored bit 2 here, and a previously-selected 60 Hz does not survive
+// a trip through Pentagon timing.
+//
+// The CPU push is skipped while the geometry is UNCHANGED from the
+// previous retune (NextZXOS re-writes NR$03=$B0 with the same timing
+// during boot), so the ZX_GO_INT_ASSERT frame-origin sweep override
+// stays effective until the guest genuinely retunes; ZX_GO_NO_INT_TIMING
+// (the held-assert A/B opt-out, see configureClassicIntTiming) skips
+// the CPU push entirely.
+func WireFrameGeometry(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, lineIntRecompute func()) {
+	timing := func() byte {
+		if mem != nil {
+			return mem.NextMachineTiming()
+		}
+		return 0x03
+	}
+	last := FrameGeometryFor(timing(), d.Raw(0x05)&0x04 != 0)
+	retune := func() {
+		t := timing()
+		if t&0x04 != 0 && d.Raw(0x05)&0x04 != 0 {
+			// Pentagon forces the stored 50/60 flag to 0
+			// (zxnext.vhd:5834-5836); the read-back byte loses bit 2.
+			d.Store(0x05, d.Raw(0x05)&^0x04)
+		}
+		g := FrameGeometryFor(t, d.Raw(0x05)&0x04 != 0)
+		if g == last {
+			return
+		}
+		last = g
+		if mem != nil {
+			mem.SetNextFrameGeometry(memory.NextFrameGeometry{
+				TStatesPerLine: g.TStatesPerLine(),
+				Lines:          g.Lines,
+				MinVActive:     g.MinVActive,
+				PaperStartT:    g.PaperStartTstate(),
+			})
+		}
+		if cpu != nil && os.Getenv("ZX_GO_NO_INT_TIMING") == "" {
+			cpu.IntAssertTstate = uint64(g.IntAssertTstate())
+			cpu.IntPulseTstates = uint64(g.PulseTstates)
+			cpu.StepFrameTstates = uint64(g.FrameTStates())
+		}
+		if lineIntRecompute != nil {
+			lineIntRecompute()
+		}
+	}
+	if prev := d.OnWriteFn(0x03); prev != nil {
+		d.SetOnWrite(0x03, func(disp *nextregs.Dispatcher, v byte) {
+			prev(disp, v)
+			retune()
+		})
+	}
+	if prev := d.OnWriteFn(0x05); prev != nil {
+		d.SetOnWrite(0x05, func(disp *nextregs.Dispatcher, v byte) {
+			prev(disp, v)
+			retune()
+		})
+	}
+}
+
 // WireVideoTiming installs the NextReg $11 OnWrite handler per
 // zxnext.vhd:5208-5217:
 //
@@ -1255,13 +1340,17 @@ func Wire(opts WireOpts) {
 	spiReset, _ := opts.DivMMCPager.(SPIResetter)
 	WireReset(opts.Dispatcher, opts.Memory, opts.CPU, spiReset, latch)
 	WireCPUSpeed(opts.Dispatcher, opts.CPU)
-	WireLineInterrupt(opts.Dispatcher, opts.CPU, latch)
+	lineIntRecompute := WireLineInterrupt(opts.Dispatcher, opts.CPU, latch, opts.Memory)
 	WireContentionDisable(opts.Dispatcher, opts.Memory)
 	WirePeripheral2(opts.Dispatcher, opts.AYEngine, opts.DivMMCPager, opts.Memory)
 	WirePeripheral1(opts.Dispatcher, opts.DivMMCPager, opts.Memory)
 	WireVideoTiming(opts.Dispatcher, opts.Memory)
 	WireCoreID(opts.Dispatcher)
 	WireJoystickMode(opts.Dispatcher)
+	// After WireMachineType (NR$03), WireJoystickMode (NR$05) and
+	// WireLineInterrupt: chains onto the $03/$05 write handlers and
+	// re-derives the line-INT offset on retune.
+	WireFrameGeometry(opts.Dispatcher, opts.Memory, opts.CPU, lineIntRecompute)
 	WireJoystickIOMode(opts.Dispatcher)
 	// NR $B0-$B2 extended keys / MD pad — the ULA carries the live
 	// keyboard-matrix + joystick state these compose from.
@@ -1966,12 +2055,23 @@ func WireCPUSpeed(d *nextregs.Dispatcher, cpu *z80.CPU) {
 // cpu.FrameIntDisabled); a nil latch falls back to driving
 // cpu.FrameIntDisabled directly for partial test wirings.
 //
-// 228 T-states per scan line at the 3.5 MHz reference; we scale by
-// the CPU's SpeedMultiplier so the offset stays correct under turbo
-// modes (NR$07 = 14 / 28 MHz). Must be called after WireCPUSpeed
-// (so OnWriteFn(0x07) is non-nil and we can chain onto it).
-func WireLineInterrupt(d *nextregs.Dispatcher, cpu *z80.CPU, latch FrameIntLatch) {
-	const tstatesPerScanLine = 228
+// The scanline length, the paper-top offset (min_vactive) and the
+// frame's line count come from the LIVE frame geometry (mem's
+// NR$03/NR$05 mirror — 228 T / 64 / 311 in the boot +3 50 Hz timing,
+// zxula_timing.vhd:180-214); we scale by the CPU's SpeedMultiplier so
+// the offset stays correct under turbo modes (NR$07 = 14 / 28 MHz).
+// Must be called after WireCPUSpeed (so OnWriteFn(0x07) is non-nil and
+// we can chain onto it). mem may be nil (partial test wirings): the
+// boot geometry is used. The returned recompute function re-derives
+// the offset from the current geometry — WireFrameGeometry calls it
+// after an NR$03/NR$05 retune.
+func WireLineInterrupt(d *nextregs.Dispatcher, cpu *z80.CPU, latch FrameIntLatch, mem *memory.Memory) (recomputeFn func()) {
+	geom := func() memory.NextFrameGeometry {
+		if mem != nil {
+			return mem.NextGeometry()
+		}
+		return memory.DefaultNextGeometry()
+	}
 	setFrameIntDisable := func(disable bool) {
 		if latch != nil {
 			latch.SetULAFrameIntDisable(disable) // sink mirrors to cpu
@@ -1993,16 +2093,34 @@ func WireLineInterrupt(d *nextregs.Dispatcher, cpu *z80.CPU, latch FrameIntLatch
 			return
 		}
 		target := uint16(nr23) | (uint16(nr22&0x01) << 8)
-		// Raster position: the target line interrupt fires at
-		// vpos = target-1+min_vactive, i.e. the target line is relative
-		// to the 256x192 active area (min_vactive=64 = our top border),
-		// not the frame top. frameStart is absolute line 0.
-		const minVactive = 64
+		// Raster position: the line INT fires when the paper-relative
+		// cvc counter reaches int_line_num = target-1
+		// (zxula_timing.vhd:563-583; target 0 → c_max_vc, :566-570).
+		// cvc resets to 0 when vc reaches c_min_vactive and wraps at
+		// c_max_vc (:458-468), so cvc=k sits on ABSOLUTE line
+		// (min_vactive+k) mod lines — targets past lines-min_vactive
+		// wrap into the TOP border (the "occurs before the line is
+		// drawn" semantics, :561). frameStart is absolute line 0.
+		g := geom()
+		lines := uint64(g.Lines)
+		minV := uint64(g.MinVActive)
 		var lineAbs uint64
-		if target != 0 {
-			lineAbs = uint64(target-1) + minVactive
+		switch {
+		case target == 0:
+			// int_line_num = c_max_vc: cvc reaches it on the line
+			// before paper top.
+			lineAbs = minV - 1
+		case int(target-1) >= g.Lines:
+			// int_line_num beyond c_max_vc — cvc never matches.
+			cpu.LineIntOffsetTstates = 0
+			return
+		default:
+			lineAbs = (minV + uint64(target-1)) % lines
 		}
-		cpu.LineIntOffsetTstates = lineAbs * tstatesPerScanLine * uint64(cpu.SpeedMultiplier())
+		// lineAbs 0 (a target wrapping exactly onto frame-top line 0)
+		// collides with the CPU's "0 = disabled" sentinel and is
+		// dropped — a one-line hole in an otherwise full wrap.
+		cpu.LineIntOffsetTstates = lineAbs * uint64(g.TStatesPerLine) * uint64(cpu.SpeedMultiplier())
 	}
 	d.SetOnWrite(0x22, func(disp *nextregs.Dispatcher, v byte) {
 		// Only bits 1:0 (line enable + target MSB) are NR$22's own
@@ -2035,6 +2153,7 @@ func WireLineInterrupt(d *nextregs.Dispatcher, cpu *z80.CPU, latch FrameIntLatch
 			recompute()
 		})
 	}
+	return recompute
 }
 
 // WireMMU installs OnWrite / OnRead handlers on the NextReg dispatcher

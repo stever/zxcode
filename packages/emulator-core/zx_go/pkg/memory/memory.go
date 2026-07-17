@@ -97,6 +97,13 @@ type Memory struct {
 	// Selects the Next's contended page set (zxnext.vhd:4490-4494).
 	nextMachineTiming byte
 
+	// nextGeom mirrors the Next's live frame geometry, pushed by
+	// pkg/next.WireFrameGeometry whenever the guest retunes NR$03
+	// machine timing or NR$05 bit 2 (50/60 Hz). Zero value = never
+	// pushed; NextGeometry() then returns the boot default (+3
+	// timing, 50 Hz), so partial wirings behave exactly as before.
+	nextGeom NextFrameGeometry
+
 	// Beta Disk / TR-DOS ROM auto-paging. When betaEnabled, the Beta hardware
 	// swaps its TR-DOS ROM over $0000-$3FFF when the CPU fetches an instruction
 	// from the $3Dxx entry vector (while the 48 BASIC ROM is mapped) and swaps
@@ -733,6 +740,67 @@ func (m *Memory) SetNextMachineTiming(t byte) { m.nextMachineTiming = t & 0x07 }
 // NextMachineTiming returns the mirrored NR$03 timing field.
 func (m *Memory) NextMachineTiming() byte { return m.nextMachineTiming }
 
+// NextFrameGeometry mirrors the Next's effective frame geometry — the
+// zxula_timing.vhd constant row selected by NR$03 machine timing +
+// NR$05 bit 2 (50/60 Hz). pkg/next computes it (FrameGeometryFor) and
+// pushes it here so the memory (contention window), the ULA (beam /
+// NR$1E/$1F) and the frame loops (frame T-state budget, audio window)
+// all follow one live selection.
+type NextFrameGeometry struct {
+	TStatesPerLine int // (c_max_hc+1)/2: 228 (128K/+3) or 224 (48K/Pentagon)
+	Lines          int // c_max_vc+1: 311 / 312 / 264 / 320
+	MinVActive     int // c_min_vactive — first paper scanline: 64 / 40 / 80
+	PaperStartT    int // contention paper-window anchor (frame-relative T)
+}
+
+// FrameTStates is the frame length this geometry produces.
+func (g NextFrameGeometry) FrameTStates() int { return g.Lines * g.TStatesPerLine }
+
+// defaultNextGeometry is the boot geometry (NR$03 timing "011" = +3,
+// NR$05 bit 2 = 0 → 50 Hz): 228 T/line × 311 lines = 70908 T/frame,
+// contention paper anchor t=14655 (INT at t=291 + 63 lines, validated
+// against the reference emulator — see contentionDelay). These are the
+// values the whole default path was pinned to before geometry went
+// live, so a Memory nobody pushes to is byte-identical to the old
+// hardcoded constants.
+var defaultNextGeometry = NextFrameGeometry{
+	TStatesPerLine: 228,
+	Lines:          311,
+	MinVActive:     64,
+	PaperStartT:    14655,
+}
+
+// DefaultNextGeometry returns the boot geometry row — the values every
+// consumer used before geometry went live. Partial wirings without a
+// Memory use it directly.
+func DefaultNextGeometry() NextFrameGeometry { return defaultNextGeometry }
+
+// SetNextFrameGeometry updates the live geometry mirror (pushed by
+// pkg/next.WireFrameGeometry on NR$03/NR$05 timing writes).
+func (m *Memory) SetNextFrameGeometry(g NextFrameGeometry) { m.nextGeom = g }
+
+// NextGeometry returns the live geometry mirror, defaulting to the +3
+// 50 Hz boot row when nothing has been pushed.
+func (m *Memory) NextGeometry() NextFrameGeometry {
+	if m.nextGeom.TStatesPerLine == 0 {
+		return defaultNextGeometry
+	}
+	return m.nextGeom
+}
+
+// FrameTStates returns the machine's live ULA frame length in 3.5 MHz
+// T-states: the geometry mirror's length on the Next (retunable by
+// NR$03/NR$05), the fixed per-model table elsewhere. The frame loops
+// and the ULA's per-frame audio reconstruction both read this, so a
+// retune shortens/lengthens the executed frame and the audio window
+// together.
+func (m *Memory) FrameTStates() int {
+	if m.currentModel == roms.ModelNext {
+		return m.NextGeometry().FrameTStates()
+	}
+	return m.currentModel.FrameTStates()
+}
+
 // contendedPage8k resolves the 8K RAM page an address accesses (the
 // FPGA's mem_active_page): the MMU slot override when armed, else the
 // classic 16K dispatch. ok=false for ROM (never contended — ROM is
@@ -815,18 +883,27 @@ func (m *Memory) contentionDelay() uint64 {
 	}
 	tstate := *m.TStates / mult
 	// Frame position of the first contended fetch. The Next's frame
-	// clock starts 291 T before the INT raster (cvc 248,
-	// FrameIntTiming), putting paper row 0 at t = 291 + 63*228 = 14655
-	// on its 228 T lines; the classic models keep the historical
-	// 48K-anchored 14335.
+	// clock starts before the INT raster (hc=0/vc=0 origin;
+	// FrameIntTiming), and paper row 0 contends from line
+	// c_min_vactive at the INT column's horizontal phase — for the
+	// boot geometry (+3 timing, 50 Hz) that is INT at t=291 + 63*228
+	// = 14655, the anchor validated against the reference emulator.
+	// The anchor and the line length now FOLLOW the live NR$03/NR$05
+	// geometry (next.FrameGeometry.PaperStartTstate, mirrored here by
+	// WireFrameGeometry), so 48K-timing contention opens at
+	// (64*448+116)/2 = 14394 on 224 T lines etc. The classic models
+	// keep the historical 48K-anchored 14335 on 228 T lines.
 	paperStart := uint64(14335)
+	tPerLine := uint64(228)
 	if m.currentModel == roms.ModelNext {
-		paperStart = 14655
+		g := m.NextGeometry()
+		paperStart = uint64(g.PaperStartT)
+		tPerLine = uint64(g.TStatesPerLine)
 	}
-	if tstate >= paperStart && tstate < paperStart+192*228 {
-		line := (tstate - paperStart) / 228
+	if tstate >= paperStart && tstate < paperStart+192*tPerLine {
+		line := (tstate - paperStart) / tPerLine
 		if line < 192 {
-			pos := (tstate - paperStart) % 228
+			pos := (tstate - paperStart) % tPerLine
 			if pos < 128 {
 				return contentionPattern[pos%8]
 			}

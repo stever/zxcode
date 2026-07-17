@@ -42,7 +42,7 @@ func newFrameIntStack(t *testing.T) (*ULA, *z80.CPU, *nextregs.Dispatcher, *memo
 	// latch, its sink mirrors changes into the CPU's INT generator.
 	u.SetFrameIntDisableSink(func(disable bool) { cpu.FrameIntDisabled = disable })
 	next.WireCPUSpeed(d, cpu)
-	next.WireLineInterrupt(d, cpu, u)
+	next.WireLineInterrupt(d, cpu, u, nil)
 	next.WireInterruptEnable0(d)
 	next.WireULAControl(d, u, nil, mem)
 	return u, cpu, d, mem

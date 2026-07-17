@@ -1,6 +1,10 @@
 package ula
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/conorarmstrong/zx_go/pkg/audio"
+)
 
 // The tape-loading sound reconstructs the EAR signal as an audible square wave:
 // a toggling (pilot-like) signal yields a varying waveform bounded by the tape
@@ -13,7 +17,7 @@ func TestTapeSoundWaveform(t *testing.T) {
 		state = !state
 		events = append(events, audioEvent{tstateOffset: off, state: state})
 	}
-	samples, _ := generateSquareWaveFrame(events, false, -tapeAudioAmplitude, tapeAudioAmplitude, 69888)
+	samples, _ := generateSquareWaveFrame(events, false, -tapeAudioAmplitude, tapeAudioAmplitude, 69888, audio.SamplesPerFrame)
 
 	var lo, hi int16 = 32767, -32768
 	for _, s := range samples {
@@ -32,7 +36,7 @@ func TestTapeSoundWaveform(t *testing.T) {
 	}
 
 	// No transitions → flat DC at the low level (inaudible), not noise.
-	silent, _ := generateSquareWaveFrame(nil, false, -tapeAudioAmplitude, tapeAudioAmplitude, 69888)
+	silent, _ := generateSquareWaveFrame(nil, false, -tapeAudioAmplitude, tapeAudioAmplitude, 69888, audio.SamplesPerFrame)
 	for i, s := range silent {
 		if s != -tapeAudioAmplitude {
 			t.Fatalf("silent tape sample %d = %d, want flat %d", i, s, -tapeAudioAmplitude)

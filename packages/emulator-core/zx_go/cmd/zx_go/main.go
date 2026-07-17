@@ -80,6 +80,20 @@ func frameTStatesForModel(model roms.SpectrumModel) int {
 	return model.FrameTStates()
 }
 
+// frameTStates returns the LIVE per-frame T-state budget for this
+// emulator: on the Next the memory's NR$03/NR$05 geometry mirror
+// (guest timing retunes — 48K/128K/+3/Pentagon × 50/60 Hz — change the
+// frame length, memory.FrameTStates), elsewhere the fixed per-model
+// table. Frame loops must read it per frame, which is also what
+// applies a retune at the frame BOUNDARY — the FPGA's vsync effective-
+// timing latch (zxnext.vhd:6693-6706).
+func (e *emulator) frameTStates() int {
+	if e.mem != nil {
+		return e.mem.FrameTStates()
+	}
+	return frameTStatesForModel(e.model)
+}
+
 type keyState struct {
 	key     fyne.KeyName
 	pressed bool
@@ -150,7 +164,7 @@ type emulator struct {
 	sdImagePath string
 	// sdCard is the live SPI card (when one is mounted); the .nex launch
 	// macro reads its DataBlocksRead counter to meter load progress.
-	sdCard *sdcard.Card
+	sdCard      *sdcard.Card
 	ula         *ula.ULA
 	kbd         *keyboard.Keyboard
 	peripherals *peripherals.PeripheralManager

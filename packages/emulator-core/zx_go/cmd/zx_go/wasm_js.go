@@ -433,7 +433,7 @@ func setupWasmExports() {
 		e := wasmEmu
 		dbgPaused := wasmDebugPaused(e)
 		if !dbgPaused {
-			e.cpu.ExecuteFrame(frameTStatesForModel(e.model))
+			e.cpu.ExecuteFrame(e.frameTStates())
 			if e.peripherals != nil {
 				e.peripherals.Frame()
 			}

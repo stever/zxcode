@@ -17,7 +17,7 @@ func TestWireLineInterruptNR22EnableComputesOffset(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu, nil)
+	WireLineInterrupt(disp, cpu, nil, nil)
 
 	disp.Select(0x23)
 	disp.WriteData(192) // line LSB = 192, MSB stays 0
@@ -39,7 +39,7 @@ func TestWireLineInterruptNR22DisableClearsOffset(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu, nil)
+	WireLineInterrupt(disp, cpu, nil, nil)
 
 	disp.Select(0x23)
 	disp.WriteData(50)
@@ -62,7 +62,7 @@ func TestWireLineInterruptNR22FrameDisable(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu, nil)
+	WireLineInterrupt(disp, cpu, nil, nil)
 
 	disp.Select(0x22)
 	disp.WriteData(0x04) // bit 2 = frame INT disable
@@ -73,21 +73,62 @@ func TestWireLineInterruptNR22FrameDisable(t *testing.T) {
 
 // TestWireLineInterruptNR22MSBCombines verifies bit 0 of NR$22
 // concatenates with NR$23 to form the 9-bit target. Line 256
-// (MSB=1, LSB=0) with bit 1 enable → (256-1+64) × 228 T-states.
+// (MSB=1, LSB=0) with bit 1 enable: cvc=255 sits on absolute line
+// (64+255) mod 311 = 8 — the paper-relative cvc counter resets at
+// min_vactive and wraps at c_max_vc (zxula_timing.vhd:458-468), so
+// high targets land in the TOP border, not past the frame's end.
 func TestWireLineInterruptNR22MSBCombines(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu, nil)
+	WireLineInterrupt(disp, cpu, nil, nil)
 
 	disp.Select(0x23)
 	disp.WriteData(0x00)
 	disp.Select(0x22)
 	disp.WriteData(0x03) // bit 1 enable + bit 0 MSB
 
-	want := uint64(256-1+64) * 228
+	want := uint64((64+255)%311) * 228
 	if got := cpu.LineIntOffsetTstates; got != want {
 		t.Errorf("LineIntOffsetTstates = %d, want %d", got, want)
+	}
+}
+
+// TestWireLineInterruptTargetZero: i_int_line = 0 loads int_line_num
+// with c_max_vc (zxula_timing.vhd:566-570), which cvc reaches on the
+// line before paper top — absolute line min_vactive-1 = 63.
+func TestWireLineInterruptTargetZero(t *testing.T) {
+	cpu := z80.New(minimalMem{}, minimalULA{})
+	disp := nextregs.New()
+	WireCPUSpeed(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil, nil)
+
+	disp.Select(0x23)
+	disp.WriteData(0)
+	disp.Select(0x22)
+	disp.WriteData(0x02) // enable, target 0
+
+	want := uint64(63) * 228
+	if got := cpu.LineIntOffsetTstates; got != want {
+		t.Errorf("target 0: LineIntOffsetTstates = %d, want %d", got, want)
+	}
+}
+
+// TestWireLineInterruptTargetBeyondFrame: int_line_num past c_max_vc
+// never matches cvc (0..c_max_vc) — the interrupt never fires.
+func TestWireLineInterruptTargetBeyondFrame(t *testing.T) {
+	cpu := z80.New(minimalMem{}, minimalULA{})
+	disp := nextregs.New()
+	WireCPUSpeed(disp, cpu)
+	WireLineInterrupt(disp, cpu, nil, nil)
+
+	disp.Select(0x23)
+	disp.WriteData(0x38) // 312 = 0x138 > c_max_vc 310
+	disp.Select(0x22)
+	disp.WriteData(0x03) // enable + MSB
+
+	if got := cpu.LineIntOffsetTstates; got != 0 {
+		t.Errorf("target 312: LineIntOffsetTstates = %d, want 0 (never fires)", got)
 	}
 }
 
@@ -97,7 +138,7 @@ func TestWireLineInterruptScalesWithSpeed(t *testing.T) {
 	cpu := z80.New(minimalMem{}, minimalULA{})
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu, nil)
+	WireLineInterrupt(disp, cpu, nil, nil)
 
 	disp.Select(0x23)
 	disp.WriteData(100)

@@ -52,6 +52,10 @@ Five packages carry every machine:
   and DACs, an FPGA-faithful AY core, one shared ring buffer).
 - `pkg/roms` — embedded ROM images and per-model timing constants
   (`FrameTStates`: 48K 69888, 128K family and Next 70908, Pentagon 71680).
+  On the Next the frame length is LIVE, not fixed: guest NR$03/NR$05
+  timing writes retune it through the geometry mirror
+  (`pkg/next/geometry.go` FrameGeometryFor → `memory.FrameTStates`),
+  and the frame loops read it per frame (#182).
 
 On top of those sit the machine stacks: `pkg/next/*` (the Next's FPGA
 hardware, by far the largest area), `pkg/peripherals` plus the classic
@@ -67,7 +71,10 @@ Everything advances in units of one 50 Hz video frame:
    requestAnimationFrame loop paced by the audio clock (produce frames
    until ~60 ms of samples are in flight). Headless: as fast as possible.
 2. `cpu.ExecuteFrame(budget)` runs instructions until the frame's T-state
-   budget is spent (`FrameTStates × SpeedMultiplier`). Each instruction
+   budget is spent (`FrameTStates × SpeedMultiplier` — on the Next the
+   live NR$03/NR$05 geometry, sampled per frame, so a guest timing
+   retune applies at the frame boundary like the FPGA's vsync latch).
+   Each instruction
    passes through pre-fetch hooks (divMMC, IF1, Multiface, Beta, esxDOS),
    the M1 fetch, the opcode switch, memory contention, and port dispatch
    through the ULA. The frame interrupt is a narrow T-state pulse on the

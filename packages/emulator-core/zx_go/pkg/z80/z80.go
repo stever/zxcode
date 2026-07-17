@@ -200,10 +200,37 @@ type CPU struct {
 	// Both default to 0, which preserves the legacy "assert at frame
 	// start, hold the whole frame" behaviour for classic models and any
 	// caller that hasn't opted in. pkg/next/wire sets them for ModelNext.
+	//
+	// Both fields are SAMPLED at each frame origin (curIntAssert /
+	// curIntPulse) and the in-frame pulse logic reads the samples: the
+	// FPGA latches its effective video timing once per frame at vsync
+	// ("changes to video timing occur during vsync",
+	// zxnext.vhd:6693-6706), so a mid-frame NR$03/NR$05 retune pushed
+	// here by pkg/next.WireFrameGeometry takes effect from the NEXT
+	// frame, never repositioning the in-flight frame's INT.
 	IntAssertTstate uint64
 	IntPulseTstates uint64
-	frameIntFired   bool // narrow-pulse: pulse raised this frame
-	frameIntDeasct  bool // narrow-pulse: pulse withdrawn this frame (one-shot)
+	curIntAssert    uint64 // frame-origin sample of IntAssertTstate
+	curIntPulse     uint64 // frame-origin sample of IntPulseTstates
+	frameIntFired   bool   // narrow-pulse: pulse raised this frame
+	frameIntDeasct  bool   // narrow-pulse: pulse withdrawn this frame (one-shot)
+
+	// StepFrameTstates is the per-frame T-state budget (3.5 MHz
+	// reference) used by StepInstructionWithIRQ's frame-boundary
+	// bookkeeping. 0 = the legacy 70908 default (the Next's boot
+	// geometry); pkg/next.WireFrameGeometry pushes the live NR$03/
+	// NR$05 frame length so debugger single-stepping fires the frame
+	// INT once per RETUNED frame. ExecuteFrame does not read this —
+	// its budget arrives per call from the frame loop, which samples
+	// the live geometry itself.
+	StepFrameTstates uint64
+	// curStepBase is the frame-origin sample of the frame length the
+	// step path's boundary bookkeeping uses (3.5 MHz reference, before
+	// speed scaling): StepFrameTstates at a step-path frame boundary,
+	// or ExecuteFrame's actual per-call budget — so a debugger step
+	// right after a bulk frame derives the same frame origin the bulk
+	// frame ran with.
+	curStepBase uint64
 
 	// WZ is the Z80's internal "MEMPTR" register. It's updated by
 	// most operations that compute a 16-bit memory address (LD with
@@ -890,11 +917,14 @@ func (c *CPU) ExecuteRZXFrame(instructions uint64) {
 // withdraw it once, IntPulseTstates later (in CPU cycles — NOT speed-
 // scaled, since the FPGA counts the pulse on the CPU clock,
 // zxnext.vhd:2035). A DI that covers the whole window therefore MISSES
-// the interrupt. No-op unless IntPulseTstates>0. frameIntFired /
-// frameIntDeasct are the per-frame one-shots, reset at each frame origin
-// by ExecuteFrame / StepInstructionWithIRQ.
+// the interrupt. No-op unless the frame-origin pulse sample is >0.
+// frameIntFired / frameIntDeasct are the per-frame one-shots, reset at
+// each frame origin by ExecuteFrame / StepInstructionWithIRQ, which
+// also sample IntAssertTstate/IntPulseTstates into curIntAssert/
+// curIntPulse there (the FPGA's vsync eff-latch, zxnext.vhd:6693-6706 —
+// a mid-frame geometry retune only applies from the next frame).
 func (c *CPU) frameIntPulse(frameStart uint64) {
-	if c.IntPulseTstates == 0 {
+	if c.curIntPulse == 0 {
 		return
 	}
 	if c.FrameIntDisabled {
@@ -908,7 +938,7 @@ func (c *CPU) frameIntPulse(frameStart uint64) {
 		}
 		return
 	}
-	assertAt := frameStart + c.IntAssertTstate*uint64(c.SpeedMultiplier())
+	assertAt := frameStart + c.curIntAssert*uint64(c.SpeedMultiplier())
 	switch {
 	case !c.frameIntFired && c.tstates >= assertAt:
 		c.frameIntFired = true
@@ -917,7 +947,7 @@ func (c *CPU) frameIntPulse(frameStart uint64) {
 			// latches the request and asserts INT itself); no level
 			// pulse to track.
 			c.frameIntDeasct = true
-		} else if c.tstates < assertAt+c.IntPulseTstates {
+		} else if c.tstates < assertAt+c.curIntPulse {
 			c.IRQPending.Store(true)
 		} else {
 			// The whole pulse window elapsed inside one instruction
@@ -928,7 +958,7 @@ func (c *CPU) frameIntPulse(frameStart uint64) {
 			c.frameIntDeasct = true
 		}
 	case c.frameIntFired && !c.frameIntDeasct:
-		if c.tstates >= assertAt+c.IntPulseTstates {
+		if c.tstates >= assertAt+c.curIntPulse {
 			// Pulse window elapsed; interrupt() clears IRQPending on
 			// acceptance, so a still-set latch here means it was missed.
 			c.IRQPending.Store(false)
@@ -989,7 +1019,14 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	// (IntPulseTstates>0): raise/withdraw a fixed-width pulse via
 	// frameIntPulse() inside the loop, so a DI covering the pulse misses
 	// the INT (matches the FPGA, zxnext.vhd:2014-2033).
-	narrowPulse := c.IntPulseTstates > 0
+	// Sample the INT timing at the frame origin: the FPGA latches its
+	// effective video timing at vsync (zxnext.vhd:6693-6706), so a
+	// mid-frame NR$03/NR$05 retune (WireFrameGeometry pushing new
+	// values) only applies from the next frame.
+	c.curIntAssert = c.IntAssertTstate
+	c.curIntPulse = c.IntPulseTstates
+	c.curStepBase = uint64(tstatesPerFrame)
+	narrowPulse := c.curIntPulse > 0
 	c.frameIntFired = false
 	c.frameIntDeasct = false
 	if !c.FrameIntDisabled && !narrowPulse {
@@ -1311,12 +1348,14 @@ func (c *CPU) StepInstruction() {
 	c.executeInstruction()
 }
 
-// stepFrameBudget is the per-frame T-state count used by
+// stepFrameBudget is the default per-frame T-state count used by
 // StepInstructionWithIRQ to assert IRQPending at each frame
-// boundary during debugger-driven single-stepping. Matches the
-// 70908 ULA-frame-T-states the Spectrum Next runs at (≈ 50 Hz);
-// the same value is what ExecuteFrame is normally called with
-// from the headless loop.
+// boundary during debugger-driven single-stepping when no live
+// value has been pushed. Matches the 70908 ULA-frame-T-states the
+// Spectrum Next boots at (+3 timing, 50 Hz); a guest NR$03/NR$05
+// retune pushes the live length into StepFrameTstates
+// (pkg/next.WireFrameGeometry) and ExecuteFrame stamps its actual
+// per-call budget into curStepBase, both of which override this.
 const stepFrameBudget = uint64(70908)
 
 // StepInstructionWithIRQ executes one Z80 instruction at the M1
@@ -1342,21 +1381,24 @@ const stepFrameBudget = uint64(70908)
 // (Zexdoc / Zexall) keep using the plain StepInstruction because
 // they expect IRQs to stay off during the test.
 func (c *CPU) StepInstructionWithIRQ() {
-	narrowPulse := c.IntPulseTstates > 0
-	// One ULA frame is stepFrameBudget T-states at the 3.5 MHz reference,
-	// but T-states accumulate on the CPU clock — at 7/14/28 MHz the CPU
-	// burns SpeedMultiplier× more T-states per ULA frame. Scale the frame
-	// boundary by SpeedMultiplier so the maskable INT fires exactly once
-	// per ULA frame (50 Hz) regardless of turbo, matching ExecuteFrame
-	// (which scales its budget identically). Without this the single-step
-	// path would fire the frame INT SpeedMultiplier× too often at turbo —
-	// e.g. 8× at 28 MHz — spurious interrupts that derail boot.
-	frameBudget := stepFrameBudget * uint64(c.SpeedMultiplier())
-	// Frame-boundary IRQ assertion. Legacy: assert at the boundary, hold.
-	// Narrow pulse: only reset the per-frame one-shots here; the pulse
-	// itself is raised/withdrawn by frameIntPulse below (timing.md §1c).
+	// Frame-boundary bookkeeping. Legacy: assert IRQ at the boundary,
+	// hold. Narrow pulse: only reset the per-frame one-shots here; the
+	// pulse itself is raised/withdrawn by frameIntPulse below
+	// (timing.md §1c). The boundary is also where the live frame
+	// timing is sampled (curIntAssert/curIntPulse/curStepBase) — the
+	// FPGA latches its effective video timing at vsync
+	// (zxnext.vhd:6693-6706), so an NR$03/NR$05 retune pushed between
+	// steps applies from the next frame origin.
 	if c.tstates >= c.nextFrameBoundary {
-		if !c.FrameIntDisabled && !narrowPulse {
+		c.curIntAssert = c.IntAssertTstate
+		c.curIntPulse = c.IntPulseTstates
+		if c.StepFrameTstates > 0 {
+			c.curStepBase = c.StepFrameTstates
+		} else if c.curStepBase == 0 {
+			c.curStepBase = stepFrameBudget
+		}
+		frameBudget := c.curStepBase * uint64(c.SpeedMultiplier())
+		if !c.FrameIntDisabled && c.curIntPulse == 0 {
 			c.IRQPending.Store(true)
 		}
 		c.nextFrameBoundary = ((c.tstates / frameBudget) + 1) * frameBudget
@@ -1365,6 +1407,16 @@ func (c *CPU) StepInstructionWithIRQ() {
 		c.frameIntFired = false
 		c.frameIntDeasct = false
 	}
+	narrowPulse := c.curIntPulse > 0
+	// One ULA frame is curStepBase T-states at the 3.5 MHz reference,
+	// but T-states accumulate on the CPU clock — at 7/14/28 MHz the CPU
+	// burns SpeedMultiplier× more T-states per ULA frame. Scale the frame
+	// boundary by SpeedMultiplier so the maskable INT fires exactly once
+	// per ULA frame regardless of turbo, matching ExecuteFrame
+	// (which scales its budget identically). Without this the single-step
+	// path would fire the frame INT SpeedMultiplier× too often at turbo —
+	// e.g. 8× at 28 MHz — spurious interrupts that derail boot.
+	frameBudget := c.curStepBase * uint64(c.SpeedMultiplier())
 	if narrowPulse {
 		c.frameIntPulse(c.nextFrameBoundary - frameBudget)
 	}

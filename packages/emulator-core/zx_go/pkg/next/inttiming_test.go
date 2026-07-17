@@ -34,6 +34,13 @@ func TestFrameIntTiming(t *testing.T) {
 		// 60 Hz variants: c_int_v=0 → assert = c_int_h/2
 		{"128K 60Hz", mt128K, true, 64, 36}, // 128/2
 		{"+3 60Hz", mtP3, true, 63, 32},     // 126/2
+		{"48K 60Hz", mt48K, true, 58, 32},   // c_int_v=0 both rates
+		// Pentagon's single row ignores the 50/60 flag
+		// (zxula_timing.vhd:150-176 has no i_50_60 branch).
+		{"Pentagon 60Hz ignored", mtPent, true, 71675, 36},
+		// Decode priority is the VHDL if-chain (zxula_timing.vhd:150):
+		// i_timing(2)=1 → Pentagon whatever the low bits are.
+		{"timing 111 = Pentagon", 0x07, false, 71675, 36},
 	}
 	for _, c := range cases {
 		gotA, gotP := FrameIntTiming(c.mt, c.sixtyHz)

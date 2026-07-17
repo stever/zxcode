@@ -399,7 +399,7 @@ func TestSpec_NR22_LineInterruptBitPositions(t *testing.T) {
 	_, _ = withConfigMode(t, false) // mem unused here; just need ROMs
 	cpu := newSpecTestCPU(t)
 	disp := nextregs.New()
-	WireLineInterrupt(disp, cpu, nil)
+	WireLineInterrupt(disp, cpu, nil, nil)
 
 	// Bit 1 = line interrupt enable. Write $02 → bit 1 set →
 	// should enable line INT.
@@ -490,7 +490,7 @@ func TestSpec_NRC4_InterruptEnable0(t *testing.T) {
 	cpu := newSpecTestCPU(t)
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu, nil)
+	WireLineInterrupt(disp, cpu, nil, nil)
 	WireInterruptEnable0(disp)
 
 	// Set line target via NR$23.
@@ -1176,7 +1176,7 @@ func TestSpec_NR22_ReservedBits_ReadAsZero(t *testing.T) {
 	cpu := newSpecTestCPU(t)
 	disp := nextregs.New()
 	WireCPUSpeed(disp, cpu)
-	WireLineInterrupt(disp, cpu, nil)
+	WireLineInterrupt(disp, cpu, nil, nil)
 
 	disp.WriteReg(0x22, 0xFF)
 	got := disp.ReadReg(0x22)

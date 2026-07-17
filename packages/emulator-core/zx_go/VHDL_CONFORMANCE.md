@@ -204,8 +204,9 @@ Changing8kBank's border band (frame INT at t=291 → StartTiming at raster 4,
 EndTiming at raster 191 after the derived 42.7k T of NEXTREG work) and
 ScanlineReadingAndInterrupt's NR$1E/$1F marker rows (cvc 200 renders exactly
 8 rows under the paper) pin INT→paper-top = 64 lines within a line for the
-128K/+3 geometry the Next runs. ⚠️ Remaining: per-NR$03 display geometry is not
-modelled (48K timing keeps the 228 T line — known-gaps.md), the sub-line hc
+128K/+3 geometry the Next runs. Per-NR$03/$05 geometry retune landed with #182
+(FrameGeometryFor: 48K/Pentagon/60 Hz frame length + INT position live, vsync-latched
+at the frame origin — Axis 10 row). ⚠️ Remaining: the sub-line hc
 component of the INT origin is below the render's one-line floor; the CTC
 counter-mode ZC/TO cascade between channels (zxnext.vhd:4082); UART INT
 sources (chain vectors 1/2/12/13 — the UART generates no interrupts);
@@ -523,7 +524,7 @@ here means real architectural work, not a quick pin.
 | Per-access memory contention | i_contention_en = ¬NR$08-bit6 ∧ ¬Pentagon ∧ 3.5 MHz (zxnext.vhd:4481); page set by NR$03 timing (:4490-4494); +3-timing wait arm memory-only (zxula.vhd:604) | LIVE on ModelNext (#181): cycle-helper contention with the FPGA's gates + timing-selected page-follows rule; ports contend only under 48K/128K timing | ✅ | TestNextContention* / TestNextPortContentionTimingGate; hold shape = the canonical 8-slot pattern (a GHDL per-cycle trace of the wait arm would sharpen it further); classic-line models remain lump-total — known-gaps row |
 | Sub-line copper / palette colour changes | copper MOVE + palette BRAM visible on the NEXT pixel (zxnext.vhd:4919-4930) | line-granular replay (borderChange-style); two writes inside one pixel collapse to one | ⚙️ | ✅ at LINE granularity (Axis 9); sub-line detail is below the 7 MHz render floor — known-gaps copper / palette rows |
 | Turbo-speed video timing (> 3.5 MHz) | the raster runs on its own clock regardless of CPU speed (zxula_timing.vhd) | mid-frame raster stamps ride the speed-independent reference timeline (#180: currentScanline → BeamPosition; palette/tilemap sources already did) | ✅ | CLOSED — TestBorderStampSpeedIndependent / TestVideoStateStampSpeedIndependent |
-| Per-NR$03/$05 display geometry (48K 312×224/448hc vs the 128K 311×228 the Next runs) | machine-timing select | fixed 128K/+3 geometry; NR$03/$05 do not retune the frame or INT position | ⚙️ | Timing/Changing8kBank ~2% band-length delta — known-gaps "Next raster geometry" |
+| Per-NR$03/$05 display geometry (48K 312×224/448hc, Pentagon 320×224, 60 Hz 264-line vs the boot 311×228) | zxula_timing.vhd:146-311 constant table; vsync eff-latch zxnext.vhd:6693-6706; Pentagon-forces-50Hz :5834-5836 | TIMING side LIVE (#182): NR$03/NR$05 writes retune frame length, T/line, frame-INT assert+pulse, the contention paper anchor, NR$1E/$1F wrap and the NR$22/$23 line-INT via the FrameGeometryFor row (pkg/next/geometry.go), applied at the next frame origin; audio window + samples/frame follow. RENDER side still composes the fixed 311-row/456-hcount canvas (copper line clock included) | ⚠️ | TestFrameGeometryFor / TestWireFrameGeometry*; visual residue in known-gaps "Next raster geometry" row |
 | Mixed-frame Timex hi-res decimation + hi-res end-of-frame palette | the FPGA resolves display mode AND palette per 14 MHz half-pixel | native 512 only when hi-res is whole-frame-stable; mixed frames decimate; palette resolved at end-of-frame | ⚙️ | re-affirmed by #154: closing these IS the per-pixel render pipeline this axis describes, not a test — known-gaps ULA-modes + palette rows carry the sharpened rationale. (#154's tractable third bullet, the per-pixel tm_below bit, landed in Axis 9.) |
 
 **Closing this axis is the render/timing rearchitecture, not the enumeration

@@ -37,7 +37,7 @@
         <mxCell id="lane-frame" value="One emulated frame (shared core)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
           <mxGeometry x="450" y="40" width="500" height="920" as="geometry" />
         </mxCell>
-        <mxCell id="f1" value="cpu.ExecuteFrame(budget)&#10;budget = FrameTStates(model) × SpeedMultiplier&#10;48K 69888 · 128K/Next 70908 · Pentagon 71680" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+        <mxCell id="f1" value="cpu.ExecuteFrame(budget)&#10;budget = FrameTStates × SpeedMultiplier&#10;48K 69888 · 128K 70908 · Pentagon 71680&#10;Next: LIVE NR$03/$05 geometry (boot 70908),&#10;sampled per frame (#182)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
           <mxGeometry x="490" y="80" width="420" height="70" as="geometry" />
         </mxCell>
         <mxCell id="f2" value="Per instruction:&#10;pre-fetch hooks (divMMC, IF1, Multiface, Beta, esxDOS)&#10;→ M1 fetch (R bump; 28 MHz waits EVERY memory read — readMem)&#10;→ execute (big switch; Z80N ops if VariantZ80N)&#10;→ memory contention (3.5 MHz window only)&#10;→ IN/OUT via ULA.ReadPort / WritePort" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">

@@ -44,28 +44,10 @@ func FrameIntTimingForModel(model roms.SpectrumModel, sixtyHz bool) (assertTstat
 	return assertTstate, pulseTstates, true
 }
 
+// FrameIntTiming is the (assert, pulse) projection of the full frame
+// geometry table — see FrameGeometryFor (geometry.go) for the complete
+// per-mode constants and their VHDL citations.
 func FrameIntTiming(nr03MachineTiming byte, sixtyHz bool) (assertTstate, pulseTstates int) {
-	switch nr03MachineTiming & 0x07 {
-	case 0x02: // 128K
-		pulseTstates = 36
-		if sixtyHz {
-			assertTstate = (0*456 + 128) / 2 // c_int_v=0
-		} else {
-			assertTstate = (1*456 + 128) / 2 // c_int_v=1 → 292
-		}
-	case 0x03: // +3 / +2A
-		pulseTstates = 32
-		if sixtyHz {
-			assertTstate = (0*456 + 126) / 2 // 63
-		} else {
-			assertTstate = (1*456 + 126) / 2 // 291
-		}
-	case 0x04: // Pentagon (always one timing)
-		pulseTstates = 36
-		assertTstate = (319*448 + 439) / 2 // 71675
-	default: // 48K (00X)
-		pulseTstates = 32
-		assertTstate = (0*448 + 116) / 2 // 58
-	}
-	return assertTstate, pulseTstates
+	g := FrameGeometryFor(nr03MachineTiming, sixtyHz)
+	return g.IntAssertTstate(), g.PulseTstates
 }

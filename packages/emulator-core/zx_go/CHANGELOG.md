@@ -29,6 +29,29 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **Per-NR$03/$05 frame geometry (#182, Track B).** Guest writes to
+  the NR$03 machine-timing bits and NR$05 bit 2 (50/60 Hz) now retune
+  the live frame geometry per the FPGA's constant table
+  (`zxula_timing.vhd:146-311`, transcribed into
+  `pkg/next/geometry.go` FrameGeometryFor): frame length (48K 312×224
+  = 69888 T, Pentagon 320×224 = 71680, 60 Hz 264-line = 60192/59136
+  vs the boot 311×228 = 70908), frame-INT assert point + pulse width,
+  the memory-contention paper anchor (14655 boot → e.g. 14394 under
+  48K timing, derived as `(c_min_vactive·(c_max_hc+1)+c_int_h)/2`),
+  the NR$1E/$1F video-line wrap and the NR$22/$23 line interrupt.
+  Changes latch at the frame origin, matching the FPGA's "changes to
+  video timing occur during vsync" (`zxnext.vhd:6693-6706`), and
+  Pentagon timing forces the stored 50 Hz flag (`:5834-5836`). The
+  line-INT target now follows the cvc counter's wrap
+  (`zxula_timing.vhd:458-468`): high targets land in the TOP border
+  (previously they silently never fired), and target 0 hits
+  `c_max_vc` — the line before paper top. The audio reconstruction
+  window and its samples-per-frame follow the live frame duration
+  (the boot geometry keeps exactly 882 — the default path is
+  byte-identical, boot goldens unchanged). RENDER residue: the canvas
+  stays the fixed 311-row/456-hcount composite and the copper line
+  clock keeps 456 hcounts — documented in known-gaps "Next raster
+  geometry".
 - **Per-access ULA memory contention on the Next (#181, Track B).**
   The CPU's cycle helpers now consult the memory's contention model,
   gated exactly like the FPGA (`zxnext.vhd:4481`): 3.5 MHz only,

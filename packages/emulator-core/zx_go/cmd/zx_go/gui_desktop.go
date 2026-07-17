@@ -483,7 +483,7 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 					case e.rzxRecord.Load() != nil:
 						recorder := e.rzxRecord.Load()
 						before := e.cpu.InstructionCount()
-						e.cpu.ExecuteFrame(frameTStatesForModel(e.model))
+						e.cpu.ExecuteFrame(e.frameTStates())
 						delta := e.cpu.InstructionCount() - before
 						if delta > 0xFFFF {
 							slog.Warn("RZX record: frame instruction count exceeded 0xFFFF, clamping", "count", delta)
@@ -532,7 +532,7 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 							if e.ula != nil {
 								before = e.ula.FEReadCount()
 							}
-							e.cpu.ExecuteFrame(frameTStatesForModel(e.model))
+							e.cpu.ExecuteFrame(e.frameTStates())
 							if e.ula != nil && e.ula.FEReadCount()-before > tapeLoadReadThreshold {
 								heavyReads = true
 							}

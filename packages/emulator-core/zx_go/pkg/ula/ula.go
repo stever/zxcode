@@ -1545,9 +1545,16 @@ func (u *ULA) renderHiResLayer2() *image.RGBA {
 // relative values to place raster-timed effects on the right rows.
 func (u *ULA) ActiveVideoLine() int {
 	line, _ := u.BeamPosition()
-	const linesPerFrame = 311 // 70908 / 228 (128K timing, Next included)
-	const paperStartLine = 64 // frame INT → paper top, per WireLineInterrupt
-	return (line + linesPerFrame - paperStartLine) % linesPerFrame
+	// Live geometry (NR$03/NR$05 mirror): 311 lines with paper top at
+	// raw line 64 in the boot +3 50 Hz timing; 312/320/264 lines with
+	// paper top at 64/80/40 under 48K/Pentagon/60 Hz timing
+	// (zxula_timing.vhd c_max_vc / c_min_vactive — the cvc counter
+	// resets at c_min_vactive, :458-468).
+	g := memory.DefaultNextGeometry()
+	if u.mem != nil {
+		g = u.mem.NextGeometry()
+	}
+	return (line + g.Lines - g.MinVActive) % g.Lines
 }
 
 // BeamPosition returns the current raster beam position: the scanline
@@ -1586,8 +1593,14 @@ func (u *ULA) BeamPosition() (line, hpos int) {
 	if t < 0 {
 		t = 0
 	}
-	line = (t / TStatesPerLine) & 0x1FF
-	hpos = (t % TStatesPerLine) / 4
+	// Live per-line length from the NR$03/NR$05 geometry mirror:
+	// 228 T in the boot +3 timing, 224 under 48K/Pentagon timing
+	// (zxula_timing.vhd c_max_hc 455 vs 447). BeamPosition's callers
+	// are all Next-conventioned (NR$1E/$1F, copper, palette raster
+	// stamps); an unpushed mirror returns the boot default 228.
+	tpl := u.mem.NextGeometry().TStatesPerLine
+	line = (t / tpl) & 0x1FF
+	hpos = (t % tpl) / 4
 	return line, hpos
 }
 
@@ -3248,14 +3261,31 @@ func (u *ULA) SetTapePlayer(tp *TapePlayer) {
 	u.lastTapeTstate = u.refNow()
 }
 
-// frameTStates returns the current model's real frame length in 3.5 MHz
+// frameTStates returns the machine's real frame length in 3.5 MHz
 // T-states — the window the per-frame audio reconstruction integrates over.
-// Looked up per frame (not cached) so a runtime SwitchModel is picked up.
+// Looked up per frame (not cached) so a runtime SwitchModel — or, on the
+// Next, a guest NR$03/NR$05 geometry retune (memory.FrameTStates reads
+// the live mirror) — is picked up.
 func (u *ULA) frameTStates() int {
 	if u.mem == nil {
 		return roms.Model48K.FrameTStates()
 	}
-	return u.mem.GetCurrentModel().FrameTStates()
+	return u.mem.FrameTStates()
+}
+
+// samplesForFrame returns how many audio samples one emulated frame of
+// tpf T-states contributes. The boot Next geometry (70908 T) and every
+// classic model keep the historical fixed audio.SamplesPerFrame — the
+// browser/desktop pacing calibration — and a Next frame RETUNED by
+// NR$03/NR$05 scales proportionally (a 60 Hz 60192-T frame is shorter
+// machine time, so it contributes fewer samples and audio-clock pacing
+// runs the machine correspondingly faster).
+func (u *ULA) samplesForFrame(tpf int) int {
+	const bootFrameT = 70908
+	if tpf == bootFrameT || u.mem == nil || u.mem.GetCurrentModel() != roms.ModelNext {
+		return audio.SamplesPerFrame
+	}
+	return audio.SamplesPerFrame * tpf / bootFrameT
 }
 
 // refNow returns the current position on the 3.5 MHz-reference timeline used
@@ -3414,7 +3444,7 @@ func (u *ULA) flushAudioFrame() {
 		u.frameStartTapeState = false
 		u.frameStartSpeakerState = u.Speaker
 		u.dc.reset()
-		u.audio.PushBeeperSamples(make([]int16, audio.SamplesPerFrame))
+		u.audio.PushBeeperSamples(make([]int16, u.samplesForFrame(u.frameTStates())))
 		if u.mem.TStates != nil {
 			u.frameStartTstate = *u.mem.TStates
 			u.frameStartRefTstate = u.refNow()
@@ -3423,18 +3453,20 @@ func (u *ULA) flushAudioFrame() {
 	}
 	u.LastAudioEventCount = len(u.audioEvents)
 	tpf := u.frameTStates()
-	samples, finalState := generateBeeperFrame(u.audioEvents, u.frameStartSpeakerState, tpf)
+	nSamples := u.samplesForFrame(tpf)
+	samples, finalState := generateSquareWaveFrame(
+		u.audioEvents, u.frameStartSpeakerState, beeperLow, beeperHigh, tpf, nSamples)
 	// Mix the SpecDrum/Covox DAC frame (event-timed, sample-accurate) into the
 	// beeper waveform before pushing it.
 	if u.speccyDAC != nil && u.speccyDAC.Enabled() {
-		mixInt16(samples, u.speccyDAC.GenerateFrame(audio.SamplesPerFrame, tpf))
+		mixInt16(samples, u.speccyDAC.GenerateFrame(nSamples, tpf))
 	}
 	// Spectrum Next 4-channel DAC: event-timed, mixed the same way (replaces the
 	// old per-pull MixInto snapshot).
 	if gen, ok := u.nextDAC.(interface {
 		GenerateFrame(int, int) []int16
 	}); ok && gen != nil {
-		mixInt16(samples, gen.GenerateFrame(audio.SamplesPerFrame, tpf))
+		mixInt16(samples, gen.GenerateFrame(nSamples, tpf))
 	}
 	// Tape-loading sound: reconstruct the EAR waveform and mix it in (the
 	// audible pilot whistle + data screech). Only while a tape is playing
@@ -3450,7 +3482,7 @@ func (u *ULA) flushAudioFrame() {
 	u.lastFlushFEReads = u.feReadCount
 	if u.tape != nil && u.tape.IsPlaying() && feReads >= tapeAudioMinFEReads {
 		tapeSamples, finalTape := generateSquareWaveFrame(
-			u.tapeAudioEvents, u.frameStartTapeState, -tapeAudioAmplitude, tapeAudioAmplitude, tpf)
+			u.tapeAudioEvents, u.frameStartTapeState, -tapeAudioAmplitude, tapeAudioAmplitude, tpf, nSamples)
 		mixInt16(samples, tapeSamples)
 		u.frameStartTapeState = finalTape
 	} else {
@@ -3512,7 +3544,8 @@ func mixInt16(dst, src []int16) {
 // the jitter into amplitude variation, which is much less perceptible
 // and naturally low-pass-filters the output.
 func generateBeeperFrame(events []audioEvent, initialState bool, tstatesPerFrame int) (samples []int16, finalState bool) {
-	return generateSquareWaveFrame(events, initialState, beeperLow, beeperHigh, tstatesPerFrame)
+	return generateSquareWaveFrame(events, initialState, beeperLow, beeperHigh,
+		tstatesPerFrame, audio.SamplesPerFrame)
 }
 
 // generateSquareWaveFrame is the box-filter square-wave reconstruction shared by
@@ -3523,18 +3556,20 @@ func generateBeeperFrame(events []audioEvent, initialState bool, tstatesPerFrame
 // (roms.SpectrumModel.FrameTStates) — with the 48K value hardcoded here, the
 // 128K/Next frame's last ~1020 T-states of toggles were dropped every frame and
 // finalState missed them, phase-inverting whole frames: an audible 50Hz buzz on
-// any sustained tone.
-func generateSquareWaveFrame(events []audioEvent, initialState bool, low, high int16, tstatesPerFrame int) (samples []int16, finalState bool) {
-	samples = make([]int16, audio.SamplesPerFrame)
+// any sustained tone. nSamples is the sample count the frame contributes
+// (samplesForFrame): audio.SamplesPerFrame in the boot geometry, scaled to
+// the frame's real duration under a guest NR$03/NR$05 retune.
+func generateSquareWaveFrame(events []audioEvent, initialState bool, low, high int16, tstatesPerFrame, nSamples int) (samples []int16, finalState bool) {
+	samples = make([]int16, nSamples)
 	state := initialState
 	eventIdx := 0
 
 	delta := int32(high) - int32(low)
 	lowV := int32(low)
 
-	for i := 0; i < audio.SamplesPerFrame; i++ {
-		sampleStart := i * tstatesPerFrame / audio.SamplesPerFrame
-		sampleEnd := (i + 1) * tstatesPerFrame / audio.SamplesPerFrame
+	for i := 0; i < nSamples; i++ {
+		sampleStart := i * tstatesPerFrame / nSamples
+		sampleEnd := (i + 1) * tstatesPerFrame / nSamples
 		sampleLen := sampleEnd - sampleStart
 
 		// Walk events that fall inside [sampleStart, sampleEnd),
