@@ -8,6 +8,58 @@ project targets [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+Per-half-pixel video pipeline (#183, Track B, r59) — the Next render
+now resolves at the FPGA's own 14 MHz half-pixel grain, closing four
+catalogued gaps in one rearchitecture (sub-line copper/palette
+visibility, mixed-frame Timex hi-res decimation, end-of-frame hi-res
+palette, NR$68 bit 2 fine-scroll-X).
+
+- **640×256 output.** The live Next path always emits the wide frame
+  at its native half-pixel width (two output pixels per frame pixel —
+  the 14 MHz pixel bus shape, `zxnext.vhd:6543-6552`); the wide
+  overlay paths composite in place and the classic machines keep
+  320×240. The direct `Pix` stores also removed one heap allocation
+  per pixel (`image.Set`'s `color.Color` boxing).
+- **Half-pixel copper interleave.** The row walk paces the copper at
+  2-cycle `RunToCycle` targets — one MOVE write per half-pixel
+  (`copper.vhd:87-109`) — gated per row by the new side-effect-free
+  `Copper.CanRetireOnLine` peek: event-free rows take a
+  pair-coalescing stride with provably identical output. The
+  base/Copper golden now asserts the flags' NATIVE 16 half-pixel
+  FlagData cells (stripe at cells 5-6; `release/!Copper.txt`: "flag
+  pixels are half-width").
+- **Fused live compose.** One per-pixel paint chain
+  (`composePixel`) serves the row pass and the fused
+  `BeginLiveRow`/`ComposeLiveHalfPixel` pass: on paced rows every
+  layer's palette lookup, the palette selects and the mixer state
+  (NR$15/$68/$14) read LIVE inside the copper interleave — the
+  per-`i_CLK_14`-slot mixer inputs (`zxnext.vhd:6799-6832`) and the
+  `sc(0)`-multiplexed palette BRAMs (`:6981/:7033`). Layer INDEX
+  buffers stay per-row — the hardware's own grain (sprites build line
+  N+1 into a line buffer while N displays, `sprites.vhd:537-540`).
+  A render-time copper NR$15 write hands mode selection from the
+  raster-stamped CPU override back to the live register at its
+  half-pixel (the `LayerPriority` write generation).
+- **Fine-scroll-X live.** NR$68 bit 2 is the LSB of the 14 MHz
+  barrel-shift amount (`zxula.vhd:199/:353/:395`) — a +1 half-pixel
+  term in the ULA source map, previously stored dead.
+- **Timex hi-res unified.** The display mode re-latches per character
+  cell (`zxula.vhd:191-214`) inside the one row walk, and hi-res
+  renders the native interleaved-files 512 stream (`zxula.vhd:389`)
+  in stable AND copper-banded mixed frames; the decimation branch,
+  the stable/mixed frame split and the dedicated
+  `renderWideTimexHiRes` pass (whose palette resolved at
+  end-of-frame) are deleted.
+- **Sub-line residue sweep.** Top/bottom border rows resolve per
+  half-pixel on lines where the copper can retire; CPU palette writes
+  stamp the full (line, hpos) beam position and replay at their own
+  half-pixel inside the row interleave (the FPGA's
+  write-visible-on-the-next-lookup rule, `zxnext.vhd:6969-6977`).
+- **Perf.** `BenchmarkNextRender` (new, the stage gate): native
+  CopperIdle 1.90→1.52 ms, CopperHeavy 1.48→1.32 ms, HiRes
+  3.21→2.38 ms per frame vs the pre-change baseline — faster across
+  the board despite the doubled output.
+
 NextReg decode conformance sweep (#153) — the register file's read
 composition and write masks are now enumerated end-to-end against the
 FPGA source, and the ESP UART moved to its real ports.

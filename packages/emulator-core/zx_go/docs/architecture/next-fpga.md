@@ -180,7 +180,13 @@ Diagram: [next-video-pipeline.drawio](diagrams/next-video-pipeline.drawio).
 
 Per frame the ULA renders its classic base image, then for each active
 scanline re-renders the ULA row through the live Next ULA palette with
-the Copper interleaved per pixel, and calls the compositor. The pieces:
+the Copper interleaved per 14 MHz HALF-pixel and composes it — on rows
+whose state can change mid-row, through the FUSED per-half-pixel pass
+(#183, r59: every layer's palette lookup and the mixer state read live
+inside the interleave); event-free rows take a provably-identical
+pair-coalescing stride. The live Next output frame is always 640×256
+(two output pixels per frame pixel — the FPGA's own 14 MHz pixel bus
+shape, zxnext.vhd:6543-6552). The pieces:
 
 - Frame geometry (r51, #171): the Next composites into the FPGA's
   320×256 wide frame — sprites, the tilemap and Layer 2's wide modes
@@ -189,7 +195,8 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   the top-left of the 32-px border ring and the classic paper at
   (32,32). `ULA.SetNextCompositor` switches the ULA's canvas to this
   geometry (image row r IS frame row r, no bias arithmetic; classics
-  keep 320×240), and 320×256 doubles to exactly the browser's fixed
+  keep 320×240). Since #183 the output canvas is 640×256 — the frame at
+  its native half-pixel width, doubling to exactly the browser's fixed
   640×512 display box. Pinned by `TestNextWideFrameLayerAnchoring`.
 
 - Layer 2 (`pkg/next/layer2`): framebuffer over three consecutive 16K
@@ -251,12 +258,22 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   colour where every layer is transparent. `mixer.go` is a fully
   faithful port of the FPGA video mixer, golden-tested; the scanline
   painter is the fast path, and its additive blend orders (modes 6/7)
-  call `Mix` per pixel with the NR$68 blend-operand bits. The NR$15
-  priority mode is raster-stamped: CPU rewrites per raster band replay
-  per composed row (SetPriorityModeOverride). Hi-res Layer 2, Timex
-  hi-res ULA (composited at its native 512 half-pixels via
-  ComposeHiResScanline when the mode is frame-stable) and 80-column
-  tilemap take dedicated wide render paths, and border passes
+  call `Mix` per pixel with the NR$68 blend-operand bits. The paint
+  chain is ONE per-pixel resolver (composePixel) shared by the row pass
+  and the fused live pass (BeginLiveRow/ComposeLiveHalfPixel — #183):
+  on paced rows every half-pixel reads the LIVE palettes, palette
+  selects, NR$14/$68 state and the NR$15 mode at its own copper time
+  (the FPGA's per-i_CLK_14-slot mixer inputs, zxnext.vhd:6799-6832),
+  while the layer INDEX buffers stay per-row — the hardware's own grain
+  (sprites build line N+1 into a line buffer while N displays,
+  sprites.vhd:537-540; do not "fix" this). The NR$15 priority mode is
+  raster-stamped: CPU rewrites per raster band replay per composed row
+  (SetPriorityModeOverride), and the first render-time (copper) NR$15
+  write hands selection back to the live register from its half-pixel
+  (the LayerPriority write generation). Timex hi-res is UNIFIED into
+  the main row walk (native 512 stream, stable and mixed frames alike);
+  hi-res Layer 2 and 80-column tilemap keep dedicated wide overlay
+  paths (in place on the 640-wide frame), and border passes
   composite tilemap and sprites over the border area — all in the one
   320×256 frame coordinate system (see "Frame geometry" above). The
   hi-res Layer 2 overlay repaints the layers the NR$15 mode places
@@ -273,11 +290,13 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   (`RunToCycle`): MOVE costs 2 and NOOP 1 cycle of the 28MHz copper
   clock (4 cycles per 7MHz pixel), WAIT releases only when vcount
   equals its line and hcount reaches (X<<3)+12, and the list address
-  wraps at 1024. The ULA's compositor pass interleaves it per PIXEL
-  with the live-palette ULA row render (mid-scanline palette MOVEs land
-  on the right pixel — the base/Copper flags), sweeps lines 192..311
-  after the visible rows, and restarts StartOnVBL lists at the frame
-  wrap. The border-line sweep runs even when the live-ULA render is
+  wraps at 1024. The ULA's compositor pass interleaves it per 14 MHz
+  HALF-pixel (2-cycle RunToCycle targets — one MOVE write per
+  half-pixel, the base/Copper flags render their native half-width
+  cells), gated per row by `CanRetireOnLine` (event-free rows coalesce
+  and skip the per-slot calls), sweeps lines 192..311 after the visible
+  rows (per half-pixel on lines with retirable instructions), and
+  restarts StartOnVBL lists at the frame wrap. The border-line sweep runs even when the live-ULA render is
   off (NR$68 bit 7 ULA-disabled content — RAMS): the copper's
   192..311 WAITs must release on their lines regardless, via the
   per-row Step fallback. The per-scanline `Step` engine (golden replay
@@ -298,17 +317,22 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
   paper 128|attr>>n, non-canonical masks and format $FF show the NR$4A
   background), border via the paper entry. Transparency (entry ==
   NR$14) travels to the compositor as alpha 0. Coverage: paper rows
-  (and their L/R borders) per pixel; the top/bottom border rows once
-  per raster line during the vblank sweep, and the sprite over-border
-  strips per frame — everything on screen resolves through the same
-  palette (one palette, one DAC; border white == paper white). Timex
-  hi-res and the ULA-disabled fill keep the classic pre-render.
+  (and their L/R borders) per half-pixel on event/stamp rows and per
+  coalesced pixel otherwise; the top/bottom border sweep rows per
+  half-pixel when the copper can retire on their line, else once per
+  line — everything on screen resolves through the same palette (one
+  palette, one DAC; border white == paper white). The Timex display
+  mode re-latches per character cell inside the row (zxula.vhd:191-214)
+  and hi-res renders the native interleaved-files 512 stream
+  (zxula.vhd:389). The ULA-disabled fill keeps the classic pre-render.
   The row render also applies the ULA hardware scroll (NR$26/$27:
   source pixel+attr = ((x+sx) mod 256, (y+sy) mod 192), zxula.vhd:199 /
   :192-208) and the NR$1A clip window (outside the inclusive
   display-space window → transparent; border exempt; zxula.vhd:562),
   both pushed by `next.WireULAControl` / `WireClipWindows`. The NR$68
-  bit 2 fine-scroll-X half-pixel is stored but below render resolution.
+  bit 2 fine-scroll-X is live: the LSB of the 14 MHz barrel-shift
+  amount (zxula.vhd:199/:353/:395), a +1 half-pixel term in the source
+  map.
 - Raster-stamped ULA-video state (`pkg/ula` ulaVideoLine): mid-frame
   CPU writes to the ULANext decode state and the DISPLAYED ULA palette
   select (NR$43 bit 1) are stamped with their raster line
@@ -321,13 +345,15 @@ the Copper interleaved per pixel, and calls the compositor. The pieces:
 - Raster-stamped palette CONTENT (`pkg/next/palette` Bank stamped-write
   log): mid-frame CPU writes of palette VALUES (NR$41/$44 — on the FPGA
   a palette BRAM write is visible to the video fetch on the next pixel,
-  zxnext.vhd:4919-4930) are logged with their raster line; the
-  compositor pass rewinds the bank to frame-start state and re-applies
-  the log row by row (paper rows and the bottom-border sweep in raster
-  order, then a rewind for the top-border rows, which scanned before
-  the paper), suspending logging for the walk so the copper
-  interleave's render-time writes are never logged. EndReplay restores
-  the live state and RETAINS the consumed log for stale re-renders.
+  zxnext.vhd:4919-4930) are logged with their FULL (line, hpos) beam
+  position; the compositor pass rewinds the bank to frame-start state
+  and re-applies the log in raster order — lines before each paper row
+  up front, the row's OWN stamps per half-pixel at their hcount inside
+  the row interleave (#183 stage 5), the bottom-border sweep per line,
+  then a rewind for the top-border rows, which scanned before the
+  paper — suspending logging for the walk so the copper interleave's
+  render-time writes are never logged. EndReplay restores the live
+  state and RETAINS the consumed log for stale re-renders.
   Granularity is one raster line; hi-res/wide re-composites stay at
   end-of-frame palette state (known-gaps.md). Driven by the
   Timing/ScanlineReadingAndInterrupt one-line palette flashes.

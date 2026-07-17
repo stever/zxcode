@@ -342,8 +342,8 @@ suite (TestE3_*).
 
 ## Axis 9 — Video (ULA/L2/tilemap/sprite/lores/palette/copper)
 Broad render edge tests (iters 204-217). Not boot-critical (boot stalls pre-render).
-The ✅ rows below are green at LINE granularity; the sub-line copper/palette
-detail they collapse is the ⚙️ row in Axis 10, not an omission here.
+Since #183 (r59) the render resolves at the FPGA's 14 MHz half-pixel grain
+(Axis 10 rows 2/5 ✅): the ✅ rows below no longer collapse sub-line detail.
 
 Pinned since (base/Copper + base/DMA conformance work):
 - ✅ Tilemap tm_below PER PIXEL (#154): each pixel's below bit is the
@@ -456,8 +456,10 @@ Pinned since (ULA group conformance work):
   attributes, per video/zxula.vhd:199 (px char sum, neighbour char mod
   32) and :192/:201-208 (py fold) — `next.WireULAControl` +
   `TestNextULARowHardwareScroll` + TestNexttestsULAScroll's read-back
-  cross-check. NR$68 bit 2 fine-scroll-X (zxnext.vhd:5449) stored; the
-  half-pixel shift is below the 7 MHz render resolution (known-gaps).
+  cross-check. NR$68 bit 2 fine-scroll-X (zxnext.vhd:5449) is LIVE
+  (#183): the LSB of the 14 MHz barrel-shift amount (zxula.vhd:199/
+  :353/:395), a +1 half-pixel source shift —
+  `TestULAFineScrollXHalfPixelShift`.
 - ✅ ULA clip window NR$1A (zxula.vhd:562): inclusive display-space
   bounds, outside → transparent (fallback / lower layers), border
   exempt — `TestNextULARowClipWindow` + TestNexttestsULAScroll.
@@ -481,9 +483,12 @@ Pinned since (ULA group conformance work):
   + TestNexttestsGraphicsNextReg0x69's 10/10 port cross-checks).
 - ✅ Timex display modes in the live ULA render: screen 1 / hi-colour
   vram addressing (zxula.vhd:235-251, `TestNextULARowTimexModes`),
-  hi-res 512 half-pixel rows with the synthesized attribute
-  ("01" & NOT(c) & c, :419) and its border rule (:425-427) —
-  TestNexttestsGraphicsLayersMixingHiCol/HiRes.
+  hi-res as the NATIVE 512-half-pixel stream (both files interleaved,
+  zxula.vhd:389) with the synthesized attribute ("01" & NOT(c) & c,
+  :419) and its border rule (:425-427), the mode re-latched per
+  character cell (:191-214) so copper NR$69 bands go native mid-frame
+  and mid-row (#183) — TestNexttestsGraphicsLayersMixingHiCol/HiRes +
+  `TestCopperMidRowNR69HiResBand`.
 - ✅ LoRes/Radastan as the ULA-layer content (zxnext.vhd:6980 pixel
   replace, :6795-6797 control, :6772 scroll, :6817 enable) —
   `TestNextULARowLoRes` + TestNexttestsGraphicsLayersMixingLoRes.
@@ -522,10 +527,10 @@ here means real architectural work, not a quick pin.
 | Aspect | VHDL / source | our model | status | notes |
 |--------|---------------|-----------|--------|-------|
 | Per-access memory contention | i_contention_en = ¬NR$08-bit6 ∧ ¬Pentagon ∧ 3.5 MHz (zxnext.vhd:4481); page set by NR$03 timing (:4490-4494); +3-timing wait arm memory-only (zxula.vhd:604) | LIVE on ModelNext (#181): cycle-helper contention with the FPGA's gates + timing-selected page-follows rule; ports contend only under 48K/128K timing | ✅ | TestNextContention* / TestNextPortContentionTimingGate; hold shape = the canonical 8-slot pattern (a GHDL per-cycle trace of the wait arm would sharpen it further); classic-line models remain lump-total — known-gaps row |
-| Sub-line copper / palette colour changes | copper MOVE + palette BRAM visible on the NEXT pixel (zxnext.vhd:4919-4930) | line-granular replay (borderChange-style); two writes inside one pixel collapse to one | ⚙️ | ✅ at LINE granularity (Axis 9); sub-line detail is below the 7 MHz render floor — known-gaps copper / palette rows |
+| Sub-line copper / palette colour changes | copper MOVE = one write per 14 MHz half-pixel (copper.vhd:87-109); palette BRAM lookup per half-pixel, write visible on the next lookup (zxnext.vhd:6969-6981/:7033); mixer state sampled per i_CLK_14 slot (:6799-6832/:7092) | CLOSED (#183, r59): 2-cycle RunToCycle targets + the fused per-half-pixel compose (live palettes/mixer state inside the interleave) + event-gated half-pixel border rows + (line,hpos) CPU palette stamps; event-free rows coalesce provably-identically (CanRetireOnLine). Layer INDEX buffers stay per-row — the hardware's own grain (sprites line-buffer build-ahead sprites.vhd:537-540; L2 ~1 px, tilemap 1-2 chars) | ✅ | TestNexttestsCopper (native half-width flags), TestCopperMoveLandsOnHalfPixel, TestCopperMidRow* pins; residue: mid-row LAYER ENABLE flips land next row — known-gaps copper row |
 | Turbo-speed video timing (> 3.5 MHz) | the raster runs on its own clock regardless of CPU speed (zxula_timing.vhd) | mid-frame raster stamps ride the speed-independent reference timeline (#180: currentScanline → BeamPosition; palette/tilemap sources already did) | ✅ | CLOSED — TestBorderStampSpeedIndependent / TestVideoStateStampSpeedIndependent |
 | Per-NR$03/$05 display geometry (48K 312×224/448hc, Pentagon 320×224, 60 Hz 264-line vs the boot 311×228) | zxula_timing.vhd:146-311 constant table; vsync eff-latch zxnext.vhd:6693-6706; Pentagon-forces-50Hz :5834-5836 | TIMING side LIVE (#182): NR$03/NR$05 writes retune frame length, T/line, frame-INT assert+pulse, the contention paper anchor, NR$1E/$1F wrap and the NR$22/$23 line-INT via the FrameGeometryFor row (pkg/next/geometry.go), applied at the next frame origin; audio window + samples/frame follow. RENDER side still composes the fixed 311-row/456-hcount canvas (copper line clock included) | ⚠️ | TestFrameGeometryFor / TestWireFrameGeometry*; visual residue in known-gaps "Next raster geometry" row |
-| Mixed-frame Timex hi-res decimation + hi-res end-of-frame palette | the FPGA resolves display mode AND palette per 14 MHz half-pixel | native 512 only when hi-res is whole-frame-stable; mixed frames decimate; palette resolved at end-of-frame | ⚙️ | re-affirmed by #154: closing these IS the per-pixel render pipeline this axis describes, not a test — known-gaps ULA-modes + palette rows carry the sharpened rationale. (#154's tractable third bullet, the per-pixel tm_below bit, landed in Axis 9.) |
+| Mixed-frame Timex hi-res decimation + hi-res end-of-frame palette | the FPGA resolves display mode per character cell (zxula.vhd:191-214) and palette per 14 MHz half-pixel | CLOSED (#183, r59): the mode re-latches per character cell inside the one row walk and hi-res renders the native 512 stream in stable AND copper-banded mixed frames; the decimation branch, the stable/mixed split and the dedicated wide pass (end-of-frame palette) are deleted — hi-res rows resolve palette through the same paced per-row replay as every row | ✅ | TestCopperMidRowNR69HiResBand (mid-row native band), LayersMixingHiRes now pins the unified path |
 
 **Closing this axis is the render/timing rearchitecture, not the enumeration
 punch-list.** Reaching ✅/⚠️-clear on Axes 1-9 is bounded work — Axes 1-3 are
