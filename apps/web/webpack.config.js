@@ -121,7 +121,19 @@ module.exports = (env, _) => {
                 },
                 devMiddleware: {
                     writeToDisk: true
-                }
+                },
+                // The official SpecNext distro route, mirroring the Caddy
+                // proxy's /specnext/distro/* pass-through, so the emulator
+                // finds the distro when this dev server is hit directly
+                // (:8000) rather than through the proxy (:8080).
+                proxy: [
+                    {
+                        context: ["/specnext"],
+                        target: "https://www.specnext.com",
+                        changeOrigin: true,
+                        pathRewrite: {"^/specnext": ""}
+                    }
+                ]
             },
             module: {
                 rules: loaders
