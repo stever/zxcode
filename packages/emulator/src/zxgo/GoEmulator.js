@@ -202,7 +202,7 @@ export class GoEmulator extends EventEmitter {
         // boot log then shows at a glance whether a dev server is serving a
         // stale bundle (workspace-package edits don't reliably trigger
         // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r57-uart-real-ports+nr-decode-conformance';
+        const ENGINE_REV = 'r58-nr03-nr05-frame-geometry';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
@@ -287,10 +287,14 @@ export class GoEmulator extends EventEmitter {
         if (actx && actx.state !== 'running') actx.resume().catch(() => {});
     }
 
+    // Drains the core's audio ring into the worklet. Returns the number of
+    // samples pulled (0 when the ring was empty) so the frame loop can pace
+    // off REAL production: a guest NR$03/$05 timing retune (48K/Pentagon/
+    // 60 Hz frame geometry) makes the core emit ≠882 samples per frame.
     pumpAudio() {
-        if (!this.audioNode || !globalThis.zxPullAudio) return;
+        if (!this.audioNode || !globalThis.zxPullAudio) return 0;
         const n = globalThis.zxPullAudio(this.audioPullU8);
-        if (!n) return;
+        if (!n) return 0;
         const chunk = this.audioPullU8.slice(0, n * 2);
         // Diagnostics: pull rate + amplitude range of the last chunk (see
         // __zxgoAudio). A healthy idle stream pulls ~44100/s of near-zero
@@ -301,6 +305,7 @@ export class GoEmulator extends EventEmitter {
         for (let i = 0; i < n; i++) { const v = s16[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
         this.diagMin = mn; this.diagMax = mx;
         this.audioNode.port.postMessage(chunk.buffer, [chunk.buffer]);
+        return n;
     }
 
     // Poll the core's tape deck and surface state changes as the events the
@@ -408,12 +413,12 @@ export class GoEmulator extends EventEmitter {
         }
         let owed;
         const actx = this.audioNode && this.audioNode.context;
-        if (actx && actx.state === 'running') {
+        const audioPaced = !!(actx && actx.state === 'running');
+        if (audioPaced) {
             if (this.audioBase === null) { this.audioBase = actx.currentTime; this.audioProduced = 0; }
             const consumed = (actx.currentTime - this.audioBase) * 44100;
             if (this.audioProduced < consumed) this.audioProduced = consumed;
             owed = Math.min(Math.max(Math.ceil((consumed + this.audioCushion - this.audioProduced) / SAMPLES_PER_FRAME), 0), 4);
-            this.audioProduced += owed * SAMPLES_PER_FRAME;
             this.acc = 0; this.lastTick = t;
         } else {
             this.acc = Math.min(this.acc + (this.lastTick ? t - this.lastTick : 20), 80);
@@ -428,10 +433,24 @@ export class GoEmulator extends EventEmitter {
             // dimensions once — zxFrame() without args runs the frame and
             // just returns {w,h}.
             const d = this.frameBuf ? globalThis.zxFrame(this.frameBuf) : globalThis.zxFrame();
-            this.pumpAudio();
+            const pumped = this.pumpAudio();
+            if (audioPaced) {
+                // Account what the core REALLY produced: under a guest
+                // NR$03/$05 timing retune (48K/Pentagon/60 Hz geometry,
+                // r58) a frame yields ≠882 samples, and fictional
+                // 882-per-frame accounting would starve (60 Hz: 748) or
+                // overfill the cushion. The boot geometry still yields
+                // exactly 882/frame, so the default path is unchanged; an
+                // empty pull (core audio not flowing) falls back to the
+                // fictional estimate so pacing cannot run away.
+                this.audioProduced += pumped > 0 ? pumped : owed * SAMPLES_PER_FRAME;
+            }
             this.pollTape();
             this.presentFrame(d);
             this.noteDebugFrame(d);
+        } else if (owed && audioPaced) {
+            // Core not ready yet: keep the audio clock's ledger moving.
+            this.audioProduced += owed * SAMPLES_PER_FRAME;
         }
         this.rafId = window.requestAnimationFrame((tt) => this.loop(tt));
     }
