@@ -110,6 +110,10 @@ type Compositor struct {
 	l2Scratch      [Width]byte
 	spriteScratch  [FullWidth]byte // full 320-wide row in FRAME coordinates (sprite X/Y are frame-relative; paper starts at 32,32)
 	tilemapScratch [FullWidth]byte // sized for full 320-wide row; ComposeScanline takes the centred 256 pixels
+	// tilemapBelow is the parallel per-pixel tm_below mask (the FPGA
+	// line buffer's bit 8, tilemap.vhd:388) — a below pixel yields to
+	// an OPAQUE ULA pixel (zxnext.vhd:7116).
+	tilemapBelow [FullWidth]byte
 }
 
 // SetTilemap attaches the tilemap layer (Layer 3). nil unhooks.
@@ -139,8 +143,9 @@ func (c *Compositor) TilemapIs80Col() bool {
 // 640-pixel width and composites it over dst — a 640-pixel RGBA row that
 // already holds the horizontally-doubled lower layers (ULA + Layer 2 +
 // sprites). A pixel is transparent when the low nibble of its palette
-// index matches the tilemap transparency nibble, or (when on_top is off)
-// when its low nibble is 0; otherwise it is opaque.
+// index matches the tilemap transparency nibble (tilemap.vhd:427);
+// per-pixel BELOW tiles (tilemap.vhd:388) are skipped — see the loop
+// comment.
 func (c *Compositor) ComposeWideTilemapRow(tilemapY int, dst []byte) {
 	if !c.TilemapIs80Col() {
 		return
@@ -149,9 +154,8 @@ func (c *Compositor) ComposeWideTilemapRow(tilemapY int, dst []byte) {
 	if tilemapPal == nil {
 		return
 	}
-	var scan [2 * FullWidth]byte // 640 pixels = 80 tiles × 8px
-	c.tilemap.RenderScanline(tilemapY, scan[:])
-	onTop := c.tilemap.OnTop()
+	var scan, below [2 * FullWidth]byte // 640 pixels = 80 tiles × 8px
+	c.tilemap.RenderScanlineWithBelow(tilemapY, scan[:], below[:])
 	tmTransparentNibble := c.tilemapTrans
 	n := len(dst) / 4
 	if n > len(scan) {
@@ -162,7 +166,12 @@ func (c *Compositor) ComposeWideTilemapRow(tilemapY int, dst []byte) {
 		if idx&0x0F == tmTransparentNibble {
 			continue
 		}
-		if !onTop && idx&0x0F == 0 {
+		// Per-pixel tm_below (tilemap.vhd:388): dst already holds the
+		// composed lower layers, so a below pixel is skipped — it
+		// would only show over a transparent ULA pixel, which this
+		// wide pass cannot distinguish (same residue class as the
+		// overlay repaint).
+		if below[x] != 0 {
 			continue
 		}
 		r, g, b := tilemapPal.RGB(idx)
@@ -259,24 +268,27 @@ func (c *Compositor) ComposeBorderRow(tilemapY int, dst []byte, isInBorderArea f
 	if tilemapPal == nil {
 		return
 	}
-	var scan [FullWidth]byte
-	c.tilemap.RenderScanline(tilemapY, scan[:])
-	// Same on_top rule as the inner pass: when NR$6B bit 0 is set
-	// the FPGA paints palette[0] for nibble-0 pixels rather than
-	// letting the ULA border colour show through. Without this the
-	// outer 32-px border + 32-px top/bottom strips of the testcard
-	// would show through to whatever ULA BorderColour boot.bin
-	// happens to have left (e.g. blue) instead of the tilemap
-	// background black, mismatching the inner screen and producing
-	// a green/blue-banded "frame" effect.
-	onTop := c.tilemap.OnTop()
+	var scan, below [FullWidth]byte
+	c.tilemap.RenderScanlineWithBelow(tilemapY, scan[:], below[:])
+	// Opacity is the NR$4C nibble (tilemap.vhd:427). Ordering is the
+	// per-pixel tm_below bit (tilemap.vhd:388): the border is an
+	// OPAQUE ULA pixel in the FPGA's ulatm arbitration
+	// (zxnext.vhd:7116), so a below pixel never paints here — a
+	// border colour that maps to the NR$14 transparency is the one
+	// unmodelled exotic (treated as opaque). With tm_on_top set every
+	// pixel has below=0 and paints — incl. palette[0] for nibble-0
+	// pixels, which the testcard's uniform black frame relies on.
+	tmTransparentNibble := c.tilemapTrans
 	for x := 0; x < FullWidth; x++ {
 		if !isInBorderArea(x) {
 			continue
 		}
 		idx := scan[x]
-		if idx == 0 && !onTop {
-			continue // transparent — ULA border shows
+		if idx&0x0F == tmTransparentNibble {
+			continue
+		}
+		if below[x] != 0 {
+			continue // below the (opaque) ULA border
 		}
 		r, g, b := tilemapPal.RGB(idx)
 		off := x * 4
@@ -353,9 +365,12 @@ func (c *Compositor) composeSpriteOverlayRow(frameY int, dst []byte, xScale int)
 
 // composeTilemapOverlayRow paints the tilemap row for frame row frameY
 // over dst at xScale output pixels per frame pixel, with the same
-// transparency rules as the inner pass's paintTilemapOnULA: the low
-// nibble of the palette index against NR$4C (tilemap.vhd:427), and the
-// legacy nibble-0 skip when tm_on_top is clear.
+// rules as the inner pass's paintTilemapOnULA: opacity is the low
+// nibble against NR$4C (tilemap.vhd:427); a per-pixel BELOW tile
+// (tilemap.vhd:388) is skipped — this overlay cannot consult the ULA
+// pixel it would arbitrate against (the same documented residue as
+// the un-repainted classic ULA pixels), so a below tile over a
+// TRANSPARENT ULA pixel under-paints here.
 func (c *Compositor) composeTilemapOverlayRow(frameY int, dst []byte, xScale int) {
 	if !c.HasActiveTilemap() {
 		return
@@ -364,15 +379,14 @@ func (c *Compositor) composeTilemapOverlayRow(frameY int, dst []byte, xScale int
 	if tilemapPal == nil {
 		return
 	}
-	var scan [FullWidth]byte
-	c.tilemap.RenderScanline(frameY, scan[:])
-	onTop := c.tilemap.OnTop()
+	var scan, below [FullWidth]byte
+	c.tilemap.RenderScanlineWithBelow(frameY, scan[:], below[:])
 	for x := 0; x < FullWidth; x++ {
 		idx := scan[x]
 		if (idx & 0x0F) == c.tilemapTrans {
 			continue
 		}
-		if !onTop && (idx&0x0F) == 0 {
+		if below[x] != 0 {
 			continue
 		}
 		r, g, b := tilemapPal.RGB(idx)
@@ -766,7 +780,7 @@ func (c *Compositor) composeRow(y int, ulaRGBA []byte, dst []byte, sub int) {
 			c.l2.RenderScanline(y, l2Scanline)
 		}
 	}
-	var tilemapScan []byte
+	var tilemapScan, tilemapBelow []byte
 	var tilemapPal *palette.Palette
 	if doTilemap {
 		// Per FPGA zxnext.vhd:6981 the tilemap pixel address has
@@ -789,8 +803,9 @@ func (c *Compositor) composeRow(y int, ulaRGBA []byte, dst []byte, sub int) {
 			// 256 pixels (cols 32..287). Passing the frame row also
 			// makes the NR$1B clip window (frame-coordinate rows)
 			// apply where the FPGA applies it.
-			c.tilemap.RenderScanline(y+SpriteFrameYTop, c.tilemapScratch[:])
+			c.tilemap.RenderScanlineWithBelow(y+SpriteFrameYTop, c.tilemapScratch[:], c.tilemapBelow[:])
 			tilemapScan = c.tilemapScratch[BorderOffsetX : BorderOffsetX+Width]
+			tilemapBelow = c.tilemapBelow[BorderOffsetX : BorderOffsetX+Width]
 		}
 	}
 	var spriteScan []byte
@@ -937,37 +952,22 @@ func (c *Compositor) composeRow(y int, ulaRGBA []byte, dst []byte, sub int) {
 	// Transparency rule from tilemap.vhd:427:
 	//	pixel_en_standard_s = '1' when video_data(3:0) /= NR$4C(3:0)
 	// — i.e. the LOW nibble of the final palette index gates pixel
-	// visibility, not "index 0 = transparent". For Sprint N we model
-	// this with NR$4C low-nibble == tile-nibble (idx low 4 bits) as
-	// the transparency condition. Without on_top, the tilemap layer
-	// also defers to nibble-0 transparency to let ULA show through —
-	// the Sprint N pre-fix behaviour kept for legacy paths.
-	tmOnTop := false
-	if c.tilemap != nil {
-		tmOnTop = c.tilemap.OnTop()
-	}
+	// visibility (NOT "index 0 = transparent"; nibble 0 is opaque
+	// unless NR$4C says otherwise). ULA-vs-tilemap ordering is the
+	// PER-PIXEL tm_below bit (tilemap.vhd:388, carried in
+	// tilemapBelow): a below pixel yields to an opaque ULA pixel and
+	// paints over a transparent one (zxnext.vhd:7116 ulatm_rgb).
 	tmTransparentNibble := c.tilemapTrans
 	paintTilemapOnULA := func(off, x int) {
 		if !doTilemap {
 			return
 		}
 		idx := tilemapScan[x]
-		// FPGA transparency: the LOW nibble of the palette index is
-		// compared to NR$4C(3:0). When equal -> transparent regardless
-		// of on_top. Otherwise the pixel is opaque AND covers ULA
-		// only when tm_on_top is set OR the tile flag asks for it.
 		if (idx & 0x0F) == tmTransparentNibble {
 			return
 		}
-		if !tmOnTop {
-			// Strict reading of tilemap.vhd:388 requires the
-			// per-pixel below bit; Sprint N approximates by saying
-			// "transparent over ULA when on_top is off and nibble
-			// is 0" — preserves the legacy compositing for non-
-			// testcard content that relies on it.
-			if (idx & 0x0F) == 0 {
-				return
-			}
+		if tilemapBelow[x] != 0 && !ulaTransparentAt(off) {
+			return // below the ULA, and the ULA pixel is opaque
 		}
 		r, g, b := tilemapPal.RGB(idx)
 		dst[off+0] = r
@@ -1046,9 +1046,12 @@ func (c *Compositor) composeRow(y int, ulaRGBA []byte, dst []byte, sub int) {
 				idx := tilemapScan[x]
 				in.TMEn = true
 				in.TMRGB = tilemapPal.Get(idx)
-				in.TMPixelEn = (idx&0x0F) != tmTransparentNibble &&
-					!((idx&0x0F) == 0 && !tmOnTop)
-				in.TMBelow = !tmOnTop
+				// Opacity is the NR$4C nibble alone (tilemap.vhd:427);
+				// the ULA-vs-TM ordering is the per-pixel below bit
+				// (tilemap.vhd:388), which Mix consumes like the FPGA's
+				// ulatm arbitration (zxnext.vhd:7116/7139+).
+				in.TMPixelEn = (idx & 0x0F) != tmTransparentNibble
+				in.TMBelow = tilemapBelow[x] != 0
 				in.TMTextmode = c.tilemap.Textmode()
 			}
 			if doSprites && spriteCover[x+BorderOffsetX] {

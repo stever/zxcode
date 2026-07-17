@@ -345,6 +345,18 @@ The ✅ rows below are green at LINE granularity; the sub-line copper/palette
 detail they collapse is the ⚙️ row in Axis 10, not an omission here.
 
 Pinned since (base/Copper + base/DMA conformance work):
+- ✅ Tilemap tm_below PER PIXEL (#154): each pixel's below bit is the
+  FPGA line buffer's bit 8 — (attr_bit0 OR mode_512) AND NOT tm_on_top
+  (tilemap.vhd:388) — and the ULA arbitration follows zxnext.vhd:7116
+  (a below pixel yields to an OPAQUE ULA pixel only). Replaces the
+  global on-top/nibble-0 approximation, which was INVERTED for
+  attr0=0 tiles with on_top off (the FPGA puts those above the ULA);
+  opacity is the NR$4C nibble alone (tilemap.vhd:427 — nibble 0 is
+  opaque). `TestTMBelowPerTileAttrBit` / `TestTMBelowOnTopOverrides` /
+  `TestTMBelow512ModeForcesBelow` (pkg/next/compositor), all pinned
+  goldens unchanged. Residue: the wide overlay/80-col passes skip
+  below pixels (no ULA pixel to arbitrate against there) —
+  known-gaps blend/wide rows.
 - ✅ Wide-frame geometry (r51, #171): sprites, tilemap and wide Layer 2
   all render in the FPGA's ONE 320×256 frame — the same whc/wvc
   counters feed all three blocks (zxnext.vhd:4208/4337/4389 ←
@@ -512,7 +524,7 @@ here means real architectural work, not a quick pin.
 | Sub-line copper / palette colour changes | copper MOVE + palette BRAM visible on the NEXT pixel (zxnext.vhd:4919-4930) | line-granular replay (borderChange-style); two writes inside one pixel collapse to one | ⚙️ | ✅ at LINE granularity (Axis 9); sub-line detail is below the 7 MHz render floor — known-gaps copper / palette rows |
 | Turbo-speed video timing (> 3.5 MHz) | scanline / border advance scales with the speed multiplier | `pkg/ula` border/scanline tracking ignores SpeedMultiplier | ⚙️ | border effects wrong above 3.5 MHz — known-gaps "Turbo-speed video timing" |
 | Per-NR$03/$05 display geometry (48K 312×224/448hc vs the 128K 311×228 the Next runs) | machine-timing select | fixed 128K/+3 geometry; NR$03/$05 do not retune the frame or INT position | ⚙️ | Timing/Changing8kBank ~2% band-length delta — known-gaps "Next raster geometry" |
-| Mixed-frame Timex hi-res decimation + hi-res end-of-frame palette | per-pixel 512 half-pixel composite | native 512 only when hi-res is whole-frame-stable; mixed frames decimate; palette resolved at end-of-frame | ⚙️ | tracked as follow-up #154 — known-gaps ULA-modes row |
+| Mixed-frame Timex hi-res decimation + hi-res end-of-frame palette | the FPGA resolves display mode AND palette per 14 MHz half-pixel | native 512 only when hi-res is whole-frame-stable; mixed frames decimate; palette resolved at end-of-frame | ⚙️ | re-affirmed by #154: closing these IS the per-pixel render pipeline this axis describes, not a test — known-gaps ULA-modes + palette rows carry the sharpened rationale. (#154's tractable third bullet, the per-pixel tm_below bit, landed in Axis 9.) |
 
 **Closing this axis is the render/timing rearchitecture, not the enumeration
 punch-list.** Reaching ✅/⚠️-clear on Axes 1-9 is bounded work — Axes 1-3 are

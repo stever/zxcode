@@ -310,8 +310,25 @@ func (t *Tilemap) SetClip(x1, x2, y1, y2 byte) {
 // pixels and stop. Out-of-mode / disabled returns all zeros so the
 // compositor's transparency-or-replace path works correctly.
 func (t *Tilemap) RenderScanline(y int, dst []byte) {
+	t.RenderScanlineWithBelow(y, dst, nil)
+}
+
+// RenderScanlineWithBelow renders like RenderScanline and, when below
+// is non-nil (same length as dst), fills each pixel's LIVE tm_below
+// bit — the FPGA's per-pixel line-buffer bit 8 (tilemap.vhd:388):
+//
+//	below = (attr_bit0 OR mode_512) AND NOT tm_on_top
+//
+// i.e. per-TILE (attribute bit 0 = "ULA over tilemap"), with 512-tile
+// mode forcing below (the attr bit is the tile-index MSB there) and
+// NR$6B bit 0 (tm_on_top) forcing on-top globally. The consumer
+// (zxnext.vhd:7116) yields a below pixel to an OPAQUE ULA pixel only.
+func (t *Tilemap) RenderScanlineWithBelow(y int, dst, below []byte) {
 	for i := range dst {
 		dst[i] = 0
+	}
+	for i := range below {
+		below[i] = 0
 	}
 	if !t.enabled || t.mem == nil {
 		return
@@ -409,6 +426,13 @@ func (t *Tilemap) RenderScanline(y int, dst []byte) {
 		tileIdx := int(mapBuf[mapEntry])
 		if mode512 {
 			tileIdx |= int(attr&0x01) << 8
+		}
+		// Per-pixel tm_below (tilemap.vhd:388): attr bit 0 ("ULA over
+		// tilemap") OR 512-mode, unless tm_on_top forces on-top. The
+		// same formula applies in textmode (:388 is unconditional).
+		if below != nil && x < len(below) &&
+			(attr&0x01 != 0 || mode512) && t.control&0x01 == 0 {
+			below[x] = 1
 		}
 		pixelInTile := absX % TileWidth
 

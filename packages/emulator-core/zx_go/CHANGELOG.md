@@ -29,6 +29,16 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **Per-pixel tilemap tm_below (#154).** The tilemap's below-the-ULA
+  arbitration is now the FPGA's per-PIXEL line-buffer bit —
+  `(attr_bit0 OR mode_512) AND NOT tm_on_top` (`tilemap.vhd:388`),
+  yielding to an opaque ULA pixel only (`zxnext.vhd:7116`) — instead
+  of the global on-top/nibble-0 approximation, which was inverted for
+  attr0=0 tiles with on_top off. Tile opacity is now the NR$4C nibble
+  alone (nibble 0 is opaque, `tilemap.vhd:427`). All pinned render
+  goldens unchanged; the wide overlay/80-col passes skip below pixels
+  (documented under-paint residue — no ULA pixel to arbitrate against
+  at that point).
 - **UART interrupt sources (#158 Axis 5).** The im2 daisy chain's
   vectors 1/2/12/13 are live per `zxnext.vhd:1941-1949`: uart0 RX
   requests on the real RX-avail level (with the NR$C6 near-full-only
