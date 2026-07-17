@@ -324,9 +324,20 @@ Pinned since (base/Copper + base/DMA conformance work):
   — the Next ULA renders through the live palette SRAM like the FPGA
   (`pkg/ula` renderNextULARow, TestNexttestsCopper).
 - ✅ Copper cycle costs + WAIT release per device/copper.vhd (MOVE 2 /
-  NOOP 1 cycles at 28MHz; vcount==Y && hcount>=(X<<3)+12; list-restart
-  only on mode transition into 01/11; 10-bit address wrap) —
-  `pkg/next/copper` RunToCycle unit tests + the GHDL golden.
+  NOOP 1 cycles at 28MHz; vcount==Y STRICT && hcount>=(X<<3)+12 —
+  a passed line parks to the next frame; list-restart only on mode
+  transition into 01/11; 10-bit address wrap) — `pkg/next/copper`
+  RunToCycle unit tests + the GHDL golden.
+- ✅ Copper engine EQUIVALENCE (#179): the per-scanline Step engine
+  (non-live render flow) and the cycle-paced RunToCycle engine
+  (live-ULA flow) are pinned to each other — identical per-line MOVE
+  sequences over directed shapes (Atic wrap, WAIT ladders incl. the
+  passed-line park, HALT + VBL restart) and 60 seeded random programs
+  × 3 frames (`equivalence_test.go`). Found + fixed: Step's late WAIT
+  release (strict equality per copper.vhd:94), Step's post-release
+  budget floor, and the line geometry — 456 hcounts/line (c_max_hc =
+  455, zxula_timing.vhd:196), so WAIT X ≥ 56 (threshold > 455) never
+  releases, like the hardware.
 - ✅ zxnDMA read-back state machine + status byte per dma.vhd:687-720/
   859-886/895-1133/902, auto-restart FINISH_DMA loop (:469-489), turbo-
   scaled prescaler timer (:250-255/424) — `pkg/next/dma` unit tests +

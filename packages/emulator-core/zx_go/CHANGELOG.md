@@ -29,6 +29,21 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **Copper engine equivalence (#179).** The two copper engines — the
+  per-scanline functional `Step` and the cycle-paced `RunToCycle` —
+  are now pinned to each other by a standing equivalence suite
+  (directed shapes + 60 seeded random programs over multi-frame
+  sweeps), the structural answer to the #167 class of single-engine
+  drift. It caught three real divergences, all fixed against the
+  VHDL: `Step`'s WAIT released late when its line had already passed
+  (the FPGA compares `vcount = Y` strictly, `copper.vhd:94` — it
+  parks to the next frame); `Step`'s post-WAIT budget ignored the
+  release position (a late-line WAIT now leaves only the line's
+  remaining cycles, like the hardware); and both engines used wrong
+  line geometry — the Next's 128K/+3 raster is 456 hcounts
+  (`c_max_hc = 455`, `zxula_timing.vhd:196`), not 448/512, so a WAIT
+  threshold above 455 (X ≥ 56) now never releases, exactly like the
+  hardware.
 - **Read-back fixes the audit surfaced:** `NR$03` bit 7 is the live
   NR$44 half-pair latch (not a stored bit); `NR$05` bits 2/0 (50/60 Hz,
   scandouble) store on write; `NR$10` composes coreid+buttons and

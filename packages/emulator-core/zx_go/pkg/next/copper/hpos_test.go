@@ -2,12 +2,14 @@ package copper
 
 import "testing"
 
-// TestEndOfLineHcountReleasesScanlineWaits: stepping at the end-of-line hcount
-// (>=511) releases a WAIT targeting any column on that scanline, so a
-// per-scanline caller doesn't release such WAITs one scanline late (as hcount
-// below the WAIT threshold would). The WAIT release threshold is
-// hcount >= (X<<3)+12 (device/copper.vhd:94); for X=30 that is 252, so a
-// mid-line hcount of 0 parks but the end-of-line hcount of 511 releases.
+// TestEndOfLineHcountReleasesScanlineWaits: stepping at the end-of-line
+// hcount (455 on the Next's 128K timing, zxula_timing.vhd:196) releases a
+// WAIT targeting a reachable column on that scanline, so a per-scanline
+// caller doesn't release such WAITs one scanline late (as hcount below the
+// WAIT threshold would). The WAIT release threshold is hcount >= (X<<3)+12
+// (device/copper.vhd:94); for X=30 that is 252, so a mid-line hcount of 0
+// parks but the end-of-line hcount releases. The following MOVE lands in
+// the cycles after the release position, so the budget is the full line.
 func TestEndOfLineHcountReleasesScanlineWaits(t *testing.T) {
 	c := New()
 	c.SetWritePtrLow(0)
@@ -21,14 +23,14 @@ func TestEndOfLineHcountReleasesScanlineWaits(t *testing.T) {
 	c.SetWritePtrHighAndMode(byte(StartFromZero) << 6)
 
 	// Scanline 5, hcount 0: WAIT(5,30) threshold 252 not reached → MOVE parked.
-	c.Step(5, 0, 4)
+	c.Step(5, 0, 456*CyclesPerHcount)
 	if len(rw.writes) != 0 {
 		t.Fatalf("hcount=0: WAIT(5,30) must not release on scanline 5; writes=%v", rw.writes)
 	}
-	// Scanline 5, hcount 511 (end of line): threshold cleared → MOVE fires.
-	c.Step(5, 511, 4)
+	// Scanline 5, hcount 455 (end of line): threshold cleared → MOVE fires.
+	c.Step(5, 455, 456*CyclesPerHcount)
 	if len(rw.writes) != 1 || rw.writes[0].val != 0xAA {
-		t.Errorf("hcount=511: WAIT(5,30) must release on scanline 5; writes=%v", rw.writes)
+		t.Errorf("hcount=455: WAIT(5,30) must release on scanline 5; writes=%v", rw.writes)
 	}
 }
 

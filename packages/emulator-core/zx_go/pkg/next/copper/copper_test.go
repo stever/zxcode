@@ -126,19 +126,28 @@ func TestWaitParksUntilRasterReached(t *testing.T) {
 	// MOVE 0x07, 0x03 at index 1.
 	c.WriteData(0x07)
 	c.WriteData(0x03)
+	// HALT at index 2 — without it the empty rest of the 1024-entry
+	// list free-runs as NOOPs, wraps (10-bit counter), and re-releases
+	// the WAIT on the same line within a full line budget: the MOVE
+	// would faithfully fire again ~1025 cycles later.
+	c.WriteData(0xFF)
+	c.WriteData(0xFF)
 
 	rw := &fakeRegWriter{}
 	c.SetRegWriter(rw)
 	c.SetWritePtrHighAndMode(byte(StartFromZero) << 6)
 
-	// Step at scanline 50, end-of-line hcount — not yet past WAIT 100.
-	c.Step(50, 511, 4)
+	// Step at scanline 50 with a full line budget — not yet WAIT 100's
+	// line (strict vcount equality, copper.vhd:94).
+	c.Step(50, 455, 456*CyclesPerHcount)
 	if len(rw.writes) != 0 {
 		t.Errorf("MOVE fired before WAIT was satisfied: writes = %+v", rw.writes)
 	}
 
-	// Step at scanline 100, end-of-line hcount — WAIT released, MOVE executes.
-	c.Step(100, 511, 4)
+	// Step at scanline 100, end-of-line hcount (455, zxula_timing.vhd:196)
+	// with the line's cycle budget — WAIT released, MOVE executes in the
+	// cycles remaining after the release position.
+	c.Step(100, 455, 456*CyclesPerHcount)
 	if len(rw.writes) != 1 || rw.writes[0].reg != 0x07 || rw.writes[0].val != 0x03 {
 		t.Errorf("MOVE not executed after WAIT released: writes = %+v", rw.writes)
 	}

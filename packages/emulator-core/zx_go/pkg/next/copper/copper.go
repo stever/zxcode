@@ -245,11 +245,13 @@ func Decode(w uint16) Instruction {
 	return Instruction{Op: OpWAIT, X: x, Y: y}
 }
 
-// WaitHThreshold is the horizontal raster counter (hcount, 0..511 in
-// pixels) at or above which a WAIT with column field x releases on its
+// WaitHThreshold is the horizontal raster counter (hcount, in pixels)
+// at or above which a WAIT with column field x releases on its
 // target scanline. The hardware compares hcount_i >= (x << 3) + 12, i.e.
 // the 6-bit column is taken as 8-pixel units with a fixed +12 pixel offset
-// (device/copper.vhd:94).
+// (device/copper.vhd:94). hcount tops out at 455 on the Next's 128K/+3
+// timing (zxula_timing.vhd:196), so thresholds above that (x >= 56)
+// never release.
 func WaitHThreshold(x byte) uint16 { return uint16(x)<<3 + 12 }
 
 // RunToCycle advances the cycle-paced copper on raster line vcount through
@@ -341,11 +343,14 @@ func (c *Copper) RunToCycle(vcount uint16, cycle int) {
 // pc / writePtr fields mid-loop, so a re-entrant mutation only takes
 // effect on the NEXT Step call.
 //
-// scanline is the raster line (vcount, 0..511). hcount is the raster
-// horizontal counter (0..511 in pixels) — the same units the FPGA's
-// hcount_i carries; a WAIT releases at hcount >= (x<<3)+12 on its target
-// line (see WaitHThreshold). A per-scanline caller passes the end-of-line
-// hcount (>= 511) so every WAIT on the line releases on that line.
+// scanline is the raster line (vcount). hcount is the raster
+// horizontal counter in pixels — the same units the FPGA's hcount_i
+// carries; on the Next's 128K/+3 timing it spans 0..455 (c_max_hc,
+// zxula_timing.vhd:196). A WAIT releases at hcount >= (x<<3)+12 on its
+// target line (see WaitHThreshold); a per-scanline caller passes the
+// end-of-line hcount (455) so every REACHABLE WAIT on the line
+// releases — thresholds past the line end (X >= 56) never release,
+// exactly like the hardware.
 func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 	// VBL auto-restart: in StartOnVBL the program counter resets to 0 at
 	// the start of each frame, i.e. when the raster wraps back to the top.
@@ -368,15 +373,25 @@ func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 			spent += 2
 			executed++
 		case OpWAIT:
-			// Release when the raster reaches the target line and the
-			// horizontal threshold: hcount >= (X<<3)+12 on line Y
-			// (device/copper.vhd:94). The scanline > Y branch is the
-			// functional-model fallback for a per-scanline caller that has
-			// already advanced past the target line (the hardware, clocked
-			// every pixel, releases exactly on line Y; a caller stepping each
-			// line hits Y exactly, so this only matters if a line is skipped).
-			if scanline > inst.Y ||
-				(scanline == inst.Y && hcount >= WaitHThreshold(inst.X)) {
+			// Release when the raster is ON the target line and past the
+			// horizontal threshold: vcount == Y (STRICT equality) and
+			// hcount >= (X<<3)+12 (device/copper.vhd:94). A WAIT whose
+			// line has already passed parks until the raster comes back
+			// around next frame — exactly like the hardware and the
+			// RunToCycle engine (the old `scanline > Y` late-release
+			// fallback was a functional-model divergence, removed by the
+			// #179 equivalence work).
+			if scanline == inst.Y && hcount >= WaitHThreshold(inst.X) {
+				// The release happens AT the threshold's raster position,
+				// so the line's remaining cycle budget starts there — a
+				// late-line WAIT leaves room for only a few following
+				// instructions before the line ends, exactly like the
+				// cycle-paced engine (RunToCycle's linePos jump). Without
+				// the floor a per-line caller would execute a full line's
+				// budget after the release.
+				if floor := int(WaitHThreshold(inst.X)) * CyclesPerHcount; spent < floor {
+					spent = floor
+				}
 				c.pc = (c.pc + 1) & (MaxInstructions - 1)
 				spent++
 				continue

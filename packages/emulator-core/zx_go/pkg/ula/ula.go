@@ -2245,24 +2245,28 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	const w = 256
 	const h = 192
 	// The copper runs at 28 MHz, one cycle per NOOP / two per MOVE
-	// (device/copper.vhd). A scanline is 448 hcounts x 4 cycles =
-	// 1792 copper cycles — Step's budget is in those cycles, so a
+	// (device/copper.vhd). A scanline on the Next's 128K/+3 timing is
+	// 456 hcounts (c_max_hc = 455, zxula_timing.vhd:196) x 4 cycles =
+	// 1824 copper cycles — Step's budget is in those cycles, so a
 	// free-running looped list (Atic Atac's NMI sample pacer: 1024
 	// entries ≈ 1361 cycles) wraps at the hardware rate (~20 kHz).
 	// WAIT-heavy programs park early and spend almost none of it.
-	const copperCyclesPerScanline = 448 * 4
+	// NB a WAIT whose threshold (X<<3)+12 exceeds 455 (X >= 56) can
+	// never release on hardware — the hcount wraps first — and both
+	// engines reproduce that (#179 equivalence).
+	const copperCyclesPerScanline = 456 * 4
 	// Raster geometry for the cycle-paced copper interleave. hcount
-	// counts 7MHz pixels (448 per 48K-timing line); the copper runs 4
-	// cycles per hcount (28 MHz, copper.CyclesPerHcount). Display pixel
-	// x is influenced by copper activity through hcount x+12 — the same
-	// +12 offset the WAIT release threshold (X<<3)+12 carries
-	// (device/copper.vhd:94), so WAIT(h=X) + MOVE recolours the pixel at
-	// exactly x = X*8, matching the real-board behaviour the upstream
-	// base/Copper test's ReadMe documents. The +2 inside pixelCycle
-	// admits the releasing WAIT check (1 cycle) plus its following
-	// MOVE's write pulse into the pixel's own 4-cycle window.
+	// counts 7MHz pixels (456 per 128K-timing line, 0..455); the copper
+	// runs 4 cycles per hcount (28 MHz, copper.CyclesPerHcount).
+	// Display pixel x is influenced by copper activity through hcount
+	// x+12 — the same +12 offset the WAIT release threshold (X<<3)+12
+	// carries (device/copper.vhd:94), so WAIT(h=X) + MOVE recolours the
+	// pixel at exactly x = X*8, matching the real-board behaviour the
+	// upstream base/Copper test's ReadMe documents. The +2 inside
+	// pixelCycle admits the releasing WAIT check (1 cycle) plus its
+	// following MOVE's write pulse into the pixel's own 4-cycle window.
 	const cyclesPerHcount = 4
-	const lineEndCycle = 448*cyclesPerHcount - 1
+	const lineEndCycle = 456*cyclesPerHcount - 1
 	const frameLines = 312
 	pixelCycle := func(x int) int { return (x+12)*cyclesPerHcount + 2 }
 	if u.compositorScan == nil {
@@ -2389,7 +2393,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			if scrollCap != nil {
 				scrollCap.CaptureTilemapRowScroll(64 + y)
 			}
-			u.nextCopper.Step(uint16(y), 511, copperCyclesPerScanline)
+			u.nextCopper.Step(uint16(y), 455, copperCyclesPerScanline)
 		} else if scrollCap != nil {
 			scrollCap.CaptureTilemapRowScroll(64 + y)
 		}
@@ -2500,7 +2504,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			} else if u.nextCopper != nil {
 				// Non-live flow (the paper walk used per-row Step): keep
 				// stepping so line-192..311 WAITs release on their line.
-				u.nextCopper.Step(uint16(v), 511, copperCyclesPerScanline)
+				u.nextCopper.Step(uint16(v), 455, copperCyclesPerScanline)
 			}
 			if imgRow >= 0 {
 				if liveULA {
