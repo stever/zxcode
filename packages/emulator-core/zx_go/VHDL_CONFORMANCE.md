@@ -206,10 +206,13 @@ ScanlineReadingAndInterrupt's NR$1E/$1F marker rows (cvc 200 renders exactly
 8 rows under the paper) pin INT→paper-top = 64 lines within a line for the
 128K/+3 geometry the Next runs. ⚠️ Remaining: per-NR$03 display geometry is not
 modelled (48K timing keeps the 228 T line — known-gaps.md), the sub-line hc
-component of the INT origin is below the render's one-line floor; line-INT at
-turbo; IM2 vector table; $C0/$C6 enable gates not all wired to the
-INT generator (the NR$22/$C4/port-$FF ULA-frame + line enables ARE — the
-Axis 4 shared latch, `ula_int_en` vhd:6711).
+component of the INT origin is below the render's one-line floor; the CTC
+counter-mode ZC/TO cascade between channels (zxnext.vhd:4082); UART INT
+sources (chain vectors 1/2/12/13 — the UART generates no interrupts);
+NR$CC-$CE DMA int enables (registers faithful, the DMA generates no
+interrupts — known-gaps zxnDMA row). (Line-INT at turbo IS pinned —
+`TestWireLineInterruptScalesWithSpeed`, NR$07-chained recompute; the IM2
+vector table + $C0 mode landed with r54's hw-IM2 chain.)
 ✅ CTC pulse-mode interrupts (r50, #169): channels 0-3 wired behind ports
 $183B-$1F3B (decode a(15:11)="00011" + low $3B, sel = a(10:8),
 zxnext.vhd:2690 + 4064-4093 — sel 4-7 hit no channel, reads 0), counting
