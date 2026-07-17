@@ -267,10 +267,12 @@ the active one. Line refs are approximate (re-grep before starting).
   (IF1's primary function) is fully modelled; RS-232/SinclairNET bit-bang
   an external serial device (out of scope like the UART) and the CTR WAT
   CPU-stall is unnecessary with emulator-driven microdrive timing (if1/ula.go).
-- [x] ~~UART / ESP Wi-Fi networking~~ DONE (scope) — the register interface
-  (NR$A8 data / NR$A9 status, TX/RX FIFOs, AT-command responder) is fully
-  implemented + wired; real Wi-Fi networking (live TCP/IP) is out of scope
-  for a reference emulator (uart/doc.go).
+- [x] ~~UART / ESP Wi-Fi networking~~ DONE (scope) — the UART lives at its
+  real ports $133B-$163B (decode zxnext.vhd:2639; moved there by #153 —
+  the old NR$A8/$A9 mapping was an invention, those are the ESP GPIO
+  registers) with TX/RX FIFOs and the AT-command responder; real Wi-Fi
+  networking (live TCP/IP) is out of scope for a reference emulator
+  (uart/doc.go).
 - [x] ~~RTC battery-backed persistence~~ DONE — the DS1307's 56-byte NVRAM
   (regs 0x08-0x3F) is modelled + persisted across runs via SetPersistPath;
   TDD TestI2C_NVRAMWriteReadBack / TestRTCNVRAMPersists (rtc/rtc.go).

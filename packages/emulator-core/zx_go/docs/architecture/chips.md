@@ -25,7 +25,7 @@ FPGA blocks are summarised here and detailed in
 | Multiface | Romantic Robot MF1/128/3 | `pkg/multiface` | two models: integration model + clock-exact FPGA core | multiface.vhd + GHDL golden |
 | RTC | DS1307 on i2c | `pkg/next/rtc` | register-accurate; host clock; NVRAM persisted | DS1307 datasheet; NextZXOS bit-bang traffic |
 | SD card | SPI-mode SD/SDHC | `pkg/next/sdcard` | protocol-accurate SPI state machine, CSD v1/v2, CRC16 | SD spec + SPI golden test + boot behaviour |
-| ESP Wi-Fi | ESP8266 AT firmware | `pkg/next/uart` | deliberate stub (AT responder, no networking) | scope decision |
+| ESP Wi-Fi | ESP8266 AT firmware | `pkg/next/uart` (ports $133B-$163B via ULA.SetNextUART) | deliberate stub (AT responder, no networking; NR$A8/$A9 are the ESP GPIO regs, not the UART) | scope decision |
 | Kempston joystick | — | `pkg/ula` | port $1F bitmap | classic behaviour |
 | Kempston mouse | — | `pkg/kempmouse` | free-running 8-bit counters, atomics | port decode masks |
 | ZX Printer | — | `pkg/zxprinter` | cycle-accurate drum timing | ROM polling behaviour |

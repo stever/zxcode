@@ -4,6 +4,42 @@ All notable changes to this project are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 project targets [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.3.7]
+
+### Changed
+
+NextReg decode conformance sweep (#153) — the register file's read
+composition and write masks are now enumerated end-to-end against the
+FPGA source, and the ESP UART moved to its real ports.
+
+- **UART at its real ports.** The ESP UART is now served at
+  `$133B`/`$143B`/`$153B`/`$163B` exactly as the FPGA decodes them
+  (`zxnext.vhd:2639`; register select = address bits 9:8 per
+  `uart.vhd:44` — Tx/status, Rx/prescaler, select, frame), routed
+  through `ULA.SetNextUART` like the CTC/DMA port blocks. The previous
+  NextReg `$A8`/`$A9` UART mapping was an invention — real software
+  probes the ports, so the move improves both fidelity and
+  compatibility. `NR$A8`/`$A9` now model what the FPGA has there: the
+  ESP GPIO output-enable and pin registers (`$A9` idles `$05`, both
+  pins pulled up).
+- **Exhaustive NextReg decode test.** `TestNRDecodeConformance` probes
+  all 256 registers on a fresh fully wired machine: registers outside
+  the FPGA read mux must read `$00` (the mux's `others => '0'` — now
+  enforced by `WireZeroReads` over the transcribed mux table in
+  `pkg/next/nrdecode.go`), stored registers pin their write masks with
+  four probe patterns, composed/live registers get dedicated probes.
+  Every entry cites its `zxnext.vhd` line.
+- **Read-back fixes the audit surfaced:** `NR$03` bit 7 is the live
+  NR$44 half-pair latch (not a stored bit); `NR$05` bits 2/0 (50/60 Hz,
+  scandouble) store on write; `NR$10` composes coreid+buttons and
+  ignores writes; `NR$20` composes the live interrupt status; `NR$28`
+  reads the staged NR$44 palette byte (its write side stays the PS/2
+  keymap MSB); `NR$68` stops storing bit 3 (live ULA+ enable) and
+  bit 1; new write masks for `$8F`/`$90`/`$93`/`$9B`/`$A0`/`$A2`
+  (bit 1 reads hard `1`, seeded at reset); `$2C-$2E` (Pi I2S) and
+  `$F0`/`$F8-$FA` (Issue-4/5 XDEV block; we present as Issue 3) read
+  their idle live sources.
+
 ## [v1.3.6]
 
 ### Fixed

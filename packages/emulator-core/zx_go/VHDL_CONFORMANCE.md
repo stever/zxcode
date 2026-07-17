@@ -43,7 +43,7 @@ Every `nr_XX_* <= value` in the reset process. Read-back byte composed per the
 | $05 periph1 | $01 | $01 | ✅ | 50 Hz |
 | $06 periph2 | $A0 (hotkey en 7,5) | $A0 | ✅ | zxnext.vhd:5161-5165 — FIXED (was $00, untracked by the matrix) |
 | $08 periph3 | $10 | $10 | ✅ | AY enable |
-| $0B joy iomode | bit0=1 | ⚠️ | ⚠️ | read-back composition unverified |
+| $0B joy iomode | bit0=1 | mask $B1 | ✅ | read shape en & '0' & iomode & "000" & iomode_0 (vhd:5915) pinned by TestNRDecodeConformance + TestSpec_NR0B |
 | $10 core id | read $04 ('0' & coreid "00001" & buttons, vhd:1133+5923) | $04 | ✅ | FIXED (was $00): composed read seeded; MAME 0.282 concurs; bootrom AND $03 @ $017E reads the button bits, unaffected. Pinned by TestNexttestsNextRegDefaults ($10 cell red vs the 3.1.5-targeted expectation, by design) |
 | $12 L2 bank | $08 | $08 | ✅ | |
 | $13 L2 shadow | $0B | $0B | ✅ | |
@@ -58,7 +58,7 @@ Every `nr_XX_* <= value` in the reset process. Read-back byte composed per the
 | $68 ula control | reset ula_en=1; read bit7 = ¬ula_en = 0 | $00 | ✅ | NOT a gap (earlier misread): zxnext.vhd:5026/5445 invert bit7 on write (nr_68_ula_en ⇐ ¬wr(7)), so the reset read-back is $00 |
 | $98 pi gpio o | $FF | $FF | ✅ | zxnext.vhd:5070 — FIXED (reset default) |
 | $99 pi gpio o | $01 | $01 | ✅ | zxnext.vhd:5071 — FIXED |
-| $A9 esp gpio0 | 1 | $00 | ⚠️ | composed; nrdiff showed ours $02 — verify read |
+| $A9 esp gpio0 | out latch 1, pins pulled up → read $05 | $05 | ✅ | FIXED (#153): read composes the live pins ("00000" & GPIO2 & '0' & GPIO0, vhd:6201); the NR$A8 output enable gates the driven value (WireESPGPIO). The UART formerly squatting here moved to its real ports $133B-$163B |
 | i2c $103B/$113B | SCL/SDA latches, open-drain | rtc.Bus + ULA dispatch | ✅ | zxnext.vhd:2630/3234 — TestI2C_* + TestI2CPortRouting (D31ai) |
 | $8C alt-rom | reset: 7:4←3:0 | promote in WireReset | ✅ | zxnext.vhd:2255 staged-nibble promote (both reset types) — TestWireResetPromotesAltROMStagedNibble (D31g) |
 | (rom3 automap gate) | (altrom_en∧alt_128_n)∨(rom3∧¬altrom_en) | Memory.DivMMCRom3Gate | ✅ | zxnext.vhd:3138 full gate — TestDivMMCRom3Gate (D31g). Re-validated in-situ by #163: 24.11's ROM0 has real code at $3D96 (HALT/LD A,$07/CALL $0D6B) that the gate correctly leaves untrapped when ROM0 is paged — the #159 "DENY(3dxx) = divergence" reading was a misread of faithful behaviour |
@@ -74,14 +74,12 @@ Every `nr_XX_* <= value` in the reset process. Read-back byte composed per the
 | $C0 im2/nmi | $00 | $00 | ✅ | |
 | (all others) | $00 | $00 | ✅ | clip/scroll/copper/dma-int reset to 0 |
 
-**Axis 1 remaining gaps to close:** NR$0B/$A9 (composed). None are
-boot-blocking. (NR$C4 closed: expbus default seeded AND the read composed
-from the live int-enable state — the port $FF bit 6 work, Axis 4.) (NR$98/
-$99 fixed earlier; NR$68 was a misread — already conformant; NR$10/$7F/$82-$89
-and the ULA-first palette default fixed by the NextReg_defaults audit, which
-now pins the whole default surface the upstream test reads.)
-**Action:** extend the reset test to assert the FULL vhd reset vector incl.
-composed read-backs.
+**Axis 1 remaining gaps to close:** none — NR$0B and NR$A9 closed by #153
+(the exhaustive decode test asserts the full 256-register surface, composed
+read-backs included, on the fully wired machine). (NR$C4 closed earlier:
+expbus default seeded AND the read composed from the live int-enable state
+— the port $FF bit 6 work, Axis 4. NR$98/$99, NR$10/$7F/$82-$89 and the
+ULA-first palette default fixed by the NextReg_defaults audit.)
 
 ---
 
@@ -91,11 +89,15 @@ Source: zxnext.vhd `nr_wr_en` case (~5113+). Tests: `pkg/next/wire_specderived_t
 $0A,$22,$34,$1C,$12/$13,$2F,$6A,$6E/$6F,$70/$71,$4A-$4C,$CE/$D8/$DA; NR$8E paging;
 $80-$8A bus enables; $C0/$C4/$C6; $CD; copper $60-$63 byte-granular cursor with
 NR$63 atomic-pair staging, vhd:5417-5437; NR$8E bypasses the port_7ffd_locked
-guard — the lock gates only the port_1ffd_wr branch, vhd:3650/3727). **Gap:** no
-single test enumerates ALL 256 write-maskable bits vs the VHDL case — the
-MrKWatkins NextReg_defaults grid (TestNexttestsNextRegDefaults) now
-write+read-back-verifies every register its tables cover, closing most of the
-distance.
+guard — the lock gates only the port_1ffd_wr branch, vhd:3650/3727).
+**CLOSED (#153):** `TestNRDecodeConformance` (pkg/next/wire_nrdecode_test.go)
+enumerates ALL 256 registers' write masks + fixed bits against the VHDL case
+on the fully wired machine, four probe patterns each; the MrKWatkins
+NextReg_defaults grid independently write+read-back-verifies the registers
+its tables cover. New masks landed with the audit: $8F (2 bits), $90
+(GPIO 1:0 forced off, vhd:5537), $93/$9B (4 bits), $A0 ($39 shape), $A2
+(bit 5 zero, bit 1 hard one), $A8 (1 bit), $05 bits 2/0 store
+(vhd:5837/5849).
 
 ## Axis 3 — NextReg read-back (port_253b_dat mux, zxnext.vhd ~5890-6250)
 Tests: read-shape fixes for $07 (iter 223), $00 machine-id, $06, $41/$44 palette,
@@ -103,8 +105,18 @@ clip windows; copper $61/$62 = live byte address + mode (vhd:6083-6087, 3 addres
 bits); $85/$89 reset_type shape (vhd:6138/6150). Tool: `--next-nrdiff` (CAVEAT: the
 reference emulator returns $00 for unimplemented read-backs — verify vs VHDL, never
 blind-match). The NextReg_defaults grid pins the read-back of every register its
-tables touch ($00-$B1 range). **Gap:** composed read-backs the grid skips
-($68,$C0,$C6,$CC-$CE,$A9,$0B,...) still not individually pinned to the VHDL mux.
+tables touch ($00-$B1 range). **CLOSED (#153):** `TestNRDecodeConformance`
+pins the WHOLE mux — every composed read-back the grid skipped
+($68/$C0/$C6/$CC-$CE/$A9/$0B/$10/$20/$28/$8E/$03-bit-7...), and the
+`others => '0'` floor: registers outside the mux read $00 on hardware, now
+enforced by `WireZeroReads` (pkg/next/nrdecode.go, the transcribed mux
+table). Two deliberate divergences remain, encoded in the test with
+rationale: NR$00/$0F writable (game hardware-probes), $98-$9A GPIO
+stored-byte-as-pin-state. New live compositions from the audit: NR$03
+bit 7 = the live NR$44 half-pair latch (vhd:5894, chained from the palette
+bank), NR$10 = coreid+buttons (vhd:5924), NR$20 = live INT status
+(vhd:5989), NR$28 = staged palette byte (vhd:6004, split read/write
+ownership with the keymap), NR$A9 = live ESP GPIO pins (vhd:6201).
 $22 and $C4 are now composed from the live int-enable state and pinned
 (:5992/:6239 — the port $FF bit 6 shared latch, Axis 4).
 $69 is now composed from its three live sources (:6096) and pinned
@@ -146,8 +158,19 @@ by TestNextJoyPort37Idle / TestNextJoyPortRouting
 IN($1F)|IN($37) every frame and read the old floating $FF as every
 button held. The MD-only bits still READ idle for lack of a pad input
 source (known-gaps.md).
+✅ UART ports **$133B/$143B/$153B/$163B** (#153): the decode is the
+FPGA's (a(15:11)="00010", a10 xor (a9 and a8) = '1', low $3B, :2639;
+register select = a(9:8) per uart.vhd:44 — Rx/select/frame/Tx-status),
+routed via ULA.SetNextUART; $133B status bits per ports.txt:392-401,
+$153B select bit 6 + bit-4-gated prescaler MSB, $163B framing (reset
+$18) per uart.vhd:279-299. The AT responder serves UART 0 (ESP); UART 1
+(Pi) reads empty. NR$A8/$A9 are the ESP GPIO registers (read mux
+:6197-6201), not the UART — the old NR-mapped UART was an invention,
+removed. `pkg/next/uart` port-face tests + TestNRDecodeConformance.
 ⚠️ $FE,$7FFD,$1FFD,$243B/$253B,$E3/$E7/$EB,$6B,$DFFD,AY ports present
-but no port-by-port VHDL decode conformance test.
+but no port-by-port VHDL decode conformance test (the NEXTREG register
+decode is now exhaustively tested — Axes 2/3; this row is the I/O port
+ADDRESS decode, #158).
 
 ## Axis 5 — Interrupts / timing  (zxula_timing.vhd + zxnext.vhd 2014-2033)
 Tests: `pkg/z80/int_timing_test.go` (narrow pulse, DI-across-pulse, speed-scaled
@@ -416,10 +439,13 @@ here means real architectural work, not a quick pin.
 | Mixed-frame Timex hi-res decimation + hi-res end-of-frame palette | per-pixel 512 half-pixel composite | native 512 only when hi-res is whole-frame-stable; mixed frames decimate; palette resolved at end-of-frame | ⚙️ | tracked as follow-up #154 — known-gaps ULA-modes row |
 
 **Closing this axis is the render/timing rearchitecture, not the enumeration
-punch-list.** Reaching ✅/⚠️-clear on Axes 1-9 is bounded work (composed
-read-backs, port $FF bit 6, the per-axis conformance tests); Axis 10 is the tier
-that a "matrix is green but the game still breaks" report cashes out on. Keep the
-two visibly separate so green on 1-9 is not mistaken for the finish line.
+punch-list.** Reaching ✅/⚠️-clear on Axes 1-9 is bounded work — Axes 1-3 are
+now DONE (#153: the exhaustive NR decode test covers reset defaults, write
+masks and read composition for all 256 registers); the remaining enumerated
+work is the Axis 4/5/7/8 conformance tests (#158) and the Axis 9/10-adjacent
+Timex residue (#154). Axis 10 is the tier that a "matrix is green but the
+game still breaks" report cashes out on. Keep the two visibly separate so
+green on 1-9 is not mistaken for the finish line.
 
 ---
 

@@ -90,7 +90,14 @@ drift. Highlights:
   machine and the test harness so their compositor wiring cannot
   drift).
 - Peripherals: `WirePeripheral1/2/3` (NR$0A/$06/$09), `WireJoystickMode`,
-  `WireRTC`, `WireUART`, `WireKeymap`, plus reserved-bit masks.
+  `WireCoreID` (NR$10 composed read), `WireESPGPIO` (NR$A8/$A9 — the
+  ESP GPIO registers; the UART itself is port-mapped, see below),
+  `WireKeymap`, plus reserved-bit masks.
+- Decode floor: `WireZeroReads` (nrdecode.go) installs `read = $00` on
+  every register the FPGA read mux does not decode (`others => '0'`,
+  zxnext.vhd:6287) — runs last in `Wire`. The `nrReadMux` table there
+  transcribes the mux case list; `TestNRDecodeConformance`
+  (wire_nrdecode_test.go) probes all 256 registers against it.
 - Input read-back: `WireExtendedKeys` (NR$B0/$B1 extended keys, NR$B2
   MD-pad extra buttons) — read-only registers composed on every read
   from the live ULA input state (keyboard-matrix composites + the
@@ -480,8 +487,14 @@ raster instant (known-gaps.md).
 
 - RTC: a DS1307 on a bit-banged i2c bus (ports $103B/$113B), clock
   registers derived from host time, 56-byte NVRAM persisted across runs.
-- UART: NR$A8/$A9 register interface with FIFOs and an AT-command
-  responder. Real networking is out of scope by decision.
+- UART: at its real ports $133B (Tx/status) / $143B (Rx/prescaler) /
+  $153B (select) / $163B (frame) — decode zxnext.vhd:2639, register
+  select by address bits 9:8 (uart.vhd:44) — routed via
+  `ULA.SetNextUART`, with FIFOs and an AT-command responder on the
+  ESP side (UART 0) and an always-empty Pi side (UART 1). Real
+  networking is out of scope by decision. NR$A8/$A9 are NOT the UART:
+  they are the ESP GPIO output-enable / pin registers (`WireESPGPIO`;
+  $A9 idles $05 — both pins pulled up).
 - DACs: four 8-bit channels on the classic DAC ports, event-timed into
   the mixer. Turbosound: three AY chips (see chips.md).
 - Keymap (NR$28/$29/$2B) and the joystick I/O-mode register (NR$0B,
