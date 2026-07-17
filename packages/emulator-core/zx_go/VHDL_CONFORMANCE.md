@@ -306,8 +306,18 @@ a variable 4-64 byte-times (SD spec Nac; real cards take tens-hundreds of
 of (LBA, read counter), so runs stay reproducible. Hosts must poll for the
 token (TBBLUE.FW/NextZXOS do); register reads (CSD/CID) keep the fixed pad
 their fixed-count readers require.
-⚠️ Remaining: no port-by-port conformance test pins the automap trigger variants
-or the SPI / CSD command set to the VHDL.
+✅ Trigger + command enumeration (re-audited under #158 — the "no
+conformance test" claim was stale): the automap trigger variants ARE
+enumerated per PC with the full B8/B9/BA gate matrix
+(pkg/next/divmmc TestGate_PC0000/0008/0038/0066/04C6/04D7/0562/056A/
+3DXXRange + boundary/disabled/delayed-ROM3 variants, ~92 tests) and
+pinned to the VHDL by the GHDL golden replay of divmmc.vhd
+(TestDivMMCMatchesFPGAGolden). The SPI/CSD side enumerates the whole
+command set the firmware uses (CMD0/8/9/10/12/13/17/18/24/25/55/58/
+ACMD41, CSD v1/v2, CID, CRC16, erase, Nac timing — ~98 tests in
+pkg/next/sdcard) with the SPI master pinned by its own GHDL golden
+(TestSPIMasterMatchesFPGAGolden). Port $E3 semantics carry their own
+suite (TestE3_*).
 
 ## Axis 9 — Video (ULA/L2/tilemap/sprite/lores/palette/copper)
 Broad render edge tests (iters 204-217). Not boot-critical (boot stalls pre-render).
