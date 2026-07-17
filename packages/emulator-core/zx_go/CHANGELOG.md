@@ -29,6 +29,17 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **Paging-priority walk (#158 Axis 7).** A canary test walks every
+  $0000-$3FFF layer up and down against the FPGA memory mux: bootrom
+  read mask > divMMC > Multiface > config-mode RAMPAGE > Alt-ROM
+  redirect > MMU8 > classic dispatch. It caught a real inversion:
+  config mode outranks the Alt-ROM redirect on the FPGA (the config
+  pre-mux branch clears `sram_pre_override(0)`, killing
+  `sram_altrom_en` — `zxnext.vhd:3044-3050/:3078`); the emulator had
+  Alt-ROM above config on both read and write paths, and the write
+  redirect was also missing the MMU-RAM pre-override skip. All fixed;
+  two routing tests that had pinned the inversion (without citation)
+  corrected.
 - **I/O port-decode sweep (#158 Axis 4).** `TestNextPortDecode_*`
   enumerates the Next port map against the FPGA's decode predicates
   (`zxnext.vhd:2540-2700`): partial-decode aliases, low-byte-only

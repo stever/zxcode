@@ -274,8 +274,18 @@ version's effect on the game's slide-entry raster phase).
 
 ## Axis 7 — Memory / paging
 MMU8 ($50-$57) defaults ✅ (this-session $DE/$DF fix), divMMC overlay, config-mode
-RAMPAGE (NR$04), alt-ROM (NR$8C), 7FFD/1FFD. ⚠️ no end-to-end paging conformance
-matrix vs the VHDL mux priority.
+RAMPAGE (NR$04), alt-ROM (NR$8C), 7FFD/1FFD.
+✅ End-to-end priority walk (#158): `TestNextPagingReadPriority` +
+`TestNextPagingBootromWritesFallThrough` (pkg/memory) canary-walk every
+$0000-$3FFF layer up and back down against the FPGA mux — bootrom read
+mask (vhd:1856) > divMMC (:3084-3130) > Multiface > config-mode RAMPAGE
+> Alt-ROM redirect > MMU8 > classic dispatch, with the
+sram_pre_override(0) kills (:3037-3050/:3078) for MMU-RAM and config
+mode. FIXED by the walk: config mode now outranks the Alt-ROM redirect
+on BOTH read and write paths (the emulator had them inverted — two
+routing_matrix tests pinned the inversion without a citation and were
+corrected), and the Alt-ROM WRITE redirect gained the MMU-RAM
+pre-override skip the read path already had.
 
 ## Axis 8 — divMMC / SD
 automap triggers (rom3/delayed variants, $3DXX gate), SPI, CSD v1/v2. The

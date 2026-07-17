@@ -177,21 +177,23 @@ func TestRouting_DivMMC_Read_BeatsConfigAndMMU(t *testing.T) {
 	}
 }
 
-// TestRouting_AltROMRead_BeatsConfig verifies the altROM read redirect
-// (NR$8C bit 7=1, 6=0) beats config-mode for reads of a ROM-region slot
-// (no MMU override) — altROM is a ROM-region overlay above config-mode.
-func TestRouting_AltROMRead_BeatsConfig(t *testing.T) {
+// TestRouting_AltROMRead_ConfigModeWins verifies the config-mode
+// window beats the altROM read redirect (NR$8C bit 7=1, 6=0): the
+// FPGA's slot pre-mux takes the config branch (zxnext.vhd:3044-3050)
+// before the ROM branch, and that branch clears sram_pre_override(0)
+// — which forces sram_altrom_en to '0' (:3078). Corrected by the
+// #158 Axis 7 priority walk (previously asserted the inverse).
+func TestRouting_AltROMRead_ConfigModeWins(t *testing.T) {
 	mem := routingTestSetup(t)
 	// altROM read redirect = NR$8C = 1000_0000 (bit 7=1, bit 6=0).
-	// bits 5:4 control which alt bank; default 0 selects altROM0
-	// when port 7FFD bit 4 = 0 (= ROM bank 0).
 	mem.SetAltROMReg(0x80)
 	mem.EnterConfigMode()
-	mem.SetConfigModeRAMPage(0x10) // would route to m.ram[0]
-	// Slot 0 left as ROM (no MMU override) → altROM redirect applies.
+	mem.ram[0][0] = 0x66
+	mem.SetConfigModeRAMPage(0x10) // routes to m.ram[0]
+	// Slot 0 left as ROM (no MMU override) — config still wins.
 
-	if got := mem.Read(0x0000); got != 0xA2 {
-		t.Errorf("read at $0000 with alt-ROM active (slot=ROM): $%02X, want $A2 (altROM0)", got)
+	if got := mem.Read(0x0000); got != 0x66 {
+		t.Errorf("read at $0000 with alt-ROM + config active: $%02X, want $66 (config wins, vhd:3044/:3078)", got)
 	}
 }
 
@@ -339,18 +341,23 @@ func TestRouting_MMU8FFDropsWrite(t *testing.T) {
 	}
 }
 
-// TestRouting_ConfigModeOverridesAltROM verifies the priority: when
-// BOTH altROM read-redirect (bit 7=1, 6=0) AND config-mode are active,
-// the **altROM redirect WINS** per the Write/Read priority in our
-// memory.go (line 798-802 for reads). This is a spec-cross-check:
-// per zxnext.vhd, the altROM read priority is HIGHER than config-mode.
+// TestRouting_AltROMReadPriority_OverConfigMode verifies the priority:
+// when BOTH the altROM read-redirect (bit 7=1, 6=0) AND config-mode
+// are active, **config mode WINS**. The FPGA's slot pre-mux takes the
+// `nr_03_config_mode` branch (zxnext.vhd:3044-3050) before the ROM
+// branch where the altROM applies, and that branch clears
+// sram_pre_override(0) — which forces sram_altrom_en to '0' (:3078),
+// so the final mux's altROM arm can never fire under config mode.
+// (This test previously asserted the inverse without a citation; the
+// #158 Axis 7 priority walk corrected it.)
 func TestRouting_AltROMReadPriority_OverConfigMode(t *testing.T) {
 	mem := routingTestSetup(t)
+	mem.ram[0][0] = 0x77
 	mem.SetAltROMReg(0x80) // altROM read redirect
 	mem.EnterConfigMode()
-	mem.SetConfigModeRAMPage(0x10) // would route to m.ram[0]
-	if got := mem.Read(0x0000); got != 0xA2 {
-		t.Errorf("altROM + config-mode read at $0000: $%02X, want $A2 (altROM wins)",
+	mem.SetConfigModeRAMPage(0x10) // routes to m.ram[0]
+	if got := mem.Read(0x0000); got != 0x77 {
+		t.Errorf("altROM + config-mode read at $0000: $%02X, want $77 (config mode wins, vhd:3044/:3078)",
 			got)
 	}
 }

@@ -1329,13 +1329,6 @@ func (m *Memory) readValue(addr uint16) byte {
 		// already lands in the MMU RAM bank (the write redirect needs NR$8C bit
 		// 6), so the read must match it. Below the divMMC overlay (zxnext.vhd
 		// mux order), above config-mode and the classic ROM dispatch.
-		if addr < 0x4000 && m.altROMRedirectsReads() {
-			slot8k := addr >> 13
-			if !m.mmuOverride[slot8k] || m.slotBank[slot8k] == 0xFF {
-				bank, _ := m.altROMSelect()
-				return m.altROMBuffer(bank)[addr]
-			}
-		}
 		// Config-mode RAM-page window (NextReg $03 bits 2-0 = 0).
 		// When config mode is active and the FPGA bootrom isn't
 		// masking the window, $0000-$3FFF reads come from a
@@ -1345,10 +1338,21 @@ func (m *Memory) readValue(addr uint16) byte {
 		// TBBlue firmware hardware.h RAMPAGE_* layout so boot.bin
 		// can address Spectrum ROM banks, divMMC RAM, Alt-ROM,
 		// and the standard / extra RAM IC space with the same
-		// register.
+		// register. ABOVE the Alt-ROM redirect: the FPGA's config
+		// branch sets sram_pre_override(0) = '0' (zxnext.vhd:
+		// 3044-3050), which kills sram_altrom_en (:3078) — the
+		// redirect never applies while config mode owns the window
+		// (the #158 Axis 7 priority walk pinned this).
 		if m.configModeActive && addr < 0x4000 {
 			if val, ok := m.configModeReadByte(addr); ok {
 				return val
+			}
+		}
+		if addr < 0x4000 && m.altROMRedirectsReads() {
+			slot8k := addr >> 13
+			if !m.mmuOverride[slot8k] || m.slotBank[slot8k] == 0xFF {
+				bank, _ := m.altROMSelect()
+				return m.altROMBuffer(bank)[addr]
 			}
 		}
 		// Layer-2 read paging (legacy port $123B read-enable): mirrors the
@@ -1493,26 +1497,34 @@ func (m *Memory) Write(addr uint16, val byte) {
 		}
 		return
 	}
-	// Alt-ROM write redirect (NextReg $8C bit 7 set, bit 6 also
-	// set): writes to $0000-$3FFF land in the alt-rom 16K bank
-	// instead of being dropped. NextZXOS uses this to patch its
-	// own ROM at runtime without disturbing reads.
-	if m.currentModel == roms.ModelNext && addr < 0x4000 && m.altROMRedirectsWrites() {
-		bank, _ := m.altROMSelect()
-		m.altROMBuffer(bank)[addr] = val
-		return
-	}
-	// Config-mode RAM-page window (NextReg $03 bits 2-0 = 0).
-	// While config mode is active and no higher-priority overlay
-	// (FPGA bootrom, Alt-ROM write) is in effect, writes to
-	// $0000-$3FFF land in the backing store selected by NextReg
-	// $04 (REG_RAMPAGE) — see configModePageBacking. boot.bin
-	// uses this to fill each personality ROM image into the
-	// page that classic 7FFD / 1FFD paging will swap in once
-	// config mode exits.
+	// Config-mode RAM-page window (NextReg $03 bits 2-0 = 0). While
+	// config mode is active, $0000-$3FFF writes land in the backing
+	// store selected by NextReg $04 (REG_RAMPAGE) — see
+	// configModePageBacking. boot.bin uses this to fill each
+	// personality ROM image into the page that classic 7FFD / 1FFD
+	// paging will swap in once config mode exits. ABOVE the Alt-ROM
+	// write redirect: the FPGA's config branch sets
+	// sram_pre_override(0) = '0' (zxnext.vhd:3044-3050), which kills
+	// sram_altrom_en for writes as much as reads (:3078).
 	if m.currentModel == roms.ModelNext && m.configModeActive && addr < 0x4000 {
 		m.configModeWriteByte(addr, val)
 		return
+	}
+	// Alt-ROM write redirect (NextReg $8C bit 7 set, bit 6 also
+	// set): writes to $0000-$3FFF land in the alt-rom 16K bank
+	// instead of being dropped. NextZXOS uses this to patch its
+	// own ROM at runtime without disturbing reads. An MMU-mapped RAM
+	// slot outranks the redirect exactly like the read path — the
+	// same sram_pre_override(0) term (zxnext.vhd:3037-3043/:3078)
+	// covers both directions, so the write falls through to the MMU
+	// dispatch below.
+	if m.currentModel == roms.ModelNext && addr < 0x4000 && m.altROMRedirectsWrites() {
+		slot8k := addr >> 13
+		if !m.mmuOverride[slot8k] || m.slotBank[slot8k] == 0xFF {
+			bank, _ := m.altROMSelect()
+			m.altROMBuffer(bank)[addr] = val
+			return
+		}
 	}
 
 	// General peripheral write hook (classic-model peripherals: IF1,
