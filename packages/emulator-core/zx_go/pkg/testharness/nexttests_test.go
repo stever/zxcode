@@ -242,37 +242,40 @@ var (
 	copperBlack  = [3]byte{0, 0, 0}
 )
 
-// copperFlagRows builds the 16-half-pixel Swedish flag rows as rendered
-// at the 28MHz copper's 2-cycles-per-MOVE pacing: 8 full pixels wide,
-// with the vertical yellow stripe (FlagData half-pixels 5-6) landing on
-// pixel column `yellowCol` — the visible column depends on the flag's
-// x mod 8 NOOP-padding phase (2 NOOPs = half a pixel), so flags at odd
-// sub-columns sample halves 1,3,5,... (stripe on column 2) and the rest
-// sample halves 0,2,4,... (stripe on column 3). B=blue Y=yellow.
-func copperFlagRows(yellowCol int) [10]string {
-	edge := []byte("BBBBBBBB")
-	edge[yellowCol] = 'Y'
-	stripe := string(edge)
+// copperFlagHalfRows builds the flag's 16-HALF-PIXEL rows exactly as
+// the upstream FlagData encodes them — one MOVE per cell, and a MOVE is
+// 2 copper cycles = one 14 MHz half-pixel (copper.vhd:100-109), so on
+// real hardware every flag cell is HALF a pixel wide (release/
+// !Copper.txt EDIT: "flag pixels are half-width"). The vertical yellow
+// stripe is FlagData cells 5-6; rows 4-5 are the horizontal bar.
+// B=blue Y=yellow, indexed by half-pixel within the flag.
+func copperFlagHalfRows() [10]string {
+	const stripe = "BBBBBYYBBBBBBBBB"
+	const bar = "YYYYYYYYYYYYYYYY"
 	return [10]string{
 		stripe, stripe, stripe, stripe,
-		"YYYYYYYY", "YYYYYYYY",
+		bar, bar,
 		stripe, stripe, stripe, stripe,
 	}
 }
 
 // TestNexttestsCopper runs base/Copper and asserts the full visible
 // surface: the two self-reported counters, all five flags (including
-// the over-left-border one), the horizontal-wait greater/equal probe's
-// single yellow pixel, the Z80-animated full-width line (with its left
-// border segment one row lower), the ruler dots and the restored-white
-// background.
+// the over-left-border one) at their NATIVE half-pixel resolution, the
+// horizontal-wait greater/equal probe's single yellow half-pixel, the
+// Z80-animated full-width line (with its left border segment one row
+// lower), the ruler dots and the restored-white background.
 //
-// Documented residual precision: the render samples the palette once
-// per 7MHz pixel (state 2 copper cycles into the pixel), so the flags'
-// half-pixel internal detail collapses to one colour per pixel. The
-// half-pixel phase our sampling picks is not resolvable from the
-// upstream photos; everything at pixel granularity and above is
-// asserted here.
+// Half-pixel derivation (#183 stage 2 — the render now resolves the
+// palette once per 14 MHz half-pixel, the FPGA's own lookup rate,
+// zxnext.vhd:6981): a flag drawn at column x spends 2 NOOPs per
+// (x mod 8) sub-column after its 8-aligned WAIT releases — 2 copper
+// cycles = ONE half-pixel each — so its first cell lands at display
+// half-pixel 2*x - (x mod 8), and the 16 FlagData cells follow at one
+// half-pixel apiece with the stripe on cells 5-6. The stripe column is
+// the copper-phase calibrator: at the old 7 MHz sampling it appeared on
+// pixel column 2 or 3 depending on the NOOP phase; natively it sits at
+// exactly cells 5-6 for every flag, matching FlagData.
 func TestNexttestsCopper(t *testing.T) {
 	h := runNexttestsSNX(t, "Copper.snx", 200)
 
@@ -294,35 +297,42 @@ func TestNexttestsCopper(t *testing.T) {
 			t.Errorf("%s at (%d,%d): got %v, want %v", what, sx, sy, got, want)
 		}
 	}
-	checkFlag := func(name string, x0, y0, yellowCol int) {
-		for r, row := range copperFlagRows(yellowCol) {
-			for c := 0; c < 8; c++ {
+	// halfAt reads OUTPUT half-pixel hx of the 640-wide frame, hx in
+	// paper half-pixels (paper starts at output column 64; the border
+	// flag passes frame-relative output columns directly via hx+128).
+	halfAt := func(hx, sy int) [3]byte {
+		return imgRGB(img, 64+hx, 32+sy)
+	}
+	checkFlagHalf := func(name string, anchorHalf, y0 int) {
+		for r, row := range copperFlagHalfRows() {
+			for c := 0; c < 16; c++ {
 				want := copperBlue
 				if row[c] == 'Y' {
 					want = copperYellow
 				}
-				check(name, x0+c, y0+r, want)
+				if got := halfAt(anchorHalf+c, y0+r); got != want {
+					t.Errorf("%s row %d half-cell %d: got %v, want %v", name, r, c, got, want)
+				}
 			}
 		}
-		// The flag ends after 8 pixels; the restore MOVE brings white back.
-		check(name+" right restore", x0+8, y0, copperWhite)
+		// The flag ends after its 16 half-cells; the restore MOVE
+		// brings white back on the very next half-pixel.
+		if got := halfAt(anchorHalf+16, y0); got != copperWhite {
+			t.Errorf("%s right restore: got %v, want white", name, got)
+		}
 	}
 
-	// The five flags. Positions are the 28MHz-copper landing pixels:
-	// an (x mod 8) sub-column offset of 1-2 costs 2(x mod 8) NOOP
-	// cycles = half a pixel each, so [1,64] keeps x=1 while [66,77]
-	// and [242,118] land one pixel after their 8-aligned column, and
-	// [248,91] (offset 0) lands exactly at 248 — consistent with the
-	// !Copper.txt EDIT that core-3.0 positions shift vs the 14MHz
-	// description. The over-left-border flag (WAIT column 52 =
-	// hcount 428, the previous line's tail) renders in the left
-	// border one row below its nominal y, like the animated line's
-	// border segment.
-	checkFlag("flag[1,64]", 1, 64, 2)
-	checkFlag("flag[66,77]", 65, 77, 3)
-	checkFlag("flag[248,91]", 248, 91, 3)
-	checkFlag("flag[left-border,104]", -32, 105, 3)
-	checkFlag("flag[242,118]", 241, 118, 3)
+	// The five flags at anchor half-pixel 2*x - (x mod 8) (see the
+	// derivation above). The over-left-border flag (WAIT column 52 =
+	// hcount 428, the previous line's tail) renders at the LEFT EDGE
+	// of the left border one row below its nominal y — frame output
+	// columns 0..15, i.e. paper halves -64..-49 (the 32-px border is
+	// 64 half-pixels) — like the animated line's border segment.
+	checkFlagHalf("flag[1,64]", 2*1-1, 64)
+	checkFlagHalf("flag[66,77]", 2*66-2, 77)
+	checkFlagHalf("flag[248,91]", 2*248, 91)
+	checkFlagHalf("flag[left-border,104]", -64, 105)
+	checkFlagHalf("flag[242,118]", 2*242-2, 118)
 
 	// Ruler dots (INK 0 through ULANext ink mask 7 = palette entry 0):
 	// row 63 at x=0,4,8,... and row 128 at x=...,236,240,244,248,252.
@@ -334,14 +344,20 @@ func TestNexttestsCopper(t *testing.T) {
 	}
 
 	// Horizontal-wait greater/equal probe (y=140): blue x=128..191,
-	// ONE yellow pixel at 192 (the h=0 WAIT releases instantly), then
-	// white — if the h=0 WAIT rolled over to the next frame the whole
-	// row would stay blue/yellow.
+	// ONE yellow HALF-pixel at x=192 (the h=0 WAIT releases instantly;
+	// the following white MOVE lands one half-pixel later — MOVE = 2
+	// cycles, copper.vhd:100-109), then white — if the h=0 WAIT rolled
+	// over to the next frame the whole row would stay blue/yellow.
 	check("y140 pre-line white", 127, 140, copperWhite)
 	for _, x := range []int{128, 150, 191} {
 		check("y140 blue", x, 140, copperBlue)
 	}
-	check("y140 yellow pixel", 192, 140, copperYellow)
+	if got := halfAt(2*192, 140); got != copperYellow {
+		t.Errorf("y140 yellow half-pixel: got %v, want yellow", got)
+	}
+	if got := halfAt(2*192+1, 140); got != copperWhite {
+		t.Errorf("y140 odd half after the probe: got %v, want white (yellow is half a pixel wide)", got)
+	}
 	check("y140 post-yellow white", 193, 140, copperWhite)
 	check("y139 untouched", 150, 139, copperWhite)
 	check("y141 untouched", 150, 141, copperWhite)

@@ -560,6 +560,17 @@ type nextCopperCyclePaced interface {
 	RunToCycle(vcount uint16, cycle int)
 }
 
+// nextCopperLinePeek is the cycle-paced copper's optional companion: a
+// side-effect-free "could any instruction retire on this line?" probe
+// (pkg/next/copper CanRetireOnLine). Rows where it reports false take
+// the render's pair-coalescing fast stride — one compute per 7 MHz
+// pixel — because a copper that is stopped, parked on HALT, or parked
+// on a WAIT for another line (strict line equality, copper.vhd:94)
+// cannot change any video state mid-row (#183 Option C).
+type nextCopperLinePeek interface {
+	CanRetireOnLine(vcount uint16) bool
+}
+
 // nextULAPaletteResolver is the optional compositor contract for resolving
 // a ULA palette index (0..255) through the LIVE Next ULA palette, the way
 // the FPGA feeds every ULA pixel through the palette SRAM. transparent
@@ -2401,23 +2412,40 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// carries (device/copper.vhd:94), so WAIT(h=X) + MOVE recolours the
 	// pixel at exactly x = X*8, matching the real-board behaviour the
 	// upstream base/Copper test's ReadMe documents. The +2 inside
-	// pixelCycle admits the releasing WAIT check (1 cycle) plus its
+	// halfCycle admits the releasing WAIT check (1 cycle) plus its
 	// following MOVE's write pulse into the pixel's own 4-cycle window.
+	//
+	// The interleave grain is the 14 MHz HALF-pixel (#183 stage 2): the
+	// copper clocks at 28 MHz, a MOVE costs 2 cycles (copper.vhd:87-109)
+	// — exactly one write per half-pixel slot — and every palette lookup
+	// happens once per half-pixel (the sc(0)-multiplexed BRAM reads,
+	// zxnext.vhd:6981/:7033). Half-pixel sx of a row therefore paces to
+	// 2 cycles into its own half-slot: the even half at its pixel's
+	// cycle +2 (identical to the previous per-pixel target, keeping the
+	// paced stride bit-compatible with the coalesced one on event-free
+	// rows) and the odd half at +4.
 	const cyclesPerHcount = 4
 	const lineEndCycle = 456*cyclesPerHcount - 1
 	const frameLines = 312
-	pixelCycle := func(x int) int { return (x+12)*cyclesPerHcount + 2 }
-	if u.compositorScan == nil {
-		u.compositorScan = make([]byte, w*4)
-		u.compositorComposed = make([]byte, w*4)
+	halfCycle := func(sx int) int { return (sx>>1+12)*cyclesPerHcount + 2 + 2*(sx&1) }
+	if len(u.compositorScan) < 2*w*4 {
+		u.compositorScan = make([]byte, 2*w*4)
+		u.compositorComposed = make([]byte, 2*w*4)
 	}
 	ulaScan := u.compositorScan
 	composed := u.compositorComposed
 	resolver, liveULA := u.liveULAResolver()
 	var paced nextCopperCyclePaced
+	var copperPeek nextCopperLinePeek
 	if u.nextCopper != nil {
 		paced, _ = u.nextCopper.(nextCopperCyclePaced)
+		copperPeek, _ = u.nextCopper.(nextCopperLinePeek)
 	}
+	// The 512-half-pixel compose pass (sub=2). Absent only on reduced
+	// test mocks, which then keep the coalesced 256 stride.
+	hiComp, _ := u.nextCompositor.(interface {
+		ComposeHiResScanline(y int, ulaRGBA []byte, dst []byte)
+	})
 	// Raster-stamped palette-CONTENT replay: rewind the palette bank to
 	// its frame-start state and re-apply the frame's logged NR$41/$44
 	// writes row by row, so a CPU rewriting palette entries mid-frame
@@ -2446,8 +2474,11 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// renders the base/Copper test's over-left-border flag, whose MOVEs
 	// live entirely inside that tail and are white-restored before the
 	// line ends.
+	// leftCarry holds OUTPUT (half-pixel) columns: 20 frame pixels = 40
+	// half-pixel slots, each resolved at its own 2-cycle copper position
+	// on paced rows (coalesced rows fill both halves of a pair alike).
 	const leftTailPx = 20
-	var leftCarry [leftTailPx][4]byte
+	var leftCarry [2 * leftTailPx][4]byte
 	leftCarryValid := false
 	// Displayed-ULA-palette replay: push each row's raster-stamped
 	// palette select (NR$43 bit 1) into the compositor's bank before
@@ -2537,25 +2568,45 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		}
 		rowStart := (u.borderTop+y)*u.img.Stride + BorderLeft*u.xs*4
 		pushPriority(u.ulaVideoLine[u.borderTop+y].nr15)
+		// Stride decision (#183 Option C): a row takes the PACED
+		// half-pixel stride only when its state can genuinely change
+		// mid-row — the copper could retire an instruction inside the
+		// line's cycle span (nextCopperLinePeek; a paced copper without
+		// the peek is conservatively treated as always able) — or when
+		// the ULA content itself is half-pixel-distinct (fine-scroll-X).
+		// Every other row takes the coalesced stride: one compute per
+		// 7 MHz pixel, both output half-pixels stored alike — provably
+		// identical output, since nothing can change between the two
+		// halves' lookups.
+		rowPaced := false
+		if paced != nil && (copperPeek == nil || copperPeek.CanRetireOnLine(uint16(y))) {
+			rowPaced = true
+		}
+		rowHalf := (rowPaced || u.ulaFineScrollX) && hiComp != nil
 		if liveULA {
 			st := u.ulaVideoLine[u.borderTop+y]
 			pushSelect(st.ulaPalSecond)
-			// Left border: carried tail pixels first, then the 12 pixels
-			// that belong to this line's own hcount 0..11.
-			for bx := 0; bx < leftTailPx; bx++ {
+			// Left border: carried tail half-pixels first, then the 12
+			// pixels that belong to this line's own hcount 0..11.
+			for obx := 0; obx < 2*leftTailPx; obx++ {
 				if leftCarryValid {
-					u.paintImagePixel(y, bx, leftCarry[bx])
+					u.paintOutPixel(y, obx, leftCarry[obx])
 				} else {
+					u.paintOutPixel(y, obx, u.nextBorderRGBA(u.borderTop+y, resolver))
+				}
+			}
+			if rowPaced {
+				for obx := 2 * leftTailPx; obx < 2*BorderLeft; obx++ {
+					bx := obx >> 1
+					paced.RunToCycle(uint16(y), (bx-leftTailPx)*cyclesPerHcount+2+2*(obx&1))
+					u.paintOutPixel(y, obx, u.nextBorderRGBA(u.borderTop+y, resolver))
+				}
+			} else {
+				for bx := leftTailPx; bx < BorderLeft; bx++ {
 					u.paintImagePixel(y, bx, u.nextBorderRGBA(u.borderTop+y, resolver))
 				}
 			}
-			for bx := leftTailPx; bx < BorderLeft; bx++ {
-				if paced != nil {
-					paced.RunToCycle(uint16(y), (bx-leftTailPx)*cyclesPerHcount+2)
-				}
-				u.paintImagePixel(y, bx, u.nextBorderRGBA(u.borderTop+y, resolver))
-			}
-			u.renderNextULARow(y, ulaScan, resolver, paced, pixelCycle, st)
+			u.renderNextULARow(y, ulaScan, resolver, paced, halfCycle, st, rowHalf, rowPaced)
 		} else {
 			// Non-live fallback: recover the logical 256 pixels from the
 			// pre-rendered (xs-doubled) row.
@@ -2564,24 +2615,37 @@ func (u *ULA) applyNextCompositor(stale bool) {
 				copy(ulaScan[x*4:x*4+4], u.img.Pix[s:s+4])
 			}
 		}
-		u.nextCompositor.ComposeScanline(y, ulaScan, composed)
-		u.storeComposedRow(rowStart, composed, w)
+		if liveULA && rowHalf {
+			// Half-pixel row: 512-wide ULA scan through the sub=2
+			// compose, stored natively (one output pixel per half).
+			hiComp.ComposeHiResScanline(y, ulaScan, composed)
+			copy(u.img.Pix[rowStart:rowStart+2*w*4], composed[:2*w*4])
+		} else {
+			u.nextCompositor.ComposeScanline(y, ulaScan, composed)
+			u.storeComposedRow(rowStart, composed, w)
+		}
 		if liveULA {
-			// Right border: per pixel at hcount 268+bx.
-			for bx := 0; bx < BorderLeft; bx++ {
-				if paced != nil {
-					paced.RunToCycle(uint16(y), (268+bx)*cyclesPerHcount+2)
+			// Right border at hcount 268+bx — per half-pixel on paced rows.
+			if rowPaced {
+				for obx := 0; obx < 2*BorderLeft; obx++ {
+					bx := obx >> 1
+					paced.RunToCycle(uint16(y), (268+bx)*cyclesPerHcount+2+2*(obx&1))
+					u.paintOutPixel(y, 2*(BorderLeft+w)+obx, u.nextBorderRGBA(u.borderTop+y, resolver))
 				}
-				u.paintImagePixel(y, BorderLeft+w+bx, u.nextBorderRGBA(u.borderTop+y, resolver))
+			} else {
+				for bx := 0; bx < BorderLeft; bx++ {
+					u.paintImagePixel(y, BorderLeft+w+bx, u.nextBorderRGBA(u.borderTop+y, resolver))
+				}
 			}
 			// Line tail: resolve the next row's carried left-border pixels
 			// live at their hcount, then finish the copper's line.
 			if y+1 < h {
-				for bx := 0; bx < leftTailPx; bx++ {
-					if paced != nil {
-						paced.RunToCycle(uint16(y), (428+bx)*cyclesPerHcount+2)
+				for obx := 0; obx < 2*leftTailPx; obx++ {
+					if rowPaced {
+						bx := obx >> 1
+						paced.RunToCycle(uint16(y), (428+bx)*cyclesPerHcount+2+2*(obx&1))
 					}
-					leftCarry[bx] = u.nextBorderRGBA(u.borderTop+y+1, resolver)
+					leftCarry[obx] = u.nextBorderRGBA(u.borderTop+y+1, resolver)
 				}
 				leftCarryValid = true
 			}
@@ -2844,6 +2908,17 @@ func (u *ULA) paintImagePixel(y, x int, c [4]byte) {
 	}
 }
 
+// paintOutPixel writes ONE output (half-pixel) column outX of display
+// row y — the paced border segments resolve every half-pixel
+// individually, so they cannot go through paintImagePixel's pair store.
+func (u *ULA) paintOutPixel(y, outX int, c [4]byte) {
+	off := (u.borderTop+y)*u.img.Stride + outX*4
+	u.img.Pix[off+0] = c[0]
+	u.img.Pix[off+1] = c[1]
+	u.img.Pix[off+2] = c[2]
+	u.img.Pix[off+3] = c[3]
+}
+
 // putPix writes the RGBA colour at frame coordinate (x, y) — xs output
 // pixels on the doubled Next frame. Direct Pix stores: image.RGBA.Set
 // boxes its color.Color argument, which cost one heap allocation per
@@ -2871,11 +2946,26 @@ func (u *ULA) putPix(x, y int, c color.RGBA) {
 //	          canonical formats, else the NR$4A background
 //
 // Transparent pixels (palette value == NR$14) are emitted with alpha 0 —
-// the compositor's per-pixel ULA transparency signal. When a cycle-paced
-// copper is wired, execution interleaves per pixel so mid-scanline MOVEs
-// recolour from exactly their pixel onward.
+// the compositor's per-pixel ULA transparency signal.
+//
+// Strides (#183 Option C — one loop body, two strides):
+//   - half=true: 512 half-pixels into dst, one output pixel per 14 MHz
+//     slot; with paced=true, copper execution interleaves per HALF-pixel
+//     (2-cycle RunToCycle targets) so mid-scanline MOVEs recolour from
+//     exactly their half-pixel onward — the hardware grain: one MOVE
+//     write per half-pixel (copper.vhd:87-109), one palette lookup per
+//     half-pixel (zxnext.vhd:6981).
+//   - half=false: the coalesced stride — 256 pixels into dst, one
+//     compute per 7 MHz pixel. Chosen only when the row provably has no
+//     mid-row events (nextCopperLinePeek) and no half-pixel-distinct
+//     content, so it is bit-identical to the paced stride's pairs.
+//
+// Fine-scroll-X (NR$68 bit 2) is a +1 half-pixel term in the source
+// map: the ULA barrel shifter shifts at 14 MHz and the fine bit is the
+// LSB of its shift amount (zxula.vhd:199 px(8), :353 scroll_0 <=
+// px(2:0) & px(8), applied at the shift-register load :395).
 func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
-	paced nextCopperCyclePaced, pixelCycle func(int) int, st ulaVideoState) {
+	paced nextCopperCyclePaced, halfCycle func(int) int, st ulaVideoState, half, rowPaced bool) {
 	screenMem := u.mem.GetPage(u.mem.ScreenPage)
 	fallback := u.ulaDisabledFill()
 	paperShift := ulaNextPaperShift(st.ulaNextFormat)
@@ -2937,15 +3027,34 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 	srcY := (y + int(u.ulaScrollY)) % ScreenHeight
 	attrRow := attrMem[(srcY>>3)*32:]
 	rowClipped := y < int(u.ulaClipY1) || y > int(u.ulaClipY2)
-	for x := 0; x < ScreenWidth; x++ {
-		if paced != nil {
-			paced.RunToCycle(uint16(y), pixelCycle(x))
+	fine := 0
+	if u.ulaFineScrollX {
+		fine = 1
+	}
+	n := ScreenWidth // coalesced stride: one compute per 7 MHz pixel
+	if half {
+		n = 2 * ScreenWidth
+	}
+	for i := 0; i < n; i++ {
+		// sx is the display HALF-pixel this iteration resolves: its own
+		// slot in the half stride, the pixel's even half in the
+		// coalesced stride (whose value provably holds for both halves).
+		sx := i
+		if !half {
+			sx = 2 * i
 		}
-		// ULA X hardware scroll (NR$26): source column = (x + scroll)
-		// mod 256 — zxula.vhd:199 adds the scroll's char column mod 32
-		// and appends its low bits; the neighbouring char loads via
-		// px_1 (char+1 mod 32), so the wrap is a clean mod-256.
-		srcX := (x + int(u.ulaScrollX)) & 0xFF
+		if rowPaced && paced != nil {
+			paced.RunToCycle(uint16(y), halfCycle(sx))
+		}
+		x := sx >> 1
+		// ULA X hardware scroll (NR$26) + fine-scroll-X (NR$68 bit 2):
+		// source HALF-pixel = display half + 2*scroll + fine, mod 512 —
+		// zxula.vhd:199 adds the scroll's char column mod 32 with px(8)
+		// (the fine bit) riding into the 14 MHz barrel-shift amount
+		// (:353/:395); the neighbouring char loads via px_1 (char+1 mod
+		// 32), so the wrap is a clean mod-256 in classic pixels.
+		srcHalf := (sx + 2*int(u.ulaScrollX) + fine) & 0x1FF
+		srcX := srcHalf >> 1
 		var idx byte
 		background := false
 		if loresOn {
@@ -3020,7 +3129,7 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 		default:
 			r, g, b, transparent = res.ULARGBA(idx)
 		}
-		off := x * 4
+		off := i * 4
 		dst[off+0] = r
 		dst[off+1] = g
 		dst[off+2] = b

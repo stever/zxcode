@@ -316,6 +316,36 @@ func (c *Copper) RunToCycle(vcount uint16, cycle int) {
 	}
 }
 
+// CanRetireOnLine reports whether any instruction could retire during
+// raster line vcount — the render's fast-stride gate (#183): an
+// event-free row (copper stopped, parked HALT, or parked WAIT for
+// another line — strict line equality, device/copper.vhd:94) provably
+// cannot change video state mid-row, so the ULA coalesces each 7 MHz
+// pixel's half-pixel pair instead of pacing RunToCycle per half-pixel.
+// Pure peek: no engine state changes. The StartOnVBL frame-origin
+// restart is anticipated the same way RunToCycle applies it (a raster
+// wrap resets the program counter, copper.vhd:80-83). A WAIT for this
+// line whose threshold lies past the line end (X >= 56 — never releases
+// on hardware) still reports true: conservative, the paced stride is
+// merely slower there, never different.
+func (c *Copper) CanRetireOnLine(vcount uint16) bool {
+	if c.mode == StartStop {
+		return false
+	}
+	pc := c.pc
+	if c.mode == StartOnVBL && vcount < c.runLastV {
+		pc = 0
+	}
+	inst := Decode(c.program[pc&(MaxInstructions-1)])
+	switch inst.Op {
+	case OpHALT:
+		return false
+	case OpWAIT:
+		return inst.Y == vcount
+	}
+	return true
+}
+
 // Step advances the copper by at most cycleBudget copper cycles
 // against the supplied raster position, at the FPGA's per-cycle
 // costs: a MOVE takes 2 cycles (write pulse + bubble,

@@ -24,6 +24,7 @@ type liveULAMock struct {
 }
 
 func (m *liveULAMock) ComposeScanline(y int, ula, dst []byte)                             { copy(dst, ula) }
+func (m *liveULAMock) ComposeHiResScanline(y int, ula, dst []byte)                        { copy(dst, ula) }
 func (m *liveULAMock) HasActiveTilemap() bool                                             { return false }
 func (m *liveULAMock) ComposeBorderRow(y int, dst []byte, xs int, f func(int) bool)       {}
 func (m *liveULAMock) HasActiveSprites() bool                                             { return false }
