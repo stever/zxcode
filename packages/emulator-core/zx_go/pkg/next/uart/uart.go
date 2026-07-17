@@ -53,6 +53,11 @@ func New() *UART {
 // build without hard-coding it in this package.
 func (u *UART) SetVersion(v string) { u.version = v }
 
+// RxAvail reports whether the ESP (uart0) RX FIFO holds bytes — the
+// FPGA's uart0_rx_avail level, an interrupt source into the im2 daisy
+// chain (vector 1, zxnext.vhd:1941-1944).
+func (u *UART) RxAvail() bool { return len(u.rxBuf) > 0 }
+
 // PortRead serves a CPU read of one of the four UART ports. reg is
 // the RegRx/RegSelect/RegFrame/RegTx constant (address bits 9:8).
 func (u *UART) PortRead(reg byte) byte {

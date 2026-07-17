@@ -137,7 +137,8 @@ func newNext() (*Harness, error) {
 	// with cmd/zx_go/next.go.
 	ctcBlk := next.WireCTC(disp, cpu)
 	u.SetNextCTC(ctcBlk)
-	next.WireIM2(disp, cpu, ctcBlk)
+	im2Blk := next.WireIM2(disp, cpu, ctcBlk)
+	im2Blk.SetUARTSource(uartEngine.RxAvail)
 	// zxnDMA bus hooks, mirroring the production wiring in
 	// cmd/zx_go/next.go: IO endpoints route through the ULA's port
 	// dispatch (without this an IO-source transfer reads $FF — the

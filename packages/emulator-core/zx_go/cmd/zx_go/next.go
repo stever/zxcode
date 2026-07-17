@@ -1200,7 +1200,8 @@ func wireNextSubsystems(e *emulator) error {
 	// TC from ($C002)) once its install hook runs.
 	ctcBlk := next.WireCTC(disp, cpu)
 	u.SetNextCTC(ctcBlk)
-	next.WireIM2(disp, cpu, ctcBlk)
+	im2Blk := next.WireIM2(disp, cpu, ctcBlk)
+	im2Blk.SetUARTSource(uartEngine.RxAvail)
 	// zxnDMA IO endpoints: a port configured as an IO endpoint (WR1/WR2 D3)
 	// transfers to/from a real port — sprite-image ($5B), Layer 2 ($253B),
 	// DAC, etc. Route those through the ULA's port dispatch.

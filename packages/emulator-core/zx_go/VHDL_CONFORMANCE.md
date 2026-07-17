@@ -253,10 +253,21 @@ in CTCBlock.catchUp, ring-iterated so multi-stage divider chains settle.
 `TestCTCCascade*` (÷3 divider residual count, running-timer immunity,
 waiting-timer start). Granularity: pulses land at the block's lazy
 observation points (per instruction in practice).
-⚠️ Not modelled: UART interrupt sources (vectors 1, 2, 12, 13 — the UART
-generates no interrupts), NR$CC-$CE DMA-interrupt enables (the DMA
-generates no interrupts — known-gaps zxnDMA row), pulse-mode
-sticky status (the chain is held reset in pulse mode), and port reads of
+✅ UART interrupt sources (#158): vectors 1/2/12/13 feed the chain as
+LEVELS per zxnext.vhd:1941-1949 — uart0 RX = the live rx-avail level
+(near-full OR (avail AND NOT the near-full-only NR$C6 bit), our FIFO
+never reports near-full), TX-empty = constant true (instant transmit;
+an idle real UART's TX is empty too), uart1 RX never requests (no Pi);
+enables NR$C6 bits 1|0 / 5|4 / 2 / 6. NR$CA now composes the sticky
+UART source states ('0' & st13 & st2 & st2 & '0' & st12 & st1 & st1,
+:6254) with write-1-to-clear (:1953-1956). `TestWireUART*Interrupt` +
+`TestWireUARTNearFullOnlyBitGatesRxAvail`.
+✅ Pulse-mode sticky status re-classified as CONFORMANT: the FPGA holds
+the chain reset in pulse mode too (im2_reset_n = mode & not reset,
+im2_peripheral.vhd:105), so NR$C8/$C9/$CA recording only in hw mode IS
+the hardware behaviour.
+⚠️ Remaining: NR$CC-$CE DMA-interrupt enables (registers faithful; the
+DMA generates no interrupts — known-gaps zxnDMA row), and port reads of
 a mid-count channel return the batch-advanced counter (exact at
 observation points).
 

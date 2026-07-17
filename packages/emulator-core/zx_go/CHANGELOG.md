@@ -29,6 +29,14 @@ FPGA source, and the ESP UART moved to its real ports.
   `pkg/next/nrdecode.go`), stored registers pin their write masks with
   four probe patterns, composed/live registers get dedicated probes.
   Every entry cites its `zxnext.vhd` line.
+- **UART interrupt sources (#158 Axis 5).** The im2 daisy chain's
+  vectors 1/2/12/13 are live per `zxnext.vhd:1941-1949`: uart0 RX
+  requests on the real RX-avail level (with the NR$C6 near-full-only
+  gate), TX-empty is the honest constant level, and `NR$CA` composes
+  the sticky UART source states with write-1-to-clear (previously a
+  zero stub). The chain's pulse-mode-only status recording was
+  re-classified as conformant (the FPGA holds the chain reset in
+  pulse mode too).
 - **CTC channel cascade (#158 Axis 5).** Channel N's CLK/TRG input is
   now channel (N-1) mod 4's ZC/TO pulse (`zxnext.vhd:4082`), fed
   through the golden-pinned channel's own trigger path — counter-mode

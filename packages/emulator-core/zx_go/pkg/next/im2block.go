@@ -23,9 +23,11 @@ import (
 //     the 4 real channels), and the ULA frame INT (vector 11). The
 //     frame/line pulse leading edges arrive via z80.CPU.RouteIntFunc;
 //     CTC ZC/TO pulses via CTCBlock.ConsumeZC (raw, the chain applies
-//     its own enables). UART rx/tx sources (1, 2, 12, 13) are wired as
-//     never-requesting — the emulator's UART does not generate
-//     interrupts yet (documented gap).
+//     its own enables). UART sources (1, 2, 12, 13; #158): uart0 RX =
+//     the live RX-avail level (SetUARTSource), TX-empty = constant
+//     true (instant transmit — an idle real UART's TX is empty too),
+//     uart1 RX never requests (no Pi); enables from NR$C6
+//     (zxnext.vhd:1941-1949).
 //   - The chain asserts the CPU INT line (o_int_n, only when the Z80 is
 //     in IM 2 — im2_device.vhd:150) through the same ExtIntFunc poll the
 //     CTC pulse used; the CTC pulse itself is suppressed
@@ -42,9 +44,9 @@ import (
 //   - NR$20 writes inject unqualified requests (software-generated
 //     interrupts): bit 7 = line, bit 6 = ULA, bits 3:0 = CTC 3:0
 //     (zxnext.vhd:1946-1947).
-//   - NR$C8/$C9 expose the sticky per-source status bits with
-//     write-1-to-clear (im2_status_clear, zxnext.vhd:1953-1956). NR$CA
-//     (UART status) reads zero — no UART sources.
+//   - NR$C8/$C9/$CA expose the sticky per-source status bits with
+//     write-1-to-clear (im2_status_clear, zxnext.vhd:1953-1956; $CA's
+//     read shape :6254).
 //
 // Timing granularity: the FPGA clocks the chain per CPU cycle; this
 // block ticks it once per CPU instruction (the ExtIntFunc poll), which
@@ -66,7 +68,19 @@ type IM2Block struct {
 	// chainActive tracks whether any device is out of S_0 or a request
 	// latch is set — lets the idle fast path skip ticking.
 	chainActive bool
+
+	// uartRx0 is the live uart0 RX-available level (uart.UART.RxAvail),
+	// the chain's vector-1 request source (zxnext.vhd:1941-1944). nil =
+	// no UART wired; the TX-empty sources (vectors 12/13) are constant
+	// true — this UART transmits instantly, and an idle real UART's TX
+	// is empty too. uart1 (the Pi) has no RX source.
+	uartRx0 func() bool
 }
+
+// SetUARTSource installs the uart0 RX-available level source. Called
+// by the machine constructor after WireIM2 (the same place the UART's
+// ports are wired via ULA.SetNextUART).
+func (b *IM2Block) SetUARTSource(rxAvail func() bool) { b.uartRx0 = rxAvail }
 
 // NewIM2Block builds the block around a fresh daisy chain.
 func NewIM2Block(cpu *z80.CPU, ctc *CTCBlock, disp *nextregs.Dispatcher) *IM2Block {
@@ -172,6 +186,24 @@ func (b *IM2Block) inputs() IM2Inputs {
 	for ch := 0; ch < 4; ch++ {
 		in.IntEn[3+ch] = ctcEn&(1<<uint(ch)) != 0
 	}
+	// UART sources (zxnext.vhd:1941-1949). Enables from NR$C6: vector 1
+	// (uart0 rx) = bits 1|0, vector 2 (uart1 rx) = bits 5|4, vector 12
+	// (uart0 tx) = bit 2, vector 13 (uart1 tx) = bit 6. Requests: the
+	// rx source is near-full OR (rx-avail AND NOT the near-full-only
+	// enable bit) — our FIFO never reports near-full, so it reduces to
+	// rx-avail gated on the near-full-only bit being clear. TX-empty is
+	// a constant-true level (instant transmit; an idle real UART's TX
+	// is empty too). uart1 has no RX source.
+	c6 := b.disp.Raw(0xC6)
+	in.IntEn[1] = c6&0x03 != 0
+	in.IntEn[2] = c6&0x30 != 0
+	in.IntEn[12] = c6&0x04 != 0
+	in.IntEn[13] = c6&0x40 != 0
+	if b.uartRx0 != nil {
+		in.IntReq[1] = b.uartRx0() && c6&0x02 == 0
+	}
+	in.IntReq[12] = true
+	in.IntReq[13] = true
 	return in
 }
 
@@ -185,6 +217,14 @@ func (b *IM2Block) IntLine(t uint64) bool {
 	in := b.inputs()
 	zc := b.ctc.ConsumeZC()
 	any := zc != 0
+	// The UART sources are LEVELS (not routed pulses): an enabled,
+	// asserted level must wake the chain to latch its request, or the
+	// idle fast path below would never see it.
+	for _, src := range [...]int{1, 2, 12, 13} {
+		if in.IntReq[src] && in.IntEn[src] {
+			any = true
+		}
+	}
 	for ch := 0; ch < 4; ch++ {
 		if zc&(1<<uint(ch)) != 0 {
 			in.IntReq[3+ch] = true
@@ -240,7 +280,7 @@ func (b *IM2Block) Ack() (byte, bool) {
 	in.M1, in.IORQ = true, true
 	b.chain.Tick(in) // S_REQ -> S_ACK (vector valid)
 	vec := b.chain.VectorByte(b.vecBase)
-	in = b.inputs() // M1/IORQ released
+	in = b.inputs()  // M1/IORQ released
 	b.chain.Tick(in) // S_ACK -> S_ISR
 	b.updateActive()
 	return vec, true
@@ -325,6 +365,46 @@ func (b *IM2Block) ClearC9(val byte) {
 		if val&(1<<uint(ch)) != 0 {
 			b.pendClear[3+ch] = true
 		}
+	}
+	b.IntLine(0)
+}
+
+// StatusCA composes the NR$CA read (zxnext.vhd:6254: '0' & st(13) &
+// st(2) & st(2) & '0' & st(12) & st(1) & st(1)) — the sticky UART
+// source states, each RX bit mirrored into two positions.
+func (b *IM2Block) StatusCA() byte {
+	st := b.chain.Status()
+	var v byte
+	if st[13] {
+		v |= 0x40
+	}
+	if st[2] {
+		v |= 0x30
+	}
+	if st[12] {
+		v |= 0x04
+	}
+	if st[1] {
+		v |= 0x03
+	}
+	return v
+}
+
+// ClearCA applies an NR$CA write-1-to-clear (im2_status_clear,
+// zxnext.vhd:1953-1956): bit 6 clears uart1 tx (13), bit 2 uart0 tx
+// (12), bits 5|4 uart1 rx (2), bits 1|0 uart0 rx (1).
+func (b *IM2Block) ClearCA(val byte) {
+	if val&0x40 != 0 {
+		b.pendClear[13] = true
+	}
+	if val&0x04 != 0 {
+		b.pendClear[12] = true
+	}
+	if val&0x30 != 0 {
+		b.pendClear[2] = true
+	}
+	if val&0x03 != 0 {
+		b.pendClear[1] = true
 	}
 	b.IntLine(0)
 }

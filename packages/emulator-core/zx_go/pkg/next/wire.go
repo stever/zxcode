@@ -1430,8 +1430,8 @@ func WireIM2(d *nextregs.Dispatcher, cpu *z80.CPU, ctcBlock *CTCBlock) *IM2Block
 	d.SetOnRead(0xC8, func(*nextregs.Dispatcher) byte { return blk.StatusC8() })
 	d.SetOnWrite(0xC9, func(disp *nextregs.Dispatcher, v byte) { blk.ClearC9(v) })
 	d.SetOnRead(0xC9, func(*nextregs.Dispatcher) byte { return blk.StatusC9() })
-	d.SetOnWrite(0xCA, func(*nextregs.Dispatcher, byte) {})
-	d.SetOnRead(0xCA, func(*nextregs.Dispatcher) byte { return 0 })
+	d.SetOnWrite(0xCA, func(_ *nextregs.Dispatcher, v byte) { blk.ClearCA(v) })
+	d.SetOnRead(0xCA, func(*nextregs.Dispatcher) byte { return blk.StatusCA() })
 
 	if prev := d.OnWriteFn(0x02); prev != nil {
 		d.SetOnWrite(0x02, func(disp *nextregs.Dispatcher, v byte) {
