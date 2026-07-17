@@ -21,15 +21,16 @@ import (
 // scaled, low blue bit = OR of the two blue bits): 182 = %101,
 // 219 = %110, 109 = %011, 73 = %010, 255 = %111, 36 = %001.
 
-// spriteFrameChecker returns a pixel asserter over the 320x256 frame.
+// spriteFrameChecker returns a pixel asserter over the 320x256 frame
+// (sampled at logical frame coordinates — the live Next output is 640
+// wide, two output pixels per frame pixel).
 func spriteFrameChecker(t *testing.T, img *image.RGBA) func(what string, x, y int, want [3]byte) {
 	t.Helper()
-	if img.Rect.Dx() != 320 || img.Rect.Dy() != 256 {
-		t.Fatalf("expected the 320x256 over-border frame, got %dx%d", img.Rect.Dx(), img.Rect.Dy())
+	if img.Rect.Dx() != 640 || img.Rect.Dy() != 256 {
+		t.Fatalf("expected the 640x256 over-border frame, got %dx%d", img.Rect.Dx(), img.Rect.Dy())
 	}
 	return func(what string, x, y int, want [3]byte) {
-		px := img.RGBAAt(x, y)
-		if got := [3]byte{px.R, px.G, px.B}; got != want {
+		if got := frameRGB(img, x, y); got != want {
 			t.Errorf("%s at frame (%d,%d): got %v, want %v", what, x, y, got, want)
 		}
 	}
@@ -121,8 +122,7 @@ func TestNexttestsSpritesRelative(t *testing.T) {
 	// colour allowed in the cell.
 	for y := 112; y < 128; y++ {
 		for x := 176; x < 192; x++ {
-			px := img.RGBAAt(x, y)
-			c := [3]byte{px.R, px.G, px.B}
+			c := frameRGB(img, x, y)
 			if c != green4 && c != black {
 				t.Fatalf("sprite A cell: unexpected %v at (%d,%d)", c, x, y)
 			}
@@ -148,8 +148,7 @@ func TestNexttestsSpritesRelative(t *testing.T) {
 	violet := [3]byte{182, 0, 182}
 	for y := 0; y < 256; y++ {
 		for x := 0; x < 320; x++ {
-			px := img.RGBAAt(x, y)
-			c := [3]byte{px.R, px.G, px.B}
+			c := frameRGB(img, x, y)
 			if c == red8 || c == red4 || c == violet {
 				t.Fatalf("forbidden colour %v at (%d,%d): an invisible/hidden sprite rendered", c, x, y)
 			}
@@ -235,8 +234,7 @@ func TestNexttestsSpritesBigSprite(t *testing.T) {
 		got := map[string][4]int{}
 		for y := g.py - 20; y < g.py+25; y++ {
 			for x := g.px - 20; x < g.px+25; x++ {
-				px := img.RGBAAt(x, y)
-				name, ok := rgbName([3]byte{px.R, px.G, px.B})
+				name, ok := rgbName(frameRGB(img, x, y))
 				if !ok {
 					continue
 				}
@@ -264,9 +262,9 @@ func TestNexttestsSpritesBigSprite(t *testing.T) {
 	// appear anywhere in the paperless scene.
 	for y := 85; y < 133; y++ {
 		for x := 60; x < 113; x++ {
-			px := img.RGBAAt(x, y)
-			if px.R != 0 || px.G != 0 || px.B != 0 {
-				t.Fatalf("invisible ninth big sprite rendered at (%d,%d): %v", x, y, px)
+			c := frameRGB(img, x, y)
+			if c != [3]byte{0, 0, 0} {
+				t.Fatalf("invisible ninth big sprite rendered at (%d,%d): %v", x, y, c)
 			}
 		}
 	}
@@ -334,8 +332,7 @@ func TestNexttestsSpritesBigSprite4b(t *testing.T) {
 				if x < 0 || x >= 320 || y < 0 || y >= 256 {
 					continue
 				}
-				px := img.RGBAAt(x, y)
-				c := [3]byte{px.R, px.G, px.B}
+				c := frameRGB(img, x, y)
 				if ulaText[c] {
 					continue
 				}
@@ -357,8 +354,7 @@ func TestNexttestsSpritesBigSprite4b(t *testing.T) {
 				g.name, count, box, len(cols), w.count, w.box)
 		}
 		for i, off := range offsets {
-			px := img.RGBAAt(g.px+off[0], g.py+off[1])
-			if got := [3]byte{px.R, px.G, px.B}; got != wantSamples[g.name][i] {
+			if got := frameRGB(img, g.px+off[0], g.py+off[1]); got != wantSamples[g.name][i] {
 				t.Errorf("group %s sample %d at (%+d,%+d): got %v, want %v",
 					g.name, i, off[0], off[1], got, wantSamples[g.name][i])
 			}
@@ -368,8 +364,7 @@ func TestNexttestsSpritesBigSprite4b(t *testing.T) {
 	// Invisible ninth big sprite region stays empty (black paper).
 	for y := 88; y < 128; y++ {
 		for x := 63; x < 105; x++ {
-			px := img.RGBAAt(x, y)
-			c := [3]byte{px.R, px.G, px.B}
+			c := frameRGB(img, x, y)
 			if !ulaText[c] {
 				t.Fatalf("invisible ninth big sprite rendered at (%d,%d): %v", x, y, c)
 			}

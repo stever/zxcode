@@ -41,24 +41,41 @@ var (
 	nineBlack = [3]byte{0, 0, 0}
 )
 
+// imgRGB reads a raw OUTPUT pixel. Tests asserting native half-pixel
+// detail (the hi-res 640-wide content) use output coordinates directly;
+// everything logical goes through frameRGB below.
 func imgRGB(img *image.RGBA, x, y int) [3]byte {
 	off := y*img.Stride + x*4
 	return [3]byte{img.Pix[off], img.Pix[off+1], img.Pix[off+2]}
 }
 
-// paperRGB reads paper coordinate (0..255, 0..191) from the Next's
-// 320×256 wide frame (paper at 32,32).
-func paperRGB(img *image.RGBA, x, y int) [3]byte { return imgRGB(img, 32+x, 32+y) }
+// frameScale is the number of output pixels per logical wide-frame
+// (320-space) pixel: 2 on the live Next path (640×256 output, #183
+// stage 1), 1 on classic frames.
+func frameScale(img *image.RGBA) int { return img.Rect.Dx() / 320 }
 
-// assertBorderUniform samples every pixel of all four border regions of
-// the 320×256 wide frame — the whole-surface rule from the banded-border
-// regression: no test may leave a border region unasserted.
+// frameRGB samples the frame at LOGICAL wide-frame coordinates (320-
+// space x), reading the left output pixel of the (possibly doubled)
+// pair. This is the accessor line-granular goldens use so their
+// coordinate maths survives the 640-wide output migration.
+func frameRGB(img *image.RGBA, x, y int) [3]byte {
+	return imgRGB(img, x*frameScale(img), y)
+}
+
+// paperRGB reads paper coordinate (0..255, 0..191) from the Next's
+// wide frame (paper at logical 32,32).
+func paperRGB(img *image.RGBA, x, y int) [3]byte { return frameRGB(img, 32+x, 32+y) }
+
+// assertBorderUniform samples every OUTPUT pixel of all four border
+// regions of the wide frame — the whole-surface rule from the banded-
+// border regression: no test may leave a border region unasserted.
 func assertBorderUniform(t *testing.T, img *image.RGBA, want [3]byte, label string) {
 	t.Helper()
+	xs := frameScale(img)
 	bad := 0
 	for y := 0; y < 256; y++ {
-		for x := 0; x < 320; x++ {
-			if x >= 32 && x < 288 && y >= 32 && y < 224 {
+		for x := 0; x < 320*xs; x++ {
+			if x >= 32*xs && x < 288*xs && y >= 32 && y < 224 {
 				continue
 			}
 			if got := imgRGB(img, x, y); got != want {
@@ -348,7 +365,7 @@ func TestNexttestsULAClassicPaletized(t *testing.T) {
 	// turns raw cyan (white through the custom palette).
 	var seq [][3]byte
 	for y := 0; y < 240; y++ {
-		c := imgRGB(img, 4, y)
+		c := frameRGB(img, 4, y)
 		if len(seq) == 0 || seq[len(seq)-1] != c {
 			seq = append(seq, c)
 		}

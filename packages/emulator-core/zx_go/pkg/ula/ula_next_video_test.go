@@ -23,17 +23,17 @@ type liveULAMock struct {
 	selectCalls []bool
 }
 
-func (m *liveULAMock) ComposeScanline(y int, ula, dst []byte)                     { copy(dst, ula) }
-func (m *liveULAMock) HasActiveTilemap() bool                                     { return false }
-func (m *liveULAMock) ComposeBorderRow(y int, dst []byte, f func(int) bool)       {}
-func (m *liveULAMock) HasActiveSprites() bool                                     { return false }
-func (m *liveULAMock) ComposeSpriteBorderRow(y int, dst []byte, f func(int) bool) {}
-func (m *liveULAMock) TilemapIs80Col() bool                                       { return false }
-func (m *liveULAMock) ComposeWideTilemapRow(y int, dst []byte)                    {}
-func (m *liveULAMock) HiResLayer2Active() bool                                    { return false }
-func (m *liveULAMock) Layer2Width() int                                           { return 320 }
-func (m *liveULAMock) ComposeWideLayer2Row(y int, dst []byte)                     {}
-func (m *liveULAMock) FallbackRGBA() [4]byte                                      { return [4]byte{9, 8, 7, 0xFF} }
+func (m *liveULAMock) ComposeScanline(y int, ula, dst []byte)                             { copy(dst, ula) }
+func (m *liveULAMock) HasActiveTilemap() bool                                             { return false }
+func (m *liveULAMock) ComposeBorderRow(y int, dst []byte, xs int, f func(int) bool)       {}
+func (m *liveULAMock) HasActiveSprites() bool                                             { return false }
+func (m *liveULAMock) ComposeSpriteBorderRow(y int, dst []byte, xs int, f func(int) bool) {}
+func (m *liveULAMock) TilemapIs80Col() bool                                               { return false }
+func (m *liveULAMock) ComposeWideTilemapRow(y int, dst []byte)                            {}
+func (m *liveULAMock) HiResLayer2Active() bool                                            { return false }
+func (m *liveULAMock) Layer2Width() int                                                   { return 320 }
+func (m *liveULAMock) ComposeWideLayer2Row(y int, dst []byte, xs int)                     {}
+func (m *liveULAMock) FallbackRGBA() [4]byte                                              { return [4]byte{9, 8, 7, 0xFF} }
 
 // ULARGBA encodes the resolution: R = idx, G = 1 for the second palette
 // (0 for the first), B = 0xAB marker. Never transparent.
@@ -67,10 +67,12 @@ func newNextVideoULA(t *testing.T) (*ULA, *liveULAMock, *memory.Memory) {
 
 // paperPixel reads the rendered image pixel for paper coordinate (x, y).
 // With a Next compositor wired the frame is the FPGA's 320×256 wide
-// frame: the paper starts at (BorderLeft, NextBorderTop) = (32, 32).
+// frame at doubled output width (640×256, xs = 2): the paper starts at
+// output (2*BorderLeft, NextBorderTop) = (64, 32), two output pixels per
+// frame pixel.
 func paperPixel(u *ULA, x, y int) (r, g, b, a byte) {
 	img := u.img
-	off := (NextBorderTop+y)*img.Stride + (BorderLeft+x)*4
+	off := (NextBorderTop+y)*img.Stride + (BorderLeft+x)*u.xs*4
 	return img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3]
 }
 

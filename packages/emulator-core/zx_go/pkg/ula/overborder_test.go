@@ -13,11 +13,11 @@ import (
 // the bottom over-border strip (frame Y 250).
 type overBorderMock struct{ rows map[int]bool }
 
-func (m *overBorderMock) ComposeScanline(y int, ula, dst []byte)               {}
-func (m *overBorderMock) HasActiveTilemap() bool                               { return false }
-func (m *overBorderMock) ComposeBorderRow(y int, dst []byte, f func(int) bool) {}
-func (m *overBorderMock) HasActiveSprites() bool                               { return true }
-func (m *overBorderMock) ComposeSpriteBorderRow(y int, dst []byte, f func(int) bool) {
+func (m *overBorderMock) ComposeScanline(y int, ula, dst []byte)                       {}
+func (m *overBorderMock) HasActiveTilemap() bool                                       { return false }
+func (m *overBorderMock) ComposeBorderRow(y int, dst []byte, xs int, f func(int) bool) {}
+func (m *overBorderMock) HasActiveSprites() bool                                       { return true }
+func (m *overBorderMock) ComposeSpriteBorderRow(y int, dst []byte, xs int, f func(int) bool) {
 	if m.rows == nil {
 		m.rows = map[int]bool{}
 	}
@@ -30,7 +30,7 @@ func (m *overBorderMock) TilemapIs80Col() bool                             { ret
 func (m *overBorderMock) ComposeWideTilemapRow(y int, dst []byte)          {}
 func (m *overBorderMock) HiResLayer2Active() bool                          { return false }
 func (m *overBorderMock) Layer2Width() int                                 { return 320 }
-func (m *overBorderMock) ComposeWideLayer2Row(y int, dst []byte)           {}
+func (m *overBorderMock) ComposeWideLayer2Row(y int, dst []byte, xs int)   {}
 func (m *overBorderMock) OverpaintWideL2Row(y int, dst []byte, xScale int) {}
 
 // TestNextRenderShowsOverBorderSprites locks in that, when the Next sprite
@@ -99,14 +99,14 @@ func TestNextRenderAlwaysWideFrame(t *testing.T) {
 
 type noSpriteMock struct{}
 
-func (m *noSpriteMock) ComposeScanline(y int, ula, dst []byte)                     {}
-func (m *noSpriteMock) HasActiveTilemap() bool                                     { return false }
-func (m *noSpriteMock) ComposeBorderRow(y int, dst []byte, f func(int) bool)       {}
-func (m *noSpriteMock) HasActiveSprites() bool                                     { return false }
-func (m *noSpriteMock) ComposeSpriteBorderRow(y int, dst []byte, f func(int) bool) {}
-func (m *noSpriteMock) TilemapIs80Col() bool                                       { return false }
-func (m *noSpriteMock) ComposeWideTilemapRow(y int, dst []byte)                    {}
-func (m *noSpriteMock) HiResLayer2Active() bool                                    { return false }
-func (m *noSpriteMock) Layer2Width() int                                           { return 320 }
-func (m *noSpriteMock) ComposeWideLayer2Row(y int, dst []byte)                     {}
-func (m *noSpriteMock) OverpaintWideL2Row(y int, dst []byte, xScale int)           {}
+func (m *noSpriteMock) ComposeScanline(y int, ula, dst []byte)                             {}
+func (m *noSpriteMock) HasActiveTilemap() bool                                             { return false }
+func (m *noSpriteMock) ComposeBorderRow(y int, dst []byte, xs int, f func(int) bool)       {}
+func (m *noSpriteMock) HasActiveSprites() bool                                             { return false }
+func (m *noSpriteMock) ComposeSpriteBorderRow(y int, dst []byte, xs int, f func(int) bool) {}
+func (m *noSpriteMock) TilemapIs80Col() bool                                               { return false }
+func (m *noSpriteMock) ComposeWideTilemapRow(y int, dst []byte)                            {}
+func (m *noSpriteMock) HiResLayer2Active() bool                                            { return false }
+func (m *noSpriteMock) Layer2Width() int                                                   { return 320 }
+func (m *noSpriteMock) ComposeWideLayer2Row(y int, dst []byte, xs int)                     {}
+func (m *noSpriteMock) OverpaintWideL2Row(y int, dst []byte, xScale int)                   {}

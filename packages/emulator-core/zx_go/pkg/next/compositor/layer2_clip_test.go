@@ -89,7 +89,7 @@ func TestComposeWideLayer2RowHonoursClip(t *testing.T) {
 	c := New(pal, l2)
 
 	dst := make([]byte, 320*4)
-	c.ComposeWideLayer2Row(0, dst)
+	c.ComposeWideLayer2Row(0, dst, 1)
 	if dst[19*4] != 0 {
 		t.Fatal("wide x=19 painted, want clipped (X1*2=20)")
 	}
@@ -108,7 +108,7 @@ func TestComposeWideLayer2RowHonoursClip(t *testing.T) {
 	for i := range dst {
 		dst[i] = 0
 	}
-	c.ComposeWideLayer2Row(0, dst)
+	c.ComposeWideLayer2Row(0, dst, 1)
 	for i, b := range dst {
 		if b != 0 {
 			t.Fatalf("row 0 painted at byte %d despite Y1=50", i)

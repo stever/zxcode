@@ -314,7 +314,7 @@ func TestComposeBorderRow_NoTilemapNoOp(t *testing.T) {
 	for i := range dst {
 		dst[i] = 0xAB
 	}
-	c.ComposeBorderRow(0, dst, func(x int) bool { return true })
+	c.ComposeBorderRow(0, dst, 1, func(x int) bool { return true })
 	for i, b := range dst {
 		if b != 0xAB {
 			t.Errorf("ComposeBorderRow with no tilemap modified dst[%d] = %02X", i, b)
@@ -364,7 +364,7 @@ func TestComposeBorderRow_ActivePathTouchesDst(t *testing.T) {
 	}
 
 	dst := make([]byte, FullWidth*4)
-	c.ComposeBorderRow(0, dst, func(int) bool { return true })
+	c.ComposeBorderRow(0, dst, 1, func(int) bool { return true })
 	// Just ensure it runs without panic; we can't easily assert
 	// content without a populated palette, but coverage is the goal.
 }
@@ -576,7 +576,7 @@ func TestComposeWideLayer2Row320(t *testing.T) {
 
 	c := New(pal, l2)
 	dst := make([]byte, 320*4)
-	c.ComposeWideLayer2Row(0, dst)
+	c.ComposeWideLayer2Row(0, dst, 1)
 	// Pixel 0 (col 0) = index 5 = red opaque.
 	if dst[0] == 0 || dst[1] != 0 || dst[2] != 0 || dst[3] != 0xFF {
 		t.Errorf("wide L2 px0: r=%d g=%d b=%d a=%d, want red opaque", dst[0], dst[1], dst[2], dst[3])
@@ -617,7 +617,7 @@ func TestComposeWideLayer2Row_PaletteMappedTransparency(t *testing.T) {
 		dst[x*4+2] = 0xFF
 		dst[x*4+3] = 0xFF
 	}
-	c.ComposeWideLayer2Row(0, dst)
+	c.ComposeWideLayer2Row(0, dst, 1)
 
 	// Pixel 0 (index 0, maps to NR$14) must be transparent → still magenta.
 	if dst[0] != 0xFF || dst[1] != 0x00 || dst[2] != 0xFF {
@@ -742,7 +742,7 @@ func TestComposeSpriteBorderRow(t *testing.T) {
 
 	dst := make([]byte, FullWidth*4)
 	border := func(int) bool { return true } // a border row: whole width
-	c.ComposeSpriteBorderRow(224, dst, border)
+	c.ComposeSpriteBorderRow(224, dst, 1, border)
 
 	// Frame X 40 should be green (the HUD pixel).
 	if dst[40*4+0] != 0 || dst[40*4+1] == 0 || dst[40*4+2] != 0 {

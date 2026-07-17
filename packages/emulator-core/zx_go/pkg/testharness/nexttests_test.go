@@ -287,8 +287,7 @@ func TestNexttestsCopper(t *testing.T) {
 
 	img := h.ScreenImage()
 	at := func(sx, sy int) [3]byte {
-		px := img.RGBAAt(32+sx, 32+sy)
-		return [3]byte{px.R, px.G, px.B}
+		return frameRGB(img, 32+sx, 32+sy)
 	}
 	check := func(what string, sx, sy int, want [3]byte) {
 		if got := at(sx, sy); got != want {
@@ -671,10 +670,9 @@ func TestNexttestsZilogDMA(t *testing.T) {
 		rows int
 	}
 	var bands []band
-	x := img.Bounds().Min.X + 4
 	for y := img.Bounds().Min.Y; y < img.Bounds().Max.Y; y++ {
-		c := img.RGBAAt(x, y)
-		rgb := fmt.Sprintf("%02X%02X%02X", c.R, c.G, c.B)
+		c := frameRGB(img, 4, y)
+		rgb := fmt.Sprintf("%02X%02X%02X", c[0], c[1], c[2])
 		if len(bands) == 0 || bands[len(bands)-1].rgb != rgb {
 			bands = append(bands, band{rgb: rgb})
 		}

@@ -151,8 +151,7 @@ func TestExt327Level2Order(t *testing.T) {
 			h := runExt327(t, fmt.Sprintf("Level2Order_%d.nex", c.order), 40)
 			img := h.ScreenImage()
 			at := func(sx, sy int) [3]byte {
-				px := img.RGBAAt(32+sx, 32+sy)
-				return [3]byte{px.R, px.G, px.B}
+				return frameRGB(img, 32+sx, 32+sy)
 			}
 			check := func(what string, sx, sy int, want [3]byte) {
 				if got := at(sx, sy); got != want {
@@ -198,14 +197,16 @@ func TestExt327ULAScreenPaging(t *testing.T) {
 				t.Fatalf("initial screen page = %d, want 5 (main)", got)
 			}
 			innerSum := func() [16]byte {
-				// Hash only the 256x192 paper area: the border colour
-				// changes with the held key and must not affect the
-				// screen-content comparison.
+				// Hash only the 256x192 paper area (at the output scale —
+				// frame x 32..287): the border colour changes with the
+				// held key and must not affect the screen-content
+				// comparison.
 				img := h.ScreenImage()
+				xs := frameScale(img)
 				var buf []byte
 				for y := 32; y < 224; y++ {
-					row := img.PixOffset(32, y)
-					buf = append(buf, img.Pix[row:row+256*4]...)
+					row := img.PixOffset(32*xs, y)
+					buf = append(buf, img.Pix[row:row+256*xs*4]...)
 				}
 				return md5.Sum(buf)
 			}

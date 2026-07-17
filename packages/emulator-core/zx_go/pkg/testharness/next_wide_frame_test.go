@@ -52,13 +52,11 @@ func TestNextWideFrameLayerAnchoring(t *testing.T) {
 		h.ULA().WritePort(0x253B, val)
 	}
 	rgbAt := func(x, y int) [3]byte {
-		img := h.ScreenImage()
-		px := img.RGBAAt(x, y)
-		return [3]byte{px.R, px.G, px.B}
+		return frameRGB(h.ScreenImage(), x, y)
 	}
 
-	if img := h.ScreenImage(); img.Bounds().Dx() != 320 || img.Bounds().Dy() != 256 {
-		t.Fatalf("Next frame = %dx%d, want 320x256", img.Bounds().Dx(), img.Bounds().Dy())
+	if img := h.ScreenImage(); img.Bounds().Dx() != 640 || img.Bounds().Dy() != 256 {
+		t.Fatalf("Next frame = %dx%d, want 640x256 (the live Next output width)", img.Bounds().Dx(), img.Bounds().Dy())
 	}
 
 	mem := h.MemoryBus()

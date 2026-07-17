@@ -89,8 +89,8 @@ func chg8kBandTransition(t *testing.T, snx, verdict string) int {
 		last := ""
 		trans := -1
 		for y := 0; y < img.Bounds().Dy(); y++ {
-			c := img.RGBAAt(x, y)
-			cls := timingColour(c.R, c.G, c.B)
+			c := frameRGB(img, x, y)
+			cls := timingColour(c[0], c[1], c[2])
 			if cls != "bordergreen" && cls != "black" {
 				t.Fatalf("border x=%d y=%d: unexpected colour %s", x, y, cls)
 			}
@@ -181,8 +181,8 @@ func linesIRQRows(h *Harness, x int, cls string) []int {
 	img := h.ScreenImage()
 	var rows []int
 	for y := 0; y < img.Bounds().Dy(); y++ {
-		c := img.RGBAAt(x, y)
-		if timingColour(c.R, c.G, c.B) == cls {
+		c := frameRGB(img, x, y)
+		if timingColour(c[0], c[1], c[2]) == cls {
 			rows = append(rows, y)
 		}
 	}

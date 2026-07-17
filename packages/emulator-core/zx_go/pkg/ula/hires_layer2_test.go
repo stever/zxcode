@@ -15,17 +15,17 @@ type hiResL2Mock struct {
 	wideL2Calls int
 }
 
-func (m *hiResL2Mock) ComposeScanline(y int, ula, dst []byte)               {}
-func (m *hiResL2Mock) HasActiveTilemap() bool                               { return false }
-func (m *hiResL2Mock) ComposeBorderRow(y int, dst []byte, f func(int) bool) {}
-func (m *hiResL2Mock) HasActiveSprites() bool                               { return false }
-func (m *hiResL2Mock) ComposeSpriteBorderRow(y int, dst []byte, f func(int) bool) {
+func (m *hiResL2Mock) ComposeScanline(y int, ula, dst []byte)                       {}
+func (m *hiResL2Mock) HasActiveTilemap() bool                                       { return false }
+func (m *hiResL2Mock) ComposeBorderRow(y int, dst []byte, xs int, f func(int) bool) {}
+func (m *hiResL2Mock) HasActiveSprites() bool                                       { return false }
+func (m *hiResL2Mock) ComposeSpriteBorderRow(y int, dst []byte, xs int, f func(int) bool) {
 }
 func (m *hiResL2Mock) TilemapIs80Col() bool                    { return false }
 func (m *hiResL2Mock) ComposeWideTilemapRow(y int, dst []byte) {}
 func (m *hiResL2Mock) HiResLayer2Active() bool                 { return true }
 func (m *hiResL2Mock) Layer2Width() int                        { return m.width }
-func (m *hiResL2Mock) ComposeWideLayer2Row(y int, dst []byte) {
+func (m *hiResL2Mock) ComposeWideLayer2Row(y int, dst []byte, xs int) {
 	m.wideL2Calls++
 	if y == 0 { // marker at row 0, x 0 — must survive into the frame
 		dst[0], dst[1], dst[2], dst[3] = 0xAB, 0xCD, 0xEF, 0xFF

@@ -195,12 +195,13 @@ func (c *Compositor) l2Transparent(l2Pal *palette.Palette, idx byte) bool {
 }
 
 // ComposeWideLayer2Row overlays the Layer 2 hi-res row (320 or 640 px,
-// NR$70 resolution 1/2) onto dst as RGBA at the layer's native width —
-// used by the display path where Layer 2 spans the full Next display
-// rather than the inner 256-wide rectangle. Transparent pixels (index ==
-// the global transparency) leave dst untouched, so the caller pre-fills
-// the background (border / ULA). dst must hold LineWidth()*4 bytes.
-func (c *Compositor) ComposeWideLayer2Row(y int, dst []byte) {
+// NR$70 resolution 1/2) onto dst as RGBA at xScale output pixels per
+// Layer 2 pixel — used by the display path where Layer 2 spans the full
+// Next display rather than the inner 256-wide rectangle. Transparent
+// pixels (index == the global transparency) leave dst untouched, so the
+// caller pre-fills the background (border / ULA). dst must hold
+// LineWidth()*xScale*4 bytes.
+func (c *Compositor) ComposeWideLayer2Row(y int, dst []byte, xScale int) {
 	if c.l2 == nil || !c.l2.Enabled() || c.pal == nil {
 		return
 	}
@@ -209,7 +210,7 @@ func (c *Compositor) ComposeWideLayer2Row(y int, dst []byte) {
 		return
 	}
 	w := c.l2.LineWidth()
-	if w > 2*FullWidth || len(dst) < w*4 {
+	if w > 2*FullWidth || len(dst) < w*xScale*4 {
 		return
 	}
 	clipX0, clipX1, rowVisible := c.l2.ClipBounds(y)
@@ -224,11 +225,13 @@ func (c *Compositor) ComposeWideLayer2Row(y int, dst []byte) {
 			continue
 		}
 		r, g, b := l2Pal.RGB(idx)
-		off := x * 4
-		dst[off+0] = r
-		dst[off+1] = g
-		dst[off+2] = b
-		dst[off+3] = 0xFF
+		for i := 0; i < xScale; i++ {
+			off := (x*xScale + i) * 4
+			dst[off+0] = r
+			dst[off+1] = g
+			dst[off+2] = b
+			dst[off+3] = 0xFF
+		}
 	}
 }
 
@@ -252,15 +255,17 @@ func (c *Compositor) Layer2Width() int {
 // 32-px border, plus the full 320-px width of border rows above
 // and below the classic screen area.
 //
-// `dst` is 320×4 RGBA bytes for row `tilemapY` (relative to tilemap
-// origin = top-left of the full 320×256 Next display).
-// `isInBorderArea(x)` returns true for x values OUTSIDE the central
-// 256-px inner area — those are the pixels the border pass paints;
-// inner pixels are left alone (the inner pass already handled them).
+// `dst` is 320×xScale×4 RGBA bytes for row `tilemapY` (relative to
+// tilemap origin = top-left of the full 320×256 Next display), at
+// xScale output pixels per frame pixel.
+// `isInBorderArea(x)` is in FRAME (320-space) x and returns true for x
+// values OUTSIDE the central 256-px inner area — those are the pixels
+// the border pass paints; inner pixels are left alone (the inner pass
+// already handled them).
 //
 // For rows above/below the classic 192-line screen, every x is in
 // the border area; for screen rows, only x < 32 and x >= 32+256.
-func (c *Compositor) ComposeBorderRow(tilemapY int, dst []byte, isInBorderArea func(x int) bool) {
+func (c *Compositor) ComposeBorderRow(tilemapY int, dst []byte, xScale int, isInBorderArea func(x int) bool) {
 	if !c.HasActiveTilemap() {
 		return
 	}
@@ -291,11 +296,13 @@ func (c *Compositor) ComposeBorderRow(tilemapY int, dst []byte, isInBorderArea f
 			continue // below the (opaque) ULA border
 		}
 		r, g, b := tilemapPal.RGB(idx)
-		off := x * 4
-		dst[off+0] = r
-		dst[off+1] = g
-		dst[off+2] = b
-		dst[off+3] = 0xFF
+		for i := 0; i < xScale; i++ {
+			off := (x*xScale + i) * 4
+			dst[off+0] = r
+			dst[off+1] = g
+			dst[off+2] = b
+			dst[off+3] = 0xFF
+		}
 	}
 }
 
@@ -404,8 +411,10 @@ func (c *Compositor) composeTilemapOverlayRow(frameY int, dst []byte, xScale int
 // the inner paper pass to cover the top/bottom border strips (where games park
 // HUD sprites, e.g. Nextoid's SHIPS/SCORE row at Y=224-225) and the left/right
 // 32-px borders of screen rows. The sprite engine's own over-border clip
-// (NR$15 bit 1) decides whether border sprites are visible at all.
-func (c *Compositor) ComposeSpriteBorderRow(frameY int, dst []byte, isInBorderArea func(x int) bool) {
+// (NR$15 bit 1) decides whether border sprites are visible at all. dst
+// carries xScale output pixels per frame pixel; isInBorderArea is in
+// frame (320-space) x.
+func (c *Compositor) ComposeSpriteBorderRow(frameY int, dst []byte, xScale int, isInBorderArea func(x int) bool) {
 	if !c.HasActiveSprites() {
 		return
 	}
@@ -421,8 +430,10 @@ func (c *Compositor) ComposeSpriteBorderRow(frameY int, dst []byte, isInBorderAr
 			continue // outside this pass, or no opaque sprite pixel here
 		}
 		r, g, b := spritePal.RGB(scan[x])
-		off := x * 4
-		dst[off+0], dst[off+1], dst[off+2], dst[off+3] = r, g, b, 0xFF
+		for i := 0; i < xScale; i++ {
+			off := (x*xScale + i) * 4
+			dst[off+0], dst[off+1], dst[off+2], dst[off+3] = r, g, b, 0xFF
+		}
 	}
 }
 

@@ -93,7 +93,9 @@ var mixCellExpect = func() [6][4][6][3]byte {
 }()
 
 // assertMixCellGrid checks the shared verdict grid. at maps a paper-space
-// coordinate to the image pixel (the HiRes frame doubles X).
+// coordinate to the OUTPUT image pixel (all live Next frames are 640
+// wide — two output pixels per frame pixel; the sampled cell centres
+// land on the left half-pixel of each pair).
 func assertMixCellGrid(t *testing.T, img *image.RGBA, at func(px, py int) (int, int)) {
 	t.Helper()
 	for band := 0; band < 6; band++ {
@@ -112,8 +114,8 @@ func assertMixCellGrid(t *testing.T, img *image.RGBA, at func(px, py int) (int, 
 
 // assertMixBandedBorder checks the CPU-raster-timed border bands the
 // ScanlinesLoop writes (C_WHITE for SLU/SUL/USL + top/bottom, C_WHITE2
-// for LSU/LUS/ULS) on a 320x256 sprite-frame image, sampling the left
-// and right border columns of every band.
+// for LSU/LUS/ULS), sampling the left and right border columns of every
+// band at logical (320-space) frame coordinates.
 func assertMixBandedBorder(t *testing.T, img *image.RGBA) {
 	t.Helper()
 	for band := 0; band < 6; band++ {
@@ -124,7 +126,7 @@ func assertMixBandedBorder(t *testing.T, img *image.RGBA) {
 		// Mid-band row: paper band*32+16 = image row 32+band*32+16.
 		y := 32 + band*32 + 16
 		for _, x := range []int{2, 317} {
-			if got := imgRGB(img, x, y); got != want {
+			if got := frameRGB(img, x, y); got != want {
 				t.Errorf("band %d border at (%d,%d) = %v, want %v", band, x, y, got, want)
 			}
 		}
@@ -132,7 +134,7 @@ func assertMixBandedBorder(t *testing.T, img *image.RGBA) {
 	// Top and bottom over-border strips are C_WHITE (BORDER CI_WHITE
 	// before/after the six phases).
 	for _, y := range []int{4, 250} {
-		if got := imgRGB(img, 160, y); got != mixWhite {
+		if got := frameRGB(img, 160, y); got != mixWhite {
 			t.Errorf("over-border strip at (160,%d) = %v, want white", y, got)
 		}
 	}
@@ -148,14 +150,14 @@ func assertMixBandedBorder(t *testing.T, img *image.RGBA) {
 func TestNexttestsGraphicsLayer2Colours(t *testing.T) {
 	h := runNexttestsSNX(t, "L2Colour.snx", 200)
 	img := h.ScreenImage()
-	if img.Rect.Dx() != 320 || img.Rect.Dy() != 256 {
-		t.Fatalf("frame = %dx%d, want 320x256 (sprites active)", img.Rect.Dx(), img.Rect.Dy())
+	if img.Rect.Dx() != 640 || img.Rect.Dy() != 256 {
+		t.Fatalf("frame = %dx%d, want 640x256 (the live Next output width)", img.Rect.Dx(), img.Rect.Dy())
 	}
-	assertMixCellGrid(t, img, func(px, py int) (int, int) { return 32 + px, 32 + py })
+	assertMixCellGrid(t, img, func(px, py int) (int, int) { return 2 * (32 + px), 32 + py })
 	assertMixBandedBorder(t, img)
 	// The ULA background outside the drawn areas is white paper — the
 	// shadow-display regression showed black here.
-	if got := imgRGB(img, 32+110, 32+8); got != mixWhite {
+	if got := frameRGB(img, 32+110, 32+8); got != mixWhite {
 		t.Errorf("ULA paper background = %v, want white (shadow-display regression)", got)
 	}
 }
@@ -169,13 +171,13 @@ func TestNexttestsGraphicsLayer2Colours(t *testing.T) {
 func TestNexttestsGraphicsLayersMixingHiCol(t *testing.T) {
 	h := runNexttestsSNX(t, "LmxHiCol.snx", 200)
 	img := h.ScreenImage()
-	assertMixCellGrid(t, img, func(px, py int) (int, int) { return 32 + px, 32 + py })
+	assertMixCellGrid(t, img, func(px, py int) (int, int) { return 2 * (32 + px), 32 + py })
 	assertMixBandedBorder(t, img)
 	// Hi-colour witness: the banner band (paper rows 8-15 at x=200) is
 	// black in every one of its 8 pixel rows — only per-8x1 attributes
 	// can paint that under a white-paper classic attr map.
 	for y := 8; y < 16; y++ {
-		if got := imgRGB(img, 32+200, 32+y); got != [3]byte{0, 0, 0} {
+		if got := frameRGB(img, 32+200, 32+y); got != [3]byte{0, 0, 0} {
 			t.Errorf("hi-colour banner row %d = %v, want black", y, got)
 		}
 	}
@@ -191,7 +193,7 @@ func TestNexttestsGraphicsLayersMixingHiCol(t *testing.T) {
 func TestNexttestsGraphicsLayersMixingLoRes(t *testing.T) {
 	h := runNexttestsSNX(t, "LmixLoRs.snx", 200)
 	img := h.ScreenImage()
-	assertMixCellGrid(t, img, func(px, py int) (int, int) { return 32 + px, 32 + py })
+	assertMixCellGrid(t, img, func(px, py int) (int, int) { return 2 * (32 + px), 32 + py })
 	assertMixBandedBorder(t, img)
 	// C_TEXT ($F3 → 255,146,255) glyph pixels of the L2-drawn header
 	// texts over the LoRes white background.
@@ -199,7 +201,7 @@ func TestNexttestsGraphicsLayersMixingLoRes(t *testing.T) {
 	whitePixels := 0
 	for y := 8; y < 24; y++ {
 		for x := 140; x < 240; x++ {
-			switch imgRGB(img, 32+x, 32+y) {
+			switch frameRGB(img, 32+x, 32+y) {
 			case [3]byte{255, 146, 255}:
 				textPixels++
 			case mixWhite:
@@ -283,7 +285,7 @@ func TestNexttestsGraphicsLightenDarken(t *testing.T) {
 		{124, 148, [3]byte{255, 0, 255}},
 		{132, 148, [3]byte{255, 0, 255}},
 	} {
-		if got := imgRGB(img, p.x, p.y); got != p.want {
+		if got := frameRGB(img, p.x, p.y); got != p.want {
 			t.Errorf("blend pixel (%d,%d) = %v, want %v", p.x, p.y, got, p.want)
 		}
 	}
@@ -291,12 +293,12 @@ func TestNexttestsGraphicsLightenDarken(t *testing.T) {
 	// raster-timed T_WHITE ($6D → 109,109,109) band across the mixing
 	// rows.
 	for _, p := range [][2]int{{2, 4}, {2, 250}, {160, 4}, {160, 250}} {
-		if got := imgRGB(img, p[0], p[1]); got != mixWhite {
+		if got := frameRGB(img, p[0], p[1]); got != mixWhite {
 			t.Errorf("border at (%d,%d) = %v, want white", p[0], p[1], got)
 		}
 	}
 	for _, p := range [][2]int{{2, 128}, {317, 128}} {
-		if got := imgRGB(img, p[0], p[1]); got != [3]byte{109, 109, 109} {
+		if got := frameRGB(img, p[0], p[1]); got != [3]byte{109, 109, 109} {
 			t.Errorf("border band at (%d,%d) = %v, want T_WHITE grey", p[0], p[1], got)
 		}
 	}
@@ -327,7 +329,7 @@ func TestNexttestsGraphicsLayer2Port(t *testing.T) {
 	bright, pale, red := 0, 0, 0
 	for y := 0; y < 192; y++ {
 		for x := 0; x < 256; x++ {
-			switch imgRGB(img, 32+x, 32+y) {
+			switch frameRGB(img, 32+x, 32+y) {
 			case [3]byte{0, 255, 0}:
 				bright++
 			case [3]byte{0, 219, 0}:
@@ -367,10 +369,10 @@ func TestNexttestsGraphicsLayer2Scroll(t *testing.T) {
 	// Ruler alignment at image row 84 (paper y 60): ULA blue tick at
 	// image x = 72+8k, L2 light-blue dot at x-1.
 	for _, x := range []int{72, 80, 88, 96, 104} {
-		if got := imgRGB(img, x, 84); got != [3]byte{0, 0, 182} {
+		if got := frameRGB(img, x, 84); got != [3]byte{0, 0, 182} {
 			t.Errorf("ULA ruler tick at (%d,84) = %v, want ULA blue", x, got)
 		}
-		if got := imgRGB(img, x-1, 84); got != [3]byte{146, 146, 255} {
+		if got := frameRGB(img, x-1, 84); got != [3]byte{146, 146, 255} {
 			t.Errorf("L2 ruler dot at (%d,84) = %v, want L2 light blue", x-1, got)
 		}
 	}
@@ -378,12 +380,12 @@ func TestNexttestsGraphicsLayer2Scroll(t *testing.T) {
 	// NR$4A fallback (set green by the test) — Layer 2 is clipped there
 	// too, so nothing else may paint it.
 	for _, p := range [][2]int{{32 + 2, 24 + 100}, {32 + 253, 24 + 100}, {32 + 128, 24 + 2}, {32 + 128, 24 + 189}} {
-		if got := imgRGB(img, p[0], p[1]); got != [3]byte{0, 182, 0} {
+		if got := frameRGB(img, p[0], p[1]); got != [3]byte{0, 182, 0} {
 			t.Errorf("clip margin at (%d,%d) = %v, want fallback green", p[0], p[1], got)
 		}
 	}
 	// Inside the window the ULA paper is white.
-	if got := imgRGB(img, 32+128, 24+60); got != mixWhite {
+	if got := frameRGB(img, 32+128, 24+60); got != mixWhite {
 		t.Errorf("paper inside clip = %v, want white", got)
 	}
 }
@@ -416,7 +418,7 @@ func TestNexttestsGraphicsNextReg0x69(t *testing.T) {
 	countIn := func(y int, want [3]byte) int {
 		n := 0
 		for x := 132; x < 252; x++ {
-			if imgRGB(img, x, y) == want {
+			if frameRGB(img, x, y) == want {
 				n++
 			}
 		}
@@ -442,13 +444,13 @@ func TestNexttestsGraphicsNextReg0x69(t *testing.T) {
 		}
 	}
 	for x := 132; x < 252; x++ {
-		if got := imgRGB(img, x, 92); got != [3]byte{255, 255, 255} {
+		if got := frameRGB(img, x, 92); got != [3]byte{255, 255, 255} {
 			t.Errorf("hi-res b/w band at (%d,92) = %v, want white", x, got)
 			break
 		}
 	}
 	for x := 132; x < 252; x++ {
-		if got := imgRGB(img, x, 100); got != [3]byte{255, 255, 0} {
+		if got := frameRGB(img, x, 100); got != [3]byte{255, 255, 0} {
 			t.Errorf("hi-res blue/yellow band at (%d,100) = %v, want yellow", x, got)
 			break
 		}
