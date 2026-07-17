@@ -610,6 +610,19 @@ type nextPaletteReplay interface {
 	EndPaletteReplay()
 }
 
+// nextPaletteSubLineReplay is the optional sub-line extension of the
+// stamped-palette replay (#183 stage 5): the walk opens each paper row
+// with ToLineStart (strictly-before-line writes), asks whether the row
+// has its OWN stamps, and — when it does — applies them per half-pixel
+// via WithinLine inside the row loop, so a CPU palette write recolours
+// from its (line, hpos) raster position, the FPGA's next-lookup rule
+// (zxnext.vhd:6969-6977).
+type nextPaletteSubLineReplay interface {
+	ReplayPaletteToLineStart(line int)
+	ReplayPaletteWithinLine(line, hcount int)
+	PaletteLineHasStamps(line int) bool
+}
+
 // nextTilemapScrollFold is the optional compositor extension for the
 // raster-stamped tilemap scroll: Render opens the bracket (fold CPU
 // stamps + start render-time capture), the compositor walk feeds
@@ -2400,15 +2413,15 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// copper clocks at 28 MHz, a MOVE costs 2 cycles (copper.vhd:87-109)
 	// — exactly one write per half-pixel slot — and every palette lookup
 	// happens once per half-pixel (the sc(0)-multiplexed BRAM reads,
-	// zxnext.vhd:6981/:7033). Half-pixel sx of a row therefore paces to
-	// 2 cycles into its own half-slot: the even half at its pixel's
-	// cycle +2 (identical to the previous per-pixel target, keeping the
-	// paced stride bit-compatible with the coalesced one on event-free
-	// rows) and the odd half at +4.
+	// zxnext.vhd:6981/:7033). Half h of hcount hc therefore paces to 2
+	// cycles into its own half-slot — hc*4 + 2 + 2*h (the slotAt closure
+	// in the row loop): the even half at its pixel's cycle +2 (identical
+	// to the previous per-pixel target, keeping the paced stride
+	// bit-compatible with the coalesced one on event-free rows) and the
+	// odd half at +4.
 	const cyclesPerHcount = 4
 	const lineEndCycle = 456*cyclesPerHcount - 1
 	const frameLines = 312
-	halfCycle := func(sx int) int { return (sx>>1+12)*cyclesPerHcount + 2 + 2*(sx&1) }
 	if len(u.compositorScan) < 2*w*4 {
 		u.compositorScan = make([]byte, 2*w*4)
 		u.compositorComposed = make([]byte, 2*w*4)
@@ -2441,6 +2454,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// Stamp clock and fold convention match borderChanges (BeamPosition
 	// lines, paper top = 64).
 	palReplay, _ := u.nextCompositor.(nextPaletteReplay)
+	subReplay, _ := u.nextCompositor.(nextPaletteSubLineReplay)
 	if palReplay != nil {
 		palReplay.BeginPaletteReplay(stale)
 		defer palReplay.EndPaletteReplay()
@@ -2515,12 +2529,21 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		}
 	}()
 	for y := 0; y < h; y++ {
-		// Apply the frame's stamped palette writes up to this paper
-		// row's raster line (y+64) before composing it — same
-		// convention as the borderChanges fold (line granularity;
-		// sub-line detail is below the render's precision floor).
+		// Apply the frame's stamped palette writes from lines BEFORE
+		// this paper row's raster line (y+64); the row's OWN stamps
+		// land per half-pixel inside the row loop at their (line, hpos)
+		// position (#183 stage 5 — the FPGA's write-visible-on-the-
+		// next-lookup rule, zxnext.vhd:6969-6977). Without the sub-line
+		// surface (reduced mocks) the whole line applies up front, the
+		// pre-stage-5 row-start convention.
+		rowStamps := false
 		if palReplay != nil {
-			palReplay.ReplayPaletteThrough(64 + y)
+			if subReplay != nil {
+				subReplay.ReplayPaletteToLineStart(64 + y)
+				rowStamps = subReplay.PaletteLineHasStamps(64 + y)
+			} else {
+				palReplay.ReplayPaletteThrough(64 + y)
+			}
 		}
 		// Run the Copper for this row BEFORE composing it so MOVEs
 		// affecting the compositor palette / Layer 2 are visible to this
@@ -2569,9 +2592,28 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		// Half-pixel-distinct content: fine-scroll-X shifts the source
 		// stream by one 14 MHz slot, and a Timex hi-res row (mode bit 2,
 		// unless the shadow display forces mode 000) IS a native
-		// 512-wide pixel stream (zxula.vhd:389).
+		// 512-wide pixel stream (zxula.vhd:389). A row with its own
+		// palette stamps needs the half stride too, so the stamps land
+		// at their half-pixel.
 		hiResRow := u.timexVideoMode&0x04 != 0 && u.mem.ScreenPage != 7
-		rowHalf := (rowPaced || u.ulaFineScrollX || hiResRow) && (liveComp != nil || hiComp != nil)
+		rowHalf := (rowPaced || rowStamps || u.ulaFineScrollX || hiResRow) && (liveComp != nil || hiComp != nil)
+		if rowStamps && !(liveULA && rowHalf) {
+			// No per-half-pixel resolution available for this row: apply
+			// its stamps up front (the row-start convention).
+			palReplay.ReplayPaletteThrough(64 + y)
+			rowStamps = false
+		}
+		// slotAt advances the row's sub-line state to hcount hc, half h:
+		// the copper to 2 cycles into that half-slot, and the row's own
+		// CPU palette stamps through hc.
+		slotAt := func(hc, hf int) {
+			if rowPaced {
+				paced.RunToCycle(uint16(y), hc*cyclesPerHcount+2+2*hf)
+			}
+			if rowStamps {
+				subReplay.ReplayPaletteWithinLine(64+y, hc)
+			}
+		}
 		if liveULA {
 			st := u.ulaVideoLine[u.borderTop+y]
 			pushSelect(st.ulaPalSecond)
@@ -2584,10 +2626,10 @@ func (u *ULA) applyNextCompositor(stale bool) {
 					u.paintOutPixel(y, obx, u.nextBorderRGBA(u.borderTop+y, resolver))
 				}
 			}
-			if rowPaced {
+			if rowPaced || rowStamps {
 				for obx := 2 * leftTailPx; obx < 2*BorderLeft; obx++ {
 					bx := obx >> 1
-					paced.RunToCycle(uint16(y), (bx-leftTailPx)*cyclesPerHcount+2+2*(obx&1))
+					slotAt(bx-leftTailPx, obx&1)
 					u.paintOutPixel(y, obx, u.nextBorderRGBA(u.borderTop+y, resolver))
 				}
 			} else {
@@ -2612,7 +2654,11 @@ func (u *ULA) applyNextCompositor(stale bool) {
 					img.Pix[off+3] = out[3]
 				}
 			}
-			u.renderNextULARow(y, ulaScan, resolver, paced, halfCycle, st, rowHalf, rowPaced, fuse)
+			var pace func(sx int)
+			if rowPaced || rowStamps {
+				pace = func(sx int) { slotAt(sx>>1+12, sx&1) }
+			}
+			u.renderNextULARow(y, ulaScan, resolver, pace, st, rowHalf, fuse)
 		} else {
 			// Non-live fallback: recover the logical 256 pixels from the
 			// pre-rendered (xs-doubled) row.
@@ -2634,11 +2680,12 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			u.storeComposedRow(rowStart, composed, w)
 		}
 		if liveULA {
-			// Right border at hcount 268+bx — per half-pixel on paced rows.
-			if rowPaced {
+			// Right border at hcount 268+bx — per half-pixel on paced /
+			// stamped rows.
+			if rowPaced || rowStamps {
 				for obx := 0; obx < 2*BorderLeft; obx++ {
 					bx := obx >> 1
-					paced.RunToCycle(uint16(y), (268+bx)*cyclesPerHcount+2+2*(obx&1))
+					slotAt(268+bx, obx&1)
 					u.paintOutPixel(y, 2*(BorderLeft+w)+obx, u.nextBorderRGBA(u.borderTop+y, resolver))
 				}
 			} else {
@@ -2650,9 +2697,8 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			// live at their hcount, then finish the copper's line.
 			if y+1 < h {
 				for obx := 0; obx < 2*leftTailPx; obx++ {
-					if rowPaced {
-						bx := obx >> 1
-						paced.RunToCycle(uint16(y), (428+bx)*cyclesPerHcount+2+2*(obx&1))
+					if rowPaced || rowStamps {
+						slotAt(428+(obx>>1), obx&1)
 					}
 					leftCarry[obx] = u.nextBorderRGBA(u.borderTop+y+1, resolver)
 				}
@@ -2714,6 +2760,41 @@ func (u *ULA) applyNextCompositor(stale bool) {
 					}
 					palReplay.ReplayPaletteThrough(v - (frameLines - u.borderTop) + (64 - u.borderTop))
 				}
+			}
+			// Event-gated per-half-pixel border rows (#183 stage 5): a
+			// visible sweep row on whose line the copper can retire an
+			// instruction resolves EVERY half-pixel at its own copper
+			// cycle — mid-row border recolours land at their half-pixel
+			// instead of the whole row taking the end-of-line state.
+			// Event-free rows keep the single-resolve fast path (start
+			// == end state, provably identical). Frame pixels 0..19 of
+			// a border row displayed during the PREVIOUS line's tail
+			// (hcount 428..447), so they take the line-START state.
+			rowEvents := paced != nil && liveULA && imgRow >= 0 &&
+				(copperPeek == nil || copperPeek.CanRetireOnLine(uint16(v)))
+			if rowEvents {
+				pushSelect(u.ulaVideoLine[imgRow].ulaPalSecond)
+				off := imgRow * u.img.Stride
+				startC := u.nextBorderRGBA(imgRow, resolver)
+				for ox := 0; ox < 2*leftTailPx; ox++ {
+					o := off + ox*4
+					u.img.Pix[o+0] = startC[0]
+					u.img.Pix[o+1] = startC[1]
+					u.img.Pix[o+2] = startC[2]
+					u.img.Pix[o+3] = startC[3]
+				}
+				for ox := 2 * leftTailPx; ox < TotalWidth*u.xs; ox++ {
+					// Frame pixel ox>>1 displays at hcount (ox>>1)-20.
+					paced.RunToCycle(uint16(v), ((ox>>1)-leftTailPx)*cyclesPerHcount+2+2*(ox&1))
+					c := u.nextBorderRGBA(imgRow, resolver)
+					o := off + ox*4
+					u.img.Pix[o+0] = c[0]
+					u.img.Pix[o+1] = c[1]
+					u.img.Pix[o+2] = c[2]
+					u.img.Pix[o+3] = c[3]
+				}
+				paced.RunToCycle(uint16(v), lineEndCycle)
+				continue
 			}
 			if paced != nil && liveULA {
 				paced.RunToCycle(uint16(v), lineEndCycle)
@@ -2973,12 +3054,14 @@ func (u *ULA) putPix(x, y int, c color.RGBA) {
 // map: the ULA barrel shifter shifts at 14 MHz and the fine bit is the
 // LSB of its shift amount (zxula.vhd:199 px(8), :353 scroll_0 <=
 // px(2:0) & px(8), applied at the shift-register load :395).
-// fuse, when non-nil (the stage-3 fused live compose), receives each
-// computed half-pixel IN PLACE of the dst store — called inside the
-// copper interleave so the compositor reads live state at the
-// half-pixel's own copper time.
+// pace, when non-nil, advances the row's sub-line state (copper cycles
+// and same-line CPU palette stamps) to the given display half-pixel —
+// called before each slot's resolution. fuse, when non-nil (the
+// stage-3 fused live compose), receives each computed half-pixel IN
+// PLACE of the dst store — called inside the interleave so the
+// compositor reads live state at the half-pixel's own copper time.
 func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
-	paced nextCopperCyclePaced, halfCycle func(int) int, st ulaVideoState, half, rowPaced bool,
+	pace func(sx int), st ulaVideoState, half bool,
 	fuse func(i int, pix [4]byte)) {
 	screenMem := u.mem.GetPage(u.mem.ScreenPage)
 	fallback := u.ulaDisabledFill()
@@ -3065,8 +3148,8 @@ func (u *ULA) renderNextULARow(y int, dst []byte, res nextULAPaletteResolver,
 		if !half {
 			sx = 2 * i
 		}
-		if rowPaced && paced != nil {
-			paced.RunToCycle(uint16(y), halfCycle(sx))
+		if pace != nil {
+			pace(sx)
 		}
 		if i&cellMask == 0 {
 			latchMode()

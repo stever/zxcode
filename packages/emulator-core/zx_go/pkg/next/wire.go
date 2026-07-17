@@ -1176,10 +1176,9 @@ func WirePalette(d *nextregs.Dispatcher, b *palette.Bank, ulaNext ULANextSink) {
 	// from their raster position (the ScanlineReadingAndInterrupt
 	// test's one-line target markers are exactly such flashes).
 	if bp, ok := ulaNext.(interface{ BeamPosition() (int, int) }); ok {
-		b.SetRasterLineSource(func() int {
-			line, _ := bp.BeamPosition()
-			return line
-		})
+		// Full (line, hpos) stamps: the render's sub-line replay applies
+		// same-line writes at their own half-pixel (#183 stage 5).
+		b.SetRasterPosSource(bp.BeamPosition)
 	}
 	pushULANext := func(disp *nextregs.Dispatcher) {
 		if ulaNext != nil {

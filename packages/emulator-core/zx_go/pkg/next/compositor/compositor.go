@@ -685,6 +685,32 @@ func (c *Compositor) ReplayPaletteThrough(line int) {
 	}
 }
 
+// ReplayPaletteToLineStart applies stamped palette writes from lines
+// STRICTLY BEFORE the given raster line; the line's own stamps then
+// land per half-pixel via ReplayPaletteWithinLine (#183 stage 5 —
+// sharpening the row-start application to the FPGA's next-lookup rule,
+// zxnext.vhd:6969-6977).
+func (c *Compositor) ReplayPaletteToLineStart(line int) {
+	if c.pal != nil {
+		c.pal.ReplayToLineStart(line)
+	}
+}
+
+// ReplayPaletteWithinLine applies the raster line's own stamped writes
+// whose horizontal position has been reached (hcount monotonic across
+// the row).
+func (c *Compositor) ReplayPaletteWithinLine(line, hcount int) {
+	if c.pal != nil {
+		c.pal.ReplayWithinLine(line, hcount)
+	}
+}
+
+// PaletteLineHasStamps reports whether the line has unapplied stamped
+// writes — the ULA walk's sub-line-row gate.
+func (c *Compositor) PaletteLineHasStamps(line int) bool {
+	return c.pal != nil && c.pal.LineHasStamps(line)
+}
+
 // RewindPaletteReplay rewinds applied stamped writes back to the
 // frame-start state for a second raster pass.
 func (c *Compositor) RewindPaletteReplay() {

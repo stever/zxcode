@@ -179,3 +179,55 @@ func TestStampedWritesWrite9RestoresPriority(t *testing.T) {
 		t.Errorf("EndReplay should restore live value+priority, got %03X/%d", p.Get(4), p.Priority(4))
 	}
 }
+
+// TestStampedWritesSubLineReplay pins the (line, hpos) sub-line replay
+// (#183 stage 5): with a full raster-position source wired, same-line
+// writes apply at their own horizontal stamp — ReplayToLineStart leaves
+// them pending, ReplayWithinLine applies them once the row walk reaches
+// hpos*8 in hcount, and LineHasStamps gates the row's half-pixel
+// stride. Oracle: a palette BRAM write is visible to the very next
+// lookup (opposite-edge clocking, zxnext.vhd:6969-6977) — i.e. from
+// its raster position within the line, not from the line start.
+func TestStampedWritesSubLineReplay(t *testing.T) {
+	line, hpos := 0, 0
+	b := NewBank()
+	b.SetRasterPosSource(func() (int, int) { return line, hpos })
+	b.Select(PaletteULAFirst)
+	b.SetAutoIncDisable(true)
+	b.SetIndex(23)
+	base := b.Palette(int(PaletteULAFirst)).Get(23)
+
+	line, hpos = 100, 20 // mid-line: hcount 160
+	b.Write8(0x0C)
+	green := b.Palette(int(PaletteULAFirst)).Get(23)
+	line, hpos = 101, 0
+	b.Write8(0xB6)
+	white := b.Palette(int(PaletteULAFirst)).Get(23)
+
+	if !b.BeginReplay(false) {
+		t.Fatal("BeginReplay should report stamped writes")
+	}
+	b.ReplayToLineStart(100)
+	if got := b.Palette(int(PaletteULAFirst)).Get(23); got != base {
+		t.Errorf("to line 100 start: entry = %03X, want %03X (stamp is mid-line)", got, base)
+	}
+	if !b.LineHasStamps(100) {
+		t.Error("LineHasStamps(100) = false, want true")
+	}
+	b.ReplayWithinLine(100, 159)
+	if got := b.Palette(int(PaletteULAFirst)).Get(23); got != base {
+		t.Errorf("within line at hcount 159: entry = %03X, want %03X (stamp at hcount 160)", got, base)
+	}
+	b.ReplayWithinLine(100, 160)
+	if got := b.Palette(int(PaletteULAFirst)).Get(23); got != green {
+		t.Errorf("within line at hcount 160: entry = %03X, want green %03X", got, green)
+	}
+	if b.LineHasStamps(100) {
+		t.Error("LineHasStamps(100) still true after the line's stamp applied")
+	}
+	b.ReplayToLineStart(102)
+	if got := b.Palette(int(PaletteULAFirst)).Get(23); got != white {
+		t.Errorf("to line 102 start: entry = %03X, want white %03X", got, white)
+	}
+	b.EndReplay()
+}

@@ -271,3 +271,72 @@ func TestCopperMidRowPaletteMoveRecoloursLayer2(t *testing.T) {
 		}
 	}
 }
+
+// TestCopperMidBorderRowRecolour — the #183 stage-5 border-row pin:
+// BORDER rows (the top/bottom sweep, outside the paper walk) resolve
+// per half-pixel too when the copper retires instructions on their
+// line — the FPGA feeds every border pixel through the same palette
+// SRAM as the paper, one lookup per half-pixel (zxnext.vhd:6981), so a
+// mid-row palette MOVE recolours the border from exactly its landing
+// half-pixel (previously the whole row took the end-of-line state).
+func TestCopperMidBorderRowRecolour(t *testing.T) {
+	h := newHalfPixelLiveHarness(t, nil)
+	// Plain scene: Layer 2 off, white border (entry 16+7 = 23).
+	h.ULA().WritePort(0x243B, 0x69)
+	h.ULA().WritePort(0x253B, 0x00)
+	h.ULA().WritePort(0x00FE, 7)
+	writeReg := func(reg, val byte) {
+		h.ULA().WritePort(0x243B, reg)
+		h.ULA().WritePort(0x253B, val)
+	}
+	writeReg(0x62, 0)
+	writeReg(0x61, 0)
+	for _, w := range []uint16{
+		// Raster line 200 = bottom-border image row 232.
+		0x8000 | 8<<9 | 200, // WAIT line 200, X=8 (hcount 76 = frame px 96)
+		0x4017,              // MOVE NR$40, 23 (the border-7 entry)
+		0x41E0,              // MOVE NR$41, $E0 (red)
+		0x8000 | 0<<9 | 202, // WAIT line 202, X=0
+		0x4017,              // MOVE NR$40, 23
+		0x41B6,              // MOVE NR$41, $B6 (the boot classic white, $16D)
+		0xFFFF,              // HALT
+	} {
+		writeReg(0x60, byte(w>>8))
+		writeReg(0x60, byte(w))
+	}
+	writeReg(0x61, 0)
+	writeReg(0x62, 0xC0)
+	h.RunFrames(4)
+
+	img := h.ScreenImage()
+	white := [3]byte{182, 182, 182}
+	red := [3]byte{255, 0, 0}
+	// Row 231: untouched white. Row 232: white through the MOVE's
+	// landing — the value write retires on hcount 76's ODD half-slot,
+	// so red starts at output column 2*(76+20)+1 = 193 — and the
+	// previous-line-tail pixels (outputs 0..39) keep the line-START
+	// state. Row 233: fully red. Row 234: restored white from early in
+	// the row. Row 236: white.
+	for _, p := range []struct {
+		ox, y int
+		want  [3]byte
+		what  string
+	}{
+		{200, 231, white, "row 231 untouched"},
+		{20, 232, white, "row 232 line-start tail"},
+		{190, 232, white, "row 232 before the landing"},
+		{192, 232, white, "row 232 even half of the landing hcount"},
+		{193, 232, red, "row 232 red from the landing half-pixel"},
+		{300, 232, red, "row 232 after the landing"},
+		{630, 232, red, "row 232 right border red"},
+		{300, 233, red, "row 233 fully red"},
+		{20, 234, red, "row 234 line-start tail still red"},
+		{60, 234, red, "row 234 before the restore lands"},
+		{70, 234, white, "row 234 restored white"},
+		{300, 236, white, "row 236 white"},
+	} {
+		if got := imgRGB(img, p.ox, p.y); got != p.want {
+			t.Errorf("%s: output (%d, row %d) = %v, want %v", p.what, p.ox, p.y, got, p.want)
+		}
+	}
+}

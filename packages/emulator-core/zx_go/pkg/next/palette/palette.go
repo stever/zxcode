@@ -172,6 +172,7 @@ type Bank struct {
 	// colour and NR$43-select changes already get. rasterLine is nil until
 	// wired (WirePalette) — no logging, no overhead for classic machines.
 	rasterLine     func() int
+	rasterPos      func() (line, hpos int)
 	writes         []stampedWrite
 	replayCursor   int
 	replayActive   bool // suspends logging while the render replays/copper runs
@@ -182,7 +183,14 @@ type Bank struct {
 // stampedWrite is one logged palette-entry mutation: enough to undo
 // (old) and redo (new) the write during the render's per-row replay.
 type stampedWrite struct {
-	line     int
+	line int
+	// hpos is the horizontal stamp in BeamPosition units (8-pixel
+	// hcount columns, 0..56) — 0 when only a line source is wired. The
+	// render's sub-line replay (#183 stage 5) applies same-line writes
+	// at their own half-pixel instead of the row start, matching the
+	// FPGA's write-visible-on-the-next-lookup BRAM rule
+	// (zxnext.vhd:6969-6977).
+	hpos     int
 	pal      byte // palette slot 0..7
 	idx      byte
 	old, new uint16
@@ -200,6 +208,17 @@ const maxStampedWrites = 4096
 // BeamPosition line, 0 = frame INT) that stamps each palette content
 // write. Nil disables logging.
 func (b *Bank) SetRasterLineSource(fn func() int) { b.rasterLine = fn }
+
+// SetRasterPosSource wires the full (line, hpos) raster clock (the
+// ULA's BeamPosition) so writes stamp with their horizontal position
+// too — the render's sub-line replay applies them at their own
+// half-pixel (#183 stage 5). Implies SetRasterLineSource.
+func (b *Bank) SetRasterPosSource(fn func() (line, hpos int)) {
+	b.rasterPos = fn
+	if fn != nil {
+		b.rasterLine = func() int { line, _ := fn(); return line }
+	}
+}
 
 // logWrite records one entry mutation with the current raster stamp.
 // Must be called BEFORE the mutation lands so old captures the prior
@@ -221,8 +240,13 @@ func (b *Bank) logWrite(idx byte, new uint16, newPrio byte, hasPrio bool) {
 		return
 	}
 	pal := b.palettes[b.selected]
+	line, hpos := b.rasterLine(), 0
+	if b.rasterPos != nil {
+		line, hpos = b.rasterPos()
+	}
 	b.writes = append(b.writes, stampedWrite{
-		line:    b.rasterLine(),
+		line:    line,
+		hpos:    hpos,
 		pal:     b.selected,
 		idx:     idx,
 		old:     pal.Get(idx),
@@ -275,6 +299,44 @@ func (b *Bank) ReplayThrough(line int) {
 		}
 		b.replayCursor++
 	}
+}
+
+// ReplayToLineStart applies every logged write stamped STRICTLY BEFORE
+// line — the sub-line replay's row opener; the row's own stamps then
+// land per half-pixel via ReplayWithinLine.
+func (b *Bank) ReplayToLineStart(line int) {
+	for b.replayCursor < len(b.writes) && b.writes[b.replayCursor].line < line {
+		b.applyCursor()
+	}
+}
+
+// ReplayWithinLine applies line-stamped writes whose horizontal stamp
+// has been reached: hpos*8 <= hcount (BeamPosition hpos = hcount/8).
+// Call with monotonically increasing hcount across the row.
+func (b *Bank) ReplayWithinLine(line, hcount int) {
+	for b.replayCursor < len(b.writes) {
+		w := &b.writes[b.replayCursor]
+		if w.line != line || w.hpos*8 > hcount {
+			return
+		}
+		b.applyCursor()
+	}
+}
+
+// LineHasStamps reports whether unapplied stamped writes exist for
+// exactly this line — the render's sub-line-row gate.
+func (b *Bank) LineHasStamps(line int) bool {
+	return b.replayCursor < len(b.writes) && b.writes[b.replayCursor].line == line
+}
+
+// applyCursor applies the write at the cursor and advances it.
+func (b *Bank) applyCursor() {
+	w := b.writes[b.replayCursor]
+	b.palettes[w.pal].Set(w.idx, w.new)
+	if w.hasPrio {
+		b.palettes[w.pal].SetPriority(w.idx, w.newPrio)
+	}
+	b.replayCursor++
 }
 
 // RewindReplay rewinds the applied writes back to the frame-start
