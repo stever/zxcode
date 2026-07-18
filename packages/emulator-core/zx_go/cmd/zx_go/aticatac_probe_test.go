@@ -202,6 +202,39 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			t.Logf("frame %6d: death ring dumped (pc entered $A6xx)", frame)
 		}
 	})
+	var wTick, wD107, wD030, wNMI int
+	wTickRets := map[uint16]int{}
+	wD107SPs := map[uint16]int{}
+	emu.cpu.AddPreFetchHook("atic-skip-ledger", func(pc uint16) {
+		if frame < 5005 || frame > 5035 {
+			return
+		}
+		switch pc {
+		case 0xCF80:
+			wTick++
+			sp := emu.cpu.SP
+			wTickRets[uint16(emu.mem.Read(sp))|uint16(emu.mem.Read(sp+1))<<8]++
+		case 0xD107:
+			wD107++
+			wD107SPs[emu.cpu.SP]++
+		case 0xD030:
+			wD030++
+		case 0x0066:
+			wNMI++
+			if frame >= 5015 && frame <= 5016 {
+				sp := emu.cpu.SP
+				ipc := uint16(emu.mem.Read(sp)) | uint16(emu.mem.Read(sp+1))<<8
+				t.Logf("frame %d NMI refT=%d sp=$%04X intpc=$%04X", frame, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), sp, ipc)
+			}
+		case 0xD146:
+			if frame >= 5015 && frame <= 5016 {
+				hl := emu.cpu.HL()
+				t.Logf("frame %d CMD18-ARG refT=%d hl=$%04X sp=$%04X arg=[%02X %02X %02X %02X]",
+					frame, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), hl, emu.cpu.SP,
+					emu.mem.Read(hl), emu.mem.Read(hl-1), emu.mem.Read(hl-2), emu.mem.Read(hl-3))
+			}
+		}
+	})
 	var lastNMIRefT uint64
 	emu.cpu.AddPreFetchHook("atic-nmi-gap", func(pc uint16) {
 		if pc != 0x0066 {
@@ -301,6 +334,31 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			emu.kbd.PressMatrixKey(6, 0x01, true) // ENTER
 		case 12030:
 			emu.kbd.PressMatrixKey(6, 0x01, false)
+		case 5013:
+			if emu.sdCard != nil {
+				n := 0
+				emu.sdCard.SetLogger(func(cmd byte, arg uint32, isACMD bool) {
+					n++
+					if n <= 80 {
+						t.Logf("frame %6d: SD CMD%d arg=$%08X pc=$%04X", frame, cmd, arg, emu.cpu.PC)
+					}
+				})
+			}
+			loop := make([]byte, 0x200)
+			for i := range loop {
+				loop[i] = emu.mem.Read(0x7E00 + uint16(i))
+			}
+			_ = os.WriteFile(outDir+"/emu_loader_7E00.bin", loop, 0644)
+		case 5015:
+			blk := make([]byte, 0x180)
+			for i := range blk {
+				blk[i] = emu.mem.Read(0xD100 + uint16(i))
+			}
+			_ = os.WriteFile(outDir+"/emu_D100.bin", blk, 0644)
+		case 5018:
+			if emu.sdCard != nil {
+				emu.sdCard.SetLogger(nil)
+			}
 		case 5090:
 			if emu.sdCard != nil {
 				emu.sdCard.SetLogger(func(cmd byte, arg uint32, isACMD bool) {
@@ -329,6 +387,21 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 		}
 		emu.cpu.ExecuteFrame(frameTStatesForModel(roms.ModelNext))
+		if frame >= 5005 && frame <= 5035 {
+			t.Logf("frame %d LEDGER: tick=%d rets=%v d107=%d sps=%v d030=%d nmi=%d pcEnd=$%04X F990=$%02X",
+				frame, wTick, wTickRets, wD107, wD107SPs, wD030, wNMI, emu.cpu.PC, emu.mem.Read(0xF990))
+			wTick, wD107, wD030, wNMI = 0, 0, 0, 0
+			for k := range wTickRets {
+				delete(wTickRets, k)
+			}
+			for k := range wD107SPs {
+				delete(wD107SPs, k)
+			}
+		}
+		if frame == 4500 || frame == 5015 {
+			t.Logf("frame %d: NR B8=%02X B9=%02X BA=%02X BB=%02X B0=%02X", frame,
+				emu.nextRegs.Raw(0xB8), emu.nextRegs.Raw(0xB9), emu.nextRegs.Raw(0xBA), emu.nextRegs.Raw(0xBB), emu.nextRegs.Raw(0xB0))
+		}
 		if emu.peripherals != nil {
 			emu.peripherals.Frame()
 		}
