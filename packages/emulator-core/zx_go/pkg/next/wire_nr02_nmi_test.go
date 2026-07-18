@@ -35,6 +35,12 @@ func TestNR02GeneratesMultifaceNMI(t *testing.T) {
 	d, cpu := nr02NMIHarness(t)
 	cpu.PendingNMI.Store(false)
 
+	// The software NMI pulses are gated on the NR$06 button-NMI enables
+	// (zxnext.vhd:2091-2092: nmi_assert_mf requires
+	// nr_06_button_m1_nmi_en). The boot firmware's config.ini defaults
+	// set them (applyTBBLUEFWBootDefaults stores $A8); this partial
+	// harness must enable the bit explicitly.
+	d.Store(0x06, 0x08)
 	d.WriteReg(0x02, 0x08) // bit 3 = Generate multiface NMI
 
 	if !cpu.PendingNMI.Load() {
@@ -51,6 +57,9 @@ func TestNR02GeneratesDivMMCNMI(t *testing.T) {
 	d, cpu := nr02NMIHarness(t)
 	cpu.PendingNMI.Store(false)
 
+	// NR$06 bit 4 (Drive button NMI enable) gates the divMMC pulse —
+	// zxnext.vhd:2091 nmi_assert_divmmc. See TestNR02NMIGatedOnNR06.
+	d.Store(0x06, 0x10)
 	d.WriteReg(0x02, 0x04) // bit 2 = Generate divmmc NMI
 
 	if !cpu.PendingNMI.Load() {
@@ -91,5 +100,88 @@ func TestNR02NMIDoesNotResetCPU(t *testing.T) {
 
 	if cpu.PC != 0x1234 {
 		t.Errorf("NR$02 = $08 (NMI, no reset) changed PC to %#04x, want 0x1234 unchanged", cpu.PC)
+	}
+}
+
+// TestNR02NMIGatedOnNR06 pins the hardware gate the #187 investigation
+// surfaced: NR$02's software NMI pulses assert only through
+// nmi_assert_mf / nmi_assert_divmmc, which require the NR$06
+// button-NMI enable bits (bit 3 = M1/Multiface, bit 4 = Drive/divMMC —
+// zxnext.vhd:2091-2092, :5165). With the enables clear, the write is
+// dropped: no PendingNMI, no source latch.
+func TestNR02NMIGatedOnNR06(t *testing.T) {
+	d, cpu := nr02NMIHarness(t)
+	d.Store(0x06, 0x00)
+
+	cpu.PendingNMI.Store(false)
+	d.WriteReg(0x02, 0x08)
+	if cpu.PendingNMI.Load() {
+		t.Error("MF NMI fired with NR$06 bit 3 clear — hardware gates it")
+	}
+	if got := d.ReadReg(0x02) & 0x08; got != 0 {
+		t.Errorf("MF NMI source latched (%#02x) despite disabled enable", got)
+	}
+
+	cpu.PendingNMI.Store(false)
+	d.WriteReg(0x02, 0x04)
+	if cpu.PendingNMI.Load() {
+		t.Error("divMMC NMI fired with NR$06 bit 4 clear — hardware gates it")
+	}
+	if got := d.ReadReg(0x02) & 0x04; got != 0 {
+		t.Errorf("divMMC NMI source latched (%#02x) despite disabled enable", got)
+	}
+}
+
+// nr02InFlightStub satisfies the divmmcSPI NMIInFlight/AssertNMIButton
+// probe interface for TestNR02DivMMCNMINeverNests.
+type nr02InFlightStub struct {
+	inFlight bool
+	asserts  int
+}
+
+func (s *nr02InFlightStub) ResetSPI()         {}
+func (s *nr02InFlightStub) AssertNMIButton()  { s.asserts++; s.inFlight = true }
+func (s *nr02InFlightStub) NMIInFlight() bool { return s.inFlight }
+
+// TestNR02DivMMCNMINeverNests pins the arbiter's serialization
+// (zxnext.vhd:2096-2116): once a divMMC NMI is latched, further NR$02
+// bit-2 pulses are dropped until the handler's RETN ends the service
+// window (S_NMI_END) — NMIs never nest. Atic Atac's ~20 kHz copper
+// pacer relies on this: without the drop, pulses arriving inside the
+// handler re-entered it at its RETN and filled RAM with the return
+// address (#187).
+func TestNR02DivMMCNMINeverNests(t *testing.T) {
+	mem, err := memory.New(wireTestROMs(t), roms.ModelNext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disp := nextregs.New()
+	cpu := z80.New(mem, wireTestULA{})
+	stub := &nr02InFlightStub{}
+	WireReset(disp, mem, cpu, stub, nil)
+	disp.Store(0x06, 0x10)
+
+	cpu.PendingNMI.Store(false)
+	disp.WriteReg(0x02, 0x04)
+	if !cpu.PendingNMI.Load() || stub.asserts != 1 {
+		t.Fatalf("first pulse should latch (pending=%v asserts=%d)",
+			cpu.PendingNMI.Load(), stub.asserts)
+	}
+
+	// Handler running (in flight): pulses are dropped.
+	cpu.PendingNMI.Store(false)
+	disp.WriteReg(0x02, 0x04)
+	disp.WriteReg(0x02, 0x04)
+	if cpu.PendingNMI.Load() || stub.asserts != 1 {
+		t.Fatalf("in-flight pulses must be dropped (pending=%v asserts=%d)",
+			cpu.PendingNMI.Load(), stub.asserts)
+	}
+
+	// RETN ends the window; the next pulse latches again.
+	stub.inFlight = false
+	disp.WriteReg(0x02, 0x04)
+	if !cpu.PendingNMI.Load() || stub.asserts != 2 {
+		t.Fatalf("post-RETN pulse should latch (pending=%v asserts=%d)",
+			cpu.PendingNMI.Load(), stub.asserts)
 	}
 }

@@ -305,10 +305,31 @@ shape, zxnext.vhd:6543-6552). The pieces:
   10-bit list address WRAPPING at 1024 in every running mode, and
   HALT parking (not stopping — the StartOnVBL frame reset un-parks
   it). The wrap is load-bearing: a free-running mode-01 list that
-  ends without HALT loops forever, and a copper MOVE to NR$02 goes
-  through the shared dispatcher, so bit 2 fires the divMMC NMI —
-  Atic Atac's sample pacer is a 1024-entry looped list whose last
-  entry is MOVE NR$02,$04, one NMI per wrap (~20 kHz).
+  ends without HALT loops forever — Atic Atac's sample pacer is a
+  1024-entry looped list whose last entry is MOVE NR$02,$04, one
+  divMMC NMI per wrap (~20 kHz).
+- Copper NR$02 NMI delivery (#187): the render passes run AFTER the
+  frame's CPU has executed, so NR$02 MOVEs fired there would collapse
+  into one PendingNMI edge per frame (the pacer above ran at 50 Hz —
+  one sample per frame, the guest's whole music timeline ~400× slow).
+  The render RegWriter therefore FILTERS NR$02 (cmd/zx_go
+  copperVideoWriter), and a per-frame schedule delivers those writes
+  on the CPU timeline instead: `copper.FrameMoveInstants` simulates
+  one frame on a throwaway copy of the copper (Step's exact costs;
+  the real state still advances only at render), and the CPU's
+  `ExtNMIFunc` poll (cmd/zx_go copperNMIPacer — live during HALT,
+  which a prefetch hook is not; guests `DI;HALT` awaiting the first
+  pulse) fires each instant through the dispatcher's one NR$02
+  handler. Any NR$60-$63 write bumps the copper's Generation and
+  clears the schedule immediately (a stopped/reprogrammed pacer must
+  fall silent at once), rebuilding after a quiet gap. The dispatcher
+  handler enforces the FPGA's NMI gates (zxnext.vhd:2091-2116): the
+  NR$06 button-NMI enables (bit 3 MF / bit 4 divMMC — boot firmware
+  config defaults $A8, applyTBBLUEFWBootDefaults) and the arbiter's
+  no-nesting envelope (a new divMMC pulse is DROPPED from assertion
+  until the handler's RETN — divmmc.Pager.NMIInFlight). Pinned by
+  TestCopperNMIPacerDeliversAtHardwareRate, TestNR02NMIGatedOnNR06,
+  TestNR02DivMMCNMINeverNests, TestFrameMoveInstantsAticPacer.
 - Live-palette ULA render (`pkg/ula` renderNextULARow +
   `Compositor.ULARGBA`): on the Next, ULA inner-screen and border
   pixels resolve through the LIVE ULA palette exactly like the FPGA's

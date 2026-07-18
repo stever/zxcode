@@ -721,7 +721,18 @@ func wireNextSubsystems(e *emulator) error {
 	prio := next.NewLayerPriority()
 	sprites := sprite.New()
 	cop := copper.New()
-	cop.SetRegWriter(disp)
+	// The render pass's copper MOVEs write video registers through the
+	// dispatcher, but NR$02 (NMI generation) is delivered on the CPU
+	// timeline by the copperNMIPacer below — at render time a frame's
+	// worth of NMI edges would collapse into one PendingNMI latch
+	// (Atic Atac's ~20 kHz divMMC sample pacer ran at 50 Hz, #187).
+	cop.SetRegWriter(copperVideoWriter{d: disp})
+	copperPacer := newCopperNMIPacer(cop, cpu, mem, disp)
+	// ExtNMIFunc, not a prefetch hook: the poll must keep running while
+	// the CPU is halted (the game HALTs with DI waiting for the pacer's
+	// first NMI — a hook that only fires on instruction fetches would
+	// deadlock there).
+	cpu.ExtNMIFunc = copperPacer.poll
 	rtcEngine := rtcpkg.New()
 	// ZX_GO_RTC_FIXED=<RFC3339> freezes the guest clock — makes the
 	// NextZXOS menu's per-second redraw task quiescent so key events

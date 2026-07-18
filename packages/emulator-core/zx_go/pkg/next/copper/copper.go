@@ -101,7 +101,18 @@ type Copper struct {
 	lineV    uint16
 	linePos  int
 	runLastV uint16
+
+	// gen counts CPU-side mutations (NR$60-$63 writes: program data,
+	// cursor, mode). Side-effect schedulers (the NR$02 NMI pacer)
+	// precompute a frame of copper execution; a generation bump tells
+	// them their schedule is stale.
+	gen uint32
 }
+
+// Generation returns the CPU-write mutation counter. It bumps on every
+// NR$60-$63 write (program data, cursor, start mode) — anything that
+// can change what a precomputed execution schedule would have done.
+func (c *Copper) Generation() uint32 { return c.gen }
 
 // New returns an empty copper.
 func New() *Copper { return &Copper{stopped: true} }
@@ -118,6 +129,7 @@ func (c *Copper) SetRegWriter(rw RegWriter) { c.regs = rw }
 // address patches just the low byte of that instruction, unlike the
 // NR$63 staged pair.
 func (c *Copper) WriteData(b byte) {
+	c.gen++
 	i := (c.addr >> 1) & (MaxInstructions - 1)
 	if c.addr&1 == 0 {
 		c.stored = b // nr_copper_data_stored latches even bytes too (:5419)
@@ -135,6 +147,7 @@ func (c *Copper) WriteData(b byte) {
 // with write_8 = '0'), so the copper never executes a half-updated
 // instruction.
 func (c *Copper) WriteData16(b byte) {
+	c.gen++
 	i := (c.addr >> 1) & (MaxInstructions - 1)
 	if c.addr&1 == 0 {
 		c.stored = b
@@ -156,6 +169,7 @@ func (c *Copper) WriteData16(b byte) {
 // reset-to-Welcome bug): the FPGA needs no separate pairing latch
 // for NR$60 and neither do we.
 func (c *Copper) SetWritePtrLow(b byte) {
+	c.gen++
 	c.addr = (c.addr & 0x0700) | uint16(b)
 }
 
@@ -169,6 +183,7 @@ func (c *Copper) SetWritePtrLow(b byte) {
 // base/Copper test's Z80 line-animation patcher does every frame)
 // does not disturb the running program.
 func (c *Copper) SetWritePtrHighAndMode(b byte) {
+	c.gen++
 	c.addr = (c.addr & 0x00FF) | (uint16(b&0x07) << 8)
 	mode := StartMode((b >> 6) & 0x03)
 	if mode == c.mode {
@@ -440,4 +455,97 @@ func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 		}
 	}
 	return executed
+}
+
+// MoveInstant is one captured MOVE from FrameMoveInstants: the raster
+// line (same vcount space the per-line render drive uses), the copper
+// cycle within that line at which the write pulse lands, and the value
+// written.
+type MoveInstant struct {
+	Line  uint16
+	Cycle int
+	Val   byte
+}
+
+// HasRunnableMoveTo reports whether the copper could deliver a MOVE to
+// reg at all: it is in a running mode and the program contains a MOVE
+// targeting that register. Cheap gate for per-frame side-effect
+// scheduling (the NR$02 NMI pacer) — most programs never touch NR$02.
+func (c *Copper) HasRunnableMoveTo(reg byte) bool {
+	if c.mode == StartStop {
+		return false
+	}
+	for _, w := range c.program {
+		if w&0x8000 == 0 && byte((w>>8)&0x7F) == reg && (w>>8)&0x7F != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// FrameMoveInstants simulates ONE frame of copper execution on a
+// throwaway copy of the current state and captures every MOVE to reg
+// with its raster instant. The real state is untouched — the render
+// pass stays the authoritative advancer. The cost model is Step's
+// exactly (MOVE 2 cycles, NOOP 1, WAIT releases at hcount >=
+// (X<<3)+12 with the spent-floor, HALT parks, address wraps at the
+// 10-bit list end, StartOnVBL restarts at the frame top).
+//
+// This exists for MOVEs with machine side effects beyond video —
+// NR$02's NMI generation bits. The render-time copper pass runs after
+// the frame's CPU has already executed, so side-effectful writes fired
+// there coalesce into one visible edge per frame; the schedule this
+// returns lets the machine deliver them on the CPU timeline instead
+// (Atic Atac's ~20 kHz divMMC NMI sample pacer, #187).
+func (c *Copper) FrameMoveInstants(reg byte, lines, cyclesPerLine int) []MoveInstant {
+	if c.mode == StartStop {
+		return nil
+	}
+	sim := *c
+	var out []MoveInstant
+	// The per-line drive mirrors the render's: each line offers the full
+	// line budget, WAITs park against the line's end-of-line hcount
+	// horizon reached progressively (the spent counter is the intra-line
+	// cycle position).
+	for line := 0; line < lines; line++ {
+		v := uint16(line)
+		if sim.mode == StartOnVBL && v < sim.lastScanline {
+			sim.pc = 0
+		}
+		sim.lastScanline = v
+		if sim.stopped {
+			return out
+		}
+	lineLoop:
+		for spent := 0; spent < cyclesPerLine; {
+			inst := Decode(sim.program[sim.pc&(MaxInstructions-1)])
+			switch inst.Op {
+			case OpMOVE:
+				if inst.Reg == reg {
+					out = append(out, MoveInstant{Line: v, Cycle: spent, Val: inst.Val})
+				}
+				sim.pc = (sim.pc + 1) & (MaxInstructions - 1)
+				spent += 2
+			case OpWAIT:
+				// The per-line horizon: on the target line the WAIT
+				// releases at its threshold cycle; on any other line it
+				// parks for the rest of this line.
+				if v == inst.Y {
+					if floor := int(WaitHThreshold(inst.X)) * CyclesPerHcount; spent < floor {
+						spent = floor
+					}
+					sim.pc = (sim.pc + 1) & (MaxInstructions - 1)
+					spent++
+					continue
+				}
+				break lineLoop
+			case OpHALT:
+				break lineLoop
+			case OpNOOP:
+				sim.pc = (sim.pc + 1) & (MaxInstructions - 1)
+				spent++
+			}
+		}
+	}
+	return out
 }

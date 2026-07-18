@@ -133,6 +133,9 @@ type Pager struct {
 	// so a plain instruction fetch of $0066 (a program running its own
 	// code there) does NOT page the esxDOS NMI overlay in.
 	nmiButton bool
+	// nmiInFlight is the NMI arbiter envelope (zxnext.vhd nmi_divmmc
+	// latch): set on AssertNMIButton, cleared by RETN. See NMIInFlight.
+	nmiInFlight bool
 	// card is the SD slot. Nil = no card inserted.
 	card CardSlot
 
@@ -678,7 +681,23 @@ func (p *Pager) SetRom3Query(fn func(pc uint16) bool) { p.rom3Query = fn }
 // automap entry point for the upcoming NMI vector fetch; the latch clears
 // once the automap engages, on RETN, or on reset. Call this when the divMMC
 // NMI fires, NOT for a Multiface NMI (the MF owns its own $0066 vector).
-func (p *Pager) AssertNMIButton() { p.nmiButton = true }
+// It also opens the NMI in-flight window (see NMIInFlight).
+func (p *Pager) AssertNMIButton() {
+	p.nmiButton = true
+	p.nmiInFlight = true
+}
+
+// NMIInFlight mirrors the FPGA NMI arbiter's nmi_divmmc latch envelope
+// (zxnext.vhd:2096-2116): true from a divMMC NMI assertion until the
+// handler's RETN drives the state machine through S_NMI_END. While
+// true, new NR$02 divMMC NMI pulses are DROPPED — the arbiter latches
+// a new NMI only when nmi_activated = '0', so NMIs never nest. This is
+// deliberately NARROWER than DisableNMI (o_disable_nmi = automap OR
+// button_nmi): a guest that runs its main code with the divMMC overlay
+// paged in (Atic Atac's engine lives in divMMC RAM) still receives
+// pacer NMIs there — only an NMI already being serviced blocks the
+// next one.
+func (p *Pager) NMIInFlight() bool { return p.nmiInFlight }
 
 // HandleRETN is the post-RETN unmap hook. divMMC pages itself out
 // when the CPU executes RETN from within the overlay — this is
@@ -691,6 +710,9 @@ func (p *Pager) AssertNMIButton() { p.nmiButton = true }
 func (p *Pager) HandleRETN() {
 	// button_nmi clears on RETN regardless of automap/CONMEM (divmmc.vhd:108).
 	p.nmiButton = false
+	// RETN ends the NMI service window: the FPGA's nmi_hold drops, the
+	// arbiter passes S_NMI_END and a new divMMC NMI may latch.
+	p.nmiInFlight = false
 	if !p.automap {
 		return
 	}

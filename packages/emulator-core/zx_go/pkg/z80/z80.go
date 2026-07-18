@@ -138,6 +138,19 @@ type CPU struct {
 	// samples the line level.
 	ExtIntFunc func(tstates uint64) bool
 
+	// ExtNMIFunc, when non-nil, is polled at the same sample points as
+	// ExtIntFunc — including every T-state of a HALT — for NMI sources
+	// that must keep running while the CPU sleeps. The callback owns its
+	// own edge bookkeeping and asserts NMIs itself (e.g. by writing the
+	// Next's NR$02 through the dispatcher, which latches the source bits
+	// and sets PendingNMI); the CPU merely guarantees the poll happens.
+	// A prefetch hook cannot serve this role: hooks only run on
+	// instruction fetches, and a `DI; HALT` guest waiting for a copper-
+	// paced divMMC NMI (Atic Atac's sample engine, #187) never fetches
+	// again — the poll must reach the source while halted or the
+	// machine deadlocks.
+	ExtNMIFunc func(tstates uint64)
+
 	// IntAckFunc, when non-nil, is consulted at IM 2 interrupt
 	// acceptance for the data-bus vector byte. On the Spectrum Next
 	// in hardware-IM2 vectored mode (NR$C0 bit 0) the im2 daisy chain
@@ -1065,6 +1078,12 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 		if c.ExtIntFunc != nil && c.ExtIntFunc(c.tstates) {
 			c.IRQPending.Store(true)
 		}
+		// External NMI sources (copper NR$02 pacer): polled here so they
+		// keep running while the CPU is halted — the halted branch below
+		// only consumes PendingNMI, it never fetches instructions.
+		if c.ExtNMIFunc != nil {
+			c.ExtNMIFunc(c.tstates)
+		}
 		// INT sample point — equivalent to the Z80's M1-boundary
 		// check on real hardware. Always evaluated; the HALT branch
 		// below ALSO samples so a halted CPU exits halt on IRQ.
@@ -1435,6 +1454,9 @@ func (c *CPU) StepInstructionWithIRQ() {
 	// External (non-raster) INT sources — CTC pulse interrupts.
 	if c.ExtIntFunc != nil && c.ExtIntFunc(c.tstates) {
 		c.IRQPending.Store(true)
+	}
+	if c.ExtNMIFunc != nil {
+		c.ExtNMIFunc(c.tstates)
 	}
 
 	// IRQ sample point at M1 boundary

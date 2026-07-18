@@ -361,3 +361,55 @@ func TestCursorSetResetsBytePhase(t *testing.T) {
 		}
 	}
 }
+
+// TestFrameMoveInstantsAticPacer pins the NR$02 NMI-pacer schedule
+// (#187): Atic Atac's free-running mode-01 list — 687 NOOPs, 336
+// MOVE-NR$7F pads, final MOVE NR$02,$04 — wraps every 1361 copper
+// cycles, so a 311-line frame at 1824 cycles/line must yield
+// floor-ish(311*1824/1361) ≈ 416 NR$02 instants, each carrying $04.
+// The simulation must also leave the real copper untouched.
+func TestFrameMoveInstantsAticPacer(t *testing.T) {
+	c := New()
+	write16 := func(i int, w uint16) {
+		c.SetWritePtrLow(byte((i * 2) & 0xFF))
+		c.SetWritePtrHighAndMode(byte((i * 2) >> 8 & 0x07))
+		c.WriteData16(byte(w >> 8))
+		c.WriteData16(byte(w))
+	}
+	for i := 0; i < 687; i++ {
+		write16(i, 0x0000) // NOOP
+	}
+	for i := 687; i < 1023; i++ {
+		write16(i, 0x7F00) // MOVE NR$7F,$00 pad
+	}
+	write16(1023, 0x0204) // MOVE NR$02,$04 — the divMMC NMI pulse
+	c.SetWritePtrHighAndMode(0x40) // mode 01 = FromZero, run
+
+	pcBefore := c.pc
+	moves := c.FrameMoveInstants(0x02, 311, 1824)
+	if c.pc != pcBefore {
+		t.Fatalf("FrameMoveInstants mutated the real copper pc: %d -> %d", pcBefore, c.pc)
+	}
+	// 311*1824 = 567264 cycles; wrap cost = 687*1 + 337*2 = 1361.
+	// Per-line budget quantization loses a fraction per line, so accept
+	// a small band around the analytic 416.
+	if len(moves) < 380 || len(moves) > 420 {
+		t.Fatalf("pacer instants = %d, want ~416 (one per ~1361-cycle wrap)", len(moves))
+	}
+	for i, m := range moves {
+		if m.Val != 0x04 {
+			t.Fatalf("instant %d val = $%02X, want $04", i, m.Val)
+		}
+		if int(m.Line) >= 311 || m.Cycle < 0 || m.Cycle >= 1824+1361 {
+			t.Fatalf("instant %d out of range: line=%d cycle=%d", i, m.Line, m.Cycle)
+		}
+	}
+	// Stopped copper produces no schedule.
+	c.SetWritePtrHighAndMode(0x00)
+	if got := c.FrameMoveInstants(0x02, 311, 1824); len(got) != 0 {
+		t.Fatalf("stopped copper produced %d instants, want 0", len(got))
+	}
+	if c.HasRunnableMoveTo(0x02) {
+		t.Fatal("HasRunnableMoveTo should be false while stopped")
+	}
+}

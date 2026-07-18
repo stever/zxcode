@@ -2372,14 +2372,36 @@ func WireReset(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcS
 		// RETN (see CPU.RETN). nextreg.txt:56: the MF NMI is ignored if an
 		// NMI master is already active — so only arm/fire when the MF
 		// isn't already paged in.
-		if val&0x08 != 0 && !mem.MultifaceActive() { // bit 3 = Generate multiface NMI
+		// Hardware NMI gates (zxnext.vhd:2091-2111): the software NMI
+		// pulses — CPU or COPPER NR$02 writes alike (nmi_cu_02_we,
+		// :3830-3833) — assert only through nmi_assert_mf/_divmmc,
+		// which require the NR$06 button-NMI enable bits (bit 3 = M1/
+		// Multiface, bit 4 = Drive/divMMC, :5165), and the arbiter
+		// latches a new NMI only when NO NMI is in flight: the divMMC
+		// hold (device/divmmc.vhd o_disable_nmi = automap OR button_nmi)
+		// spans from assertion until the handler's RETN, so pulses
+		// arriving mid-handler are DROPPED, never nested. Atic Atac's
+		// ~20 kHz copper pacer relies on both: NR$06 gating around its
+		// SP-blast sections and the no-nesting hold — without them the
+		// delivered pulses nested at the handler's RETN and filled RAM
+		// with the return address (#187).
+		divmmcHold := false // o_disable_nmi: automap or button_nmi — gates the MF latch (:2107)
+		if q, ok := divmmcSPI.(interface{ DisableNMI() bool }); ok {
+			divmmcHold = q.DisableNMI()
+		}
+		nmiInFlight := false // nmi arbiter envelope — a divMMC NMI being serviced
+		if q, ok := divmmcSPI.(interface{ NMIInFlight() bool }); ok {
+			nmiInFlight = q.NMIInFlight()
+		}
+		nr06 := disp.Raw(0x06)
+		if val&0x08 != 0 && nr06&0x08 != 0 && !mem.MultifaceActive() && !divmmcHold { // bit 3 = Generate multiface NMI
 			nr02NMISource |= 0x08
 			mem.SetMultifaceActive(true) // page MF ROM in so the NMI vectors into it
 			cpu.PendingNMI.Store(true)
 		} else if val&0x08 == 0 {
 			nr02NMISource &^= 0x08
 		}
-		if val&0x04 != 0 { // bit 2 = Generate divmmc NMI
+		if val&0x04 != 0 && nr06&0x10 != 0 && !mem.MultifaceActive() && !nmiInFlight { // bit 2 = Generate divmmc NMI
 			nr02NMISource |= 0x04
 			cpu.PendingNMI.Store(true)
 			// Latch button_nmi so the $0066 NMI-vector automap engages for
@@ -2388,7 +2410,7 @@ func WireReset(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcS
 			if q, ok := divmmcSPI.(interface{ AssertNMIButton() }); ok {
 				q.AssertNMIButton()
 			}
-		} else {
+		} else if val&0x04 == 0 {
 			nr02NMISource &^= 0x04
 		}
 		// reset_type shift-history per zxnext.vhd:1736. A hard reset

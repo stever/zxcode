@@ -137,7 +137,12 @@ func applyResetDefaults(regs *[256]byte) {
 	regs[0x05] = 0x01                // Peripheral 1: bit 0 = 50 Hz
 	// Peripheral 2: bit 7 = CPU-speed hotkey enable, bit 5 = 50/60 Hz hotkey
 	// enable. zxnext.vhd:5161-5165 resets both to 1 → read-back $A0 (the rest
-	// of NR$06's read mux composes from bits that reset to 0).
+	// of NR$06's read mux composes from bits that reset to 0). The
+	// button-NMI enables (bits 4/3) stay 0 here, exactly like the FPGA;
+	// applyTBBLUEFWBootDefaults then applies the boot firmware's
+	// config.ini values ($A8), and guests that need the Drive-button /
+	// software divMMC NMI (NR$02 bit 2 is gated on bit 4,
+	// zxnext.vhd:2091) enable it themselves — Atic Atac does (#187).
 	regs[0x06] = 0xA0
 	regs[0x08] = 0x10 // Peripheral 3: bit 4 = AY3-8910 enabled
 	regs[0x12] = 0x08 // Layer 2 RAM base bank
