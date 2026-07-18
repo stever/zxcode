@@ -754,6 +754,7 @@ func wireNextSubsystems(e *emulator) error {
 		// first NMI — a hook that only fires on instruction fetches would
 		// deadlock there).
 		cpu.ExtNMIFunc = copperPacer.poll
+		e.nextNMIPacer = copperPacer
 	}
 	rtcEngine := rtcpkg.New()
 	// ZX_GO_RTC_FIXED=<RFC3339> freezes the guest clock — makes the
@@ -1352,6 +1353,21 @@ func wireNextSubsystems(e *emulator) error {
 	cpu.SetRETNHook(func() {
 		if mem.MultifaceActive() {
 			mem.SetMultifaceActive(false)
+		}
+		// FPGA NMI-arbiter envelope: the gate for new divMMC NMI pulses
+		// reopens ~6 CPU cycles BEFORE this RETN completes (retn_seen at
+		// T3 of the $45 M1 fetch, im2_control.vhd:236; hold drop and
+		// S_NMI_HOLD->S_NMI_END->S_NMI_IDLE walk, zxnext.vhd:2118-2166).
+		// This hook runs at the instruction's END, after which the
+		// pacer's end-of-instruction poll would deliver every pulse that
+		// elapsed DURING the RETN — including ones the FPGA dropped
+		// while the envelope was still closed. Tell the pacer where the
+		// reopen point was so pre-reopen pulses are dropped like
+		// hardware drops them (#187). Only meaningful when this RETN
+		// actually ends an NMI service window.
+		if e.nextNMIPacer != nil && pager.NMIInFlight() {
+			tail8 := uint64(6) * 8 / uint64(cpu.SpeedMultiplier())
+			e.nextNMIPacer.noteEnvelopeReopen(cpu.Ref8Tstates() - tail8)
 		}
 		pager.HandleRETN()
 	})

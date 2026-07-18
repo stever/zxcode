@@ -224,8 +224,12 @@ type emulator struct {
 	nextPalette *palette.Bank
 	nextTilemap *tilemap.Tilemap
 	nextCopper  *copper.Copper
-	nextSprites *sprite.Engine
-	nextLayer2  *layer2.Layer2
+	// nextNMIPacer is the copper NR$02 NMI pacer (nil when the
+	// bisection switch ZX_GO_NO_COPPER_NMI_PACER disables it).
+	// Exposed for probe instrumentation (#187).
+	nextNMIPacer *copperNMIPacer
+	nextSprites  *sprite.Engine
+	nextLayer2   *layer2.Layer2
 
 	// nexloadMacro, when non-nil, drives the NextZXOS .nexload dot
 	// command from the run loop to load a .nex via the genuine OS

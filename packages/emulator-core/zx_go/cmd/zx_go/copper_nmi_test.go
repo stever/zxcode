@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/conorarmstrong/zx_go/pkg/roms"
+	"github.com/conorarmstrong/zx_go/pkg/z80"
 )
 
 // TestCopperNMIPacerDeliversAtHardwareRate pins #187's core fix: a
@@ -72,4 +73,34 @@ func TestCopperNMIPacerDeliversAtHardwareRate(t *testing.T) {
 		t.Fatalf("copper NMI pacer delivered %d NMIs/frame, want ~416 (hardware wrap rate)", perFrame)
 	}
 	t.Logf("pacer delivered %d NMIs/frame", perFrame)
+}
+
+// TestCopperNMIPacerEnvelopeReopen pins the FPGA arbiter's mid-RETN
+// gate-reopen semantics (#187): scheduled pure divMMC-NMI pulses
+// (val $04) whose instants fall BEFORE the reopen point are dropped —
+// the FPGA arbiter ignores pulses while nmi_activated is latched
+// (zxnext.vhd:2096-2116) and only reopens ~6 CPU cycles before the
+// RETN completes. Pulses at/after the reopen instant, and pulses whose
+// value carries non-NMI bits (reset/MF), survive.
+func TestCopperNMIPacerEnvelopeReopen(t *testing.T) {
+	cpu := &z80.CPU{} // only FrameOriginRefTstates()==0 is used
+	p := &copperNMIPacer{cpu: cpu}
+
+	p.instants = []int{100, 200, 300}
+	p.vals = []byte{0x04, 0x04, 0x04}
+	p.idx = 0
+	p.noteEnvelopeReopen(250)
+	if p.idx != 2 {
+		t.Fatalf("reopen at 250: idx=%d, want 2 (instants 100 and 200 dropped, 300 kept)", p.idx)
+	}
+
+	// A non-pure-NMI value blocks the scan: its write must still be
+	// delivered (reset bits are not gated by the arbiter latch).
+	p.instants = []int{10, 20}
+	p.vals = []byte{0x05, 0x04}
+	p.idx = 0
+	p.noteEnvelopeReopen(100)
+	if p.idx != 0 {
+		t.Fatalf("mixed-value pulse: idx=%d, want 0 (write with reset bit kept)", p.idx)
+	}
 }

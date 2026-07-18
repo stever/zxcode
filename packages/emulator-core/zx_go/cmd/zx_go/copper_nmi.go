@@ -80,6 +80,10 @@ type copperNMIPacer struct {
 	// waiting on. Instants before the bump belong to the OLD list's
 	// already-delivered schedule and stay skipped.
 	dirty8 uint64
+
+	// onDeliver, when non-nil, observes each delivered write (probe
+	// instrumentation): the instant's absolute Ref8 time and the value.
+	onDeliver func(instant8 uint64, val byte)
 }
 
 // quietRebuildM1s is how many consecutive polls without a copper
@@ -158,7 +162,40 @@ func (p *copperNMIPacer) poll(_ uint64) {
 	// firing up to 7 copper cycles early (#187 conformance).
 	t8 := int(p.cpu.Ref8Tstates() - origin*8)
 	for p.idx < len(p.instants) && p.instants[p.idx] <= t8 {
+		if p.onDeliver != nil {
+			p.onDeliver(uint64(p.instants[p.idx])+origin*8, p.vals[p.idx])
+		}
 		p.disp.WriteReg(0x02, p.vals[p.idx])
+		p.idx++
+	}
+}
+
+// noteEnvelopeReopen models the FPGA NMI arbiter's mid-RETN gate
+// reopen (#187). On the FPGA a divMMC-NMI pulse arriving while
+// nmi_activated is latched is DROPPED (the arbiter latch only accepts
+// when nmi_activated='0', zxnext.vhd:2096-2116), and the envelope
+// reopens ~6 CPU cycles BEFORE the RETN instruction completes:
+// retn_seen pulses at T3 of the $45 M1 fetch (im2_control.vhd:236,
+// "active in T3 for rising edge of T4"), the divMMC clears button_nmi/
+// automap on the next CLK_28 edge (divmmc.vhd:108,126), nmi_hold drops
+// and the state machine walks S_NMI_HOLD -> S_NMI_END -> S_NMI_IDLE in
+// two i_CLK_CPU edges with the latches clearing in S_NMI_END
+// (zxnext.vhd:2118-2166) — cycle ~12 of RETN's 18 at 28 MHz (~8 of 14
+// at 3.5 MHz).
+//
+// The emulator's poll granularity is instruction ends: an instant that
+// elapses DURING the RETN would otherwise be delivered at the
+// end-of-RETN poll, AFTER the retnHook cleared the envelope — an NMI
+// the FPGA never sees. The RETN hook calls this (only when an NMI was
+// in flight) with the reopen instant; scheduled pure divMMC-NMI pulses
+// ($04 — Atic Atac's pacer value) earlier than it are dropped exactly
+// like the hardware drops them. Values carrying reset/MF/bus bits keep
+// their write (those paths are not gated by this arbiter latch).
+func (p *copperNMIPacer) noteEnvelopeReopen(reopen8 uint64) {
+	origin8 := p.cpu.FrameOriginRefTstates() * 8
+	for p.idx < len(p.instants) &&
+		uint64(p.instants[p.idx])+origin8 < reopen8 &&
+		p.vals[p.idx] == 0x04 {
 		p.idx++
 	}
 }
@@ -198,10 +235,25 @@ func (p *copperNMIPacer) rebuild() {
 	p.carryVal = p.carryVal[:0]
 	moves := p.cop.FrameMoveInstants(0x02, lines, cyclesPerLine)
 	for _, m := range moves {
-		// Copper-cycle (28 MHz) instants, no /8 truncation. m.Cycle is
-		// the MOVE's first cycle (the write pulse, copper.vhd:87-89);
-		// the NMI line asserts on the following cycle, hence +1.
-		t := int(m.Line)*cyclesPerLine + m.Cycle + 1
+		// Copper-cycle (28 MHz) instants, no /8 truncation. The FPGA
+		// pipeline from the MOVE's first cycle N (the instruction read;
+		// m.Cycle) to CPU-visible NMI is 4 register stages + the
+		// same-edge sampling rule, so the earliest end-of-instruction
+		// edge that can accept the NMI is N+5 (#187 conformance):
+		//   N+1  copper_dout_s registered (the write pulse lands on the
+		//        MOVE's SECOND cycle, copper.vhd:87-96)
+		//   N+2  copper_req rising-edge detect register
+		//        (zxnext.vhd:4709-4737)
+		//   N+3  arbiter nmi_divmmc latch -> nmi_generate_n asserts
+		//        NMI_n (zxnext.vhd:2096-2116, :2166)
+		//   N+4  T80N NMI_s synchronizer registers the edge
+		//        (t80n.vhd:1650-1670)
+		//   N+5  first T_Res edge that samples NMI_s='1' (a clocked
+		//        process reads the PRE-edge value, so the N+4 edge
+		//        itself still sees 0; t80n.vhd:1765)
+		// The delivery compare below is `instant <= t8(end of
+		// instruction)`, so the instant is anchored at N+5.
+		t := int(m.Line)*cyclesPerLine + m.Cycle + 5
 		if t >= frame8 {
 			p.carryT = append(p.carryT, t-frame8)
 			p.carryVal = append(p.carryVal, m.Val)

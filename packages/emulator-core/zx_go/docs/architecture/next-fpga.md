@@ -322,8 +322,13 @@ shape, zxnext.vhd:6543-6552). The pieces:
   pulse) fires each instant through the dispatcher's one NR$02
   handler. Instants are 28 MHz copper-cycle granular (compared against
   the CPU's Ref8Tstates — the old /8 refT truncation fired up to 7
-  cycles early), offset +1 for the cycle between the MOVE's write
-  pulse and the NMI line assert. A stopped→running NR$62 transition
+  cycles early), offset +5 from the MOVE's first cycle for the full
+  FPGA pipeline: write pulse on the MOVE's SECOND cycle
+  (copper.vhd:87-96), copper_req edge-detect register
+  (zxnext.vhd:4709-4737), arbiter nmi_divmmc latch → NMI_n
+  (zxnext.vhd:2096-2116), T80N NMI_s synchronizer
+  (t80n.vhd:1650-1670), and the same-edge sampling rule at the final
+  T_Res (t80n.vhd:1765). A stopped→running NR$62 transition
   anchors the list to its WRITE INSTANT: the FPGA copper begins
   executing on the next 28 MHz cycle after the enable edge
   (copper.vhd:70-83) — the model banks the frame's already-elapsed
@@ -345,9 +350,18 @@ shape, zxnext.vhd:6543-6552). The pieces:
   NR$06 button-NMI enables (bit 3 MF / bit 4 divMMC — boot firmware
   config defaults $A8, applyTBBLUEFWBootDefaults) and the arbiter's
   no-nesting envelope (a new divMMC pulse is DROPPED from assertion
-  until the handler's RETN — divmmc.Pager.NMIInFlight). Pinned by
-  TestCopperNMIPacerDeliversAtHardwareRate, TestNR02NMIGatedOnNR06,
-  TestNR02DivMMCNMINeverNests, TestFrameMoveInstantsAticPacer.
+  until the handler's RETN — divmmc.Pager.NMIInFlight). The envelope
+  reopens MID-RETN on the FPGA, ~6 CPU cycles before the instruction
+  ends (retn_seen pulses at T3 of the $45 M1 fetch,
+  im2_control.vhd:236; divmmc button_nmi/automap clear,
+  divmmc.vhd:108,126; S_NMI_HOLD→S_NMI_END→S_NMI_IDLE,
+  zxnext.vhd:2118-2166): the RETN hook passes that reopen instant to
+  the pacer (`noteEnvelopeReopen`), which drops pure-$04 pulses that
+  elapsed before it — otherwise the end-of-RETN poll (after the hook
+  cleared the envelope) would deliver pulses the FPGA never saw.
+  Pinned by TestCopperNMIPacerDeliversAtHardwareRate,
+  TestNR02NMIGatedOnNR06, TestNR02DivMMCNMINeverNests,
+  TestFrameMoveInstantsAticPacer, TestCopperNMIPacerEnvelopeReopen.
 - Live-palette ULA render (`pkg/ula` renderNextULARow +
   `Compositor.ULARGBA`): on the Next, ULA inner-screen and border
   pixels resolve through the LIVE ULA palette exactly like the FPGA's

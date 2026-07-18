@@ -63,7 +63,41 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 	// the doors screen). Logical-address hook: fires on every CPU write.
 	frame := 0
 	var lastPos [2]byte
+	// $886F+ byte-queue forensics (#187 doors wedge): ring of every CPU
+	// write into the queue page, with producer context (pc, NMI-era or
+	// mainline via the divMMC arbiter envelope, ref8 timestamp).
+	type qw struct {
+		frame  int
+		addr   uint16
+		val    byte
+		pc     uint16
+		ref8   uint64
+		nmiCtx bool
+		sp     uint16
+		mmu4   byte
+	}
+	qRing := make([]qw, 1<<17)
+	qIdx := 0
+	inFlightNow := func() bool {
+		if q, ok := emu.ula.NextDivMMC().(interface{ NMIInFlight() bool }); ok {
+			return q.NMIInFlight()
+		}
+		return false
+	}
+	f9Logs := 400
 	emu.mem.SetAllWriteHook(func(addr uint16, val byte) {
+		if addr >= 0x8800 && addr < 0x89C0 && frame >= 3050 {
+			qRing[qIdx&(1<<17-1)] = qw{frame, addr, val, emu.cpu.PC, emu.cpu.Ref8Tstates(), inFlightNow(), emu.cpu.SP, emu.nextRegs.Raw(0x54)}
+			qIdx++
+		}
+		// Doors engine state block: the doors main loop's $D7D3 scan
+		// gates the whole engine on $F99C-$F9A4 being nonzero. Find
+		// every writer (#187 wedge forensics).
+		if addr >= 0xF99C && addr <= 0xF9A8 && frame >= 4990 && val != 0 && f9Logs > 0 {
+			f9Logs--
+			t.Logf("frame %6d: F9-STATE $%04X <- $%02X (pc=$%04X sp=$%04X)",
+				frame, addr, val, emu.cpu.PC, emu.cpu.SP)
+		}
 		switch addr {
 		case 0xF996:
 			if val != 0 {
@@ -185,24 +219,29 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		pc, sp, hl, de uint16
 		a, op0, op1    byte
 	}
-	ring2 := make([]traceEnt, 65536)
+	const ring2Sz = 1 << 18
+	ring2 := make([]traceEnt, ring2Sz)
 	ring2Idx := 0
 	ring2Dumped := false
 	emu.cpu.AddPreFetchHook("atic-death-trace", func(pc uint16) {
 		if ring2Dumped || deathTrace == nil {
 			return
 		}
-		ring2[ring2Idx&65535] = traceEnt{frame, pc, emu.cpu.SP, emu.cpu.HL(), emu.cpu.DE(), emu.cpu.A, emu.mem.Read(pc), emu.mem.Read(pc + 1)}
+		ring2[ring2Idx&(ring2Sz-1)] = traceEnt{frame, pc, emu.cpu.SP, emu.cpu.HL(), emu.cpu.DE(), emu.cpu.A, emu.mem.Read(pc), emu.mem.Read(pc + 1)}
 		ring2Idx++
+		// Wedge-window force dump: the doors-era queue wedge leaves the
+		// machine alive (no crash-orbit trigger fires) — dump the full
+		// instruction ring shortly after the expected wedge frame.
 		if (frame > 5030 && pc >= 0xA5F0 && pc < 0xA700) ||
-			(frame > 5060 && pc < 0x0100 && emu.cpu.SP < 0x2000) {
+			(frame > 5060 && pc < 0x0100 && emu.cpu.SP < 0x2000) ||
+			frame >= 5153 {
 			ring2Dumped = true
-			for i := 0; i < 65536; i++ {
-				e := ring2[(ring2Idx+i)&65535]
+			for i := 0; i < ring2Sz; i++ {
+				e := ring2[(ring2Idx+i)&(ring2Sz-1)]
 				fmt.Fprintf(deathTrace, "f%d pc=%04X sp=%04X a=%02X hl=%04X de=%04X op=%02X%02X\n",
 					e.frame, e.pc, e.sp, e.a, e.hl, e.de, e.op0, e.op1)
 			}
-			t.Logf("frame %6d: death ring dumped (pc entered $A6xx)", frame)
+			t.Logf("frame %6d: death ring dumped", frame)
 		}
 	})
 	var wTick, wD107, wD030, wNMI int
@@ -272,7 +311,41 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 		}
 	})
+	// Pacer delivery + RETN timing forensics (#187 doors wedge): the
+	// last delivered pulse's scheduled instant vs its delivery time
+	// tells whether the pulse elapsed inside an FPGA-held window (the
+	// arbiter's nmi_activated envelope reopens ~6 CPU cycles before
+	// RETN's end — zxnext.vhd:2096-2166, im2_control.vhd:236).
+	var lastPulseInstant8, lastPulseDeliver8 uint64
+	if emu.nextNMIPacer != nil {
+		emu.nextNMIPacer.onDeliver = func(instant8 uint64, val byte) {
+			lastPulseInstant8 = instant8
+			lastPulseDeliver8 = emu.cpu.Ref8Tstates()
+		}
+	}
+	var lastRETNFetch8 uint64
 	var lastNMIRefT uint64
+	qcLogsLeft := 200
+	emu.cpu.AddPreFetchHook("atic-retn-track", func(pc uint16) {
+		if frame >= 5100 && frame <= 5200 &&
+			emu.mem.Read(pc) == 0xED && emu.mem.Read(pc+1) == 0x45 {
+			lastRETNFetch8 = emu.cpu.Ref8Tstates()
+		}
+		if pc == 0x1397 && frame >= 5130 && frame <= 5160 && qcLogsLeft > 0 {
+			sp := emu.cpu.SP
+			if sp >= 0x8800 && sp < 0x89C0 {
+				qcLogsLeft--
+				var q [12]byte
+				for i := range q {
+					q[i] = emu.mem.Read(sp + uint16(i))
+				}
+				t.Logf("frame %6d: QCONSUME $1397 sp=$%04X hl=$%04X de=$%04X ref8=%d sinceNMI=%d mmu45=%02X:%02X q[sp..]=% x",
+					frame, sp, emu.cpu.HL(), emu.cpu.DE(), emu.cpu.Ref8Tstates(),
+					emu.cpu.RefTstates()-lastNMIRefT,
+					emu.nextRegs.Raw(0x54), emu.nextRegs.Raw(0x55), q)
+			}
+		}
+	})
 	emu.cpu.AddPreFetchHook("atic-walk-phase", func(pc uint16) {
 		if frame <= 4000 {
 			return
@@ -298,8 +371,11 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 			if frame >= 5060 && frame <= 5160 && sp < 0xF000 {
 				ipc := uint16(emu.mem.Read(sp)) | uint16(emu.mem.Read(sp+1))<<8
-				t.Logf("frame %6d: NMI-SPANOM sp=$%04X intpc=$%04X refT=%d", frame, sp, ipc,
-					emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates())
+				now8 := emu.cpu.Ref8Tstates()
+				t.Logf("frame %6d: NMI-SPANOM sp=$%04X intpc=$%04X refT=%d pulseInstant8=%d deliver8=%d now8=%d sinceRETNfetch8=%d",
+					frame, sp, ipc,
+					emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(),
+					lastPulseInstant8, lastPulseDeliver8, now8, int64(now8)-int64(lastRETNFetch8))
 			}
 		}
 	})
@@ -644,6 +720,24 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			t.Logf("frame %d: dumped $CF80-$D0C0 sequencer region", frame)
 		case 5150, 5300, 5500, 6100, 7000, 8500, 10500, 12000, 14500, 17500, 20000, 25000:
 			shot(frame, "stage")
+		}
+		if frame == 5155 {
+			// Queue-write forensics dump: every write into $8800-$89C0
+			// captured since frame 5100, producer pc + NMI-era flag.
+			fq, err := os.Create(outDir + "/queue_writes.txt")
+			if err == nil {
+				n := qIdx
+				if n > len(qRing) {
+					n = len(qRing)
+				}
+				for i := 0; i < n; i++ {
+					e := qRing[(qIdx-n+i)&(1<<17-1)]
+					fmt.Fprintf(fq, "f%d addr=%04X val=%02X pc=%04X sp=%04X ref8=%d nmiCtx=%v mmu4=%02X\n",
+						e.frame, e.addr, e.val, e.pc, e.sp, e.ref8, e.nmiCtx, e.mmu4)
+				}
+				fq.Close()
+				t.Logf("frame %6d: queue write ring dumped (%d entries)", frame, n)
+			}
 		}
 	}
 	t.Logf("done: screenshots in %s", outDir)
