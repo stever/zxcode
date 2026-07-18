@@ -84,7 +84,84 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		}
 		return false
 	}
+	// PHYSICAL page-4 write forensics (#187 doors producer hunt): the
+	// $8870 scene-record table lives on 8K page 4 (16K bank 2, offsets
+	// $0000-$1FFF). The logical $88xx hook below misses writes routed
+	// through any other MMU window (e.g. page 4 mapped at slot 2/3/5),
+	// so also record every PHYSICAL write into the page.
+	type pw struct {
+		frame    int
+		off      uint16
+		val      byte
+		pc, sp   uint16
+		mmuState [4]byte
+	}
+	const pRingSz = 1 << 17
+	pRing := make([]pw, pRingSz)
+	pIdx := 0
+	prevRW := emu.mem.GetRAMWriteHook()
+	emu.mem.SetRAMWriteHook(func(bank int, addr uint16, val byte) {
+		if prevRW != nil {
+			prevRW(bank, addr, val)
+		}
+		if bank == 2 && (addr < 0x2000 || (addr >= 0x2E00 && addr < 0x3100)) && frame >= 3050 {
+			pRing[pIdx&(pRingSz-1)] = pw{frame, addr, val, emu.cpu.PC, emu.cpu.SP,
+				[4]byte{emu.mem.GetMMU(2), emu.mem.GetMMU(3), emu.mem.GetMMU(4), emu.mem.GetMMU(5)}}
+			pIdx++
+		}
+	})
+	dumpPage4 := func(tag string) {
+		for _, pg8 := range []int{4, 5} {
+			if pg := emu.mem.RAM8KPage(pg8); pg != nil {
+				buf := make([]byte, len(pg))
+				copy(buf, pg)
+				_ = os.WriteFile(fmt.Sprintf("%s/page%d_%s.bin", outDir, pg8, tag), buf, 0644)
+			}
+		}
+	}
+	// Scene-record consumer trace ($1385 NEXTREG $54,$04 entry): log the
+	// scene id ($F918) and the physical record bytes it is about to pop.
+	consLogs := 400
+	trackPostLogs := 200
+	emu.cpu.AddPreFetchHook("atic-trackpost", func(pc uint16) {
+		if pc != 0xC917 && pc != 0xC91B {
+			return
+		}
+		if frame < 3100 || trackPostLogs <= 0 {
+			return
+		}
+		trackPostLogs--
+		sp := emu.cpu.SP
+		ret := uint16(emu.mem.Read(sp)) | uint16(emu.mem.Read(sp+1))<<8
+		t.Logf("frame %6d: TRACKPOST $%04X A=$%02X ret=$%04X sp=$%04X", frame, pc, emu.cpu.A, ret, sp)
+	})
+	doorsTicks := 0
+	doorsTickRets := map[uint16]int{}
+	emu.cpu.AddPreFetchHook("atic-doorstick", func(pc uint16) {
+		if pc != 0xCF80 || frame < 5140 {
+			return
+		}
+		doorsTicks++
+		sp := emu.cpu.SP
+		doorsTickRets[uint16(emu.mem.Read(sp))|uint16(emu.mem.Read(sp+1))<<8]++
+	})
+	emu.cpu.AddPreFetchHook("atic-consumer", func(pc uint16) {
+		if pc != 0x1385 || frame < 3100 || consLogs <= 0 {
+			return
+		}
+		consLogs--
+		id := emu.mem.Read(0xF918)
+		pg := emu.mem.RAM8KPage(4)
+		base := 0x0870 + 6*int(id)
+		var rec [6]byte
+		if pg != nil && base+6 <= len(pg) {
+			copy(rec[:], pg[base:base+6])
+		}
+		t.Logf("frame %6d: CONSUMER $1385 id=$%02X rec@%04X=% x sp=$%04X", frame, id, 0x8870+6*int(id), rec, emu.cpu.SP)
+	})
 	f9Logs := 400
+	sceneLogs := 3000
+	objLogs := 2000
 	emu.mem.SetAllWriteHook(func(addr uint16, val byte) {
 		if addr >= 0x8800 && addr < 0x89C0 && frame >= 3050 {
 			qRing[qIdx&(1<<17-1)] = qw{frame, addr, val, emu.cpu.PC, emu.cpu.Ref8Tstates(), inFlightNow(), emu.cpu.SP, emu.nextRegs.Raw(0x54)}
@@ -97,6 +174,28 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			f9Logs--
 			t.Logf("frame %6d: F9-STATE $%04X <- $%02X (pc=$%04X sp=$%04X)",
 				frame, addr, val, emu.cpu.PC, emu.cpu.SP)
+		}
+		// Scene id / doors-timer writes (#187 producer hunt): $F918 is
+		// the current scene id (consumer index into the $8870 record
+		// table), $F99A the doors auto-toggle countdown, $F9A1/$F9A3
+		// the active-door half pointers the $1385 consumer publishes.
+		if frame >= 3100 && sceneLogs > 0 {
+			switch addr {
+			case 0xF918, 0xF919, 0xF99A, 0xF9A1, 0xF9A2, 0xF9A3, 0xF9A4:
+				sceneLogs--
+				t.Logf("frame %6d: SCENE $%04X <- $%02X (pc=$%04X sp=$%04X)",
+					frame, addr, val, emu.cpu.PC, emu.cpu.SP)
+			}
+		}
+		// Object system (#187 doors derail): 4-byte list entries at
+		// $F800 (count $F923/$F924); entry word0 = object struct ptr
+		// whose +$0A proc pointer the $B001 dispatch CALLs.
+		if frame >= 5140 && objLogs > 0 {
+			if (addr >= 0xF800 && addr < 0xF830) || addr == 0xF923 || addr == 0xF924 {
+				objLogs--
+				t.Logf("frame %6d: OBJ $%04X <- $%02X (pc=$%04X sp=$%04X)",
+					frame, addr, val, emu.cpu.PC, emu.cpu.SP)
+			}
 		}
 		switch addr {
 		case 0xF996:
@@ -232,9 +331,10 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		// Wedge-window force dump: the doors-era queue wedge leaves the
 		// machine alive (no crash-orbit trigger fires) — dump the full
 		// instruction ring shortly after the expected wedge frame.
-		if (frame > 5030 && pc >= 0xA5F0 && pc < 0xA700) ||
-			(frame > 5060 && pc < 0x0100 && emu.cpu.SP < 0x2000) ||
-			frame >= 5153 {
+		// Trigger on the doors-era derail: the corpse ends up executing
+		// DAC-buffer bytes ($E800-$F8FF). No legit code runs there.
+		if (frame > 5149 && pc >= 0xE800 && pc < 0xF900) ||
+			frame >= 5175 {
 			ring2Dumped = true
 			for i := 0; i < ring2Sz; i++ {
 				e := ring2[(ring2Idx+i)&(ring2Sz-1)]
@@ -331,7 +431,7 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			emu.mem.Read(pc) == 0xED && emu.mem.Read(pc+1) == 0x45 {
 			lastRETNFetch8 = emu.cpu.Ref8Tstates()
 		}
-		if pc == 0x1397 && frame >= 5130 && frame <= 5160 && qcLogsLeft > 0 {
+		if pc == 0x1397 && frame >= 5130 && frame <= 5250 && qcLogsLeft > 0 {
 			sp := emu.cpu.SP
 			if sp >= 0x8800 && sp < 0x89C0 {
 				qcLogsLeft--
@@ -720,6 +820,49 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			t.Logf("frame %d: dumped $CF80-$D0C0 sequencer region", frame)
 		case 5150, 5300, 5500, 6100, 7000, 8500, 10500, 12000, 14500, 17500, 20000, 25000:
 			shot(frame, "stage")
+		}
+		switch frame {
+		case 4995, 5059, 5072, 5105, 5146, 5150, 5153, 5155:
+			dumpPage4(fmt.Sprintf("%06d", frame))
+		}
+		if frame >= 5140 && frame <= 5250 {
+			t.Logf("frame %6d: DOORS-HEALTH ticks+%d rets=%v pcEnd=$%04X spEnd=$%04X F9E3=$%02X%02X F990=$%02X F918=$%02X F99C..A4=% x",
+				frame, doorsTicks, doorsTickRets, emu.cpu.PC, emu.cpu.SP,
+				emu.mem.Read(0xF9E4), emu.mem.Read(0xF9E3), emu.mem.Read(0xF990), emu.mem.Read(0xF918),
+				[]byte{emu.mem.Read(0xF99C), emu.mem.Read(0xF99D), emu.mem.Read(0xF99E), emu.mem.Read(0xF99F),
+					emu.mem.Read(0xF9A0), emu.mem.Read(0xF9A1), emu.mem.Read(0xF9A2), emu.mem.Read(0xF9A3), emu.mem.Read(0xF9A4)})
+			doorsTicks = 0
+			for k := range doorsTickRets {
+				delete(doorsTickRets, k)
+			}
+		}
+		if frame == 5145 {
+			full := make([]byte, 0x10000)
+			for i := range full {
+				full[i] = emu.mem.Read(uint16(i))
+			}
+			_ = os.WriteFile(outDir+"/emu_full64k_5145.bin", full, 0644)
+			var sl [8]byte
+			for i := range sl {
+				sl[i] = emu.mem.GetMMU(byte(i))
+			}
+			t.Logf("frame %6d: full 64K dumped, slots=%02X", frame, sl)
+		}
+		if frame == 5150 {
+			fp, err := os.Create(outDir + "/page4_writes.txt")
+			if err == nil {
+				n := pIdx
+				if n > pRingSz {
+					n = pRingSz
+				}
+				for i := 0; i < n; i++ {
+					e := pRing[(pIdx-n+i)&(pRingSz-1)]
+					fmt.Fprintf(fp, "f%d off=%04X val=%02X pc=%04X sp=%04X mmu2345=%02X:%02X:%02X:%02X\n",
+						e.frame, e.off, e.val, e.pc, e.sp, e.mmuState[0], e.mmuState[1], e.mmuState[2], e.mmuState[3])
+				}
+				fp.Close()
+				t.Logf("frame %6d: physical page4 write ring dumped (%d entries, %d total)", frame, n, pIdx)
+			}
 		}
 		if frame == 5155 {
 			// Queue-write forensics dump: every write into $8800-$89C0
