@@ -555,7 +555,17 @@ func (c *Copper) FrameMoveInstants(reg byte, lines, cyclesPerLine int) []MoveIns
 	}
 	sim := *c
 	var out []MoveInstant
+	// Resume from the authoritative copper's carried intra-line phase
+	// (continuous pacing's linePos + stepCarry) instead of re-anchoring
+	// at cycle 0: the FPGA's free-running list is a perfectly continuous
+	// lattice, and restarting each frame's simulation at spent=0 wobbled
+	// the NMI schedule's phase by up to a line (~228 refT) per frame —
+	// enough to walk Atic Atac's NMI-atomic SP-repointed descriptor
+	// walks under a sample NMI (#187).
 	spent := 0
+	if c.continuous {
+		spent = sim.linePos + sim.stepCarry
+	}
 	// The per-line drive mirrors the render's: each line offers the full
 	// line budget, WAITs park against the line's end-of-line hcount
 	// horizon reached progressively (the spent counter is the intra-line
