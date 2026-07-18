@@ -217,6 +217,9 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		case 0xD107:
 			wD107++
 			wD107SPs[emu.cpu.SP]++
+			if frame >= 5015 && frame <= 5016 {
+				t.Logf("frame %d WALK-D107 refT=%d sp=$%04X", frame, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), emu.cpu.SP)
+			}
 		case 0xD030:
 			wD030++
 		case 0x0066:
@@ -232,6 +235,34 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 				t.Logf("frame %d CMD18-ARG refT=%d hl=$%04X sp=$%04X arg=[%02X %02X %02X %02X]",
 					frame, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), hl, emu.cpu.SP,
 					emu.mem.Read(hl), emu.mem.Read(hl-1), emu.mem.Read(hl-2), emu.mem.Read(hl-3))
+			}
+		}
+	})
+	var nmiEntryRefT uint64
+	var handlerSpans []uint64
+	dumpedHandler := false
+	emu.cpu.AddPreFetchHook("atic-handler-span", func(pc uint16) {
+		if frame >= 4600 && frame <= 4601 && nmiEntryRefT != 0 &&
+			emu.mem.Read(pc) == 0xED && emu.mem.Read(pc+1) == 0x45 {
+			if len(handlerSpans) < 12 {
+				handlerSpans = append(handlerSpans, emu.cpu.RefTstates()-nmiEntryRefT)
+			}
+			nmiEntryRefT = 0
+		}
+		if pc == 0x0066 {
+			nmiEntryRefT = emu.cpu.RefTstates()
+			if !dumpedHandler && frame == 4600 {
+				dumpedHandler = true
+				h := make([]byte, 0x400)
+				for i := range h {
+					h[i] = emu.mem.Read(uint16(i))
+				}
+				_ = os.WriteFile(outDir+"/emu_nmi_handler_low.bin", h, 0644)
+				var h2 [0x300]byte
+				for i := range h2 {
+					h2[i] = emu.mem.Read(0x2800 + uint16(i))
+				}
+				_ = os.WriteFile(outDir+"/emu_nmi_stub_2800.bin", h2[:], 0644)
 			}
 		}
 	})
@@ -406,6 +437,9 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			for k := range wD107SPs {
 				delete(wD107SPs, k)
 			}
+		}
+		if frame == 4602 && len(handlerSpans) > 0 {
+			t.Logf("frame %d: handler spans entry->RETN (refT): %v", frame, handlerSpans)
 		}
 		if frame == 4500 || frame == 5015 {
 			t.Logf("frame %d: NR B8=%02X B9=%02X BA=%02X BB=%02X B0=%02X 61=%02X 62=%02X 07=%02X", frame,
