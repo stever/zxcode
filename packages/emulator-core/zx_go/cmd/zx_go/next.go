@@ -724,6 +724,19 @@ func wireNextSubsystems(e *emulator) error {
 	// FPGA-true free-running pacing for the production machine — the
 	// per-tick test drivers keep the legacy budget contract (#187).
 	cop.SetContinuousPacing(true)
+	// Anchor stopped→running copper starts to the NR$62 write instant
+	// (copper.vhd:70-83 — execution begins on the next 28 MHz cycle
+	// after the enable edge, not at the frame top). The callback
+	// reports the CPU's intra-frame position in copper cycles; the
+	// sub-refT origin remainder (frameOriginRef is refT-granular) and
+	// the in-flight write instruction's own tail (~2-3 refT, the NR
+	// commit lands near the instruction's end) are the residual
+	// uncertainty. A free-running NMI-pacer list keeps this phase for
+	// its whole life, so the anchor decides where every later
+	// raster-slaved walk sits inside the NMI period (#187).
+	cop.SetStartPhaseSource(func() int {
+		return int(cpu.Ref8Tstates() - cpu.FrameOriginRefTstates()*8)
+	})
 	// The render pass's copper MOVEs write video registers through the
 	// dispatcher, but NR$02 (NMI generation) is delivered on the CPU
 	// timeline by the copperNMIPacer below — at render time a frame's

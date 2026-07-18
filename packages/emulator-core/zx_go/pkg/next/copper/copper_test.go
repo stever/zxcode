@@ -382,7 +382,7 @@ func TestFrameMoveInstantsAticPacer(t *testing.T) {
 	for i := 687; i < 1023; i++ {
 		write16(i, 0x7F00) // MOVE NR$7F,$00 pad
 	}
-	write16(1023, 0x0204) // MOVE NR$02,$04 — the divMMC NMI pulse
+	write16(1023, 0x0204)          // MOVE NR$02,$04 — the divMMC NMI pulse
 	c.SetWritePtrHighAndMode(0x40) // mode 01 = FromZero, run
 
 	pcBefore := c.pc
@@ -413,3 +413,72 @@ func TestFrameMoveInstantsAticPacer(t *testing.T) {
 		t.Fatal("HasRunnableMoveTo should be false while stopped")
 	}
 }
+
+// TestStartPhaseAnchor pins the stopped→running NR$62 start anchoring
+// (#187): the FPGA copper begins executing on the 28 MHz cycle after
+// the enable edge (copper.vhd:70-83 edge-detects copper_en on the
+// free-running dot-clock lattice), so a list started mid-frame is
+// phase-anchored to the WRITE instant, not the frame top. The model
+// banks the frame's already-elapsed cycles as a stepCarry debt at the
+// mode transition; both the render engines (Step / RunToCycle) and
+// the NMI pacer's schedule sim (FrameMoveInstants resumes from
+// linePos+stepCarry) consume it before executing the list. A
+// free-running NMI-pacer wrap keeps this phase for its whole life.
+func TestStartPhaseAnchor(t *testing.T) {
+	const debt = 5000 // copper cycles already elapsed in the frame
+	newList := func(phase func() int) *Copper {
+		c := New()
+		c.SetContinuousPacing(true)
+		c.SetLineCycles(1824)
+		c.SetStartPhaseSource(phase)
+		// MOVE NR$02,$04 at index 0, HALT after: single instant at the
+		// list start makes the anchored offset directly observable.
+		c.SetWritePtrLow(0)
+		c.WriteData16(0x02)
+		c.WriteData16(0x04)
+		c.WriteData16(0xFF)
+		c.WriteData16(0xFF)
+		c.SetWritePtrHighAndMode(0x40) // stopped → FromZero: start edge
+		return c
+	}
+
+	// FrameMoveInstants: the single MOVE must land at the write instant
+	// (debt cycles into the frame), +1 for the pulse-to-NMI-line cycle
+	// accounted by the pacer, not here — the raw instant is the MOVE's
+	// first cycle.
+	c := newList(func() int { return debt })
+	moves := c.FrameMoveInstants(0x02, 311, 1824)
+	if len(moves) != 1 {
+		t.Fatalf("instants = %d, want 1", len(moves))
+	}
+	if got := int(moves[0].Line)*1824 + moves[0].Cycle; got != debt {
+		t.Fatalf("anchored instant = %d cycles, want %d (the NR$62 write instant)", got, debt)
+	}
+
+	// RunToCycle: the render's line drive must consume the same debt
+	// before the MOVE executes — the write fires on line debt/1824 at
+	// cycle debt%1824, not at the frame top.
+	c2 := newList(func() int { return debt })
+	var fired []int
+	c2.SetRegWriter(regWriterFunc(func(reg, val byte) {
+		if reg == 0x02 {
+			fired = append(fired, 0)
+		}
+	}))
+	for line := 0; line < 5; line++ {
+		c2.RunToCycle(uint16(line), 1823)
+		if len(fired) > 0 {
+			wantLine := debt / 1824
+			if line != wantLine {
+				t.Fatalf("MOVE fired on line %d, want line %d (debt %d)", line, wantLine, debt)
+			}
+			return
+		}
+	}
+	t.Fatalf("MOVE never fired within 5 lines (debt %d)", debt)
+}
+
+// regWriterFunc adapts a func to the RegWriter interface for tests.
+type regWriterFunc func(reg, val byte)
+
+func (f regWriterFunc) WriteReg(reg, val byte) { f(reg, val) }

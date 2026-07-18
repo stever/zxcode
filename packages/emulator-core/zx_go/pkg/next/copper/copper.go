@@ -126,6 +126,31 @@ type Copper struct {
 	// precompute a frame of copper execution; a generation bump tells
 	// them their schedule is stale.
 	gen uint32
+
+	// startPhase, when set (SetStartPhaseSource), returns the current
+	// CPU position within the frame in COPPER CYCLES (28 MHz; 8 per
+	// reference T-state) at the instant a stopped→running NR$62
+	// transition commits. On the FPGA the copper begins executing on
+	// the next 28 MHz cycle after that write (copper.vhd:70-83
+	// edge-detects copper_en and the dot-clock lattice never stops),
+	// so a list started mid-frame is phase-anchored to the WRITE
+	// instant. The render pass only advances this model's copper at
+	// frame end, whole-frame at a time — without an anchor a list
+	// started mid-frame executed as if started at the frame origin, a
+	// constant lattice phase error of (write - origin) mod wrap.
+	// Atic Atac's free-running ~20 kHz NMI pacer list (1361-cycle
+	// wrap, frame-incommensurate) keeps that phase forever, and its
+	// raster-slaved SP-repointed walks live or die by it (#187).
+	// The debt is banked in startDebt (consumed before any execution
+	// by Step, RunToCycle and FrameMoveInstants) so the start frame
+	// advances the list only over the post-write span.
+	startPhase func() int
+	// startDebt is the pending stopped→running anchor debt in copper
+	// cycles from the current frame's origin. Distinct from stepCarry:
+	// the carry follows the completed-line convention (a line's final
+	// position includes its full budget), while the debt is an
+	// absolute intra-frame position.
+	startDebt int
 }
 
 // Generation returns the CPU-write mutation counter. It bumps on every
@@ -153,6 +178,14 @@ func (c *Copper) SetContinuousPacing(on bool) {
 	c.continuous = on
 	c.stepCarry = 0
 }
+
+// SetStartPhaseSource installs the callback that reports the CPU's
+// current intra-frame position in copper cycles (28 MHz). Used to
+// anchor a stopped→running NR$62 start to its write instant — see the
+// startPhase field comment. Production wiring (cmd/zx_go) supplies
+// the CPU reference clock; nil (tests, classic models) keeps the
+// legacy frame-origin anchoring.
+func (c *Copper) SetStartPhaseSource(f func() int) { c.startPhase = f }
 
 // SetRegWriter installs the NextReg writer. Required for MOVE
 // instructions to take effect; otherwise they are silent no-ops.
@@ -226,6 +259,7 @@ func (c *Copper) SetWritePtrHighAndMode(b byte) {
 	if mode == c.mode {
 		return
 	}
+	wasStopped := c.stopped
 	c.mode = mode
 	switch c.mode {
 	case StartStop:
@@ -235,6 +269,18 @@ func (c *Copper) SetWritePtrHighAndMode(b byte) {
 		c.stopped = false
 	case StartContinue:
 		c.stopped = false
+	}
+	// Anchor a stopped→running start to the write instant: bank the
+	// frame's already-elapsed copper cycles as a stepCarry debt so the
+	// end-of-frame render advance (and the NMI pacer's schedule sim,
+	// which resumes from linePos+stepCarry) executes the list only
+	// from the write onward — the FPGA's copper_en edge starts
+	// execution on the very next 28 MHz cycle (copper.vhd:70-83), not
+	// at the frame top. See the startPhase field comment (#187).
+	if wasStopped && !c.stopped && c.continuous && c.startPhase != nil {
+		c.startDebt = c.startPhase()
+		c.stepCarry = 0
+		c.linePos = 0
 	}
 }
 
@@ -339,6 +385,14 @@ func (c *Copper) RunToCycle(vcount uint16, cycle int) {
 		} else {
 			c.linePos = 0
 		}
+	}
+	// Consume a pending stopped→running start debt as intra-line
+	// position: whole-line portions drain through the line-change
+	// overrun carry above, so the first instruction executes exactly
+	// startDebt cycles into the frame — the NR$62 write instant.
+	if c.continuous && c.startDebt > 0 {
+		c.linePos += c.startDebt
+		c.startDebt = 0
 	}
 	if c.mode == StartStop { // copper_en "00": no execution (copper.vhd:85)
 		return
@@ -452,6 +506,13 @@ func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 	executed := 0
 	spent := c.stepCarry
 	c.stepCarry = 0
+	// Consume a pending stopped→running start debt: the per-call budget
+	// convention drains it line by line, so the first instruction
+	// executes exactly startDebt cycles into the frame.
+	if c.continuous && c.startDebt > 0 {
+		spent += c.startDebt
+		c.startDebt = 0
+	}
 	for spent < cycleBudget {
 		inst := Decode(c.program[c.pc&(MaxInstructions-1)])
 		switch inst.Op {
@@ -563,8 +624,15 @@ func (c *Copper) FrameMoveInstants(reg byte, lines, cyclesPerLine int) []MoveIns
 	// enough to walk Atic Atac's NMI-atomic SP-repointed descriptor
 	// walks under a sample NMI (#187).
 	spent := 0
+	debt := 0
 	if c.continuous {
 		spent = sim.linePos + sim.stepCarry
+		// A pending stopped→running start debt (absolute intra-frame
+		// cycle position of the NR$62 write) delays the list's first
+		// instruction to exactly that instant — the FPGA's enable-edge
+		// anchor (copper.vhd:70-83). Whole lines drain via the per-line
+		// walk; the remainder floors the entry line's spent position.
+		debt = sim.startDebt
 	}
 	// The per-line drive mirrors the render's: each line offers the full
 	// line budget, WAITs park against the line's end-of-line hcount
@@ -583,6 +651,16 @@ func (c *Copper) FrameMoveInstants(reg byte, lines, cyclesPerLine int) []MoveIns
 			spent -= cyclesPerLine
 		} else {
 			spent = 0
+		}
+		if debt >= cyclesPerLine {
+			debt -= cyclesPerLine
+			continue
+		}
+		if debt > 0 {
+			if spent < debt {
+				spent = debt
+			}
+			debt = 0
 		}
 	lineLoop:
 		for spent < cyclesPerLine {

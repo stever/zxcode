@@ -320,9 +320,27 @@ shape, zxnext.vhd:6543-6552). The pieces:
   `ExtNMIFunc` poll (cmd/zx_go copperNMIPacer — live during HALT,
   which a prefetch hook is not; guests `DI;HALT` awaiting the first
   pulse) fires each instant through the dispatcher's one NR$02
-  handler. Any NR$60-$63 write bumps the copper's Generation and
-  clears the schedule immediately (a stopped/reprogrammed pacer must
-  fall silent at once), rebuilding after a quiet gap. The dispatcher
+  handler. Instants are 28 MHz copper-cycle granular (compared against
+  the CPU's Ref8Tstates — the old /8 refT truncation fired up to 7
+  cycles early), offset +1 for the cycle between the MOVE's write
+  pulse and the NMI line assert. A stopped→running NR$62 transition
+  anchors the list to its WRITE INSTANT: the FPGA copper begins
+  executing on the next 28 MHz cycle after the enable edge
+  (copper.vhd:70-83) — the model banks the frame's already-elapsed
+  cycles as a start debt (`Copper.SetStartPhaseSource`/`startDebt`,
+  wired from the CPU reference clock in cmd/zx_go) that Step,
+  RunToCycle and FrameMoveInstants all consume before executing, so a
+  mid-frame start is not silently re-anchored to the frame top. A
+  free-running pacer wrap (Atic's 1361 cycles, frame-incommensurate)
+  keeps that phase for its whole life, so the anchor decides where
+  every later raster-slaved guest sequence sits inside the NMI period.
+  Pinned by TestStartPhaseAnchor. Any NR$60-$63 write bumps the
+  copper's Generation and clears the schedule immediately (a
+  stopped/reprogrammed pacer must fall silent at once), rebuilding
+  after a quiet gap; the rebuild's fast-forward cuts at the BUMP
+  instant, not the rebuild instant, so instants elapsing during the
+  quiet gap deliver late instead of dropping (a just-started pacer's
+  first pulse may be DI;HALT-awaited). The dispatcher
   handler enforces the FPGA's NMI gates (zxnext.vhd:2091-2116): the
   NR$06 button-NMI enables (bit 3 MF / bit 4 divMMC — boot firmware
   config defaults $A8, applyTBBLUEFWBootDefaults) and the arbiter's

@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+
+	"github.com/conorarmstrong/zx_go/pkg/next/copper"
 	"image/png"
 	"os"
 	"strconv"
@@ -192,7 +194,8 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		}
 		ring2[ring2Idx&65535] = traceEnt{frame, pc, emu.cpu.SP, emu.cpu.HL(), emu.cpu.DE(), emu.cpu.A, emu.mem.Read(pc), emu.mem.Read(pc + 1)}
 		ring2Idx++
-		if frame > 5030 && pc >= 0xA5F0 && pc < 0xA700 {
+		if (frame > 5030 && pc >= 0xA5F0 && pc < 0xA700) ||
+			(frame > 5060 && pc < 0x0100 && emu.cpu.SP < 0x2000) {
 			ring2Dumped = true
 			for i := 0; i < 65536; i++ {
 				e := ring2[(ring2Idx+i)&65535]
@@ -205,8 +208,11 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 	var wTick, wD107, wD030, wNMI int
 	wTickRets := map[uint16]int{}
 	wD107SPs := map[uint16]int{}
+	ledgerFrame := func(f int) bool {
+		return (f >= 5005 && f <= 5035) || (f >= 5120 && f <= 5140)
+	}
 	emu.cpu.AddPreFetchHook("atic-skip-ledger", func(pc uint16) {
-		if frame < 5005 || frame > 5035 {
+		if !ledgerFrame(frame) {
 			return
 		}
 		switch pc {
@@ -267,6 +273,36 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		}
 	})
 	var lastNMIRefT uint64
+	emu.cpu.AddPreFetchHook("atic-walk-phase", func(pc uint16) {
+		if frame <= 4000 {
+			return
+		}
+		switch pc {
+		case 0x26A4:
+			since := emu.cpu.RefTstates() - lastNMIRefT
+			sp := emu.cpu.SP
+			ret := uint16(emu.mem.Read(sp)) | uint16(emu.mem.Read(sp+1))<<8
+			t.Logf("frame %6d: WALK $26A4 entry refT=%d sinceNMI=%d sp=$%04X ret=$%04X",
+				frame, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), since, sp, ret)
+		case 0x1C17:
+			since := emu.cpu.RefTstates() - lastNMIRefT
+			sp := emu.cpu.SP
+			ret := uint16(emu.mem.Read(sp)) | uint16(emu.mem.Read(sp+1))<<8
+			t.Logf("frame %6d: RASTERWAIT exit refT=%d sinceNMI=%d line=$%02X ret=$%04X",
+				frame, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), since, emu.cpu.A, ret)
+		case 0x0066:
+			sp := emu.cpu.SP
+			if sp >= 0x26D0 && sp < 0x2700 {
+				t.Logf("frame %6d: MIDWALK NMI sp=$%04X refT=%d", frame, sp,
+					emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates())
+			}
+			if frame >= 5060 && frame <= 5160 && sp < 0xF000 {
+				ipc := uint16(emu.mem.Read(sp)) | uint16(emu.mem.Read(sp+1))<<8
+				t.Logf("frame %6d: NMI-SPANOM sp=$%04X intpc=$%04X refT=%d", frame, sp, ipc,
+					emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates())
+			}
+		}
+	})
 	emu.cpu.AddPreFetchHook("atic-nmi-gap", func(pc uint16) {
 		if pc != 0x0066 {
 			return
@@ -347,19 +383,100 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		}
 	}
 	importAt := 3000
+	// Menu-select frame (SPACE press; released 28 frames later). The
+	// menu era's raster-slaved mainline walk makes an IDLE menu
+	// deterministically fatal (~frame 5116 era); a human selects
+	// promptly. ZX_GO_ATIC_SELECT varies the press frame — each value
+	// shifts the doors-era engine passes' NMI-lattice phase classes.
+	selectAt := 5060
+	if s := os.Getenv("ZX_GO_ATIC_SELECT"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			selectAt = v
+		}
+	}
 	lastSD := 0
 	for frame = 0; frame < maxFrames; frame++ {
 		if frame == importAt {
 			emu.importAndRunNex("Atic Atac/ATICATAC.NEX", nexData)
 		}
 		switch frame {
+		case 0:
+			cop6063 := 0
+			emu.nextRegs.SetTracer(func(reg, val byte, write bool) {
+				if !write || reg < 0x60 || reg > 0x63 {
+					return
+				}
+				if reg == 0x60 || reg == 0x63 {
+					cop6063++
+					if cop6063 > 12 && cop6063%512 != 0 {
+						return
+					}
+				}
+				line, hpos := emu.ula.BeamPosition()
+				t.Logf("frame %6d NR$%02X <- $%02X refT=%d beam=(%d,%d) pc=$%04X",
+					frame, reg, val, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), line, hpos, emu.cpu.PC)
+			})
+		case 5010:
+			emu.nextRegs.SetTracer(nil)
+		case 5040:
+			blk := make([]byte, 0x40)
+			for i := range blk {
+				blk[i] = emu.mem.Read(0x1C00 + uint16(i))
+			}
+			t.Logf("frame %6d $1C00-$1C40: % x", frame, blk)
+			blk2 := make([]byte, 0xA0)
+			for i := range blk2 {
+				blk2[i] = emu.mem.Read(0x2660 + uint16(i))
+			}
+			t.Logf("frame %6d $2660-$2700: % x", frame, blk2)
+			emu.nextRegs.SetTracer(func(reg, val byte, write bool) {
+				if !write || (reg == 0x02 && (val == 0x00 || val == 0x04)) {
+					return
+				}
+				t.Logf("frame %6d NRW $%02X <- $%02X refT=%d pc=$%04X",
+					frame, reg, val, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), emu.cpu.PC)
+			})
+			if c := emu.nextCopper; c != nil {
+				nMove, nNoop, nWait, nHalt, cycles := 0, 0, 0, 0, 0
+				var nonNoop []string
+				for i := 0; i < copper.MaxInstructions; i++ {
+					in := c.Instruction(uint16(i))
+					switch in.Op {
+					case copper.OpMOVE:
+						nMove++
+						cycles += 2
+						nonNoop = append(nonNoop, fmt.Sprintf("%03X:MOVE NR$%02X,$%02X", i, in.Reg, in.Val))
+					case copper.OpWAIT:
+						nWait++
+						nonNoop = append(nonNoop, fmt.Sprintf("%03X:WAIT line=%d hpos=%d", i, in.Y, in.X))
+					case copper.OpHALT:
+						nHalt++
+						nonNoop = append(nonNoop, fmt.Sprintf("%03X:HALT", i))
+					default:
+						nNoop++
+						cycles++
+					}
+				}
+				t.Logf("frame %6d COPPER LIST: %d MOVE, %d NOOP, %d WAIT, %d HALT, wrap=%d cycles; non-NOOP: %v",
+					frame, nMove, nNoop, nWait, nHalt, cycles, nonNoop)
+			}
+		case 5130:
+			emu.nextRegs.SetTracer(nil)
+		}
+		switch frame {
+		// Menu-select EARLY: the menu era runs a per-frame raster-slaved
+		// mainline SP walk ($19FB -> CALL $2674) whose collision phase
+		// precesses ~34 refT/frame against the free-running NMI lattice;
+		// an idle menu deterministically dies when the sweep enters the
+		// ~5-refT fatal band (~frame 5116 in this build). Selecting
+		// before then exercises the intended flow (a human would).
 		case 5000, 6500:
 			kempston(true)
 		case 5030, 6530:
 			kempston(false)
-		case 9000, 15000:
+		case selectAt, 9000, 15000:
 			emu.kbd.PressMatrixKey(7, 0x01, true) // SPACE
-		case 9030, 15030:
+		case selectAt + 28, 9030, 15030:
 			emu.kbd.PressMatrixKey(7, 0x01, false)
 		case 12000:
 			emu.kbd.PressMatrixKey(6, 0x01, true) // ENTER
@@ -427,7 +544,7 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 		}
 		emu.cpu.ExecuteFrame(frameTStatesForModel(roms.ModelNext))
-		if frame >= 5005 && frame <= 5035 {
+		if ledgerFrame(frame) {
 			t.Logf("frame %d LEDGER: tick=%d rets=%v d107=%d sps=%v d030=%d nmi=%d pcEnd=$%04X F990=$%02X",
 				frame, wTick, wTickRets, wD107, wD107SPs, wD030, wNMI, emu.cpu.PC, emu.mem.Read(0xF990))
 			wTick, wD107, wD030, wNMI = 0, 0, 0, 0
@@ -525,7 +642,7 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 			_ = os.WriteFile(outDir+"/emu_CF80.bin", seq[:], 0644)
 			t.Logf("frame %d: dumped $CF80-$D0C0 sequencer region", frame)
-		case 5500, 7000, 8500, 10500, 12000, 14500, 17500, 20000, 25000:
+		case 5150, 5300, 5500, 6100, 7000, 8500, 10500, 12000, 14500, 17500, 20000, 25000:
 			shot(frame, "stage")
 		}
 	}

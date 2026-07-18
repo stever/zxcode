@@ -29,7 +29,7 @@ var copperNMITrace = os.Getenv("ZX_GO_COPPER_NMI_TRACE") != ""
 // Per CPU frame this pacer simulates one frame of copper execution on
 // a THROWAWAY copy (copper.FrameMoveInstants — the real state still
 // advances only in the render pass), converts each captured NR$02
-// MOVE instant to a frame-relative reference T-state, and the CPU's
+// MOVE instant to a frame-relative 28 MHz copper cycle, and the CPU's
 // ExtNMIFunc poll (live during HALT too) fires the writes through the
 // NextReg dispatcher as the CPU crosses each instant — so the NMI source latching, divMMC
 // automap arming and Multiface semantics all stay in the dispatcher's
@@ -45,7 +45,7 @@ type copperNMIPacer struct {
 	mem  *memory.Memory
 	disp *nextregs.Dispatcher
 
-	instants   []int // frame-relative ref T-states, ascending
+	instants   []int // frame-relative COPPER CYCLES (28 MHz), ascending
 	vals       []byte
 	idx        int
 	lastOrigin uint64
@@ -71,6 +71,15 @@ type copperNMIPacer struct {
 	lastGen uint32
 	dirty   bool
 	quietM1 int
+	// dirty8 is the absolute Ref8 (28 MHz reference) instant of the
+	// LAST generation bump. The post-rebuild fast-forward cuts at this
+	// instant, not at the rebuild instant: instants that elapsed
+	// DURING the quiet gap (the ~64 M1s between the final NR write and
+	// the rebuild) would have fired on the FPGA — dropping them loses
+	// a just-started list's first pulse, which a guest may be DI;HALT
+	// waiting on. Instants before the bump belong to the OLD list's
+	// already-delivered schedule and stay skipped.
+	dirty8 uint64
 }
 
 // quietRebuildM1s is how many consecutive polls without a copper
@@ -109,6 +118,7 @@ func (p *copperNMIPacer) poll(_ uint64) {
 		p.carryVal = p.carryVal[:0]
 		p.dirty = true
 		p.quietM1 = 0
+		p.dirty8 = p.cpu.Ref8Tstates()
 		return
 	}
 	origin := p.cpu.FrameOriginRefTstates()
@@ -120,18 +130,21 @@ func (p *copperNMIPacer) poll(_ uint64) {
 		p.dirty = false
 		p.lastOrigin = origin
 		p.rebuild()
-		// Fast-forward past already-elapsed instants: a mid-frame
-		// rebuild must not fire the frame's past as a burst.
-		t := int(p.cpu.RefTstates() - origin)
-		for p.idx < len(p.instants) && p.instants[p.idx] <= t {
+		// Fast-forward past instants already covered by the OLD
+		// schedule (before the generation bump): a mid-frame rebuild
+		// must not re-fire the frame's past as a burst. Instants
+		// between the bump and now fire below on this or the next
+		// poll — the FPGA delivered those during the quiet gap
+		// (dropping them starves a just-started pacer's first pulse).
+		cut := int64(p.dirty8) - int64(origin*8)
+		for p.idx < len(p.instants) && int64(p.instants[p.idx]) <= cut {
 			p.idx++
 		}
 		if copperNMITrace {
 			slog.Info("copper-nmi: rebuilt after quiet gap",
-				"instants", len(p.instants), "skipped", p.idx, "t", t,
+				"instants", len(p.instants), "skipped", p.idx, "cut", cut,
 				"mode", p.cop.Mode(), "pc", p.cpu.PC)
 		}
-		return
 	}
 	if origin != p.lastOrigin {
 		p.lastOrigin = origin
@@ -140,8 +153,11 @@ func (p *copperNMIPacer) poll(_ uint64) {
 	if p.idx >= len(p.instants) {
 		return
 	}
-	t := int(p.cpu.RefTstates() - origin)
-	for p.idx < len(p.instants) && p.instants[p.idx] <= t {
+	// 28 MHz-granular comparison: an instant fires once the reference
+	// clock has REACHED it. The old refT compare truncated instants /8,
+	// firing up to 7 copper cycles early (#187 conformance).
+	t8 := int(p.cpu.Ref8Tstates() - origin*8)
+	for p.idx < len(p.instants) && p.instants[p.idx] <= t8 {
 		p.disp.WriteReg(0x02, p.vals[p.idx])
 		p.idx++
 	}
@@ -175,16 +191,19 @@ func (p *copperNMIPacer) rebuild() {
 	// exact); no known title uses one.
 	lines := g.Lines
 	cyclesPerLine := tpl * copper.CyclesPerHcount * 2
-	frameT := g.FrameTStates()
+	frame8 := g.FrameTStates() * 8
 	p.instants = append(p.instants, p.carryT...)
 	p.vals = append(p.vals, p.carryVal...)
 	p.carryT = p.carryT[:0]
 	p.carryVal = p.carryVal[:0]
 	moves := p.cop.FrameMoveInstants(0x02, lines, cyclesPerLine)
 	for _, m := range moves {
-		t := (int(m.Line)*cyclesPerLine + m.Cycle) / 8
-		if t >= frameT {
-			p.carryT = append(p.carryT, t-frameT)
+		// Copper-cycle (28 MHz) instants, no /8 truncation. m.Cycle is
+		// the MOVE's first cycle (the write pulse, copper.vhd:87-89);
+		// the NMI line asserts on the following cycle, hence +1.
+		t := int(m.Line)*cyclesPerLine + m.Cycle + 1
+		if t >= frame8 {
+			p.carryT = append(p.carryT, t-frame8)
 			p.carryVal = append(p.carryVal, m.Val)
 			continue
 		}
