@@ -2421,7 +2421,17 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// odd half at +4.
 	const cyclesPerHcount = 4
 	const lineEndCycle = 456*cyclesPerHcount - 1
-	const frameLines = 312
+	// frameLines follows the LIVE geometry (zxula_timing.vhd c_max_vc+1:
+	// 311 on the +3 50 Hz boot timing, 312/264/320 on others). The old
+	// hardcoded 312 advanced the copper one extra line per frame on the
+	// 311-line timing — +0.32% copper rate — which broke engines that
+	// phase-lock NMI-pacer stub walks to raster events (Atic Atac's
+	// sample engine overshot its per-buffer stub walk by 1-2 stubs and
+	// derailed at a scene transition, #187).
+	frameLines := memory.DefaultNextGeometry().Lines
+	if u.mem != nil {
+		frameLines = u.mem.NextGeometry().Lines
+	}
 	if len(u.compositorScan) < 2*w*4 {
 		u.compositorScan = make([]byte, 2*w*4)
 		u.compositorComposed = make([]byte, 2*w*4)

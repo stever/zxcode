@@ -101,6 +101,25 @@ type Copper struct {
 	lineV    uint16
 	linePos  int
 	runLastV uint16
+	// lineCycles is one scanline's copper-cycle length (hcounts x 4;
+	// 1824 on the 456-hcount 128K/+3 timing). Used to CARRY an
+	// in-flight instruction's overrun across line boundaries: the
+	// FPGA copper is a free-running 28 MHz machine — line boundaries
+	// do not exist for its MOVE/NOOP pacing. Both engines previously
+	// reset the intra-line position to 0 on a line change, silently
+	// forgiving the overrun and running free-running lists a fraction
+	// fast; engines that phase-lock NMI-pacer stub walks to raster
+	// events (Atic Atac) drift and derail on that inflation (#187).
+	lineCycles int
+	// stepCarry is Step's cross-call overrun (cycles an instruction
+	// consumed past the previous call's budget).
+	stepCarry int
+	// continuous enables the cross-line/cross-call overrun carry
+	// (SetContinuousPacing). The per-tick golden-trace and equivalence
+	// drivers rely on the legacy "budget gates STARTING an instruction"
+	// contract, so the carry is opt-in; the production machine enables
+	// it (cmd/zx_go wiring).
+	continuous bool
 
 	// gen counts CPU-side mutations (NR$60-$63 writes: program data,
 	// cursor, mode). Side-effect schedulers (the NR$02 NMI pacer)
@@ -115,7 +134,25 @@ type Copper struct {
 func (c *Copper) Generation() uint32 { return c.gen }
 
 // New returns an empty copper.
-func New() *Copper { return &Copper{stopped: true} }
+func New() *Copper { return &Copper{stopped: true, lineCycles: 456 * CyclesPerHcount} }
+
+// SetLineCycles sets the scanline length in copper cycles (hcounts x
+// CyclesPerHcount) for the cross-line overrun carry. Defaults to the
+// 456-hcount 128K/+3 timing.
+func (c *Copper) SetLineCycles(n int) {
+	if n > 0 {
+		c.lineCycles = n
+	}
+}
+
+// SetContinuousPacing enables FPGA-true free-running pacing: an
+// instruction's cycles consumed past a line boundary (RunToCycle) or a
+// call's budget (Step) reduce the next line/call's budget instead of
+// being forgiven. See the lineCycles field comment for why (#187).
+func (c *Copper) SetContinuousPacing(on bool) {
+	c.continuous = on
+	c.stepCarry = 0
+}
 
 // SetRegWriter installs the NextReg writer. Required for MOVE
 // instructions to take effect; otherwise they are silent no-ops.
@@ -295,7 +332,13 @@ func (c *Copper) RunToCycle(vcount uint16, cycle int) {
 	c.runLastV = vcount
 	if vcount != c.lineV {
 		c.lineV = vcount
-		c.linePos = 0
+		// Carry the previous line's overrun (free-running pacing);
+		// anything within the line is simply done.
+		if over := c.linePos - c.lineCycles; c.continuous && over > 0 {
+			c.linePos = over
+		} else {
+			c.linePos = 0
+		}
 	}
 	if c.mode == StartStop { // copper_en "00": no execution (copper.vhd:85)
 		return
@@ -407,7 +450,9 @@ func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 		return 0
 	}
 	executed := 0
-	for spent := 0; spent < cycleBudget; {
+	spent := c.stepCarry
+	c.stepCarry = 0
+	for spent < cycleBudget {
 		inst := Decode(c.program[c.pc&(MaxInstructions-1)])
 		switch inst.Op {
 		case OpMOVE:
@@ -453,6 +498,13 @@ func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 			c.pc = (c.pc + 1) & (MaxInstructions - 1)
 			spent++
 		}
+	}
+	// Free-running carry: the cycles the final instruction consumed
+	// past the budget reduce the next call's budget (parked WAIT/HALT
+	// exits return above and carry nothing — they are waiting, not
+	// mid-instruction).
+	if c.continuous {
+		c.stepCarry = spent - cycleBudget
 	}
 	return executed
 }
@@ -503,6 +555,7 @@ func (c *Copper) FrameMoveInstants(reg byte, lines, cyclesPerLine int) []MoveIns
 	}
 	sim := *c
 	var out []MoveInstant
+	spent := 0
 	// The per-line drive mirrors the render's: each line offers the full
 	// line budget, WAITs park against the line's end-of-line hcount
 	// horizon reached progressively (the spent counter is the intra-line
@@ -516,8 +569,13 @@ func (c *Copper) FrameMoveInstants(reg byte, lines, cyclesPerLine int) []MoveIns
 		if sim.stopped {
 			return out
 		}
+		if spent >= cyclesPerLine {
+			spent -= cyclesPerLine
+		} else {
+			spent = 0
+		}
 	lineLoop:
-		for spent := 0; spent < cyclesPerLine; {
+		for spent < cyclesPerLine {
 			inst := Decode(sim.program[sim.pc&(MaxInstructions-1)])
 			switch inst.Op {
 			case OpMOVE:

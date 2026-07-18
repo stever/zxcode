@@ -140,6 +140,15 @@ type Card struct {
 	// command for instrumentation. (cmd, arg, isACMD).
 	logger func(cmd byte, arg uint32, isACMD bool)
 
+	// lastDispatchQueued / lastDispatchMultiRead snapshot the response
+	// backlog at each command dispatch for DebugLastDispatchState.
+	lastDispatchQueued    int
+	lastDispatchMultiRead bool
+
+	// csLogger, if non-nil, is called on every CS (port $E7) write —
+	// diagnostic only (#187 probes).
+	csLogger func(val byte, asserted bool)
+
 	// byteLogger, if non-nil, is called with each byte clocked
 	// (write=true if host->card, false if card->host). Useful for
 	// debugging SPI framing issues against real-hardware traces.
@@ -183,6 +192,21 @@ func (c *Card) DataBlocksRead() uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.dataBlocksRead
+}
+
+// DebugLastDispatchState reports the response-queue depth and open
+// CMD18 stream flag as snapshotted at the LAST command dispatch,
+// lock-free — safe to call from a SetLogger callback (which runs with
+// the card mutex held). Diagnostic only (#187 probes).
+func (c *Card) DebugLastDispatchState() (queued int, multiRead bool) {
+	return c.lastDispatchQueued, c.lastDispatchMultiRead
+}
+
+// SetCSLogger installs a per-CS-write callback for debugging (#187).
+func (c *Card) SetCSLogger(fn func(val byte, asserted bool)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.csLogger = fn
 }
 
 // SetLogger installs a per-command callback for debugging. Pass
@@ -262,6 +286,9 @@ func (c *Card) WriteCS(val byte) {
 	// forever trying to mount the phantom — the $3BF5 deliberate-reset
 	// loop (the development log). The reference/hardware with one card return B=1.
 	asserted := val&0x01 == 0
+	if c.csLogger != nil {
+		c.csLogger(val, asserted)
+	}
 	if c.csSelected != asserted {
 		c.cmdLen = 0
 		c.rxQueue = c.rxQueue[:0]
@@ -386,6 +413,8 @@ func (c *Card) dispatch() {
 		uint32(c.cmdBuf[3])<<8 |
 		uint32(c.cmdBuf[4])
 
+	c.lastDispatchQueued = len(c.rxQueue)
+	c.lastDispatchMultiRead = c.multiReadActive
 	if c.logger != nil {
 		c.logger(cmd, arg, c.appCmd)
 	}

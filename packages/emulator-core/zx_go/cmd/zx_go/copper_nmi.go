@@ -3,7 +3,6 @@ package main
 import (
 	"log/slog"
 	"os"
-	"sort"
 
 	"github.com/conorarmstrong/zx_go/pkg/memory"
 	"github.com/conorarmstrong/zx_go/pkg/next/copper"
@@ -50,6 +49,16 @@ type copperNMIPacer struct {
 	vals       []byte
 	idx        int
 	lastOrigin uint64
+	// Seam carry: sim instants past the CPU frame budget belong to
+	// copper time the render also advanced — dropping them made a
+	// deterministic ~1.3-NMI gap at the frame origin every frame.
+	// Atic Atac's engine switches NMI-stub sets in phase with its
+	// raster-synced effects; the per-frame hiccup slipped the stub
+	// walk one sample per frame until a stack-repointing stub fired
+	// mis-phased and derailed the machine (#187). Overflow instants
+	// are re-based into the next frame's schedule instead.
+	carryT   []int
+	carryVal []byte
 
 	// Staleness: any CPU write to the copper (NR$60-$63 — program data,
 	// cursor, mode) invalidates the precomputed schedule. The schedule
@@ -92,6 +101,12 @@ func (p *copperNMIPacer) poll(_ uint64) {
 		p.instants = p.instants[:0]
 		p.vals = p.vals[:0]
 		p.idx = 0
+		// The seam carry belongs to the OLD list's trajectory — carrying
+		// it into a reprogrammed list's first frame fires a stale NMI
+		// bunched against the new list's own first instant, overrunning
+		// the one-push pad Atic Atac's SP-repointing stubs rely on (#187).
+		p.carryT = p.carryT[:0]
+		p.carryVal = p.carryVal[:0]
 		p.dirty = true
 		p.quietM1 = 0
 		return
@@ -144,25 +159,37 @@ func (p *copperNMIPacer) rebuild() {
 	}
 	g := p.mem.NextGeometry()
 	tpl := g.TStatesPerLine
-	moves := p.cop.FrameMoveInstants(0x02, g.Lines, tpl*copper.CyclesPerHcount*2)
-	if len(moves) == 0 {
-		return
-	}
-	// cvc line L plays at raw line (L+MinVActive)%Lines; a copper cycle
-	// is 1/8 of a reference T-state (28 MHz vs 3.5 MHz).
-	type inst struct {
-		t   int
-		val byte
-	}
-	tmp := make([]inst, len(moves))
-	for i, m := range moves {
-		raw := (int(m.Line) + g.MinVActive) % g.Lines
-		tmp[i] = inst{t: raw*tpl + m.Cycle/8, val: m.Val}
-	}
-	sort.Slice(tmp, func(i, j int) bool { return tmp[i].t < tmp[j].t })
-	for _, e := range tmp {
-		p.instants = append(p.instants, e.t)
-		p.vals = append(p.vals, e.val)
+	// Simulate the SAME number of lines the render pass drives the
+	// authoritative copper with — the live geometry's Lines (the render
+	// follows it too since #187) — so the schedule's trajectory stays
+	// continuous with the real state across frames. Instants are
+	// anchored on MONOTONIC SIM TIME (cumulative copper cycles from
+	// frame origin, 8 cycles per reference T-state), NOT re-folded onto
+	// the raster: folding parked two instants back-to-back at every
+	// frame seam. Atic Atac's stream updater repoints SP into a reused
+	// parameter block whose sacrificial pad absorbs exactly ONE NMI
+	// push — a bunched pair overran the pad, a return address became a
+	// stream sector, and the streamer died on its data-token timeout
+	// (#187). The cost of sim-time anchoring: a raster-WAIT-anchored
+	// NR$02 list would fire with a paper-top phase offset (rate still
+	// exact); no known title uses one.
+	lines := g.Lines
+	cyclesPerLine := tpl * copper.CyclesPerHcount * 2
+	frameT := g.FrameTStates()
+	p.instants = append(p.instants, p.carryT...)
+	p.vals = append(p.vals, p.carryVal...)
+	p.carryT = p.carryT[:0]
+	p.carryVal = p.carryVal[:0]
+	moves := p.cop.FrameMoveInstants(0x02, lines, cyclesPerLine)
+	for _, m := range moves {
+		t := (int(m.Line)*cyclesPerLine + m.Cycle) / 8
+		if t >= frameT {
+			p.carryT = append(p.carryT, t-frameT)
+			p.carryVal = append(p.carryVal, m.Val)
+			continue
+		}
+		p.instants = append(p.instants, t)
+		p.vals = append(p.vals, m.Val)
 	}
 }
 

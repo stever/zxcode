@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/png"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/conorarmstrong/zx_go/pkg/roms"
@@ -85,15 +86,202 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		emu.ula.SetKempstonButton(0x10, down)
 	}
 
+	lastNR06 := byte(0xFF)
+	nmiInAutomap := 0
 	// Count NMI deliveries (PC entering $0066) per snapshot window.
+	dumpedC951 := false
 	nmiCount := 0
+	iyCount := 0
+	lastIY := uint16(0)
+	nmiTraceLeft := 0
+	var nmiTrace []uint16
+	inNMI := false
 	emu.cpu.AddPreFetchHook("atic-nmi-count", func(pc uint16) {
+		if iy := emu.cpu.IY; iy != lastIY {
+			iyCount++
+			lastIY = iy
+		}
 		if pc == 0x0066 {
 			nmiCount++
+			if pg, ok := emu.ula.NextDivMMC().(interface{ IsPagedIn() bool }); ok && pg.IsPagedIn() {
+				nmiInAutomap++
+			}
+			if frame > 5895 && frame < 5905 && nmiTraceLeft > 0 {
+				inNMI = true
+			}
+		}
+		if inNMI {
+			nmiTrace = append(nmiTrace, pc)
+			if len(nmiTrace) > 400 || (len(nmiTrace) > 2 && pc > 0x4000) {
+				inNMI = false
+				nmiTraceLeft--
+				t.Logf("NMI trace (%d PCs): % x", len(nmiTrace), nmiTrace)
+				nmiTrace = nmiTrace[:0]
+			}
+		}
+		if pc == 0xD107 {
+			t.Logf("frame %6d: STREAM-DESC WRITER $D107 (sp=$%04X)", frame, emu.cpu.SP)
+		}
+		if pc == 0xC949 && frame > 3200 {
+			t.Logf("frame %6d: track_start track=$%02X flags=$%02X seed(DE)=$%04X",
+				frame, emu.mem.Read(0xF995), emu.mem.Read(0xF994), emu.cpu.DE())
+		}
+		if pc == 0xD107 && frame > 4995 && frame < 5012 {
+			sp := emu.cpu.SP
+			var q [8]uint16
+			for i := range q {
+				a := sp + uint16(2*i)
+				q[i] = uint16(emu.mem.Read(a)) | uint16(emu.mem.Read(a+1))<<8
+			}
+			t.Logf("frame %6d: $D107 queue-pop SP=$%04X HL=$%04X DE=$%04X q=%04x",
+				frame, sp, emu.cpu.HL(), emu.cpu.DE(), q)
+		}
+		if pc == 0xD131 && frame > 3900 {
+			t.Logf("frame %6d: CMD18-issue $D131 (sp=$%04X)", frame, emu.cpu.SP)
+		}
+		if pc == 0xD610 && frame > 3900 {
+			t.Logf("frame %6d: SD-TOKEN TIMEOUT -> $D610 abandon (from $CFE7 wait)", frame)
+		}
+		if pc == 0xCFF4 && frame > 4990 && frame < 5100 {
+			t.Logf("frame %6d: token OK at $CFF4", frame)
+		}
+		if pc == 0xC949 && frame > 4000 && !dumpedC951 {
+			sp := emu.cpu.SP
+			retw := uint16(emu.mem.Read(sp)) | uint16(emu.mem.Read(sp+1))<<8
+			var low [16]byte
+			for i := range low {
+				low[i] = emu.mem.Read(uint16(i))
+			}
+			t.Logf("frame %6d: $C949 entry SP=$%04X (SP)=$%04X slot0-lowbytes=% x",
+				frame, sp, retw, low)
+		}
+		if pc == 0xC951 && !dumpedC951 && frame > 4000 {
+			dumpedC951 = true
+			var dac0 [0x80]byte
+			for i := range dac0 {
+				dac0[i] = emu.mem.Read(0xDAC0 + uint16(i))
+			}
+			var blk [0x90]byte
+			for i := range blk {
+				blk[i] = emu.mem.Read(0xF970 + uint16(i))
+			}
+			_ = os.WriteFile(outDir+"/emu_c951_DAC0.bin", dac0[:], 0644)
+			_ = os.WriteFile(outDir+"/emu_c951_F970.bin", blk[:], 0644)
+			t.Logf("frame %6d: $C951 title track_start — dumped DAC0+F970", frame)
 		}
 	})
 
-	const maxFrames = 26000
+	e3Callers := map[uint16]uint64{}
+	tickCallers := map[uint16]uint64{}
+	var tickHits uint64
+	var pcRing [256]uint16
+	var pcRingIdx int
+	deathDumped := false
+	var deathTrace *os.File
+	type traceEnt struct {
+		frame          int
+		pc, sp, hl, de uint16
+		a, op0, op1    byte
+	}
+	ring2 := make([]traceEnt, 65536)
+	ring2Idx := 0
+	ring2Dumped := false
+	emu.cpu.AddPreFetchHook("atic-death-trace", func(pc uint16) {
+		if ring2Dumped || deathTrace == nil {
+			return
+		}
+		ring2[ring2Idx&65535] = traceEnt{frame, pc, emu.cpu.SP, emu.cpu.HL(), emu.cpu.DE(), emu.cpu.A, emu.mem.Read(pc), emu.mem.Read(pc + 1)}
+		ring2Idx++
+		if frame > 5030 && pc >= 0xA5F0 && pc < 0xA700 {
+			ring2Dumped = true
+			for i := 0; i < 65536; i++ {
+				e := ring2[(ring2Idx+i)&65535]
+				fmt.Fprintf(deathTrace, "f%d pc=%04X sp=%04X a=%02X hl=%04X de=%04X op=%02X%02X\n",
+					e.frame, e.pc, e.sp, e.a, e.hl, e.de, e.op0, e.op1)
+			}
+			t.Logf("frame %6d: death ring dumped (pc entered $A6xx)", frame)
+		}
+	})
+	var lastNMIRefT uint64
+	emu.cpu.AddPreFetchHook("atic-nmi-gap", func(pc uint16) {
+		if pc != 0x0066 {
+			return
+		}
+		t0 := emu.cpu.RefTstates()
+		gap := t0 - lastNMIRefT
+		lastNMIRefT = t0
+		if frame >= 5050 && frame <= 5250 && (gap < 140 || gap > 260) {
+			t.Logf("frame %6d: NMI gap %d refT (sp=$%04X)", frame, gap, emu.cpu.SP)
+		}
+	})
+	emu.cpu.AddPreFetchHook("atic-tick-caller", func(pc uint16) {
+		pcRing[pcRingIdx&255] = pc
+		pcRingIdx++
+		if pc == 0xCF80 {
+			tickHits++
+			sp := emu.cpu.SP
+			ret := uint16(emu.mem.Read(sp)) | uint16(emu.mem.Read(sp+1))<<8
+			tickCallers[ret]++
+			if ret == 0 && !deathDumped && frame > 5000 {
+				deathDumped = true
+				var ring []string
+				for i := 0; i < 256; i++ {
+					ring = append(ring, fmt.Sprintf("%04X", pcRing[(pcRingIdx+i)&255]))
+				}
+				t.Logf("frame %6d: FIRST ret-$0000 tick call. sp=$%04X iy=$%04X", frame, sp, emu.cpu.IY)
+				t.Logf("pc ring (oldest first): %v", ring)
+				var stk [64]byte
+				for i := range stk {
+					stk[i] = emu.mem.Read(sp - 16 + uint16(i))
+				}
+				t.Logf("stack sp-16..sp+48: % x", stk)
+				var desc [0x120]byte
+				for i := range desc {
+					desc[i] = emu.mem.Read(0xA5F0 + uint16(i))
+				}
+				t.Logf("$A5F0 block: % x", desc)
+				var slots [8]byte
+				for i := range slots {
+					slots[i] = emu.nextRegs.Raw(0x50 + byte(i))
+				}
+				t.Logf("slots=%v", slots)
+			}
+		}
+	})
+	var e3w, e3r uint64
+	var e3wLastVal byte
+	var e3wLastPC, e3rLastPC uint16
+	var e3Bit1Flips uint64
+	emu.ula.SetPortTracer(func(addr uint16, val byte, isWrite, handled bool) {
+		if addr&0xFF != 0xE3 {
+			return
+		}
+		if isWrite {
+			if (val^e3wLastVal)&0x02 != 0 {
+				e3Bit1Flips++
+			}
+			e3w++
+			e3wLastVal = val
+			e3wLastPC = emu.cpu.PC
+		} else {
+			e3r++
+			e3rLastPC = emu.cpu.PC
+			if emu.cpu.PC == 0xCFBC {
+				sp := emu.cpu.SP
+				ret := uint16(emu.mem.Read(sp)) | uint16(emu.mem.Read(sp+1))<<8
+				e3Callers[ret]++
+			}
+		}
+	})
+
+	deathTrace, _ = os.Create(outDir + "/death_trace.txt")
+	defer deathTrace.Close()
+	maxFrames := 26000
+	if s := os.Getenv("ZX_GO_ATIC_PROBE_MAX"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			maxFrames = v
+		}
+	}
 	importAt := 3000
 	lastSD := 0
 	for frame = 0; frame < maxFrames; frame++ {
@@ -101,10 +289,44 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			emu.importAndRunNex("Atic Atac/ATICATAC.NEX", nexData)
 		}
 		switch frame {
-		case 5000, 6500, 8000, 10000:
+		case 5000, 6500:
 			kempston(true)
-		case 5030, 6530, 8030, 10030:
+		case 5030, 6530:
 			kempston(false)
+		case 9000, 15000:
+			emu.kbd.PressMatrixKey(7, 0x01, true) // SPACE
+		case 9030, 15030:
+			emu.kbd.PressMatrixKey(7, 0x01, false)
+		case 12000:
+			emu.kbd.PressMatrixKey(6, 0x01, true) // ENTER
+		case 12030:
+			emu.kbd.PressMatrixKey(6, 0x01, false)
+		case 5090:
+			if emu.sdCard != nil {
+				emu.sdCard.SetLogger(func(cmd byte, arg uint32, isACMD bool) {
+					q, mr := emu.sdCard.DebugLastDispatchState()
+					t.Logf("frame %6d: SD CMD%d arg=$%08X pc=$%04X q=%d multiRead=%v",
+						frame, cmd, arg, emu.cpu.PC, q, mr)
+				})
+				emu.sdCard.SetCSLogger(func(val byte, asserted bool) {
+					t.Logf("frame %6d: SD CS write $%02X asserted=%v pc=$%04X",
+						frame, val, asserted, emu.cpu.PC)
+				})
+			}
+		case 5124:
+			if emu.sdCard != nil {
+				emu.sdCard.SetByteLogger(func(write bool, val byte) {
+					if write {
+						t.Logf("frame %6d: SD WR $%02X pc=$%04X", frame, val, emu.cpu.PC)
+					}
+				})
+			}
+		case 5200:
+			if emu.sdCard != nil {
+				emu.sdCard.SetLogger(nil)
+				emu.sdCard.SetCSLogger(nil)
+				emu.sdCard.SetByteLogger(nil)
+			}
 		}
 		emu.cpu.ExecuteFrame(frameTStatesForModel(roms.ModelNext))
 		if emu.peripherals != nil {
@@ -124,15 +346,68 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			if emu.sdCard != nil {
 				sd = int(emu.sdCard.DataBlocksRead())
 			}
-			t.Logf("frame %6d: pc=$%04X F996=$%02X F9E3=$%02X%02X F990=$%02X sd+%d nmi+%d",
+			t.Logf("frame %6d: pc=$%04X F996=$%02X F9E3=$%02X%02X F990=$%02X sd+%d nmi+%d iy+%d",
 				frame, emu.cpu.PC,
 				emu.mem.Read(0xF996),
 				emu.mem.Read(0xF9E4), emu.mem.Read(0xF9E3),
-				emu.mem.Read(0xF990), sd-lastSD, nmiCount)
+				emu.mem.Read(0xF990), sd-lastSD, nmiCount, iyCount)
 			lastSD = sd
 			nmiCount = 0
+			iyCount = 0
+			t.Logf("frame %6d: E3 w+%d (last $%02X pc=$%04X, bit1flips %d) r+%d (last pc=$%04X) callers=%v",
+				frame, e3w, e3wLastVal, e3wLastPC, e3Bit1Flips, e3r, e3rLastPC, e3Callers)
+			e3w, e3r, e3Bit1Flips = 0, 0, 0
+			for k := range e3Callers {
+				delete(e3Callers, k)
+			}
+			t.Logf("frame %6d: tick $CF80 hits+%d callers=%v", frame, tickHits, tickCallers)
+			tickHits = 0
+			for k := range tickCallers {
+				delete(tickCallers, k)
+			}
+			if v := emu.nextRegs.Raw(0x06); v != lastNR06 {
+				t.Logf("frame %6d: NR$06 now $%02X (was $%02X)", frame, v, lastNR06)
+				lastNR06 = v
+			}
+			if nmiInAutomap > 0 {
+				t.Logf("frame %6d: %d NMIs landed with divMMC automap PAGED IN", frame, nmiInAutomap)
+				nmiInAutomap = 0
+			}
+			if frame == 4000 {
+				nmiTraceLeft = 6
+			}
 		}
 		switch frame {
+		case 8600:
+			low := make([]byte, 0x8000)
+			for i := range low {
+				low[i] = emu.mem.Read(uint16(i))
+			}
+			_ = os.WriteFile(outDir+"/emu_low_8500.bin", low, 0644)
+			var slots [8]byte
+			for i := range slots {
+				slots[i] = emu.nextRegs.Raw(0x50 + byte(i))
+			}
+			t.Logf("frame %6d: slots=%v", frame, slots)
+		case 6000:
+			var idle [0x100]byte
+			for i := range idle {
+				idle[i] = emu.mem.Read(0xA600 + uint16(i))
+			}
+			_ = os.WriteFile(outDir+"/emu_A600.bin", idle[:], 0644)
+			var f9 [0x90]byte
+			for i := range f9 {
+				f9[i] = emu.mem.Read(0xF970 + uint16(i))
+			}
+			t.Logf("frame 6000 doors state F970: % x", f9[:0x30])
+			t.Logf("frame 6000 F990+: % x", f9[0x20:0x40])
+		case 4500:
+			var seq [0x140]byte
+			for i := range seq {
+				seq[i] = emu.mem.Read(0xCF80 + uint16(i))
+			}
+			_ = os.WriteFile(outDir+"/emu_CF80.bin", seq[:], 0644)
+			t.Logf("frame %d: dumped $CF80-$D0C0 sequencer region", frame)
 		case 5500, 7000, 8500, 10500, 12000, 14500, 17500, 20000, 25000:
 			shot(frame, "stage")
 		}

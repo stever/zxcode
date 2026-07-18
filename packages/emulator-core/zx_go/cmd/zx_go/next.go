@@ -721,6 +721,9 @@ func wireNextSubsystems(e *emulator) error {
 	prio := next.NewLayerPriority()
 	sprites := sprite.New()
 	cop := copper.New()
+	// FPGA-true free-running pacing for the production machine — the
+	// per-tick test drivers keep the legacy budget contract (#187).
+	cop.SetContinuousPacing(true)
 	// The render pass's copper MOVEs write video registers through the
 	// dispatcher, but NR$02 (NMI generation) is delivered on the CPU
 	// timeline by the copperNMIPacer below — at render time a frame's
@@ -728,11 +731,17 @@ func wireNextSubsystems(e *emulator) error {
 	// (Atic Atac's ~20 kHz divMMC sample pacer ran at 50 Hz, #187).
 	cop.SetRegWriter(copperVideoWriter{d: disp})
 	copperPacer := newCopperNMIPacer(cop, cpu, mem, disp)
-	// ExtNMIFunc, not a prefetch hook: the poll must keep running while
-	// the CPU is halted (the game HALTs with DI waiting for the pacer's
-	// first NMI — a hook that only fires on instruction fetches would
-	// deadlock there).
-	cpu.ExtNMIFunc = copperPacer.poll
+	// ZX_GO_NO_COPPER_NMI_PACER reverts to render-time NR$02 coalescing —
+	// bisection aid for #187 probes, not a supported mode.
+	if os.Getenv("ZX_GO_NO_COPPER_NMI_PACER") != "" {
+		cop.SetRegWriter(disp)
+	} else {
+		// ExtNMIFunc, not a prefetch hook: the poll must keep running while
+		// the CPU is halted (the game HALTs with DI waiting for the pacer's
+		// first NMI — a hook that only fires on instruction fetches would
+		// deadlock there).
+		cpu.ExtNMIFunc = copperPacer.poll
+	}
 	rtcEngine := rtcpkg.New()
 	// ZX_GO_RTC_FIXED=<RFC3339> freezes the guest clock — makes the
 	// NextZXOS menu's per-second redraw task quiescent so key events
