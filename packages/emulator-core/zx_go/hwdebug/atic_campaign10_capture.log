@@ -1,0 +1,27 @@
+nex: SP=$BFFE PC=$BF00 border=0 entry16k=2 banks16k=[5, 2, 0]
+nex loaded, PC/SP set
+bank94 stubs planted
+started; awaiting handoff pause
+PAUSE reason=breakpoint addr=$E259 bank+1=95 
+[   3.29s] handoff pause; slots: [20, 255, 10, 11, 95, 5, 6, 1]
+orig $C949: ed 53 92 f9 ed 53 90
+track_start anchor armed at $C949 (permanent)
+
+>>> Let the title tune start, then PRESS FIRE ONCE to skip. <<<
+
+PAUSE reason=breakpoint addr=$C948 bank+1=7 
+[   3.92s] HIT 1: track_start trk=$21 flags=$00 seed=$0012  F990=00 F992=0000 flags=00 trk=21 ev=00 pos=0000 slots=[16, 17, 53, 94, 95, 13, 6, 1]
+  bank16[0000..005F]: 18 64 fb ed 92 57 f1 c9 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+PAUSE reason=breakpoint addr=$C948 bank+1=7 
+[   4.57s] HIT 2: track_start trk=$00 flags=$C0 seed=$0080  F990=01 F992=0012 flags=C0 trk=00 ev=00 pos=0000 slots=[16, 17, 53, 94, 21, 13, 6, 1]
+  bank16[0000..005F]: 18 64 fb ed 92 57 f1 c9 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  refill anchor armed at $D131 ok=True
+PAUSE reason=breakpoint addr=$D130 bank+1=7 
+[   5.13s] HIT 3: FIRST CMD18 AFTER CHAIN  sp=$F9FE F990=77 F992=0080 flags=C0 trk=00 ev=00 pos=0000 slots=[16, 17, 53, 94, 21, 13, 6, 1]
+  d131 restored ok=True (track anchor stays armed; re-arms on next chain)
+PAUSE reason=breakpoint addr=$C948 bank+1=7 
+[   6.51s] HIT 4: track_start trk=$22 flags=$00 seed=$0070  F990=18 F992=0243 flags=00 trk=22 ev=43 pos=4302 slots=[16, 17, 24, 94, 4, 13, 6, 1]
+  bank16[0000..005F]: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+[   6.83s] ANCHOR DISARMED after title-tune start ok=True — press fire when ready; watching (no further hits possible)
+[  31.83s] quiet 25s — still watching (Ctrl-C to finish)
+[  56.83s] quiet 25s — still watching (Ctrl-C to finish)
