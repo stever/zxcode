@@ -349,3 +349,83 @@ func TestZ80N28MHz_AticCMD18ArgSequence(t *testing.T) {
 		t.Errorf("Atic CMD18-arg sequence at 28 MHz: got %d cycles, want 159 (FPGA hand count)", got)
 	}
 }
+
+// --- Bank-7 BRAM no-wait quirk (zxnext.vhd:6670-6686) ---
+//
+// The Next's bank-7 lower 8K (8K MMU page 14) lives in a dedicated
+// dual-port BRAM whose CPU port is clocked directly on i_CLK_28; the
+// 28 MHz read-wait term (zxnext.vhd:3175) covers only sram_req_t
+// (external SRAM) and cpu_bank5_sched (bank-5 BRAM), so reads that
+// resolve to page 14 pay NO wait state — one cycle faster than every
+// other memory read. The memory backend advertises those addresses
+// through the optional Read28NoWait interface; this mock exposes a
+// configurable no-wait window standing in for page 14.
+
+type bank7NoWaitMem struct {
+	data       [0x10000]byte
+	noWaitFrom uint16
+	noWaitTo   uint16
+}
+
+func (m *bank7NoWaitMem) Read(addr uint16) byte       { return m.data[addr] }
+func (m *bank7NoWaitMem) Write(addr uint16, val byte) { m.data[addr] = val }
+func (m *bank7NoWaitMem) ContendPort(port uint16)     {}
+func (m *bank7NoWaitMem) Read28NoWait(addr uint16) bool {
+	return addr >= m.noWaitFrom && addr <= m.noWaitTo
+}
+
+func TestZ80N28MHz_Bank7BRAMNoWait(t *testing.T) {
+	run := func(code []byte, pc uint16, setup func(*CPU)) uint64 {
+		mem := &bank7NoWaitMem{noWaitFrom: 0xC000, noWaitTo: 0xDFFF}
+		cpu := New(mem, nil)
+		cpu.Variant = VariantZ80N
+		cpu.SetSpeedSelect(0x03)
+		cpu.PC = pc
+		cpu.SP = 0xA000
+		for i, b := range code {
+			mem.data[pc+uint16(i)] = b
+		}
+		if setup != nil {
+			setup(cpu)
+		}
+		before := cpu.tstates
+		cpu.StepInstruction()
+		return cpu.tstates - before
+	}
+
+	cases := []struct {
+		name  string
+		bytes []byte
+		pc    uint16
+		setup func(*CPU)
+		want  uint64
+	}{
+		// Data read resolves to the BRAM: only the M1 fetch (SRAM)
+		// collects the wait — 7 + 1, not the 7 + 2 the waited-HL
+		// variant of the opcode table pins.
+		{"LD A,(HL) data in bank7", []byte{0x7E}, 0x8000,
+			func(c *CPU) { c.H, c.L = 0xC1, 0x00 }, 8},
+		// Same opcode, data outside the BRAM: both reads wait (the
+		// opcode-table baseline, unchanged by the quirk wiring).
+		{"LD A,(HL) data in SRAM", []byte{0x7E}, 0x8000,
+			func(c *CPU) { c.H, c.L = 0x90, 0x00 }, 9},
+		// Executing FROM the BRAM: the M1 fetch is the exempt read.
+		{"NOP fetched from bank7", []byte{0x00}, 0xC000, nil, 4},
+		{"LD A,n fetched from bank7", []byte{0x3E, 0x52}, 0xC000, nil, 7},
+		// Writes never wait anywhere, so a bank-7 write target
+		// changes nothing: M1 (SRAM) waits, the write is free.
+		{"LD (HL),A into bank7", []byte{0x77}, 0x8000,
+			func(c *CPU) { c.H, c.L = 0xC1, 0x00 }, 8},
+		// Stack in the BRAM: POP's two stack reads are exempt.
+		{"POP HL stack in bank7", []byte{0xE1}, 0x8000,
+			func(c *CPU) { c.SP = 0xC800 }, 11},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := run(tc.bytes, tc.pc, tc.setup)
+			if got != tc.want {
+				t.Errorf("%s at 28 MHz: got %d cycles, want %d", tc.name, got, tc.want)
+			}
+		})
+	}
+}

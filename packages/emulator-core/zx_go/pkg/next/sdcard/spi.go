@@ -40,6 +40,7 @@ package sdcard
 
 import (
 	"os"
+	"strconv"
 	"sync"
 )
 
@@ -169,11 +170,17 @@ type Card struct {
 	// Pure telemetry: the .nex launch macro compares its delta against
 	// the file's size to meter load progress (DataBlocksRead).
 	dataBlocksRead uint64
-	// readCount seeds the per-read access-time (Nac) hash in
-	// handleReadBlock so consecutive reads of the same LBA still see
-	// different (deterministic) access times, like a real card's
-	// internal state does.
-	readCount uint32
+	// readAheadLBA/readAheadValid model the card controller's
+	// sequential read-ahead: after serving a block, a real card has
+	// already fetched (or is fetching) the NEXT sequential block into
+	// its buffer, so a follow-on read of exactly that LBA sees the
+	// minimal data-token access time (Nac) while a random-access read
+	// pays the full block fetch. handleReadBlock consults and
+	// advances these; ReadData's CMD18 auto-stream keeps them synced;
+	// writes/erases/CMD0 invalidate (the controller repurposes its
+	// buffers). Deterministic — no wall clock, no RNG.
+	readAheadLBA   uint32
+	readAheadValid bool
 }
 
 // SetSDHC toggles the OCR's CCS bit so this card advertises
@@ -203,10 +210,48 @@ func (c *Card) DebugLastDispatchState() (queued int, multiRead bool) {
 	return c.lastDispatchQueued, c.lastDispatchMultiRead
 }
 
+// CMD17/18 data-token access times (SD spec "Nac") in byte-times,
+// INCLUDING the one idle byte queueRawDataBlock itself prepends.
+// Deterministic two-state model of a real card (#187):
+//
+//   - nacSequential: the requested LBA is exactly the card's
+//     read-ahead position (the block a CMD18 stream would have
+//     auto-delivered next, or lastLBA+1 after any read). The
+//     controller already holds the data — the token follows almost
+//     immediately. Real cards stream CMD18 continuations with 1-2
+//     idle bytes; the hardware-verified inter-block gap in ReadData
+//     is the same magnitude (2+1 byte-times).
+//   - nacRandom: a first/random-access block costs a real internal
+//     fetch. A fast SDHC card at the Next's ~14 MHz SPI clock
+//     answers within a handful of byte-times (a byte-time is
+//     ~0.57 us; 8 byte-times ~ 4.6 us of controller latency).
+//
+// The previous model hashed LBA + a read counter into a 4..64 range:
+// deterministic per run, but every CMD18 re-open during Atic Atac's
+// scene transitions re-rolled the mainline's phase against its
+// ~170.125-refT copper-NMI sample lattice by tens of refT — a phase
+// lottery the FPGA + real-card combination does not play (real
+// sequential latencies are uniform).
+const (
+	nacSequential = 2
+	nacRandom     = 8
+)
+
+// nacRandomOverride (ZX_GO_SD_NAC_RANDOM=<n>) overrides the
+// random-access Nac for phase experiments (#187 grid probes). 0 = use
+// nacRandom. Diagnostic only — the shipped model is the constant.
+var nacRandomOverride = func() int {
+	if s := os.Getenv("ZX_GO_SD_NAC_RANDOM"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v >= 1 {
+			return v
+		}
+	}
+	return 0
+}()
+
 // fastNac (ZX_GO_SD_FAST_NAC=1) pins the CMD17/18 data-token access
-// delay to 2 byte-times — the #187 experiment probing whether the
-// stochastic 4..64 Nac stretches Atic Atac's NMI-atomic SPI walks past
-// the ~170-refT sample-NMI gap a real card's read-ahead keeps them under.
+// delay to 2 byte-times for ALL reads (sequential and random alike) —
+// kept as a bisection switch from the #187 experiments.
 var fastNac = os.Getenv("ZX_GO_SD_FAST_NAC") != ""
 
 // SetCSLogger installs a per-CS-write callback for debugging (#187).
@@ -381,6 +426,11 @@ func (c *Card) ReadData() byte {
 		c.queueRawDataBlock(buf)
 		c.multiReadLBA++
 		c.dataBlocksRead++
+		// Keep the read-ahead position in step with the stream, so a
+		// CMD12 + fresh CMD18 continuing at exactly this LBA counts
+		// as sequential (real cards' read-ahead survives CMD12).
+		c.readAheadLBA = c.multiReadLBA
+		c.readAheadValid = true
 	}
 	var b byte = 0xFF
 	if len(c.rxQueue) > 0 {
@@ -435,9 +485,11 @@ func (c *Card) dispatch() {
 	switch cmd {
 	case 0: // GO_IDLE_STATE
 		// CMD0 always puts the card BACK into idle, regardless of
-		// previous state. Re-arm ACMD41 init handshake too.
+		// previous state. Re-arm ACMD41 init handshake too. The
+		// controller's read-ahead buffer does not survive a reset.
 		c.inIdle = true
 		c.acmd41Remaining = 0
+		c.readAheadValid = false
 		c.respondR1(0x01)
 	case 1: // SEND_OP_COND (MMC; we just respond ready)
 		c.respondR1(0x00)
@@ -646,32 +698,40 @@ func (c *Card) queueDataBlock(data []byte, n int) {
 // to the LBA `src.ReadBlock` wants, per the advertised class.
 func (c *Card) handleReadBlock(arg uint32) {
 	c.respondR1(0x00) // respondR1 supplies the Ncr pad
+	lba := c.argToLBA(arg)
 	buf := make([]byte, 512)
 	if c.src != nil {
-		_ = c.src.ReadBlock(c.argToLBA(arg), buf)
+		_ = c.src.ReadBlock(lba, buf)
 	}
-	// Variable access time (SD spec "Nac"): a real card holds DataOut
-	// high between the R1 response and the $FE data token while it
-	// fetches the block internally, and the count varies per access.
-	// Correct guest code polls for the $FE token, so the exact count
-	// is invisible to it; we model a small deterministic per-access
-	// variance (hash of LBA + per-card read counter, so runs stay
-	// reproducible) rather than answering instantly, which is closer
-	// to a real card than a fixed pad. Register reads (CSD/CID) keep
-	// the fixed pad their fixed-count TBBLUE.FW readers require.
+	// Access time (SD spec "Nac"): a real card holds DataOut high
+	// between the R1 response and the $FE data token while it fetches
+	// the block. Correct guest code polls for the token, so the exact
+	// count is functionally invisible — but it IS phase: Atic Atac's
+	// NMI-lattice-locked loader made the old stochastic 4..64 pad a
+	// per-read phase re-roll (#187). Two deterministic states instead:
+	// a read continuing the card's sequential read-ahead position gets
+	// the minimal gap, a random access pays a fixed small fetch (see
+	// nacSequential/nacRandom). Register reads (CSD/CID) keep the
+	// fixed 1-byte pad their fixed-count TBBLUE.FW readers require.
 	// (Work item #169 explored whether a real-card-SIZED latency
 	// affects TX-1696's raster-phased install retry; it does not —
 	// the install re-locks its raster phase on an NR$1F poll each
-	// pass, so SD timing washes out. Kept small and faithful.)
-	c.readCount++
-	c.dataBlocksRead++
-	h := c.argToLBA(arg)*2654435761 ^ c.readCount*0x9E3779B9
-	h ^= h >> 16
-	nac := int(4 + h%61) // 4..64 byte-times
-	if fastNac {
-		nac = 2 // #187 experiment: real-card sequential read-ahead latency
+	// pass, so SD timing washes out.)
+	nac := nacRandom
+	if nacRandomOverride > 0 {
+		nac = nacRandomOverride
 	}
-	for i := 0; i < nac; i++ {
+	if c.readAheadValid && lba == c.readAheadLBA {
+		nac = nacSequential
+	}
+	if fastNac {
+		nac = 2
+	}
+	c.readAheadLBA = lba + 1
+	c.readAheadValid = true
+	c.dataBlocksRead++
+	// queueRawDataBlock prepends one idle byte itself; top up to nac.
+	for i := 1; i < nac; i++ {
 		c.rxQueue = append(c.rxQueue, 0xFF)
 	}
 	c.queueRawDataBlock(buf)
@@ -695,6 +755,8 @@ func (c *Card) argToLBA(arg uint32) uint32 {
 func (c *Card) handleWriteBlockStart(arg uint32) {
 	lba := c.argToLBA(arg)
 	c.respondR1(0x00)
+	// A write repurposes the controller's buffers — read-ahead is lost.
+	c.readAheadValid = false
 	c.writeMode = true
 	c.writeBuf = make([]byte, 0, 512+3)
 	c.writeBuf = append(c.writeBuf, byte(lba>>24), byte(lba>>16), byte(lba>>8), byte(lba))
@@ -744,6 +806,8 @@ func (c *Card) handleWriteByte(val byte) {
 func (c *Card) handleWriteMultiBlockStart(arg uint32) {
 	lba := c.argToLBA(arg)
 	c.respondR1(0x00)
+	// A write repurposes the controller's buffers — read-ahead is lost.
+	c.readAheadValid = false
 	c.writeMode = true
 	c.multiWriteMode = true
 	c.multiWriteCollecting = false
@@ -805,6 +869,8 @@ func (c *Card) handleErase() {
 	if end < start {
 		start, end = end, start
 	}
+	// An erase repurposes the controller's buffers — read-ahead is lost.
+	c.readAheadValid = false
 	if c.src != nil {
 		zero := make([]byte, 512)
 		for lba := start; lba <= end; lba++ {

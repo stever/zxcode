@@ -576,6 +576,47 @@ func (m *Memory) ResolvePage(addr uint16) int {
 	return rmap*2 + slot8k&1
 }
 
+// Read28NoWait reports whether a CPU memory READ at addr currently
+// resolves to the Next's bank-7 lower-8K BRAM — effective 8K page 14
+// — which pays NO wait state at 28 MHz. On the FPGA that page lives
+// in a dedicated dual-port BRAM whose CPU port is clocked directly on
+// i_CLK_28 (zxnext.vhd:6670-6686 "ULA BANK 7 (8k only ...)"), and the
+// 28 MHz read-wait term (zxnext.vhd:3175) covers only sram_req_t
+// (external SRAM: sram_active) and cpu_bank5_sched (bank-5 BRAM) —
+// bank 7 contributes nothing, so its reads are one cycle faster than
+// every other memory read. mem_active_bank7 (zxnext.vhd:2962) is
+// exactly "effective 8K page = $0E": page 15 (bank 7's upper half) is
+// NOT in the BRAM and takes the normal SRAM wait. Writes never wait
+// anywhere, so only the CPU's read path consults this (z80.readMem).
+//
+// Deliberate approximation: addresses below $4000 always report false
+// (charge the wait). The FPGA would exempt page 14 MMU-mapped into
+// slots 0/1 too, but only when none of the low-area overlays (divMMC
+// automap, Multiface, Alt-ROM, config mode, bootrom, romcs) wins the
+// decode — a mapping no known software uses; reporting false there
+// keeps the pre-quirk timing. Layer-2 read paging (port $123B rd_en)
+// DOES redirect $0000-$BFFF reads to SRAM ahead of the MMU dispatch
+// (sram_layer2_map_en beats the bank7 branch in the final mux,
+// zxnext.vhd:3101-3107), so a redirected read keeps its wait.
+func (m *Memory) Read28NoWait(addr uint16) bool {
+	if m.currentModel != roms.ModelNext || addr < 0x4000 {
+		return false
+	}
+	if m.l2RdEn {
+		if _, _, ok := m.layer2Redirect(addr); ok {
+			return false
+		}
+	}
+	slot8k := int(addr >> 13)
+	if m.mmuOverride[slot8k] {
+		return m.slotBank[slot8k] == 14
+	}
+	// Classic dispatch: 16K RAM bank N covers 8K pages 2N/2N+1, so
+	// page 14 is the lower half of 16K bank 7 (e.g. RAM7 paged at
+	// $C000 via port $7FFD → slot 6). ROM never maps at >= $4000.
+	return int(m.memoryPageReadMap[addr>>14])*2+(slot8k&1) == 14
+}
+
 // SetDFFD applies a write to port $DFFD, the Spectrum Next high RAM-bank
 // extension. Bits 3:0 are the most-significant bits of the $C000-slot RAM bank
 // selected by $7FFD (zxnext.vhd: port_7ffd_bank = port_dffd_reg(3:0) &

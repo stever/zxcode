@@ -300,6 +300,16 @@ type CPU struct {
 	// use in place of lump `c.tstates += N` accounting.
 	contender memContender
 
+	// noWait28, when non-nil, reports that a memory READ at the given
+	// address currently resolves to storage with NO 28 MHz wait state
+	// — on the Next, the bank-7 lower-8K BRAM (8K MMU page 14), whose
+	// dedicated dpram2 CPU port (zxnext.vhd:6670-6686) is absent from
+	// the sram_wait_n term (zxnext.vhd:3175: only sram_req_t |
+	// cpu_bank5_sched). Wired in New when the memory backend
+	// implements Read28NoWait; nil (test mocks, classic memory) means
+	// every read pays the wait, identical to the pre-quirk model.
+	noWait28 func(addr uint16) bool
+
 	// MemContend gates per-access ULA memory contention. Default
 	// false: the cycle helpers still advance T-states exactly as the
 	// old lump accounting did, so machine behaviour is byte-identical
@@ -493,7 +503,17 @@ func New(mem Memory, ula ULA) *CPU {
 	if mc, ok := mem.(memContender); ok {
 		c.contender = mc
 	}
+	if nw, ok := mem.(read28NoWaiter); ok {
+		c.noWait28 = nw.Read28NoWait
+	}
 	return c
+}
+
+// read28NoWaiter is the optional interface a memory backend implements
+// to exempt reads of specific addresses from the 28 MHz all-reads wait
+// state (the Next's bank-7 lower-8K BRAM quirk — see CPU.noWait28).
+type read28NoWaiter interface {
+	Read28NoWait(addr uint16) bool
 }
 
 // memContender is the optional interface a memory backend implements
@@ -1117,8 +1137,13 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 			// machines keep their pinned timings.
 			if c.Variant == VariantZ80N {
 				nopLen := uint64(4)
-				if c.speedSelect == 0x03 {
-					nopLen = 5 // 4 + the 28 MHz M1 read wait
+				if c.speedSelect == 0x03 &&
+					(c.noWait28 == nil || !c.noWait28(c.PC)) {
+					// 4 + the 28 MHz M1 read wait. The halt NOPs
+					// fetch (and discard) at PC, so a HALT parked
+					// in the bank-7 no-wait BRAM keeps the plain
+					// 4T grid (see readMem's exemption).
+					nopLen = 5
 				}
 				if (c.tstates-c.haltStartT)%nopLen != 0 {
 					c.tstates++
@@ -4182,8 +4207,15 @@ func (c *CPU) fetch() byte {
 // push-slide diversion is timed by this: with the wait applied to M1
 // only, the ~48k-instruction INT→slide stretch ran ~5-10% fast and
 // the slide wrapped $FFFF→$0000 nine lines before the next INT.
+//
+// EXEMPTION (bank-7 BRAM quirk): reads that resolve to the Next's
+// bank-7 lower-8K BRAM (8K MMU page 14) pay NO wait — its dedicated
+// dpram2 CPU port is clocked directly on i_CLK_28 (zxnext.vhd:
+// 6670-6686) and contributes no term to sram_wait_n (:3175). The
+// memory backend reports those addresses via Read28NoWait (noWait28).
 func (c *CPU) readMem(addr uint16) byte {
-	if c.Variant == VariantZ80N && c.speedSelect == 0x03 {
+	if c.Variant == VariantZ80N && c.speedSelect == 0x03 &&
+		(c.noWait28 == nil || !c.noWait28(addr)) {
 		c.tstates++
 	}
 	return c.mem.Read(addr)
@@ -4197,7 +4229,10 @@ func (c *CPU) readMem(addr uint16) byte {
 // "internal" trailing cycles of some Z80N opcodes — and the discarded
 // opcode fetch of the NMI acceptance M1 — are real bus reads that
 // collect the one-cycle 28 MHz read wait (zxnext.vhd:3168-3181).
-// Charged only in the same configuration readMem's wait applies.
+// Charged only in the same configuration readMem's wait applies. The
+// bank-7 no-wait exemption is NOT applied here: this core does not
+// model which address the T80N drives during these dummy cycles, and
+// all conformance-audited sequences execute from waited SRAM.
 func (c *CPU) dummyRead28(n uint64) {
 	if c.Variant == VariantZ80N && c.speedSelect == 0x03 {
 		c.tstates += n
