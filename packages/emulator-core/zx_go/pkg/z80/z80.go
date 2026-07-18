@@ -436,18 +436,39 @@ type CPU struct {
 	NMICallback func()
 
 	// NMIStackless models the ZX Spectrum Next "stackless NMI" (NextReg
-	// $C0 bit 3): when true, NMI acceptance ALSO writes the return address
-	// to NR$C2 (LSB)/NR$C3 (MSB) via StacklessWriteNR, and RETN takes its
-	// PC from NR$C2/$C3 (read via StacklessReadNR) instead of the popped
-	// stack value (the stack push/pop still happens so SP stays correct).
-	// NextZXOS launches 128 BASIC this way: the MF-NMI handler rewrites
-	// NR$C2/$C3 to the editor entry so RETN jumps there. The callbacks are
-	// generic (reg,val) so pkg/z80 needn't depend on the NextReg package;
-	// they are wired to the dispatcher in pkg/next. Matches a faithful
-	// Z80N core (the NMI path writes $C2/$C3; RETN reads them back).
+	// $C0 bit 3): when true, NMI acceptance writes the return address to
+	// NR$C2 (LSB)/NR$C3 (MSB) via StacklessWriteNR INSTEAD of the stack —
+	// the FPGA suppresses the push's MREQ cycles outright (zxnext.vhd:1828
+	// `cpu_mreq_n <= z80_mreq_n or z80_stackless_nmi`, :2052 asserted for
+	// the NMIACK_LSB/MSB write cycles, t80n_mcode.vhd:844-848), so MEMORY
+	// IS NEVER TOUCHED while SP still decrements by 2 internally. The next
+	// RETN-family instruction takes its PC from NR$C2/$C3 (read via
+	// StacklessReadNR) with its two pop reads likewise suppressed
+	// (`cpu_di <= z80_retn_address`, zxnext.vhd:1850); SP still increments.
+	//
+	// This is what makes a ~20 kHz NMI pacer safe against SP-cursor code:
+	// Atic Atac (#187) sets NR$C0=$09 and walks its object list with SP as
+	// the cursor (LD SP,IX; EX (SP),HL swaps; DEC SP rewinds) in MAINLINE
+	// code — on the FPGA an NMI acceptance mid-walk leaves RAM untouched.
+	// Modelling the push as a real memory write corrupted the walk's
+	// re-read bytes (a fake object pointer from the interrupted PC) and
+	// killed the game at the doors screen.
+	//
+	// NextZXOS launches 128 BASIC this way too: the MF-NMI handler
+	// rewrites NR$C2/$C3 to the editor entry so RETN jumps there. The
+	// callbacks are generic (reg,val) so pkg/z80 needn't depend on the
+	// NextReg package; they are wired to the dispatcher in pkg/next.
 	NMIStackless     bool
 	StacklessReadNR  func(reg byte) byte
 	StacklessWriteNR func(reg, val byte)
+	// StacklessRETNArmed mirrors the FPGA's z80_stackless_retn_en
+	// (zxnext.vhd:2073-2083): set at the NMI acceptance's NMIACK_LSB
+	// cycle, consumed by the next RETN-family instruction's RETN_MSB
+	// cycle, and held clear whenever NR$C0 bit 3 is 0 (the wiring in
+	// pkg/next clears it on such writes). Only an ARMED RETN returns via
+	// NR$C2/$C3 — a RETN with no preceding stackless NMI acceptance pops
+	// the real stack even while bit 3 is set.
+	StacklessRETNArmed bool
 
 	// For debugging
 	logEnabled bool
@@ -3279,7 +3300,18 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 	// ED $45/$55/$65/$75 are all RETN mirrors. Each takes 14 t and
 	// performs the same pop + IFF restoration.
 	case 0x4D, 0x5D, 0x6D, 0x7D: // RETI mirrors
-		c.PC = c.pop()
+		// Stackless-RETN arming: T80N's microcode groups ED $5D/$6D/$7D
+		// with the RETN family for the Z80N RETN_LSB/MSB commands — only
+		// ED $4D is RETI there (t80n_mcode.vhd:2426-2455) — so an armed
+		// stackless return is consumed by the mirrors too, with the pop
+		// reads suppressed (zxnext.vhd:1850, 2052) and PC from NR$C2/$C3.
+		if opcode != 0x4D && c.NMIStackless && c.StacklessRETNArmed && c.StacklessReadNR != nil {
+			c.SP += 2
+			c.PC = uint16(c.StacklessReadNR(0xC3))<<8 | uint16(c.StacklessReadNR(0xC2))
+			c.StacklessRETNArmed = false
+		} else {
+			c.PC = c.pop()
+		}
 		c.WZ = c.PC // per Sean Young §3.4: RETI sets MEMPTR = popped PC
 		// RETI restores IFF1 from IFF2 — faithful Z80 behaviour
 		// (IFF1 <- IFF2), the same as RETN.
@@ -3296,14 +3328,20 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 			c.OnRETI()
 		}
 	case 0x45, 0x55, 0x65, 0x75: // RETN mirrors
-		popped := c.pop() // always pop (SP stays correct)
-		if c.NMIStackless && c.StacklessReadNR != nil {
-			// Stackless NMI: RETN returns to NR$C2/$C3, not the stack —
-			// NextZXOS rewrites them in the MF-NMI handler to launch the
-			// 128 editor. SP is still popped above.
+		if c.NMIStackless && c.StacklessRETNArmed && c.StacklessReadNR != nil {
+			// Stackless NMI (armed by the acceptance, zxnext.vhd:2073-2083):
+			// RETN returns to NR$C2/$C3 with its two pop READS suppressed on
+			// the FPGA (cpu_di forced to z80_retn_address and cpu_mreq_n held
+			// high, zxnext.vhd:1828/:1850/:2052) — memory untouched, SP still
+			// increments by 2. NextZXOS rewrites NR$C2/$C3 in the MF-NMI
+			// handler to launch the 128 editor. An UNARMED RETN (no stackless
+			// NMI acceptance pending) pops the real stack even with NR$C0
+			// bit 3 set.
+			c.SP += 2
 			c.PC = uint16(c.StacklessReadNR(0xC3))<<8 | uint16(c.StacklessReadNR(0xC2))
+			c.StacklessRETNArmed = false
 		} else {
-			c.PC = popped
+			c.PC = c.pop()
 		}
 		c.WZ = c.PC // per Sean Young §3.4: RETN sets MEMPTR = popped PC
 		c.IFF1 = c.IFF2
@@ -5248,17 +5286,25 @@ func (c *CPU) NMI() {
 	c.BranchSource = 7 // SourceNmi — for the debugger's history
 	c.BranchFrom = c.PC
 
-	// Stackless NMI (NextReg $C0 bit 3): also store the return address in
-	// NR$C2/$C3 so a RETN can return there. The stack push still happens
-	// (SP stays correct) — only RETN's PC source changes (the NMI path
-	// writes $C2/$C3 then takes the NMI normally).
+	// Stackless NMI (NextReg $C0 bit 3): the return address goes to
+	// NR$C2/$C3 and the push's two memory WRITE cycles are suppressed on
+	// the FPGA (zxnext.vhd:1828/:2052 force cpu_mreq_n high during the
+	// NMIACK_LSB/MSB cycles) — RAM is never touched, SP still decrements
+	// by 2 internally (t80n_mcode.vhd:830-849, IncDec_16 runs as normal).
+	// This makes SP-cursor mainline code (Atic Atac's object sorter,
+	// LD SP,IX / EX (SP),HL walks, #187) safe under a ~20 kHz NMI pacer.
+	// The next RETN-family instruction is armed to return via NR$C2/$C3
+	// (z80_stackless_retn_en, zxnext.vhd:2073-2083).
 	if c.NMIStackless && c.StacklessWriteNR != nil {
 		c.StacklessWriteNR(0xC2, byte(c.PC))
 		c.StacklessWriteNR(0xC3, byte(c.PC>>8))
+		c.StacklessRETNArmed = true
+		c.SP -= 2
+	} else {
+		c.push(c.PC)
 	}
 
 	// NMI always jumps to 0x0066
-	c.push(c.PC)
 	c.PC = 0x0066
 	c.WZ = c.PC // per Sean Young §3.4: NMI acceptance behaves like CALL
 	// 11 T = 5 (M1, TStates "101" in t80n_mcode.vhd's NMICycle arm) +

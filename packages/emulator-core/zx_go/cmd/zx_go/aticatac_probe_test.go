@@ -446,6 +446,31 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 		}
 	})
+	// Sorter execution context (#187 stackless verdict): the doors-era
+	// object sorter ($B064) walks its list with SP as cursor. Capture at
+	// entry: the divMMC NMI envelope (NMIInFlight — true would mean the
+	// sorter runs pre-RETN inside the handler), the stackless-NMI mode
+	// (NR$C0 bit 3 / cpu.NMIStackless — true means acceptance pushes
+	// never touch RAM on the FPGA), the caller chain and the NMI phase.
+	sorterLogs := 40
+	emu.cpu.AddPreFetchHook("atic-sorter-ctx", func(pc uint16) {
+		if pc != 0xB064 || frame < 5140 || sorterLogs <= 0 {
+			return
+		}
+		sorterLogs--
+		sp := emu.cpu.SP
+		var chain [4]uint16
+		for i := range chain {
+			a := sp + uint16(2*i)
+			chain[i] = uint16(emu.mem.Read(a)) | uint16(emu.mem.Read(a+1))<<8
+		}
+		t.Logf("frame %6d: SORTER $B064 nmiInFlight=%v stackless=%v NR06=$%02X NRC0=$%02X sp=$%04X chain=%04x sinceNMI=%d refT=%d cnt=$%02X",
+			frame, inFlightNow(), emu.cpu.NMIStackless,
+			emu.nextRegs.Raw(0x06), emu.nextRegs.Raw(0xC0), sp, chain,
+			emu.cpu.RefTstates()-lastNMIRefT,
+			emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(),
+			emu.mem.Read(0xF923))
+	})
 	emu.cpu.AddPreFetchHook("atic-walk-phase", func(pc uint16) {
 		if frame <= 4000 {
 			return
@@ -579,6 +604,14 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		case 0:
 			cop6063 := 0
 			emu.nextRegs.SetTracer(func(reg, val byte, write bool) {
+				// NR$C0 (stackless NMI / IM2 vector) writes are logged
+				// from boot: Atic Atac's NEXTREG $C0,$09/$08 arming is
+				// the doors-sorter safety mechanism (#187).
+				if write && (reg == 0xC0 || reg == 0xC2 || reg == 0xC3) {
+					t.Logf("frame %6d NR$%02X <- $%02X pc=$%04X (stackless ctl)",
+						frame, reg, val, emu.cpu.PC)
+					return
+				}
 				if !write || reg < 0x60 || reg > 0x63 {
 					return
 				}
@@ -637,6 +670,21 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 					frame, nMove, nNoop, nWait, nHalt, cycles, nonNoop)
 			}
 		case 5130:
+			emu.nextRegs.SetTracer(nil)
+		case 5150:
+			// Task-3 evidence (#187): every NR$02/$06/$C0 write in the
+			// sorter-death window with pc attribution — is the GAME
+			// re-asserting bit 2 (or gating NR$06) around the sort? The
+			// pacer's deliveries show up as $02<-$04 at mainline pcs; the
+			// IY-wheel stub acks as $02<-$00 at $xx3B-region pcs.
+			emu.nextRegs.SetTracer(func(reg, val byte, write bool) {
+				if !write || (reg != 0x02 && reg != 0x06 && reg != 0xC0) {
+					return
+				}
+				t.Logf("frame %6d NR02WIN $%02X <- $%02X refT=%d pc=$%04X",
+					frame, reg, val, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), emu.cpu.PC)
+			})
+		case 5161:
 			emu.nextRegs.SetTracer(nil)
 		}
 		switch frame {
@@ -818,7 +866,13 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 			_ = os.WriteFile(outDir+"/emu_CF80.bin", seq[:], 0644)
 			t.Logf("frame %d: dumped $CF80-$D0C0 sequencer region", frame)
-		case 5150, 5300, 5500, 6100, 7000, 8500, 10500, 12000, 14500, 17500, 20000, 25000:
+		case 5150, 5300, 6100, 7000, 8500, 10500, 12000, 14500, 17500, 20000, 25000:
+			shot(frame, "stage")
+		}
+		// Gameplay-progress record (#187 task 4): with the stackless-NMI
+		// fix the doors scene should survive — screenshot every 500
+		// frames to see how far the attract/game advances.
+		if frame >= 5500 && frame%500 == 0 {
 			shot(frame, "stage")
 		}
 		switch frame {

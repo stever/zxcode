@@ -50,7 +50,14 @@ Faithfulness points:
   for LD A,I / NMI.
 - Interrupts: IM0/1/2 with correct T-states, EI delay, `interrupt()`
   clears both IFFs (Zilog behaviour NextZXOS relies on), NMI leaves IFF2
-  alone (FUSE-matched), stackless NMI (NR$C0 bit 3, Next).
+  alone (FUSE-matched), stackless NMI (NR$C0 bit 3, Next): acceptance
+  writes the return PC to NR$C2/$C3 with the push's memory writes
+  SUPPRESSED (RAM untouched, SP still -2 — zxnext.vhd:1828/:2052 force
+  MREQ off during the NMIACK cycles), and the one armed RETN-family
+  return (`StacklessRETNArmed`, z80_stackless_retn_en) takes PC from
+  NR$C2/$C3 with its pop reads suppressed (SP still +2). Atic Atac's
+  SP-cursor object sorter under its ~20 kHz NMI pacer depends on the
+  suppression (#187).
 - Frame interrupts: whole-frame assert for classics, VHDL-derived narrow
   pulse (`IntAssertTstate`/`IntPulseTstates`) plus line interrupt for
   the Next.

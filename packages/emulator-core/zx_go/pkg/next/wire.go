@@ -214,6 +214,12 @@ func WireInterruptControl(d *nextregs.Dispatcher, cpu *z80.CPU) {
 		disp.Store(0xC0, val&^0x06)
 		if cpu != nil {
 			cpu.NMIStackless = val&0x08 != 0 // bit 3 = stackless NMI
+			if !cpu.NMIStackless {
+				// z80_stackless_retn_en is held in synchronous reset the
+				// whole time bit 3 is 0 (zxnext.vhd:2075-2076): a pending
+				// armed stackless return does not survive disabling.
+				cpu.StacklessRETNArmed = false
+			}
 		}
 	})
 }
