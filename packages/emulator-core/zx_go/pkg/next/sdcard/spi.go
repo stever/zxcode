@@ -39,6 +39,7 @@ package sdcard
 // offset). This is what NextZXOS expects.
 
 import (
+	"os"
 	"sync"
 )
 
@@ -201,6 +202,12 @@ func (c *Card) DataBlocksRead() uint64 {
 func (c *Card) DebugLastDispatchState() (queued int, multiRead bool) {
 	return c.lastDispatchQueued, c.lastDispatchMultiRead
 }
+
+// fastNac (ZX_GO_SD_FAST_NAC=1) pins the CMD17/18 data-token access
+// delay to 2 byte-times — the #187 experiment probing whether the
+// stochastic 4..64 Nac stretches Atic Atac's NMI-atomic SPI walks past
+// the ~170-refT sample-NMI gap a real card's read-ahead keeps them under.
+var fastNac = os.Getenv("ZX_GO_SD_FAST_NAC") != ""
 
 // SetCSLogger installs a per-CS-write callback for debugging (#187).
 func (c *Card) SetCSLogger(fn func(val byte, asserted bool)) {
@@ -661,6 +668,9 @@ func (c *Card) handleReadBlock(arg uint32) {
 	h := c.argToLBA(arg)*2654435761 ^ c.readCount*0x9E3779B9
 	h ^= h >> 16
 	nac := int(4 + h%61) // 4..64 byte-times
+	if fastNac {
+		nac = 2 // #187 experiment: real-card sequential read-ahead latency
+	}
 	for i := 0; i < nac; i++ {
 		c.rxQueue = append(c.rxQueue, 0xFF)
 	}

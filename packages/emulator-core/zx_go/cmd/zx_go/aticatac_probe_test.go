@@ -349,6 +349,15 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 				loop[i] = emu.mem.Read(0x7E00 + uint16(i))
 			}
 			_ = os.WriteFile(outDir+"/emu_loader_7E00.bin", loop, 0644)
+		case 5014:
+			emu.nextRegs.SetTracer(func(reg, val byte, write bool) {
+				if write && (reg == 0x02 || reg == 0x06 || reg == 0xC0 || reg == 0xC4 || reg == 0xCC) {
+					t.Logf("frame %6d NRWRITE $%02X <- $%02X refT=%d pc=$%04X",
+						frame, reg, val, emu.cpu.RefTstates()-emu.cpu.FrameOriginRefTstates(), emu.cpu.PC)
+				}
+			})
+		case 5017:
+			emu.nextRegs.SetTracer(nil)
 		case 5015:
 			blk := make([]byte, 0x180)
 			for i := range blk {
@@ -399,8 +408,9 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 		}
 		if frame == 4500 || frame == 5015 {
-			t.Logf("frame %d: NR B8=%02X B9=%02X BA=%02X BB=%02X B0=%02X", frame,
-				emu.nextRegs.Raw(0xB8), emu.nextRegs.Raw(0xB9), emu.nextRegs.Raw(0xBA), emu.nextRegs.Raw(0xBB), emu.nextRegs.Raw(0xB0))
+			t.Logf("frame %d: NR B8=%02X B9=%02X BA=%02X BB=%02X B0=%02X 61=%02X 62=%02X 07=%02X", frame,
+				emu.nextRegs.Raw(0xB8), emu.nextRegs.Raw(0xB9), emu.nextRegs.Raw(0xBA), emu.nextRegs.Raw(0xBB), emu.nextRegs.Raw(0xB0),
+				emu.nextRegs.Raw(0x61), emu.nextRegs.Raw(0x62), emu.nextRegs.Raw(0x07))
 		}
 		if emu.peripherals != nil {
 			emu.peripherals.Frame()
