@@ -171,6 +171,13 @@ func (c *CPU) executeZ80NEDInstruction(opcode byte) bool {
 		lo := c.readOperand()
 		c.push((uint16(hi) << 8) | uint16(lo))
 		c.tstates += 23
+		// FPGA: 6 machine cycles after the ED prefix
+		// (t80n_mcode.vhd X"8A": MCycles "110"); M3/M5 are the
+		// stack writes, M6 is a trailing cycle whose microcode
+		// sets neither NoRead nor Write — a dummy bus READ at PC
+		// that collects the 28 MHz read wait our two operand
+		// readOperands don't account for.
+		c.dummyRead28(1)
 		return true
 	case 0x90: // OUTINB    output (HL) to (BC); HL++; B unchanged
 		c.mem.ContendPort(c.bc())
@@ -185,6 +192,12 @@ func (c *CPU) executeZ80NEDInstruction(opcode byte) bool {
 			c.NextRegs.WriteReg(reg, val)
 		}
 		c.tstates += 20
+		// FPGA: 5 machine cycles after the ED prefix
+		// (t80n_mcode.vhd X"91"). M2/M3 read the two operands;
+		// M4 (NEXTREGW strobe) and M5 set neither NoRead nor
+		// Write, so both are dummy bus READS at PC on the FPGA —
+		// two 28 MHz read waits beyond our operand fetches.
+		c.dummyRead28(2)
 		return true
 	case 0x92: // NEXTREG r,A   write A to NextReg r
 		reg := c.readOperand()
@@ -192,6 +205,11 @@ func (c *CPU) executeZ80NEDInstruction(opcode byte) bool {
 			c.NextRegs.WriteReg(reg, c.A)
 		}
 		c.tstates += 17
+		// FPGA: 4 machine cycles after the ED prefix
+		// (t80n_mcode.vhd X"92"). M2 reads the register operand;
+		// M3 (NEXTREGW strobe) and M4 are dummy bus reads at PC —
+		// two 28 MHz read waits beyond our operand fetch.
+		c.dummyRead28(2)
 		return true
 	case 0x93: // PIXELDN   advance HL one pixel row in screen layout
 		c.pixeldn()

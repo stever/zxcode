@@ -316,6 +316,14 @@ type CPU struct {
 	// reference clock.
 	tstates uint64
 
+	// haltStartT is the tstates position where the CPU entered its
+	// current HALT (the start of the first halted NOP M1 cycle). Only
+	// the difference (tstates - haltStartT) is ever used — modulo the
+	// halt-NOP length it gives the T_Res grid the FPGA accepts
+	// NMI/INT wakes on — so the frame-wrap rebase may underflow
+	// harmlessly (uint64 modular arithmetic keeps differences exact).
+	haltStartT uint64
+
 	// refClock8/refMark maintain the 3.5 MHz-REFERENCE view of the same
 	// timeline (in eighths of a reference T-state, exact for the 1/2/4/8
 	// multipliers): refClock8 banks completed constant-speed segments,
@@ -1097,6 +1105,26 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 		}
 		c.eiDelay = false
 		if c.Halted {
+			// Halt-NOP wake grid (Z80N conformance, #187): while
+			// halted the T80N keeps executing NOP-shaped M1 cycles
+			// (4 T, 5 at 28 MHz with the all-reads wait) and accepts
+			// NMI/INT only at the end of one (t80n.vhd:1749-1769:
+			// NMICycle/IntCycle are set at T_Res). Atic Atac's
+			// mainline phase-locks to the ~20 kHz copper-NMI lattice
+			// through DI;HALT waits, so the wake instant must be
+			// quantized to the same grid — a per-tstate wake runs up
+			// to 4 cycles early per period. Z80N-only so classic
+			// machines keep their pinned timings.
+			if c.Variant == VariantZ80N {
+				nopLen := uint64(4)
+				if c.speedSelect == 0x03 {
+					nopLen = 5 // 4 + the 28 MHz M1 read wait
+				}
+				if (c.tstates-c.haltStartT)%nopLen != 0 {
+					c.tstates++
+					continue
+				}
+			}
 			// NMI during HALT: the CPU is waiting with IFF1=true (after EI).
 			// This is the ideal time for NMI — IFF2 captures IFF1=true so
 			// RETN can restore interrupts correctly.
@@ -1132,6 +1160,17 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 			continue
 		}
 		c.executeInstruction()
+		// Re-poll external NMI sources at the instruction's END: an
+		// instant that elapsed DURING the instruction must assert
+		// now — the FPGA samples NMI_s at the final T_Res
+		// (t80n.vhd:1765) and starts NMICycle immediately. With only
+		// the loop-top poll it would be seen one instruction late
+		// (the poll precedes execution, the consume follows it), a
+		// systematic ~one-instruction delivery lag against the
+		// copper NR$02 pacer's lattice (#187).
+		if c.ExtNMIFunc != nil {
+			c.ExtNMIFunc(c.tstates)
+		}
 		// NMI check after each instruction (NMI is non-maskable)
 		if c.PendingNMI.CompareAndSwap(true, false) {
 			if c.NMICallback != nil {
@@ -1165,6 +1204,11 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	c.foldRefClock()
 	c.tstates -= c.frameEnd
 	c.refMark = c.tstates
+	// Keep the halt-NOP grid origin in the same (rebased) timeline so
+	// a HALT spanning the frame wrap keeps its T_Res phase; modular
+	// uint64 arithmetic makes any underflow harmless (only the
+	// difference to tstates is ever used).
+	c.haltStartT -= c.frameEnd
 	c.frameEnd = 0
 	// Rebase the step path's boundary across the wrap: the pre-wrap
 	// value is meaningless on the wrapped counter. One budget out is
@@ -1663,6 +1707,11 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 	case 0x76: // HALT
 		c.Halted = true
 		c.tstates += 4
+		// Mark the halt-NOP grid origin: from here the real CPU runs
+		// back-to-back NOP-shaped M1 cycles and accepts NMI/INT only
+		// at the end of one (t80n.vhd T_Res). ExecuteFrame's halted
+		// branch quantizes wakes onto this grid for the Z80N.
+		c.haltStartT = c.tstates
 	case 0x77: // LD (HL),A
 		c.m1(c.currentInstrPC)
 		c.wr(c.hl(), c.A)
@@ -4140,6 +4189,21 @@ func (c *CPU) readMem(addr uint16) byte {
 	return c.mem.Read(addr)
 }
 
+// dummyRead28 charges the 28 MHz read wait for machine cycles that are
+// bus READ cycles on the FPGA but carry no memory access in this
+// core's model. The T80N asserts MREQ+RD in every non-M1 machine cycle
+// whose microcode does not set NoRead/Write/IORQ (t80na.vhd "Generate
+// RD for MREQ": RD <= not Write when TState=1 and NoRead='0'), so
+// "internal" trailing cycles of some Z80N opcodes — and the discarded
+// opcode fetch of the NMI acceptance M1 — are real bus reads that
+// collect the one-cycle 28 MHz read wait (zxnext.vhd:3168-3181).
+// Charged only in the same configuration readMem's wait applies.
+func (c *CPU) dummyRead28(n uint64) {
+	if c.Variant == VariantZ80N && c.speedSelect == 0x03 {
+		c.tstates += n
+	}
+}
+
 // readOperand reads the next byte at PC without incrementing R (for immediate operands).
 func (c *CPU) readOperand() byte {
 	val := c.readMem(c.PC)
@@ -5162,5 +5226,12 @@ func (c *CPU) NMI() {
 	c.push(c.PC)
 	c.PC = 0x0066
 	c.WZ = c.PC // per Sean Young §3.4: NMI acceptance behaves like CALL
+	// 11 T = 5 (M1, TStates "101" in t80n_mcode.vhd's NMICycle arm) +
+	// 3 + 3 (the two return-address pushes). The 5T M1 is a real bus
+	// READ on the FPGA (the discarded opcode fetch: t80na.vhd asserts
+	// MREQ+RD for every M1; NMICycle only forces IR to $00), so at
+	// 28 MHz it collects the one-cycle all-reads wait
+	// (zxnext.vhd:3175) — NMI acceptance is 12 cycles there, not 11.
 	c.tstates += 11
+	c.dummyRead28(1)
 }
