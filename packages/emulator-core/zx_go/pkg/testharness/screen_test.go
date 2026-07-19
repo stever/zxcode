@@ -28,6 +28,9 @@ func TestScreenTextReadsBootBanner(t *testing.T) {
 		t.Logf("screen at timeout:\n%s", h.ScreenText())
 		t.Fatalf("RunUntilText: %v", err)
 	}
+	// The banner is detected mid-print (contended boot spans a frame
+	// boundary); let the ROM finish the line and enter the input loop.
+	h.RunFrames(5)
 	t.Logf("BASIC banner appeared after %d frames", frames)
 
 	// Sanity check: verify the full Sinclair line is recognisable.
@@ -51,6 +54,7 @@ func TestTypeReachesScreen(t *testing.T) {
 	if _, err := h.RunUntilText("1982", 200); err != nil {
 		t.Fatalf("boot: %v", err)
 	}
+	h.RunFrames(5) // let the banner print finish and the input loop start
 
 	// Type "P" — on 48K BASIC at the start of a line, "P" is the
 	// PRINT keyword (single-key entry in K mode). It should appear

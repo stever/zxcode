@@ -38,9 +38,10 @@ import (
 	"github.com/conorarmstrong/zx_go/pkg/z80"
 )
 
-// TstatesPerFrame is the 48K Spectrum's frame length used by the
-// harness. Other models tick at slightly different rates, but
-// 69888 is fine for any test that doesn't care about exact pitch.
+// TstatesPerFrame is the 48K Spectrum's frame length. RunFrames uses
+// the constructed model's own frame length (FrameTStates — 70908 on
+// the 128K family); this constant remains for tests that reason in
+// 48K frames.
 const TstatesPerFrame = 69888
 
 // Harness is a headless Spectrum emulator wrapped in a scripting
@@ -54,6 +55,13 @@ type Harness struct {
 	ula         *ula.ULA
 	kbd         *keyboard.Keyboard
 	peripherals *peripherals.PeripheralManager
+
+	// frameTStates is the per-frame T-state budget for the
+	// constructed model (roms.SpectrumModel.FrameTStates), used by
+	// RunFrames. 69888 on 48K, 70908 on the 128K family — running a
+	// 128K at the 48K length would put the frame INT and the
+	// floating-bus/contention grids out of step with the hardware.
+	frameTStates int
 
 	// nextEsxdos is the Spectrum Next's esxDOS dispatcher when
 	// the harness was constructed with ModelNext, nil otherwise.
@@ -96,6 +104,15 @@ func New(model roms.SpectrumModel) (*Harness, error) {
 	kbd := keyboard.New()
 	u := ula.New(mem, kbd)
 	cpu := z80.New(mem, u)
+	// Per-access ULA memory contention, same as cmd/zx_go's
+	// newEmulator (#189). Without this the harness modelled a machine
+	// the production builds don't ship: a 48K with no memory
+	// contention, whose CPU does materially more work per frame —
+	// enough to flip beam-race behaviour (Arkanoid's floating-bus
+	// pacing loop, #194).
+	cpu.MemContend = true
+	// Beam-time paper capture, as in cmd/zx_go's newEmulator (#194).
+	cpu.ScanlineFunc = u.CaptureScanlines
 	// Same narrow frame-INT pulse the desktop emulator configures
 	// (level-triggered 32/36 T window; legacy held-INT otherwise), so
 	// harness tests exercise the conformant interrupt model.
@@ -112,11 +129,12 @@ func New(model roms.SpectrumModel) (*Harness, error) {
 	mem.SetBottomOverlayProbe(pm.BottomOverlayPossible)
 
 	h := &Harness{
-		cpu:         cpu,
-		mem:         mem,
-		ula:         u,
-		kbd:         kbd,
-		peripherals: pm,
+		cpu:          cpu,
+		mem:          mem,
+		ula:          u,
+		kbd:          kbd,
+		peripherals:  pm,
+		frameTStates: model.FrameTStates(),
 	}
 	return h, nil
 }
@@ -165,8 +183,12 @@ func (h *Harness) Reboot() {
 // emulator past boot, between key presses, or while waiting for
 // asynchronous BASIC operations to complete.
 func (h *Harness) RunFrames(n int) {
+	tpf := h.frameTStates
+	if tpf == 0 {
+		tpf = TstatesPerFrame
+	}
 	for i := 0; i < n; i++ {
-		h.cpu.ExecuteFrame(TstatesPerFrame)
+		h.cpu.ExecuteFrame(tpf)
 		h.ula.Render()
 		h.peripherals.Frame()
 	}

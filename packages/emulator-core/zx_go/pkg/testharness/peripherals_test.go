@@ -104,6 +104,7 @@ func TestZXPrinterCOPYCommand(t *testing.T) {
 	if _, err := h.RunUntilText("1982", 200); err != nil {
 		t.Fatalf("boot: %v", err)
 	}
+	h.RunFrames(5) // settle: banner detected mid-print on a contended boot
 
 	// Type PRINT 123 and execute. P in K mode types PRINT, then
 	// the digits, then ENTER runs it — putting "123" at row 0.

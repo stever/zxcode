@@ -470,6 +470,16 @@ type CPU struct {
 	// processes it at the next safe point in ExecuteFrame.
 	PendingNMI atomic.Bool
 
+	// ScanlineFunc, when non-nil, is polled between instructions in
+	// ExecuteFrame once the counter reaches scanlineAt. It captures
+	// beam-completed paper lines for the renderer (ula.CaptureScanlines)
+	// and returns the next T-state deadline. Armed at frame entry so the
+	// consumer can detect the new frame (the entry T is the wrap
+	// overshoot, far below the first line's deadline). See #194: end-of-
+	// frame memory is the wrong thing to render for beam-racing games.
+	ScanlineFunc func(t uint64) uint64
+	scanlineAt   uint64
+
 	// NMICallback is called just before the NMI is executed, allowing
 	// peripherals to page in their ROM at the exact right moment.
 	NMICallback func()
@@ -529,12 +539,17 @@ type ULA interface {
 
 // Memory is the interface the CPU uses to talk to the address space.
 // Z80 memory accesses don't fail — every 16-bit address is valid — so
-// Read/Write don't return errors. ContendPort applies the
-// model-specific I/O contention timing for the given port address.
+// Read/Write don't return errors. ContendPortEarly / ContendPortLate
+// apply the model-specific ULA HOLDS for the two contention points of
+// an I/O machine cycle (before its first T-state, and during T2/TW).
+// Holds only — the cycle's fixed 4 T-states are charged by the CPU's
+// ioIn / ioOut helpers, so backends that don't model contention can
+// implement both as no-ops and instruction totals stay documented.
 type Memory interface {
 	Read(addr uint16) byte
 	Write(addr uint16, val byte)
-	ContendPort(port uint16)
+	ContendPortEarly(port uint16)
+	ContendPortLate(port uint16)
 }
 
 // contentionWirer is an optional interface implemented by memory
@@ -666,6 +681,38 @@ func (c *CPU) exec(addr uint16, n uint64) {
 		c.contendAt(addr)
 		c.tstates++
 	}
+}
+
+// ioIn performs a cycle-exact I/O read machine cycle: 4 T plus ULA
+// holds, with the BUS SAMPLE at the cycle's final T-state — the FUSE
+// readport ordering (early hold, T1, late holds, T2+TW, sample, T3).
+// The sample point matters beyond totals: Arkanoid's beam-chase loop
+// (IN A,(C) on $28FF) phase-locks against the floating bus, and a
+// sample taken at the instruction's start T lands 3 bus slots early —
+// on the idle-bus $FF pair instead of the bitmap/attr fetch slots —
+// so the game misreads "raster left the paper" mid-frame and runs its
+// game loop 2-3× per frame (the fast-ball bug, #194).
+func (c *CPU) ioIn(port uint16) byte {
+	c.mem.ContendPortEarly(port)
+	c.tstates++
+	c.mem.ContendPortLate(port)
+	c.tstates += 2
+	val, _ := c.ula.ReadPort(port)
+	c.tstates++
+	return val
+}
+
+// ioOut performs a cycle-exact I/O write machine cycle: 4 T plus ULA
+// holds, with the BUS WRITE after the first T-state — the FUSE
+// writeport ordering (early hold, T1, write, late holds, T2+TW+T3).
+// Mid-frame raster effects (border stripes) therefore stamp at the
+// cycle's true position instead of the instruction's start T.
+func (c *CPU) ioOut(port uint16, val byte) {
+	c.mem.ContendPortEarly(port)
+	c.tstates++
+	c.ula.WritePort(port, val)
+	c.mem.ContendPortLate(port)
+	c.tstates += 3
 }
 
 // rdAddr fetches a 16-bit little-endian operand at PC through two
@@ -1200,6 +1247,12 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	c.extNMIDeadline = 0
 	c.extIntDeadline = 0
 	c.frameEnd = c.tstates + budget
+	// Arm the beam-time scanline capture for this frame (see the
+	// ScanlineFunc field). The entry call both resets the consumer's
+	// per-frame state and yields the first line's deadline.
+	if c.ScanlineFunc != nil {
+		c.scanlineAt = c.ScanlineFunc(c.tstates)
+	}
 	// Keep the step path's frame bookkeeping in sync. nextFrameBoundary
 	// is otherwise only maintained by StepInstructionWithIRQ itself, so
 	// after bulk-frame execution it is stale (far behind tstates) and
@@ -1281,6 +1334,10 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 		// External (non-raster) INT sources — CTC pulse interrupts.
 		// Deadline-gated: see pollExtInt/ExtIntDeadlineFunc.
 		c.pollExtInt()
+		// Beam-time scanline capture (classic ULA render, #194).
+		if c.ScanlineFunc != nil && c.tstates >= c.scanlineAt {
+			c.scanlineAt = c.ScanlineFunc(c.tstates)
+		}
 		// External NMI sources (copper NR$02 pacer): polled here so they
 		// keep running while the CPU is halted — the halted branch below
 		// only consumes PendingNMI, it never fetches instructions. The
@@ -2712,25 +2769,24 @@ func (c *CPU) executeBaseInstruction(opcode byte) {
 		c.eiDelay = true // Defer IRQ ack by one instruction.
 		c.tstates += 4
 
-	// I/O
+	// I/O — cycle-exact: M1 (4) + operand read (3) + I/O cycle (4).
 	case 0xD3: // OUT (n),A
-		n := c.readOperand()
+		c.m1(c.currentInstrPC)
+		n := c.rd(c.PC)
+		c.PC++
 		port := uint16(n) | (uint16(c.A) << 8)
 		// MEMPTR/WZ per Sean Young §A.1: WZ_low = (n+1) & $FF;
 		// WZ_high = A. Important for BIT n,(HL) F5/F3.
 		c.WZ = (uint16(c.A) << 8) | uint16(byte(n+1))
-		c.mem.ContendPort(port)
-		c.ula.WritePort(port, c.A)
-		c.tstates += 11
+		c.ioOut(port, c.A)
 	case 0xDB: // IN A,(n)
-		n := c.readOperand()
+		c.m1(c.currentInstrPC)
+		n := c.rd(c.PC)
+		c.PC++
 		port := uint16(n) | (uint16(c.A) << 8)
 		// MEMPTR/WZ: WZ = (A<<8 | n) + 1.
 		c.WZ = port + 1
-		c.mem.ContendPort(port)
-		val, _ := c.ula.ReadPort(port)
-		c.A = val
-		c.tstates += 11
+		c.A = c.ioIn(port)
 
 	// Exchange
 	case 0xD9: // EXX
@@ -3360,102 +3416,95 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 
 	// I/O operations — all set WZ = BC + 1 per Sean Young §A.1.
 	case 0x40: // IN B,(C)
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		val, _ := c.ula.ReadPort(c.bc())
-		c.B = val
+		c.B = c.ioIn(c.bc())
 		c.F = (c.F & FLAG_C) | c.sz53Table[c.B] | c.parityTable[c.B]
-		c.tstates += 12
 	case 0x48: // IN C,(C)
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		val, _ := c.ula.ReadPort(c.bc())
-		c.C = val
+		c.C = c.ioIn(c.bc())
 		c.F = (c.F & FLAG_C) | c.sz53Table[c.C] | c.parityTable[c.C]
-		c.tstates += 12
 	case 0x50: // IN D,(C)
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		val, _ := c.ula.ReadPort(c.bc())
-		c.D = val
+		c.D = c.ioIn(c.bc())
 		c.F = (c.F & FLAG_C) | c.sz53Table[c.D] | c.parityTable[c.D]
-		c.tstates += 12
 	case 0x58: // IN E,(C)
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		val, _ := c.ula.ReadPort(c.bc())
-		c.E = val
+		c.E = c.ioIn(c.bc())
 		c.F = (c.F & FLAG_C) | c.sz53Table[c.E] | c.parityTable[c.E]
-		c.tstates += 12
 	case 0x60: // IN H,(C)
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		val, _ := c.ula.ReadPort(c.bc())
-		c.H = val
+		c.H = c.ioIn(c.bc())
 		c.F = (c.F & FLAG_C) | c.sz53Table[c.H] | c.parityTable[c.H]
-		c.tstates += 12
 	case 0x68: // IN L,(C)
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		val, _ := c.ula.ReadPort(c.bc())
-		c.L = val
+		c.L = c.ioIn(c.bc())
 		c.F = (c.F & FLAG_C) | c.sz53Table[c.L] | c.parityTable[c.L]
-		c.tstates += 12
 	case 0x78: // IN A,(C)
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		val, _ := c.ula.ReadPort(c.bc())
-		c.A = val
+		c.A = c.ioIn(c.bc())
 		c.F = (c.F & FLAG_C) | c.sz53Table[c.A] | c.parityTable[c.A]
-		c.tstates += 12
 	case 0x70: // IN F,(C) - special case, only affects flags
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		val, _ := c.ula.ReadPort(c.bc())
+		val := c.ioIn(c.bc())
 		c.F = (c.F & FLAG_C) | c.sz53Table[val] | c.parityTable[val]
-		c.tstates += 12
 
 	// Output instructions — all set WZ = BC + 1.
 	case 0x41: // OUT (C), B
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		c.ula.WritePort(c.bc(), c.B)
-		c.tstates += 12
+		c.ioOut(c.bc(), c.B)
 	case 0x49: // OUT (C), C
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		c.ula.WritePort(c.bc(), c.C)
-		c.tstates += 12
+		c.ioOut(c.bc(), c.C)
 	case 0x51: // OUT (C), D
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		c.ula.WritePort(c.bc(), c.D)
-		c.tstates += 12
+		c.ioOut(c.bc(), c.D)
 	case 0x59: // OUT (C), E
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		c.ula.WritePort(c.bc(), c.E)
-		c.tstates += 12
+		c.ioOut(c.bc(), c.E)
 	case 0x61: // OUT (C), H
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		c.ula.WritePort(c.bc(), c.H)
-		c.tstates += 12
+		c.ioOut(c.bc(), c.H)
 	case 0x69: // OUT (C), L
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		c.ula.WritePort(c.bc(), c.L)
-		c.tstates += 12
+		c.ioOut(c.bc(), c.L)
 	case 0x71: // OUT (C), 0 - outputs zero
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		c.ula.WritePort(c.bc(), 0)
-		c.tstates += 12
+		c.ioOut(c.bc(), 0)
 	case 0x79: // OUT (C), A
+		c.m1(c.currentInstrPC)
+		c.m1(c.currentInstrPC + 1)
 		c.WZ = c.bc() + 1
-		c.mem.ContendPort(c.bc())
-		c.ula.WritePort(c.bc(), c.A)
-		c.tstates += 12
+		c.ioOut(c.bc(), c.A)
 
 	// Return from interrupt. Per Sean Young's "Undocumented Z80
 	// Documented" §A.1, ED $4D/$5D/$6D/$7D are all RETI mirrors and
@@ -5128,10 +5177,8 @@ func (c *CPU) outi() {
 	c.m1(c.currentInstrPC + 1)
 	c.exec(c.ir(), 1)
 	val := c.rd(c.hl())
-	c.B-- // decrement before the OUT: the port high byte is the new B
-	c.mem.ContendPort(c.bc())
-	c.ula.WritePort(c.bc(), val)
-	c.tstates += 4 // IO-out machine-cycle base (ContendPort adds ULA contention)
+	c.B--                // decrement before the OUT: the port high byte is the new B
+	c.ioOut(c.bc(), val) // cycle-exact I/O write (4 T + ULA holds)
 	c.setHL(c.hl() + 1)
 	c.WZ = c.bc() + 1
 
@@ -5160,10 +5207,8 @@ func (c *CPU) outd() {
 	c.m1(c.currentInstrPC + 1)
 	c.exec(c.ir(), 1)
 	val := c.rd(c.hl())
-	c.B-- // decrement before the OUT: the port high byte is the new B
-	c.mem.ContendPort(c.bc())
-	c.ula.WritePort(c.bc(), val)
-	c.tstates += 4 // IO-out machine-cycle base (ContendPort adds ULA contention)
+	c.B--                // decrement before the OUT: the port high byte is the new B
+	c.ioOut(c.bc(), val) // cycle-exact I/O write (4 T + ULA holds)
 	c.setHL(c.hl() - 1)
 	c.WZ = c.bc() - 1
 
@@ -5230,10 +5275,8 @@ func (c *CPU) ini() {
 	c.m1(c.currentInstrPC)
 	c.m1(c.currentInstrPC + 1)
 	c.exec(c.ir(), 1)
-	c.WZ = c.bc() + 1 // per Sean Young §3.4: INI sets MEMPTR = BC + 1 (pre-decrement)
-	c.mem.ContendPort(c.bc())
-	val, _ := c.ula.ReadPort(c.bc())
-	c.tstates += 4 // IO-in machine-cycle base (ContendPort adds ULA contention)
+	c.WZ = c.bc() + 1     // per Sean Young §3.4: INI sets MEMPTR = BC + 1 (pre-decrement)
+	val := c.ioIn(c.bc()) // cycle-exact I/O read (4 T + ULA holds)
 	c.wr(c.hl(), val)
 	c.setHL(c.hl() + 1)
 	c.B--
@@ -5265,10 +5308,8 @@ func (c *CPU) ind() {
 	c.m1(c.currentInstrPC)
 	c.m1(c.currentInstrPC + 1)
 	c.exec(c.ir(), 1)
-	c.WZ = c.bc() - 1 // per Sean Young §3.4: IND sets MEMPTR = BC - 1 (pre-decrement)
-	c.mem.ContendPort(c.bc())
-	val, _ := c.ula.ReadPort(c.bc())
-	c.tstates += 4 // IO-in machine-cycle base (ContendPort adds ULA contention)
+	c.WZ = c.bc() - 1     // per Sean Young §3.4: IND sets MEMPTR = BC - 1 (pre-decrement)
+	val := c.ioIn(c.bc()) // cycle-exact I/O read (4 T + ULA holds)
 	c.wr(c.hl(), val)
 	c.setHL(c.hl() - 1)
 	c.B--

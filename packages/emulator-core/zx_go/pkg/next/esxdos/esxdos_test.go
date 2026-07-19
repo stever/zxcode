@@ -45,7 +45,8 @@ type memBus struct{ m memMap }
 
 func (b memBus) Read(addr uint16) byte       { return b.m[addr] }
 func (b memBus) Write(addr uint16, val byte) { b.m[addr] = val }
-func (b memBus) ContendPort(_ uint16)        {}
+func (b memBus) ContendPortEarly(_ uint16)   {}
+func (b memBus) ContendPortLate(_ uint16)    {}
 
 func TestDispatcherMGetHandleClearsCFAndReturnsHandle(t *testing.T) {
 	cpu, mem := setupRST8(t, M_GETHANDLE, 0x1234)

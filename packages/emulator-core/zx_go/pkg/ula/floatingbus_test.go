@@ -95,16 +95,15 @@ func TestFloatingBusInBorderReturns0xFF(t *testing.T) {
 		t.Errorf("bottom border: got %#x, want 0xFF", got)
 	}
 
-	// Left border within a display line.
-	*mem.TStates = uint64(64*tpl + 5)
-	if got := u.floatingBusByte(); got != 0xFF {
-		t.Errorf("left border: got %#x, want 0xFF", got)
-	}
-
-	// Right border within a display line.
-	*mem.TStates = uint64(64*tpl + 24 + 128 + 5)
+	// Right border / retrace / next line's left border: everything
+	// past the first 128 T of a paper line reads idle.
+	*mem.TStates = uint64(64*tpl + 128 + 5)
 	if got := u.floatingBusByte(); got != 0xFF {
 		t.Errorf("right border: got %#x, want 0xFF", got)
+	}
+	*mem.TStates = uint64(64*tpl + 224 - 3)
+	if got := u.floatingBusByte(); got != 0xFF {
+		t.Errorf("pre-line blanking: got %#x, want 0xFF", got)
 	}
 }
 
@@ -114,10 +113,11 @@ func TestFloatingBusInBorderReturns0xFF(t *testing.T) {
 func TestFloatingBusInDisplayReturnsScreenData(t *testing.T) {
 	u, mem := newFloatingBusULA(t)
 
-	// First display line, first display column. The 48K floating-bus origin
-	// is 64*224 + leftBorder = 14336 + 24 (224-T-state lines).
-	const leftBorder = 24
-	base := uint64(64*TStatesPerLineFor(roms.Model48K) + leftBorder)
+	// First display line, first display column. The 48K paper-fetch
+	// window opens at 64*224 = 14336 (top-left-pixel time), with the
+	// first bitmap byte on the bus at 14338 — Ramsoft's documented
+	// value, matching FUSE's spectrum_unattached_port.
+	base := uint64(64 * TStatesPerLineFor(roms.Model48K))
 
 	// t%8 = 0,1,6,7: idle 0xFF; 2,4: bitmap (0xA5); 3,5: attribute (0x5A).
 	for offset, want := range []byte{0xFF, 0xFF, 0xA5, 0x5A, 0xA5, 0x5A, 0xFF, 0xFF} {
@@ -154,5 +154,30 @@ func TestFloatingBusOnPlus3Returns0xFF(t *testing.T) {
 	*mem.TStates = uint64(64*TStatesPerLine + leftBorder + 4)
 	if got := u.floatingBusByte(); got != 0xFF {
 		t.Errorf("Plus3 should always return 0xFF, got %#x", got)
+	}
+}
+
+// TestFloatingBusIgnoresAudioFrameStamp: the floating bus must read
+// off the RAW frame-relative T counter (the grid contentionDelay
+// anchors on), NOT relative to frameStartTstate — that field is
+// stamped by the audio flush at the previous frame's overshoot
+// (0..~20 T, varying per frame), and subtracting it jitters the bus
+// slots against the contention pattern. With audio running that
+// collapsed Arkanoid's beam-race pacing to 2-3 game updates per frame
+// while every audio-less harness run looked correct (#194).
+func TestFloatingBusIgnoresAudioFrameStamp(t *testing.T) {
+	u, mem := newFloatingBusULA(t)
+	base := uint64(64*TStatesPerLineFor(roms.Model48K) + 2) // first bitmap fetch slot
+	*mem.TStates = base
+	u.frameStartTstate = 0
+	want := u.floatingBusByte()
+	if want == 0xFF {
+		t.Fatalf("setup: expected screen data at T=%d, got 0xFF", base)
+	}
+	// An audio flush stamped a 13 T overshoot. Same raw T must return
+	// the same byte.
+	u.frameStartTstate = 13
+	if got := u.floatingBusByte(); got != want {
+		t.Errorf("frameStartTstate=13 changed the bus byte: got %#x, want %#x", got, want)
 	}
 }

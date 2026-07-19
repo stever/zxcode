@@ -77,6 +77,7 @@ func runZ80Test(t *testing.T, tap string, maxFrames int) *Harness {
 	if _, err := h.RunUntilText("1982", 600); err != nil {
 		t.Fatalf("48K did not boot to BASIC: %v", err)
 	}
+	h.RunFrames(5) // settle: banner detected mid-print on a contended boot
 	data, addr := tapCodeBlock(t, filepath.Join("testdata", "z80test", tap))
 	for i, b := range data {
 		h.WriteMemory(addr+uint16(i), b)

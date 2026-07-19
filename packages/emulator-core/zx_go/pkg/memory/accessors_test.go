@@ -55,14 +55,15 @@ func TestGetAltROMBuffers(t *testing.T) {
 
 func TestContendPortDisabledNoOp(t *testing.T) {
 	m := newTestMemory(t, roms.Model48K)
-	// With ContentionEnabled = false (default for tests), ContendPort
-	// must not touch TStates.
-	var t1 uint64 = 1000
+	// With ContentionEnabled = false (default for tests), the port
+	// contention hooks must not touch TStates.
+	var t1 uint64 = 14335 // in-window: would hold if enabled
 	m.TStates = &t1
 	m.ContentionEnabled = false
-	m.ContendPort(0xFE) // ULA port — would contend if enabled
-	if t1 != 1000 {
-		t.Errorf("ContendPort with disabled contention modified TStates: %d", t1)
+	m.ContendPortEarly(0x40FE)
+	m.ContendPortLate(0x40FE)
+	if t1 != 14335 {
+		t.Errorf("port contention with disabled contention modified TStates: %d", t1)
 	}
 }
 
@@ -71,7 +72,8 @@ func TestContendPortNilTStateNoOp(t *testing.T) {
 	m.ContentionEnabled = true
 	m.TStates = nil
 	// Should not panic.
-	m.ContendPort(0xFE)
+	m.ContendPortEarly(0xFE)
+	m.ContendPortLate(0xFE)
 }
 
 func TestContendPortPlus3NoOp(t *testing.T) {
@@ -79,67 +81,81 @@ func TestContendPortPlus3NoOp(t *testing.T) {
 	// Plus3 / Plus2A have no ULA port contention.
 	m.currentModel = roms.ModelPlus3
 	m.ContentionEnabled = true
-	var t1 uint64 = 1000
+	var t1 uint64 = 14335 // in-window on a contended machine
 	m.TStates = &t1
-	m.ContendPort(0xFE)
-	if t1 != 1000 {
-		t.Errorf("ContendPort on +3 model contended: TStates=%d, want 1000", t1)
+	m.ContendPortEarly(0x40FE)
+	m.ContendPortLate(0x40FE)
+	if t1 != 14335 {
+		t.Errorf("port contention on +3 model contended: TStates=%d, want 14335", t1)
 	}
 }
 
-// iter 303: ContendPort branch coverage. The function has four
-// distinct cost paths depending on whether the address is in
-// contended memory and whether the port is a ULA port. Force each
-// branch by composing addresses + a non-+3 model.
+// iter 303 (reshaped for the Early/Late split): the port hold hooks
+// contribute HOLDS ONLY — the I/O cycle's fixed 4 T-states are charged
+// by the CPU's ioIn/ioOut helpers. Position the counter at 14335
+// (first contended T-state, delay 6) so a hold is observable.
 
-func TestContendPort_ContendedULAPort(t *testing.T) {
+func TestContendPortEarly_ContendedAddr(t *testing.T) {
 	m := newTestMemory(t, roms.Model48K)
 	m.ContentionEnabled = true
-	var ts uint64
+	var ts uint64 = 14335
 	m.TStates = &ts
-	// Address $4000 is the first contended bank-5 byte; port = $40FE
-	// is even (ULA) and address-contended.
-	m.ContendPort(0x40FE)
-	if ts == 0 {
-		t.Error("contended ULA port did not advance TStates")
+	// $40FF has its high byte in contended memory → early hold fires.
+	m.ContendPortEarly(0x40FF)
+	if ts != 14335+6 {
+		t.Errorf("contended-addr early hold: TStates=%d, want %d", ts, 14335+6)
 	}
 }
 
-func TestContendPort_ContendedNonULAPort(t *testing.T) {
+func TestContendPortEarly_UncontendedAddr(t *testing.T) {
 	m := newTestMemory(t, roms.Model48K)
 	m.ContentionEnabled = true
-	var ts uint64
+	var ts uint64 = 14335
 	m.TStates = &ts
-	// $40FF is odd (non-ULA) + contended.
-	m.ContendPort(0x40FF)
-	if ts == 0 {
-		t.Error("contended non-ULA port did not advance TStates")
+	// $00FE: high byte outside the contended window → no early hold
+	// (the ULA-port hold belongs to the LATE phase).
+	m.ContendPortEarly(0x00FE)
+	if ts != 14335 {
+		t.Errorf("uncontended-addr early hold: TStates=%d, want 14335", ts)
 	}
 }
 
-func TestContendPort_NonContendedULAPort(t *testing.T) {
+func TestContendPortLate_ULAPort(t *testing.T) {
 	m := newTestMemory(t, roms.Model48K)
 	m.ContentionEnabled = true
-	var ts uint64
+	var ts uint64 = 14335
 	m.TStates = &ts
-	// $00FE is even (ULA) but at $00xx — not in the contended
-	// 16K window ($4000-$7FFF) so only the C:3 stage applies.
-	m.ContendPort(0x00FE)
-	if ts == 0 {
-		t.Error("non-contended ULA port (FE-style) did not advance TStates")
+	// Even port → ULA-decoded → one late hold (C:3 shape).
+	m.ContendPortLate(0x00FE)
+	if ts != 14335+6 {
+		t.Errorf("ULA-port late hold: TStates=%d, want %d", ts, 14335+6)
 	}
 }
 
-func TestContendPort_NonContendedNonULA(t *testing.T) {
+func TestContendPortLate_ContendedNonULA(t *testing.T) {
 	m := newTestMemory(t, roms.Model48K)
 	m.ContentionEnabled = true
-	var ts uint64
+	var ts uint64 = 14335
 	m.TStates = &ts
-	// $00FF: odd + non-contended → ContendPort path does nothing
-	// (caller handles standard T-states).
-	m.ContendPort(0x00FF)
-	if ts != 0 {
-		t.Errorf("non-contended non-ULA port should leave TStates at 0; got %d", ts)
+	// Odd port with contended high byte → C:1,C:1,C:1 hold triplet
+	// sampled at successive T-states; the interleaved fixed T-states
+	// are handed back (net = holds only). At 14335: 6, then
+	// 14341→+1=14342 (slot 7: 0), then 14343 (slot 0: 6) → 12 total.
+	m.ContendPortLate(0x40FF)
+	if ts != 14335+12 {
+		t.Errorf("contended non-ULA late holds: TStates=%d, want %d", ts, 14335+12)
+	}
+}
+
+func TestContendPortLate_PlainPortNoHold(t *testing.T) {
+	m := newTestMemory(t, roms.Model48K)
+	m.ContentionEnabled = true
+	var ts uint64 = 14335
+	m.TStates = &ts
+	// $00FF: odd + uncontended high byte → N:4, no holds at all.
+	m.ContendPortLate(0x00FF)
+	if ts != 14335 {
+		t.Errorf("plain port should hold nothing; TStates=%d, want 14335", ts)
 	}
 }
 

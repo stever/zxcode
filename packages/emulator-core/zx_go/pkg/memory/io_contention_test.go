@@ -68,49 +68,52 @@ func TestContentionDelay_Boundaries(t *testing.T) {
 	}
 }
 
-// TestContendPort_FixedWaits positions the counter OUTSIDE the display
-// region so contentionDelay()==0; what remains is the fixed I/O wait
-// T-state structure for each of the four cases.
-func TestContendPort_FixedWaits(t *testing.T) {
-	cases := []struct {
+// TestContendPort_NoFixedWaits positions the counter OUTSIDE the
+// display region so contentionDelay()==0. The Early/Late hooks carry
+// HOLDS ONLY — the I/O cycle's fixed 4 T-states are charged by the
+// CPU's ioIn/ioOut helpers — so out-of-display every shape adds 0.
+func TestContendPort_NoFixedWaits(t *testing.T) {
+	ports := []struct {
 		name string
 		port uint16
-		want uint64
 	}{
-		{"contended ULA (C:1,C:3)", 0x40FE, 4},      // 0+1+0+3
-		{"contended non-ULA (C:1x4)", 0x40FF, 4},    // (0+1)*4
-		{"non-contended ULA (N:1,C:3)", 0x00FE, 4},  // 1+0+3
-		{"non-contended non-ULA (none)", 0x00FF, 0}, // untouched
+		{"contended ULA (C:1,C:3)", 0x40FE},
+		{"contended non-ULA (C:1x3)", 0x40FF},
+		{"non-contended ULA (N:1,C:3)", 0x00FE},
+		{"non-contended non-ULA (N:4)", 0x00FF},
 	}
-	for _, c := range cases {
+	for _, c := range ports {
 		m, ts := newContendMem(t)
 		*ts = 100000 // well past the 57343 display end → delay 0
 		before := *ts
-		m.ContendPort(c.port)
-		if got := *ts - before; got != c.want {
-			t.Errorf("%s: +%d T, want +%d", c.name, got, c.want)
+		m.ContendPortEarly(c.port)
+		m.ContendPortLate(c.port)
+		if got := *ts - before; got != 0 {
+			t.Errorf("%s: +%d T out of display, want +0 (holds only)", c.name, got)
 		}
 	}
 }
 
 // TestContendPort_DelayContributesInDisplay confirms that the same
-// port access costs MORE inside the contended display window than
+// port access holds MORE inside the contended display window than
 // outside it — i.e. the ULA hold is actually applied.
 func TestContendPort_DelayContributesInDisplay(t *testing.T) {
 	m, ts := newContendMem(t)
 	*ts = 100000 // outside display
 	b1 := *ts
-	m.ContendPort(0x40FE)
+	m.ContendPortEarly(0x40FE)
+	m.ContendPortLate(0x40FE)
 	outside := *ts - b1
 
 	m2, ts2 := newContendMem(t)
 	*ts2 = 14335 // first contended T → delay 6
 	b2 := *ts2
-	m2.ContendPort(0x40FE)
+	m2.ContendPortEarly(0x40FE)
+	m2.ContendPortLate(0x40FE)
 	inside := *ts2 - b2
 
 	if inside <= outside {
-		t.Errorf("in-display ContendPort (%d T) should exceed out-of-display (%d T)", inside, outside)
+		t.Errorf("in-display port holds (%d T) should exceed out-of-display (%d T)", inside, outside)
 	}
 }
 

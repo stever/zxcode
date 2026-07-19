@@ -369,7 +369,8 @@ type bank7NoWaitMem struct {
 
 func (m *bank7NoWaitMem) Read(addr uint16) byte       { return m.data[addr] }
 func (m *bank7NoWaitMem) Write(addr uint16, val byte) { m.data[addr] = val }
-func (m *bank7NoWaitMem) ContendPort(port uint16)     {}
+func (m *bank7NoWaitMem) ContendPortEarly(port uint16) {}
+func (m *bank7NoWaitMem) ContendPortLate(port uint16)  {}
 func (m *bank7NoWaitMem) Read28NoWait(addr uint16) bool {
 	return addr >= m.noWaitFrom && addr <= m.noWaitTo
 }

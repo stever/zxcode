@@ -1001,11 +1001,24 @@ func (m *Memory) contentionDelay() uint64 {
 	// The anchor and the line length now FOLLOW the live NR$03/NR$05
 	// geometry (next.FrameGeometry.PaperStartTstate, mirrored here by
 	// WireFrameGeometry), so 48K-timing contention opens at
-	// (64*448+116)/2 = 14394 on 224 T lines etc. The classic models
-	// keep the historical 48K-anchored 14335 on 228 T lines.
+	// (64*448+116)/2 = 14394 on 224 T lines etc.
+	// Classic models use the libspectrum/FUSE anchors (timings.c):
+	// 48K first paper pixel 14336 on 224 T lines → pattern base 14335;
+	// 128K/+2 first paper pixel 14362 on 228 T lines → base 14361.
+	// The pattern grid MUST agree with the floating-bus slot grid
+	// (ula.floatingBusByte): Arkanoid's beam-chase pacing loop uses a
+	// contended screen write to phase-lock its bus polls, and a
+	// mismatched grid locks the poll onto an idle bus slot — the loop
+	// then misreads "raster left the paper" mid-frame and the game
+	// runs multiple updates per frame (#194).
 	paperStart := uint64(14335)
 	tPerLine := uint64(228)
-	if m.currentModel == roms.ModelNext {
+	switch m.currentModel {
+	case roms.Model48K:
+		paperStart, tPerLine = 14335, 224
+	case roms.Model128K, roms.ModelPlus2:
+		paperStart, tPerLine = 14361, 228
+	case roms.ModelNext:
 		g := m.NextGeometry()
 		paperStart = uint64(g.PaperStartT)
 		tPerLine = uint64(g.TStatesPerLine)
@@ -1038,74 +1051,92 @@ func (m *Memory) ContendMemory(addr uint16) {
 	}
 }
 
-// ContendPort adds contention delay for I/O port access.
-// On 48K/128K/+2: even ports (bit 0 = 0) are ULA ports and always contended.
-// Additionally, if the port address is in contended memory range, extra contention applies.
-// On +2A/+3: no ports are treated as ULA ports (different ULA design).
-func (m *Memory) ContendPort(addr uint16) {
+// portHoldsActive reports whether ULA I/O contention holds apply at
+// all for the current model/state, and — on the Next — whether this
+// specific port is in the FPGA's contended-port set.
+//
+// On +2A/+3 no ports are contended (different memory controller). On
+// the Next the FPGA contends ports only under 48K/128K machine timing
+// (zxula.vhd:596-604 — o_cpu_contend is gated on i_timing_p3='0'; the
+// +3-timing wait arm is MEMORY-only, the port term deliberately
+// removed) and only at 3.5 MHz (i_contention_en, zxnext.vhd:4481);
+// the port set there is a0=0, the $7FFD decode (128K timing only:
+// zxnext.vhd:2594, a15=0 and a1:0="01") and the ULA+ ports
+// (zxnext.vhd:4497 port_contend).
+func (m *Memory) portHoldsActive(addr uint16) bool {
 	if !m.ContentionEnabled || m.TStates == nil {
-		return
+		return false
 	}
-
-	// +2A/+3 have no ULA port contention
 	if m.currentModel == roms.ModelPlus3 || m.currentModel == roms.ModelPlus2A {
-		return
+		return false
 	}
-
-	// ModelNext: the FPGA contends ports only under 48K/128K machine
-	// timing (zxula.vhd:596-604 — o_cpu_contend is gated on
-	// i_timing_p3='0'; the +3-timing wait arm is MEMORY-only, the port
-	// term deliberately removed). The Next boots and runs +3 timing
-	// (NR$03 = $B3), so ports are uncontended there; under a guest-
-	// selected 48K/128K timing the port set is a0=0, the $7FFD decode
-	// and the ULA+ ports (zxnext.vhd:4497 port_contend). Only at
-	// 3.5 MHz (i_contention_en, :4481).
 	if m.currentModel == roms.ModelNext {
 		if m.nextMachineTiming != 1 && m.nextMachineTiming != 2 {
-			return
+			return false
 		}
 		if m.SpeedMultiplier != nil && m.SpeedMultiplier() > 1 {
-			return
+			return false
 		}
-		// port_7ffd (zxnext.vhd:2594): a15=0 and port_fd (a1:0="01"),
-		// active only under 128K/+3 hw timing — here reachable only in
-		// the 128K-timing arm.
 		is7FFD := m.nextMachineTiming == 2 && addr&0x8003 == 0x0001
 		isULAP := addr == 0xBF3B || addr == 0xFF3B
-		if addr&0x01 == 0 || is7FFD || isULAP {
-			// ULA-port style hold: C:1, C:3 (zxula.vhd port arm).
-			*m.TStates += m.contentionDelay()
-			*m.TStates++
-			*m.TStates += m.contentionDelay()
-			*m.TStates += 3
-		}
+		return addr&0x01 == 0 || is7FFD || isULAP
+	}
+	return true
+}
+
+// ContendPortEarly applies the ULA hold that precedes the first
+// T-state of an I/O machine cycle (FUSE ula_contend_port_early): the
+// hold fires when the port's HIGH BYTE places the address in
+// contended memory — the ULA sees the address on the bus and stalls
+// the CPU exactly as it would for a contended memory access. Holds
+// ONLY: the cycle's fixed T-states are charged by the CPU's ioIn /
+// ioOut helpers, so memory backends without a wired T-state counter
+// still produce documented instruction totals.
+func (m *Memory) ContendPortEarly(addr uint16) {
+	if !m.portHoldsActive(addr) {
 		return
 	}
+	if m.currentModel == roms.ModelNext {
+		// Next contended-port hold, C:1 arm (zxula.vhd port arm).
+		*m.TStates += m.contentionDelay()
+		return
+	}
+	if m.isContendedAddr(addr) {
+		*m.TStates += m.contentionDelay()
+	}
+}
 
-	isULAPort := (addr & 0x01) == 0
-	isContended := m.isContendedAddr(addr)
-
-	if isContended && isULAPort {
-		// Contended address, ULA port: C:1, C:3
+// ContendPortLate applies the hold pattern for the T2/TW portion of
+// an I/O machine cycle (FUSE ula_contend_port_late), one T-state
+// after the cycle began. Shapes (Sean Young §4.2, holds only — the
+// interleaved fixed T-states belong to the CPU helper):
+//
+//	ULA-decoded port (A0=0):        C:3    → one hold
+//	contended high byte, non-ULA:   C:1 ×3 → three holds at +0,+1,+2
+//	otherwise:                      N:4    → nothing
+func (m *Memory) ContendPortLate(addr uint16) {
+	if !m.portHoldsActive(addr) {
+		return
+	}
+	if m.currentModel == roms.ModelNext {
+		// Next contended-port hold, C:3 arm.
 		*m.TStates += m.contentionDelay()
-		*m.TStates++ // io cycle
+		return
+	}
+	if addr&0x01 == 0 {
 		*m.TStates += m.contentionDelay()
-		*m.TStates += 3
-	} else if isContended {
-		// Contended address, non-ULA port: C:1, C:1, C:1, C:1
+		return
+	}
+	if m.isContendedAddr(addr) {
+		// Three holds sampled at successive T-states. The +1 steps are
+		// the CPU's fixed T2/TW — advance to sample each hold at its
+		// true position, then hand the fixed T-states back.
 		*m.TStates += m.contentionDelay()
 		*m.TStates++
 		*m.TStates += m.contentionDelay()
 		*m.TStates++
 		*m.TStates += m.contentionDelay()
-		*m.TStates++
-		*m.TStates += m.contentionDelay()
-		*m.TStates++
-	} else if isULAPort {
-		// Non-contended address, ULA port: N:1, C:3
-		*m.TStates++ // io cycle
-		*m.TStates += m.contentionDelay()
-		*m.TStates += 3
+		*m.TStates -= 2
 	}
 	// Non-contended, non-ULA: no contention (just the standard T-states)
 }

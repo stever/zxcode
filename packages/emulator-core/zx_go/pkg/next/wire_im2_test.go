@@ -21,7 +21,8 @@ func (s *slideMem) Write(a uint16, v byte) {
 	}
 	s.m[a] = v
 }
-func (s *slideMem) ContendPort(_ uint16) {}
+func (s *slideMem) ContendPortEarly(_ uint16) {}
+func (s *slideMem) ContendPortLate(_ uint16)  {}
 
 // im2TestRig wires a CPU + dispatcher + CTC + IM2 block over a slideMem
 // programmed with the TX-1696 install shape:

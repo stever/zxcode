@@ -79,14 +79,28 @@ The ULA type is the I/O hub for every machine and the classic video
 renderer. Video: once-per-frame render of the 256×192 bitmap
 (Spectrum address interleave, attributes, FLASH every 16 frames) inside
 a 320×240 border (320×256 on the Next — the FPGA's wide frame, paper at
-32,32), with mid-frame border changes replayed per scanline.
+32,32), with mid-frame border changes replayed per scanline. On classic
+models the PAPER renders from beam-time scanline captures: the CPU's
+ExecuteFrame polls ula.CaptureScanlines as the counter crosses each
+line's fetch window, so a rendered row holds what the ULA fetched when
+the beam passed — not end-of-frame memory. Beam-racers need this:
+Arkanoid XOR-erases its bat in the vblank and redraws it next frame
+just ahead of the beam, so the bat exists on the CRT every frame while
+being absent from memory at the frame boundary (#194). Uncaptured
+lines (single-step paths, first frame, ModelNext) fall back to live
+memory.
 Timex hi-res (port $FF) and the Next paths hang off the same render.
 
 Port $FE: keyboard scan AND-plane, EAR from the tape edge stream, MIC
 and speaker bits recorded as audio events, border writes recorded with
 scanline positions. The floating bus is the canonical Ramsoft/FUSE
-algorithm (returns $FF on +2A/+3/Next). Frame timing: 224 T/line on 48K,
-228 on everything later, per-model totals from `pkg/roms`.
+algorithm (returns $FF on +2A/+3/Next): the fetch window is the FIRST
+128 T of each paper line from the top-left-pixel time — 48K 14336,
+128K/+2 14362 (libspectrum timings.c) — with bitmap/attr pairs on
+slots 2..5 of each 8, computed on the RAW frame-relative T counter
+(the same grid contention anchors on; never on the audio flush's
+frameStartTstate, whose per-frame overshoot jitter desyncs the two). Frame timing: 224 T/line on 48K, 228 on
+everything later, per-model totals from `pkg/roms`.
 
 Tape: `.tap`/`.tzx` as a pulse stream (pilot/sync/bit timings, turbo
 blocks), advanced per port read so edge-timed loaders work; a ROM
@@ -94,8 +108,19 @@ LD-BYTES trap provides fast loading; the $FE-read rate detects active
 loading for the tape-turbo mode.
 
 Contention lives in `pkg/memory` (pattern {6,5,4,3,2,1,0,0}, display
-window only, per-model enables) with port contention per Sean Young,
-including the +2A/+3 no-port-contention rule.
+window only, per-model enables/anchors: 48K 14335 on 224 T lines,
+128K/+2 14361 on 228 — one T before the matching floating-bus window,
+so the two grids stay in phase). Port I/O is cycle-exact: the CPU's
+`ioIn`/`ioOut` helpers charge the 4 T I/O machine cycle and call
+`ContendPortEarly`/`ContendPortLate` (holds ONLY, FUSE's
+ula_contend_port_early/late shapes per Sean Young §4.2, including the
++2A/+3 no-port-contention rule) — the port READ samples the bus at the
+cycle's 4th T-state (IN r,(C): instruction T+11) and the port WRITE
+lands after its 1st. Beam-racers need all three grids to agree:
+Arkanoid paces its 50Hz game loop by phase-locking floating-bus polls
+via a contended screen write, and any grid mismatch made it misread
+"raster left the paper" mid-frame and run 2-3 game updates per frame
+(#194, TestArkanoidBallSpeed).
 
 ## Sound
 

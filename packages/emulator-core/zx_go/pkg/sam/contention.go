@@ -91,9 +91,13 @@ func (m *Memory) ContendMemory(addr uint16) {
 	}
 }
 
-// ContendPort adds I/O contention for ASIC ports (low byte ≥ 0xF8), rounded up
-// to an 8-T boundary.
-func (m *Memory) ContendPort(port uint16) {
+// ContendPortEarly adds I/O contention for ASIC ports (low byte ≥
+// 0xF8), rounded up to an 8-T boundary. The whole ASIC hold lands at
+// the I/O cycle's start — the ASIC stalls the CPU until its slot —
+// so the early phase carries it all and ContendPortLate is a no-op.
+// Holds only: the cycle's fixed 4 T-states are charged by the CPU's
+// ioIn / ioOut helpers.
+func (m *Memory) ContendPortEarly(port uint16) {
 	if !m.contentionEnabled || m.tstatePtr == nil {
 		return
 	}
@@ -102,3 +106,7 @@ func (m *Memory) ContendPort(port uint16) {
 		*m.tstatePtr += uint64(7 - ((t + 2) & 7))
 	}
 }
+
+// ContendPortLate is a no-op on the SAM: the ASIC hold is applied in
+// full by ContendPortEarly.
+func (m *Memory) ContendPortLate(port uint16) {}

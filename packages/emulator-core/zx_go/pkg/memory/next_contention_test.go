@@ -145,16 +145,18 @@ func TestNextPortContentionTimingGate(t *testing.T) {
 	// +3 timing (the Next's default): NO port contention — the
 	// zxula.vhd wait arm is memory-only (:604).
 	before := *cpuT
-	m.ContendPort(0x00FE)
+	m.ContendPortEarly(0x00FE)
+	m.ContendPortLate(0x00FE)
 	if got := *cpuT - before; got != 0 {
 		t.Errorf("+3-timing port $FE cost = %d, want 0 (zxula.vhd:604 memory-only)", got)
 	}
-	// 128K timing: the ULA port contends (C:1, C:3 → 6+1+5+3 = 15 at
-	// pattern slot 0... position advances between the two holds).
+	// 128K timing: the ULA port contends (C:1, C:3 hold pair; the
+	// fixed I/O T-states are charged by the CPU's ioIn/ioOut).
 	m.SetNextMachineTiming(2)
 	*cpuT = 14655
 	before = *cpuT
-	m.ContendPort(0x00FE)
+	m.ContendPortEarly(0x00FE)
+	m.ContendPortLate(0x00FE)
 	if got := *cpuT - before; got == 0 {
 		t.Errorf("128K-timing port $FE cost = 0, want contended (zxula.vhd:600)")
 	}

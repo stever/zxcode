@@ -501,6 +501,11 @@ func newEmulator(model roms.SpectrumModel) (*emulator, error) {
 	// ZX_GO_NO_MEM_CONTEND=1 restores the old uncontended model, for
 	// bisecting a timing regression against pre-#189 behaviour.
 	cpu.MemContend = os.Getenv("ZX_GO_NO_MEM_CONTEND") != "1"
+	// Beam-time paper capture: the renderer shows what the ULA fetched
+	// as the beam passed each line, not end-of-frame memory — required
+	// for beam-racers that erase sprites during the vblank (#194,
+	// Arkanoid's bat). The hook self-disables on ModelNext.
+	cpu.ScanlineFunc = ula.CaptureScanlines
 	configureClassicIntTiming(cpu, model)
 
 	// Classic-Spectrum SpecDrum/Covox DAC (both off until enabled from the

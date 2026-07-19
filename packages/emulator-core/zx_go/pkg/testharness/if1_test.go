@@ -23,6 +23,7 @@ func TestBasicPRINTCommand(t *testing.T) {
 	if _, err := h.RunUntilText("1982", 200); err != nil {
 		t.Fatalf("boot: %v", err)
 	}
+	h.RunFrames(5) // settle: banner detected mid-print on a contended boot
 
 	// 48K BASIC at the start of a line is in K (keyword) mode.
 	// Pressing P inserts the keyword PRINT.
@@ -89,6 +90,7 @@ func TestIF1ROMPagedInOnBoot(t *testing.T) {
 		t.Logf("screen at timeout:\n%s", h.ScreenText())
 		t.Fatalf("boot with IF1 enabled: %v", err)
 	}
+	h.RunFrames(5) // settle: banner detected mid-print on a contended boot
 }
 
 // TestMicrodriveInsertReachesDrive end-to-end-tests the cartridge
@@ -150,6 +152,7 @@ func TestIF1CATCommand(t *testing.T) {
 	if _, err := h.RunUntilText("1982", 300); err != nil {
 		t.Fatalf("boot: %v", err)
 	}
+	h.RunFrames(5) // settle: banner detected mid-print on a contended boot
 
 	// Enter E mode.
 	h.EnterExtendedMode()

@@ -17,7 +17,8 @@ type flatMem [0x10000]byte
 
 func (m *flatMem) Read(addr uint16) byte       { return m[addr] }
 func (m *flatMem) Write(addr uint16, val byte) { m[addr] = val }
-func (m *flatMem) ContendPort(_ uint16)        {}
+func (m *flatMem) ContendPortEarly(_ uint16)   {}
+func (m *flatMem) ContendPortLate(_ uint16)    {}
 
 // nullULA is an inert port-I/O sink: reads return 0xFF, writes are
 // discarded. zexdoc / zexall never use ports but the CPU interface

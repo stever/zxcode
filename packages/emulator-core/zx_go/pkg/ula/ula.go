@@ -262,6 +262,15 @@ type ULA struct {
 	// them to the audio system. Reset at start of every frame.
 	audioEvents      []audioEvent
 	frameStartTstate uint64
+	// Beam-time paper capture (classic models): each line's bitmap and
+	// attribute bytes copied when the beam completes that line's fetch
+	// window (CaptureScanlines, driven by the CPU's ScanlineFunc hook).
+	// Render prefers these rows; lineCapCount lines are valid this
+	// frame. See CaptureScanlines for why end-of-frame memory is the
+	// wrong thing to render (#194, Arkanoid's vblank-erased bat).
+	lineCapBitmap [192][32]byte
+	lineCapAttr   [192][32]byte
+	lineCapCount  int
 	// frameStartRefTstate is frameStartTstate's counterpart on the 3.5 MHz-
 	// reference timeline (refNow); audio/tape event offsets are measured
 	// against it so mid-frame turbo changes can't misplace them.
@@ -1058,6 +1067,65 @@ func (u *ULA) SetULAPaletteSecond(second bool) {
 	u.recordULAVideoChange()
 }
 
+// CaptureScanlines copies every paper line whose fetch window the
+// beam has completed (fetch = the FIRST 128 T of the line, from the
+// top-left-pixel time) into the beam-time capture buffer, and returns
+// the T-state at which the next line's capture is due (or done-
+// sentinel ^0 once all 192 lines are in). The CPU's ExecuteFrame
+// polls this between instructions (ScanlineFunc), so the captured
+// rows hold what the ULA actually FETCHED when the beam passed — not
+// what memory holds at frame end. Beam-racing games depend on the
+// difference: Arkanoid XOR-erases its bat during the vblank and
+// redraws it next frame before the beam returns, so the bat exists
+// on the CRT for every scan of its rows yet is ABSENT from memory at
+// the frame boundary — an end-of-frame renderer shows no bat at all
+// (#194). Render consumes these rows for the paper area and resets
+// the buffer for the next frame; lines not captured (single-step
+// paths, first frame) fall back to live memory, the old behaviour.
+func (u *ULA) CaptureScanlines(now uint64) uint64 {
+	const doneSentinel = ^uint64(0)
+	if u.mem == nil {
+		return doneSentinel
+	}
+	model := u.mem.GetCurrentModel()
+	if model == roms.ModelNext {
+		return doneSentinel
+	}
+	tPerLine := uint64(TStatesPerLineFor(model))
+	paperStart := uint64(64) * tPerLine // 14336 on 48K
+	if model != roms.Model48K {
+		paperStart = 14362 // 128K family top-left pixel (libspectrum)
+	}
+	// A call before line 0's fetch completes can only be the frame-
+	// start arming call (ExecuteFrame entry, T = the wrap overshoot):
+	// start a fresh capture. Mid-frame calls are deadline-gated to
+	// now >= due(lineCapCount) >= this threshold.
+	if now < paperStart+128 {
+		u.lineCapCount = 0
+	}
+	for u.lineCapCount < 192 {
+		due := paperStart + uint64(u.lineCapCount)*tPerLine + 128
+		if now < due {
+			return due
+		}
+		screenBank := u.mem.ScreenPage
+		if screenBank == 0 {
+			screenBank = 5
+		}
+		page := u.mem.GetPage(screenBank)
+		if page == nil {
+			return doneSentinel
+		}
+		y := u.lineCapCount
+		base := screenAddrForRowCol(y, 0)
+		copy(u.lineCapBitmap[y][:], page[base:base+32])
+		attrBase := 0x1800 + (y>>3)*32
+		copy(u.lineCapAttr[y][:], page[attrBase:attrBase+32])
+		u.lineCapCount++
+	}
+	return doneSentinel
+}
+
 // currentScanline returns the raster line of "now" for stamping
 // mid-frame effects (border changes, video-state flips). On the Next
 // it rides the 3.5 MHz REFERENCE timeline (the same clock
@@ -1369,17 +1437,31 @@ func (u *ULA) Render() *image.RGBA {
 		}
 	}
 
-	// Draw screen
+	// Draw screen. Paper rows the beam-time capture holds for this
+	// frame render from the captured bytes — what the ULA fetched as
+	// the beam passed — with live memory as the fallback for
+	// uncaptured lines (single-step paths, first frame, Next). See
+	// CaptureScanlines (#194).
 	screenMem := u.mem.GetPage(u.mem.ScreenPage)
 	attrMem := screenMem[0x1800:]
+	// The capture buffer persists through stale re-renders (the
+	// harness screenshot path); CaptureScanlines resets it when the
+	// next frame begins.
+	capLines := u.lineCapCount
 
 	for y := 0; y < ScreenHeight; y++ {
 		for x := 0; x < ScreenWidth/8; x++ {
 			addr := screenAddrForRowCol(y, x)
 			attrAddr := ((y >> 3) * 32) + x
 
-			pixels := screenMem[addr]
-			attr := attrMem[attrAddr]
+			var pixels, attr byte
+			if y < capLines {
+				pixels = u.lineCapBitmap[y][x]
+				attr = u.lineCapAttr[y][x]
+			} else {
+				pixels = screenMem[addr]
+				attr = attrMem[attrAddr]
+			}
 
 			inkIdx := attr & 0x07
 			paperIdx := (attr >> 3) & 0x07
@@ -1936,8 +2018,20 @@ func (u *ULA) floatingBusByte() byte {
 		return 0xFF
 	}
 
-	// Compute T-state offset within the current frame.
-	tstates := int(*u.mem.TStates - u.frameStartTstate)
+	// T-state offset within the current frame: the RAW counter.
+	// ExecuteFrame wraps it to the per-frame overshoot at every frame
+	// boundary, so it is frame-relative by construction — the same
+	// convention memory.contentionDelay anchors its pattern on. Do
+	// NOT subtract frameStartTstate here: that field is stamped by
+	// the AUDIO flush at whatever overshoot the previous frame ended
+	// on (0..~20 T, varying per frame), and subtracting it jitters
+	// the bus-slot grid against the contention grid by up to 3 slots
+	// — with audio running, Arkanoid's write-stall phase lock then
+	// sampled idle slots and its beam-race pacing collapsed to 2-3
+	// game updates per frame (#194). (Audio off left the field at 0,
+	// which is why the harness never showed the regression;
+	// TestFloatingBusIgnoresAudioFrameStamp pins this.)
+	tstates := int(*u.mem.TStates)
 
 	// Per-model line length: the 48K ULA uses 224 T-states/line, the 128K
 	// family 228. Using the wrong length shifts the floating-bus origin by a
@@ -1946,8 +2040,17 @@ func (u *ULA) floatingBusByte() byte {
 	// video/zxula_timing.vhd c_max_hc 447 vs 455).
 	tPerLine := TStatesPerLineFor(model)
 
-	// Top border: before the first display line.
+	// Top border: before the first display line. The 48K's paper starts
+	// 64 lines in (64*224 = 14336); the 128K/+2's starts at 14362
+	// (libspectrum timings.c ferranti_7c top-left pixel — NOT 64 of its
+	// 228 T lines, which would be 230 T late). This origin must stay on
+	// the same grid as the contention window (memory.contentionDelay:
+	// 14335 / 14361) — beam-chasing games (Arkanoid #194) phase-lock
+	// bus polls via contended writes and read the bus one slot later.
 	topBorderTStates := 64 * tPerLine
+	if model != roms.Model48K {
+		topBorderTStates = 14362
+	}
 	if tstates < topBorderTStates {
 		return 0xFF
 	}
@@ -1957,25 +2060,24 @@ func (u *ULA) floatingBusByte() byte {
 		return 0xFF
 	}
 
-	// T-states into this line. The first 18 are the leftmost
-	// blanking/sync; the first displayed pixel is at T-state 14336 on 48K.
-	// Our frameStartTstate is the start of frame, so we subtract the
-	// per-line origin.
-	tInLine := tstates - topBorderTStates - line*tPerLine
-
-	// Each line: 24 T-states left border, 128 T-states display,
-	// 24 right border, 52 retrace. Only the 128 display T-states
-	// produce floating-bus data.
-	const leftBorder = 24
+	// T-states into this line, measured from the line's paper-fetch
+	// origin: the fetch window is the FIRST 128 T-states of each
+	// paper line (t = paperStart + line*tPerLine + 0..127), with the
+	// first bitmap byte on the bus 2 T in (48K: 14338 — Ramsoft, and
+	// FUSE spectrum_unattached_port, whose per-line display window
+	// also begins AT the top-left-pixel time). The right border,
+	// retrace and next line's left border make up the remaining
+	// T-states of the line and read 0xFF. An extra 24 T "left
+	// border" offset here (the old model) shifts the whole fetch
+	// grid 3 slots late relative to the contention grid (base
+	// paperStart-1) — beam-chasing games phase-lock on contended
+	// writes and then sample the bus one machine cycle later, so the
+	// two grids must agree (Arkanoid #194).
 	const horizontalScreen = 128
-	if tInLine < leftBorder {
+	tInDisplay := tstates - topBorderTStates - line*tPerLine
+	if tInDisplay >= horizontalScreen {
 		return 0xFF
 	}
-	if tInLine >= leftBorder+horizontalScreen {
-		return 0xFF
-	}
-
-	tInDisplay := tInLine - leftBorder
 	// 8 T-states per 16-pixel column pair. Within those 8 T-states
 	// the ULA's fetch pattern is:
 	//   t%8 = 0,1: idle bus (0xFF)

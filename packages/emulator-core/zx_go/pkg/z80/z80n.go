@@ -180,7 +180,8 @@ func (c *CPU) executeZ80NEDInstruction(opcode byte) bool {
 		c.dummyRead28(1)
 		return true
 	case 0x90: // OUTINB    output (HL) to (BC); HL++; B unchanged
-		c.mem.ContendPort(c.bc())
+		c.mem.ContendPortEarly(c.bc())
+		c.mem.ContendPortLate(c.bc())
 		c.ula.WritePort(c.bc(), c.readMem(c.hl()))
 		c.setHL(c.hl() + 1)
 		c.tstates += 16
@@ -224,7 +225,8 @@ func (c *CPU) executeZ80NEDInstruction(opcode byte) bool {
 		// lands on a 64-byte boundary within the current 16K alignment
 		// (wiki.specnext.dev; pinned by ZXSpectrumNextTests Z80Nc2 —
 		// the original implementation jumped to BC's value instead).
-		c.mem.ContendPort(c.bc())
+		c.mem.ContendPortEarly(c.bc())
+		c.mem.ContendPortLate(c.bc())
 		val, _ := c.ula.ReadPort(c.bc())
 		c.PC = (c.PC & 0xC000) | (uint16(val) << 6)
 		c.tstates += 13

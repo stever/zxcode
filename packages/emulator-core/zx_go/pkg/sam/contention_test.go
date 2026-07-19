@@ -58,7 +58,7 @@ func TestContentionOptOut(t *testing.T) {
 	before := m.CPU.Tstates()
 	for i := 0; i < 64; i++ {
 		m.Mem.ContendMemory(0x8000)
-		m.Mem.ContendPort(0x00FA)
+		m.Mem.ContendPortEarly(0x00FA)
 	}
 	if m.CPU.Tstates() != before {
 		t.Errorf("contention opt-out should add no delay (tstates %d → %d)", before, m.CPU.Tstates())
@@ -70,14 +70,14 @@ func TestContentionOptOut(t *testing.T) {
 func TestContendPortASIC(t *testing.T) {
 	m, _ := NewFromROM(synthROM())
 	before := m.CPU.Tstates()
-	m.Mem.ContendPort(0x001F) // low port → no I/O contention
+	m.Mem.ContendPortEarly(0x001F) // low port → no I/O contention
 	if m.CPU.Tstates() != before {
 		t.Errorf("non-ASIC port should not be contended (%d → %d)", before, m.CPU.Tstates())
 	}
 	total := uint64(0)
 	for i := 0; i < 16; i++ {
 		b := m.CPU.Tstates()
-		m.Mem.ContendPort(0x00FE) // ASIC port (≥0xF8)
+		m.Mem.ContendPortEarly(0x00FE) // ASIC port (≥0xF8)
 		total += m.CPU.Tstates() - b
 	}
 	if total == 0 {
