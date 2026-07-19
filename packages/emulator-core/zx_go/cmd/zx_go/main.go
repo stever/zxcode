@@ -491,6 +491,16 @@ func newEmulator(model roms.SpectrumModel) (*emulator, error) {
 	// machine with the interface installed and nothing pressed.
 	ula.KempstonEnabled = true
 	cpu := z80.New(mem, ula)
+	// Per-access ULA memory contention. Without it the CPU never pays the
+	// hold on $4000-$7FFF during the display window, so a 48K machine
+	// executes materially more work per frame than the hardware does and
+	// loop-timed games run fast (#189: Manic Miner noticeably, Arkanoid
+	// very pronounced). The memory side already models the delay and
+	// gates it correctly (contentionDisabled on Pentagon, zero above
+	// 3.5 MHz); this switch lets the CPU's access path consult it.
+	// ZX_GO_NO_MEM_CONTEND=1 restores the old uncontended model, for
+	// bisecting a timing regression against pre-#189 behaviour.
+	cpu.MemContend = os.Getenv("ZX_GO_NO_MEM_CONTEND") != "1"
 	configureClassicIntTiming(cpu, model)
 
 	// Classic-Spectrum SpecDrum/Covox DAC (both off until enabled from the

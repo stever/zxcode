@@ -269,7 +269,7 @@ func (c *CPU) pixelad() {
 func (c *CPU) ldix() {
 	val := c.readMem(c.hl())
 	if val != c.A {
-		c.mem.Write(c.de(), val)
+		c.writeMem(c.de(), val)
 	}
 	c.setHL(c.hl() + 1)
 	c.setDE(c.de() + 1)
@@ -288,7 +288,7 @@ func (c *CPU) ldix() {
 func (c *CPU) lddx() {
 	val := c.readMem(c.hl())
 	if val != c.A {
-		c.mem.Write(c.de(), val)
+		c.writeMem(c.de(), val)
 	}
 	c.setHL(c.hl() - 1)
 	c.setDE(c.de() + 1)
@@ -312,7 +312,7 @@ func (c *CPU) lddx() {
 // transferred value, which matches the common LDWS-in-a-loop idiom.
 func (c *CPU) ldws() {
 	val := c.readMem(c.hl())
-	c.mem.Write(c.de(), val)
+	c.writeMem(c.de(), val)
 	c.L++
 	// Flags come from the INC D half-step (S/Z/H/PV/F53 of the
 	// incremented D, N cleared) — not from the byte copied. Pinned by
@@ -331,7 +331,7 @@ func (c *CPU) ldpirx() {
 	srcAddr := (c.hl() & 0xFFF8) | (c.de() & 7)
 	val := c.readMem(srcAddr)
 	if val != c.A {
-		c.mem.Write(c.de(), val)
+		c.writeMem(c.de(), val)
 	}
 	c.setDE(c.de() + 1)
 	c.setBC(c.bc() - 1)

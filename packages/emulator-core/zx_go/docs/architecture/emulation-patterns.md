@@ -114,8 +114,16 @@ Three coexisting levels, from coarse to fine:
 - Lump accounting: most opcodes add a literal T-state total
   (`c.tstates += 11`). The dominant CPU model.
 - FUSE-style per-cycle helpers (`m1`, `rd`, `wr`, `exec`) for opcodes
-  converted to per-access contention. Gated by `MemContend`, currently
-  enabled per-test rather than machine-wide (see known-gaps.md).
+  converted to exact per-cycle placement. These no longer apply
+  contention to the accesses they delegate — that would double-charge.
+- Central contention (#189): the ULA hold is applied in `readMem` and
+  `writeMem`, which every CPU memory access funnels through, so all 256
+  opcodes contend rather than only the converted ones — and the M1
+  fetch contends, which no opcode used to do. Gated by `MemContend`,
+  now enabled machine-wide for the Next, SAM and the classic models.
+  The unconverted set contends at the instruction's current T position
+  rather than the exact cycle start; converting an opcode to the cycle
+  helpers is what buys exact placement.
 - Shared clock, derived views: the raw T-state counter is shared by
   pointer across CPU/memory/ULA. The Next adds a 3.5 MHz reference clock
   (`RefTstates`, kept in eighths) so audio and tape events land correctly

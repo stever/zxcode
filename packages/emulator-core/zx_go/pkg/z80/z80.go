@@ -609,25 +609,51 @@ func (c *CPU) contendAt(addr uint16) {
 	}
 }
 
-// m1 models the opcode-fetch machine cycle (4 T): contend the fetch
-// address, then charge 4 T. The actual byte fetch + R-increment is
-// done separately by fetch(); m1 only accounts the cycle's timing.
+// m1 models the opcode-fetch machine cycle (4 T): charge 4 T. The
+// actual byte fetch + R-increment is done separately by fetch(), which
+// reaches readMem and contends the fetch address there — including
+// each prefix byte of a CB/ED/DD/FD opcode, since every prefix is
+// dispatched through its own fetch(). m1 therefore only accounts the
+// cycle's timing; contending here too would double-charge (#189).
 func (c *CPU) m1(addr uint16) {
-	c.contendAt(addr)
 	c.tstates += 4
 }
 
-// rd models a memory-read machine cycle (3 T): contend then read.
+// rd models a memory-read machine cycle (3 T). readMem applies the
+// contention at the cycle's start instant, so the access is performed
+// before the 3 T are charged — the same "contend then advance" phase
+// the explicit contendAt gave, without contending twice (#189).
 func (c *CPU) rd(addr uint16) byte {
-	c.contendAt(addr)
+	val := c.readMem(addr)
 	c.tstates += 3
-	return c.readMem(addr)
+	return val
 }
 
 // wr models a memory-write machine cycle (3 T): contend then write.
+// Writes have no central choke point equivalent to readMem — the write
+// is deliberately left until after the 3 T are charged so mid-frame
+// screen/border raster stamps keep their existing T-state position —
+// so wr contends here and writes raw. Lump-timed opcodes call writeMem
+// instead.
 func (c *CPU) wr(addr uint16, val byte) {
 	c.contendAt(addr)
 	c.tstates += 3
+	c.memWriteRaw(addr, val)
+}
+
+// writeMem is the contended write used by opcodes still on lump
+// T-state accounting. Their contention lands at the instruction's
+// current T position rather than at the exact machine cycle's start —
+// the documented approximation of the central-choke-point model
+// (#189); opcodes converted to the cycle helpers use wr for exact
+// placement.
+func (c *CPU) writeMem(addr uint16, val byte) {
+	c.contendAt(addr)
+	c.memWriteRaw(addr, val)
+}
+
+// memWriteRaw performs the bus write with no contention applied.
+func (c *CPU) memWriteRaw(addr uint16, val byte) {
 	c.mem.Write(addr, val)
 }
 
@@ -3149,14 +3175,14 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 	// 16-bit loads. All set MEMPTR (WZ) = addr + 1.
 	case 0x43: // LD (nn),BC
 		addr := c.fetch16()
-		c.mem.Write(addr, c.C)
-		c.mem.Write(addr+1, c.B)
+		c.writeMem(addr, c.C)
+		c.writeMem(addr+1, c.B)
 		c.WZ = addr + 1
 		c.tstates += 20
 	case 0x53: // LD (nn),DE
 		addr := c.fetch16()
-		c.mem.Write(addr, c.E)
-		c.mem.Write(addr+1, c.D)
+		c.writeMem(addr, c.E)
+		c.writeMem(addr+1, c.D)
 		c.WZ = addr + 1
 		c.tstates += 20
 	case 0x4B: // LD BC,(nn)
@@ -3173,8 +3199,8 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 		c.tstates += 20
 	case 0x63: // LD (nn),HL
 		addr := c.fetch16()
-		c.mem.Write(addr, c.L)
-		c.mem.Write(addr+1, c.H)
+		c.writeMem(addr, c.L)
+		c.writeMem(addr+1, c.H)
 		c.WZ = addr + 1
 		c.tstates += 20
 	case 0x6B: // LD HL,(nn)
@@ -3219,8 +3245,8 @@ func (c *CPU) executeEDInstruction(opcode byte) {
 		c.tstates += 15
 	case 0x73: // LD (nn),SP
 		addr := c.fetch16()
-		c.mem.Write(addr, byte(c.SP))
-		c.mem.Write(addr+1, byte(c.SP>>8))
+		c.writeMem(addr, byte(c.SP))
+		c.writeMem(addr+1, byte(c.SP>>8))
 		c.WZ = addr + 1
 		c.tstates += 20
 	case 0x7B: // LD SP,(nn)
@@ -3524,8 +3550,8 @@ func (c *CPU) executeDDInstruction(opcode byte) {
 		c.tstates += 14
 	case 0x22: // LD (nn),IX
 		addr := c.fetch16()
-		c.mem.Write(addr, byte(c.IX))
-		c.mem.Write(addr+1, byte(c.IX>>8))
+		c.writeMem(addr, byte(c.IX))
+		c.writeMem(addr+1, byte(c.IX>>8))
 		c.tstates += 20
 	case 0x2A: // LD IX,(nn)
 		addr := c.fetch16()
@@ -3649,8 +3675,8 @@ func (c *CPU) executeDDInstruction(opcode byte) {
 	case 0xE3: // EX (SP),IX
 		temp := c.IX
 		c.IX = uint16(c.readMem(c.SP)) | (uint16(c.readMem(c.SP+1)) << 8)
-		c.mem.Write(c.SP, byte(temp))
-		c.mem.Write(c.SP+1, byte(temp>>8))
+		c.writeMem(c.SP, byte(temp))
+		c.writeMem(c.SP+1, byte(temp>>8))
 		c.WZ = c.IX // per Sean Young §A.1: WZ = new IX
 		c.tstates += 23
 
@@ -3932,7 +3958,7 @@ func (c *CPU) executeDDCBInstruction(opcode byte, addr uint16) {
 		case 7:
 			val = c.srl(val)
 		}
-		c.mem.Write(addr, val)
+		c.writeMem(addr, val)
 		if reg != 6 {
 			c.setRegister8(reg, val)
 		}
@@ -3957,13 +3983,13 @@ func (c *CPU) executeDDCBInstruction(opcode byte, addr uint16) {
 		return
 	case 2: // RES n,(IX+d) [+ register copy]
 		val &^= 1 << bit
-		c.mem.Write(addr, val)
+		c.writeMem(addr, val)
 		if reg != 6 {
 			c.setRegister8(reg, val)
 		}
 	case 3: // SET n,(IX+d) [+ register copy]
 		val |= 1 << bit
-		c.mem.Write(addr, val)
+		c.writeMem(addr, val)
 		if reg != 6 {
 			c.setRegister8(reg, val)
 		}
@@ -3991,8 +4017,8 @@ func (c *CPU) executeFDInstruction(opcode byte) {
 		c.tstates += 14
 	case 0x22: // LD (nn),IY
 		addr := c.fetch16()
-		c.mem.Write(addr, byte(c.IY))
-		c.mem.Write(addr+1, byte(c.IY>>8))
+		c.writeMem(addr, byte(c.IY))
+		c.writeMem(addr+1, byte(c.IY>>8))
 		c.tstates += 20
 	case 0x2A: // LD IY,(nn)
 		addr := c.fetch16()
@@ -4116,8 +4142,8 @@ func (c *CPU) executeFDInstruction(opcode byte) {
 	case 0xE3: // EX (SP),IY
 		temp := c.IY
 		c.IY = uint16(c.readMem(c.SP)) | (uint16(c.readMem(c.SP+1)) << 8)
-		c.mem.Write(c.SP, byte(temp))
-		c.mem.Write(c.SP+1, byte(temp>>8))
+		c.writeMem(c.SP, byte(temp))
+		c.writeMem(c.SP+1, byte(temp>>8))
 		c.WZ = c.IY // per Sean Young §A.1: WZ = new IY
 		c.tstates += 23
 
@@ -4324,7 +4350,7 @@ func (c *CPU) executeFDCBInstruction(opcode byte, d int8) {
 		case 7:
 			val = c.srl(val) // SRL (IY+d)
 		}
-		c.mem.Write(addr, val)
+		c.writeMem(addr, val)
 		if reg != 6 { // Copy to register if not (HL)
 			c.setRegister8(reg, val)
 		}
@@ -4345,13 +4371,13 @@ func (c *CPU) executeFDCBInstruction(opcode byte, d int8) {
 		return
 	case 2: // RES operations
 		val &= ^(1 << bit)
-		c.mem.Write(addr, val)
+		c.writeMem(addr, val)
 		if reg != 6 {
 			c.setRegister8(reg, val)
 		}
 	case 3: // SET operations
 		val |= (1 << bit)
-		c.mem.Write(addr, val)
+		c.writeMem(addr, val)
 		if reg != 6 {
 			c.setRegister8(reg, val)
 		}
@@ -4387,7 +4413,15 @@ func (c *CPU) fetch() byte {
 // dpram2 CPU port is clocked directly on i_CLK_28 (zxnext.vhd:
 // 6670-6686) and contributes no term to sram_wait_n (:3175). The
 // memory backend reports those addresses via Read28NoWait (noWait28).
+// CONTENTION: every CPU read in this core funnels through here — the
+// M1 opcode/prefix fetch (fetch), immediate operands (readOperand) and
+// data reads alike — so the ULA hold is applied at this single choke
+// point rather than per opcode. That is what makes contention live for
+// all 256 opcodes instead of only the ~81 converted to the m1/rd/wr
+// cycle helpers (#189). The helpers therefore no longer contend the
+// accesses they delegate here; see m1/rd.
 func (c *CPU) readMem(addr uint16) byte {
+	c.contendAt(addr)
 	if c.Variant == VariantZ80N && c.speedSelect == 0x03 &&
 		(c.noWait28 == nil || !c.noWait28(addr)) {
 		c.tstates++
@@ -4494,9 +4528,9 @@ func (c *CPU) initTables() {
 // Stack operations
 func (c *CPU) push(val uint16) {
 	c.SP--
-	c.mem.Write(c.SP, byte(val>>8))
+	c.writeMem(c.SP, byte(val>>8))
 	c.SP--
-	c.mem.Write(c.SP, byte(val))
+	c.writeMem(c.SP, byte(val))
 }
 
 func (c *CPU) pop() uint16 {
@@ -4769,7 +4803,7 @@ func (c *CPU) setRegister8(reg int, val byte) {
 	case 5:
 		c.L = val
 	case 6:
-		c.mem.Write(c.hl(), val) // (HL)
+		c.writeMem(c.hl(), val) // (HL)
 	case 7:
 		c.A = val
 	}
@@ -5283,7 +5317,7 @@ func (c *CPU) rrd() {
 	val := c.readMem(c.hl())
 	temp := c.A
 	c.A = (c.A & 0xF0) | (val & 0x0F)
-	c.mem.Write(c.hl(), (val>>4)|(temp<<4))
+	c.writeMem(c.hl(), (val>>4)|(temp<<4))
 	c.WZ = c.hl() + 1
 
 	c.F = (c.F & FLAG_C) | c.sz53Table[c.A] | c.parityTable[c.A]
@@ -5294,7 +5328,7 @@ func (c *CPU) rld() {
 	val := c.readMem(c.hl())
 	temp := c.A
 	c.A = (c.A & 0xF0) | (val >> 4)
-	c.mem.Write(c.hl(), (val<<4)|(temp&0x0F))
+	c.writeMem(c.hl(), (val<<4)|(temp&0x0F))
 	c.WZ = c.hl() + 1
 
 	c.F = (c.F & FLAG_C) | c.sz53Table[c.A] | c.parityTable[c.A]

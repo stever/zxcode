@@ -68,13 +68,18 @@ func timingColour(r, g, b byte) string {
 // flavour 228 T line, a catalogued difference of ~2%, see
 // known-gaps.md).
 //
-// The NoContention variant (NR$08 bit 6 set) must render IDENTICALLY:
-// MAME 0.282's two captures match pixel-for-pixel, and zx_go's
-// machine-wide ULA memory contention is a documented deferral
-// (pkg/z80.CPU.MemContend, known-gaps.md) — on a real board the
-// contention-ON band would be slightly taller. No board photo exists
-// upstream to pin that delta.
-func chg8kBandTransition(t *testing.T, snx, verdict string) int {
+// The NoContention variant (NR$08 bit 6 set) keeps the 159±2 band —
+// it matches MAME 0.282's capture and the uncontended 20T-per-NEXTREG
+// arithmetic. The contention-ON variant now runs SLOWER, as a real
+// board does: per-access ULA contention went machine-wide at the
+// readMem/writeMem choke point (#189), so the ON band is taller. MAME
+// 0.282's two captures match pixel-for-pixel because MAME shares our
+// former deferral; no board photo exists upstream to pin the true
+// delta, so the ON band is pinned to observed behaviour with wide
+// slack — its VALUE is a model artefact, but its DIRECTION (ON > OFF)
+// is hardware-required (zxnext.vhd:4481 gates contention on
+// cpu_speed=00).
+func chg8kBandTransition(t *testing.T, snx, verdict string, lo, hi int) int {
 	t.Helper()
 	h := runNexttestsSNX(t, snx, 100)
 	text := h.ScreenText()
@@ -110,11 +115,12 @@ func chg8kBandTransition(t *testing.T, snx, verdict string) int {
 		}
 		transition = trans
 	}
-	// 2048 NEXTREG r,n at 20T ≈ 187 lines of green ending at raster
-	// ~191 → image row 159 (wide frame: raster − 32). ±2 rows of
-	// slack for the launch ISR cost.
-	if transition < 157 || transition > 161 {
-		t.Errorf("green band ends at image row %d, want 159±2 (2048×20T NEXTREG work)", transition)
+	// Uncontended: 2048 NEXTREG r,n at 20T ≈ 187 lines of green ending
+	// at raster ~191 → image row 159 (wide frame: raster − 32). ±2 rows
+	// of slack for the launch ISR cost. The contended variant runs
+	// longer; its window is passed in by the caller.
+	if transition < lo || transition > hi {
+		t.Errorf("green band ends at image row %d, want %d-%d (2048×20T NEXTREG work)", transition, lo, hi)
 	}
 	// The attribute rainbow down column 0 (bright, paper cycling
 	// green->cyan->... by +P_BLUE with green forced back in) is static
@@ -129,16 +135,17 @@ func chg8kBandTransition(t *testing.T, snx, verdict string) int {
 }
 
 func TestNexttestsChanging8kBank(t *testing.T) {
-	on := chg8kBandTransition(t, "Chg8kBan.snx", "256x 8k switch, contention ON")
-	off := chg8kBandTransition(t, "Chg8kB_2.snx", "256x 8k switch, contention OFF")
-	// Identical bands, matching the MAME 0.282 reference pair. On a
-	// real board contention ON adds ULA fetch stalls (zxnext.vhd:4481
-	// gates contention on cpu_speed=00) and the ON band grows; zx_go's
-	// per-access contention is a catalogued deferral (known-gaps.md),
-	// so equality is the CURRENT pinned behaviour — if contention gets
-	// wired this assertion must flip to on > off.
-	if on != off {
-		t.Errorf("contention ON transition %d != OFF %d (if contention was wired, update this pin)", on, off)
+	on := chg8kBandTransition(t, "Chg8kBan.snx", "256x 8k switch, contention ON", 166, 178)
+	off := chg8kBandTransition(t, "Chg8kB_2.snx", "256x 8k switch, contention OFF", 157, 161)
+	// Contention ON must cost real time: the ULA holds the CPU off the
+	// contended page set during the display window (zxnext.vhd:4481,
+	// gated on cpu_speed=00), so the same 2048-NEXTREG workload takes
+	// longer and its green band is taller. Pinned as an inequality
+	// because the exact delta is model-derived — MAME 0.282's captures
+	// show the pair identical, sharing the deferral zx_go dropped in
+	// #189, so there is no external reference for the magnitude.
+	if on <= off {
+		t.Errorf("contention ON transition %d must exceed OFF %d — contention costs time", on, off)
 	}
 }
 
