@@ -396,9 +396,27 @@ shape, zxnext.vhd:6543-6552). The pieces:
   regs) and advances them arithmetically; Step/RunToCycle batch NOOP
   runs via a gen-cached run table and skip consecutive-identical
   `MOVE NR$7F` pad writes (inert user register, last write always
-  lands); and rows are half-pixel-paced only when the program CAN
-  affect video (`Copper.HasVideoMoves` — MOVEs solely to NR$02/NR$7F
-  keep the coalesced stride, the pacer list's case).
+  lands) — the write-SKIPPED prefix of such a run (all but its last
+  MOVE) is itself batched arithmetically via a second gen-cached run
+  table (`dupRun`), so a 245-entry pad run costs two loop iterations
+  per pass instead of 245; and rows are half-pixel-paced only when the
+  program CAN affect video (`Copper.HasVideoMoves` — MOVEs solely to
+  NR$02/NR$7F keep the coalesced stride, the pacer list's case).
+  Render-side (#187 wave 2, all pixel-identical — Atic probe
+  screenshots byte-equal pre/post): the compositor keeps per-render
+  ROW CACHES for the tilemap and sprite layers (one
+  RenderScanline(WithBelow) per frame row per render bracket instead
+  of one per compositing pass — inner, border and wide-overpaint
+  passes share it; validity = (per-bracket epoch, layer mutation
+  counter `Gen()`), so render-time copper register writes invalidate
+  exactly), `composePixel`'s per-pixel closures are flattened into
+  method calls with the mode/palette resolution hoisted per row on the
+  non-live path (per half-pixel resolution retained on the fused live
+  path), the tilemap scanline walk runs per TILE-run (map entry,
+  attribute and textmode byte fetched once per run), Layer 2's
+  faithful scanline path caches the bank page across columns, and the
+  ULA's border/disabled-fill loops paint by row segment instead of
+  per-pixel putPix.
 - Live-palette ULA render (`pkg/ula` renderNextULARow +
   `Compositor.ULARGBA`): on the Next, ULA inner-screen and border
   pixels resolve through the LIVE ULA palette exactly like the FPGA's

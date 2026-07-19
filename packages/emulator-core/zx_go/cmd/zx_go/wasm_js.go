@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"syscall/js"
+	"time"
 
 	fyne "fyne.io/fyne/v2"
 
@@ -23,6 +24,16 @@ var wasmEmu *emulator
 var (
 	sdIngestSrc *sdcard.SparseSource
 	sdIngestOff int64
+)
+
+// zxFrame execute-vs-render wall-time split (#187 diagnostics): two
+// time.Now() deltas per frame summed into these accumulators, drained by
+// the zxPerfSplit export (GoEmulator.js's 5s diagnostics line). Wall time
+// only — no per-pixel instrumentation, so the render path stays untouched.
+var (
+	perfExecNs   int64
+	perfRenderNs int64
+	perfFrames   int64
 )
 
 // wasmTapeTraps mirrors the host page's "instant tape loading" toggle: when
@@ -499,6 +510,7 @@ func setupWasmExports() {
 		e := wasmEmu
 		dbgPaused := wasmDebugPaused(e)
 		if !dbgPaused {
+			t0 := time.Now()
 			e.cpu.ExecuteFrame(e.frameTStates())
 			if e.peripherals != nil {
 				e.peripherals.Frame()
@@ -510,10 +522,14 @@ func setupWasmExports() {
 				e.nexloadMacro = nil
 			}
 			e.noteBootFrame()
+			perfExecNs += int64(time.Since(t0))
 			// A breakpoint / watchpoint / one-shot may have fired mid-frame.
 			dbgPaused = wasmDebugPaused(e)
 		}
+		t1 := time.Now()
 		img := e.renderFrame() // *image.RGBA
+		perfRenderNs += int64(time.Since(t1))
+		perfFrames++
 		// Guard null as well as undefined: CopyBytesToJS panics on a null
 		// destination, and a panic in a js.FuncOf callback kills the whole
 		// Go program ("Go program has already exited" on every later call).
@@ -538,6 +554,21 @@ func setupWasmExports() {
 			}
 		}
 		return frameRet
+	}))
+
+	// zxPerfSplit() -> {execMs, renderMs, frames}. Drains the zxFrame
+	// execute-vs-render wall-time accumulators (totals since the last
+	// call; divide by frames for per-frame ms). Polled by GoEmulator.js's
+	// once-per-second FPS tally, so the fresh js.ValueOf map here is off
+	// the hot path.
+	g.Set("zxPerfSplit", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		ret := js.ValueOf(map[string]any{
+			"execMs":   float64(perfExecNs) / 1e6,
+			"renderMs": float64(perfRenderNs) / 1e6,
+			"frames":   perfFrames,
+		})
+		perfExecNs, perfRenderNs, perfFrames = 0, 0, 0
+		return ret
 	}))
 
 	// zxType — printable runes via TypeRune. Named keys deferred (boot and .nex

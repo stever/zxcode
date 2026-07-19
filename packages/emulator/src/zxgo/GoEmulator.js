@@ -38,7 +38,7 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r74-browser-perf';
+const ENGINE_REV = 'r75-render-trims';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
@@ -365,12 +365,25 @@ export class GoEmulator extends EventEmitter {
             // most once per 5s) only while it exceeds the real-time
             // budget, so a healthy machine stays silent.
             window.__zxgoFrameMs = Math.round(this.frameCostEma * 100) / 100;
+            // Wasm-side execute-vs-render split (zxPerfSplit drains the
+            // core's accumulators): per-frame averages over the last
+            // second, published beside __zxgoFrameMs so the two halves of
+            // the core cost can be attributed separately.
+            if (globalThis.zxPerfSplit) {
+                const p = globalThis.zxPerfSplit();
+                if (p && p.frames > 0) {
+                    window.__zxgoExecMs = Math.round(p.execMs / p.frames * 100) / 100;
+                    window.__zxgoRenderMs = Math.round(p.renderMs / p.frames * 100) / 100;
+                }
+            }
             if (this.frameCostEma > 20
                 && (!this.frameMsLogT || t - this.frameMsLogT > 5000)) {
                 this.frameMsLogT = t;
                 console.debug('[zxplay] core frame cost '
                     + window.__zxgoFrameMs + 'ms (>20ms budget) - fps '
-                    + window.__zxgoFps);
+                    + window.__zxgoFps
+                    + ' - exec ' + (window.__zxgoExecMs ?? '?')
+                    + 'ms render ' + (window.__zxgoRenderMs ?? '?') + 'ms');
             }
             this.fpsCount = 0;
             this.fpsT = t;

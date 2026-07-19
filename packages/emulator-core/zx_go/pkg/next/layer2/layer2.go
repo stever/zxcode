@@ -584,7 +584,13 @@ func (l *Layer2) RenderScanline(y int, dst []byte) {
 
 	// Faithful path: per displayed column, compute the FPGA framebuffer byte
 	// and pixel. In 640 mode two pixels share one byte (high/low nibble).
+	// fetchByte is inlined with a bank->page cache: the wide layouts cross
+	// a 16K bank only every 64 columns, so the per-pixel GetPage lookup
+	// collapses to a handful per row (#187 performance; same address math,
+	// same bytes).
 	hires4 := l.resolution&0x02 != 0
+	lastBank := -1
+	var page []byte
 	for x := 0; x < w; x++ {
 		hc := x
 		sc1 := false
@@ -594,12 +600,22 @@ func (l *Layer2) RenderScanline(y int, dst []byte) {
 		}
 		// displayed column hc -> hc_eff = hc (the +1 generate-ahead and the
 		// 1-pixel pipeline delay cancel for the displayed pixel).
-		data, ok := l.fetchByte(hc, y)
-		if !ok {
+		addr16, en := l.fpgaFrameAddr(hc, y)
+		if !en {
 			dst[x] = 0
 			continue
 		}
-		dst[x] = l.fpgaPixel(data, sc1)
+		bank := int(l.activeBank) + addr16/0x4000
+		if bank != lastBank {
+			lastBank = bank
+			page = l.mem.GetPage(bank)
+		}
+		off := addr16 % 0x4000
+		if page == nil || off >= len(page) {
+			dst[x] = 0
+			continue
+		}
+		dst[x] = l.fpgaPixel(page[off], sc1)
 	}
 }
 

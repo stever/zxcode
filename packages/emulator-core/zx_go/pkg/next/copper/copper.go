@@ -138,6 +138,18 @@ type Copper struct {
 	// noopRuns(); invalidated by every program mutation (bumpGen).
 	noopRun   [MaxInstructions]int32
 	noopRunOK bool
+	// dupRun caches, per program index, the length of the consecutive
+	// run of IDENTICAL inert MOVEs (MOVE NR$7F — see skipInertDupMove)
+	// starting there (0 for anything else). Every MOVE in such a run
+	// except the last skips its dispatcher write, so both engines
+	// advance the skipped prefix (dupRun-1 instructions, 2 cycles each)
+	// with one add instead of one Decode+skip check per MOVE — Atic
+	// Atac's pacer list pads with 245-336 consecutive `MOVE NR$7F,$00`
+	// entries stepped every rendered line (#187 performance). Lazily
+	// built by dupRuns(); invalidated by every program mutation
+	// (bumpGen), like noopRun.
+	dupRun   [MaxInstructions]int32
+	dupRunOK bool
 	// videoMoves caches HasVideoMoves() (gen-invalidated like noopRun).
 	videoMoves   bool
 	videoMovesOK bool
@@ -184,6 +196,7 @@ func (c *Copper) SetGenerationHook(fn func()) { c.genHook = fn }
 func (c *Copper) bumpGen() {
 	c.gen++
 	c.noopRunOK = false
+	c.dupRunOK = false
 	c.videoMovesOK = false
 	if c.genHook != nil {
 		c.genHook()
@@ -267,6 +280,35 @@ func (c *Copper) noopRuns() *[MaxInstructions]int32 {
 		c.noopRunOK = true
 	}
 	return &c.noopRun
+}
+
+// dupRuns returns the identical-inert-MOVE run-length table (see the
+// dupRun field), rebuilding it after any program mutation. Same
+// two-backward-pass wrap resolution and all-identical-list cap as
+// noopRuns. dupRun[i] >= 2 is exactly skipInertDupMove(i): the MOVE at
+// i skips its dispatcher write because the next word is identical.
+func (c *Copper) dupRuns() *[MaxInstructions]int32 {
+	if !c.dupRunOK {
+		for pass := 0; pass < 2; pass++ {
+			for i := MaxInstructions - 1; i >= 0; i-- {
+				w := c.program[i]
+				if (w>>8)&0x7F != 0x7F || w&0x8000 != 0 {
+					c.dupRun[i] = 0
+					continue
+				}
+				rl := int32(1)
+				if c.program[(i+1)&(MaxInstructions-1)] == w {
+					rl = c.dupRun[(i+1)&(MaxInstructions-1)] + 1
+					if rl > MaxInstructions {
+						rl = MaxInstructions
+					}
+				}
+				c.dupRun[i] = rl
+			}
+		}
+		c.dupRunOK = true
+	}
+	return &c.dupRun
 }
 
 // New returns an empty copper.
@@ -512,6 +554,19 @@ func (c *Copper) RunToCycle(vcount uint16, cycle int) {
 		inst := Decode(c.program[c.pc&(MaxInstructions-1)])
 		switch inst.Op {
 		case OpMOVE:
+			// Batch the write-skipped prefix of an identical-inert-MOVE
+			// run — see Step's OpMOVE case; same semantics under this
+			// engine's start convention (an instruction starts while
+			// linePos <= cycle, costing 2).
+			if l := int(c.dupRuns()[c.pc&(MaxInstructions-1)]); l >= 2 {
+				k := l - 1
+				if avail := (cycle-c.linePos)/2 + 1; k > avail {
+					k = avail
+				}
+				c.pc = (c.pc + uint16(k)) & (MaxInstructions - 1)
+				c.linePos += 2 * k
+				continue
+			}
 			if c.regs != nil && !c.skipInertDupMove(c.pc) {
 				c.regs.WriteReg(inst.Reg, inst.Val)
 			}
@@ -635,6 +690,26 @@ func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 		inst := Decode(c.program[c.pc&(MaxInstructions-1)])
 		switch inst.Op {
 		case OpMOVE:
+			// Batch the write-skipped prefix of an identical-inert-MOVE
+			// run (dupRun L >= 2: the first L-1 MOVEs each see an
+			// identical successor, so skipInertDupMove elides their
+			// dispatcher writes — advance them with one add, 2 cycles
+			// and one executed count each, exactly like stepping them).
+			// The run's LAST move falls through to the normal path on a
+			// later iteration and stores the value.
+			if l := int(c.dupRuns()[c.pc&(MaxInstructions-1)]); l >= 2 {
+				k := l - 1
+				// Starts allowed under the budget convention (an
+				// instruction starts while spent < cycleBudget, costing
+				// 2): first at spent, then spent+2, ...
+				if avail := (cycleBudget - spent + 1) / 2; k > avail {
+					k = avail
+				}
+				c.pc = (c.pc + uint16(k)) & (MaxInstructions - 1)
+				spent += 2 * k
+				executed += k
+				continue
+			}
 			if c.regs != nil && !c.skipInertDupMove(c.pc) {
 				c.regs.WriteReg(inst.Reg, inst.Val)
 			}

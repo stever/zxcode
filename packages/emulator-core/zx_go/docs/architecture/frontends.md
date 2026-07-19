@@ -66,7 +66,7 @@ Exports (`wasm_js.go`, all globals; `zxReady` is set last):
 | Tape | `zxLoadTap`, `zxTapeInsert`, `zxTapePlay`, `zxTapeStop`, `zxTapeStatus`, `zxTapeTraps` |
 | Programs / files | `zxLoadSnapshot(bytes, ext)`, `zxRunNex(name, bytes)`, `zxRunBas(name, bytes)`, `zxPutFile(path, bytes)` |
 | Debug | `zxDebugAttach/Detach`, `zxDebugCmd(line)`, `zxDebugState`, `zxDebugMem`, `zxDebugDisasm`, `zxDebugPaging`, `zxDebugStepFrame` |
-| Diagnostics | `zxAudioDebug`, `zxAudioLevel` |
+| Diagnostics | `zxAudioDebug`, `zxAudioLevel`, `zxPerfSplit() → {execMs, renderMs, frames}` (drains the zxFrame execute-vs-render wall-time accumulators; GoEmulator.js polls it once a second for the `window.__zxgoExecMs` / `__zxgoRenderMs` readouts, #187) |
 
 Boot calls run in goroutines (audio setup blocks until the JS loop
 turns), so the page polls `zxModel()` for completion. `zxPutFile` stages

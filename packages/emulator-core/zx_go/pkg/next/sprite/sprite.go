@@ -108,13 +108,24 @@ type Engine struct {
 	// (in 2-px X units) only when borderClip is set, else there is no clip.
 	overBorder bool
 	borderClip bool
+
+	// gen counts render-input mutations (attributes, patterns, clip,
+	// control bits) — every exported mutator bumps it. Consumers (the
+	// compositor's per-render row cache, #187 performance) use it to
+	// prove a row rendered earlier in the same render pass is still
+	// exact: RenderScanline is a pure function of (y, engine state),
+	// and an unchanged gen means unchanged state.
+	gen uint32
 }
 
+// Gen returns the render-input mutation counter (see the gen field).
+func (e *Engine) Gen() uint32 { return e.gen }
+
 // SetOverBorder sets NextReg $15 bit 1 ("sprites over border").
-func (e *Engine) SetOverBorder(on bool) { e.overBorder = on }
+func (e *Engine) SetOverBorder(on bool) { e.overBorder = on; e.gen++ }
 
 // SetBorderClip sets NextReg $15 bit 5 ("border clip enable").
-func (e *Engine) SetBorderClip(on bool) { e.borderClip = on }
+func (e *Engine) SetBorderClip(on bool) { e.borderClip = on; e.gen++ }
 
 // effectiveClip resolves the active clip window to inclusive screen bounds
 // [xs..xe] x [ys..ye] in 320x256 frame coordinates, following sprites.vhd:
@@ -139,6 +150,7 @@ func (e *Engine) effectiveClip() (xs, xe, ys, ye int) {
 func (e *Engine) SetClip(x1, x2, y1, y2 byte) {
 	e.clipX1, e.clipX2, e.clipY1, e.clipY2 = x1, x2, y1, y2
 	e.clipSet = true
+	e.gen++
 }
 
 // Clip returns the current clip window (x1,x2,y1,y2) and whether it is set.
@@ -152,7 +164,7 @@ func New() *Engine { return &Engine{transpColour: 0xE3} }
 
 // SetTransparencyColour installs the sprite transparency colour
 // (NextReg $4B). See the transpColour field for the comparison rule.
-func (e *Engine) SetTransparencyColour(v byte) { e.transpColour = v }
+func (e *Engine) SetTransparencyColour(v byte) { e.transpColour = v; e.gen++ }
 
 // TransparencyColour returns the current NR$4B transparency colour.
 func (e *Engine) TransparencyColour() byte { return e.transpColour }
@@ -166,11 +178,11 @@ func (e *Engine) TransparencyColour() byte { return e.transpColour }
 func (e *Engine) LineCoverage() []bool { return e.lineCovered }
 
 // SetEnabled toggles the sprite layer.
-func (e *Engine) SetEnabled(on bool) { e.enabled = on }
+func (e *Engine) SetEnabled(on bool) { e.enabled = on; e.gen++ }
 
 // SetZeroOnTop sets the NextReg $15 bit 6 "sprite_priority" mode: when true the
 // lowest-numbered sprite is drawn in front of higher-numbered overlapping ones.
-func (e *Engine) SetZeroOnTop(on bool) { e.zeroOnTop = on }
+func (e *Engine) SetZeroOnTop(on bool) { e.zeroOnTop = on; e.gen++ }
 
 // ZeroOnTop reports the NextReg $15 bit 6 "sprite_priority" mode.
 func (e *Engine) ZeroOnTop() bool { return e.zeroOnTop }
@@ -181,7 +193,7 @@ func (e *Engine) Enabled() bool { return e.enabled }
 // SetIndexTie sets NR$09 bit 4 ("sprite id lockstep", zxnext.vhd:5187,
 // reset 0): when tied, a sprite-number change on either the NR$34 mirror
 // or the IO-port cursor copies to the other side (sprites.vhd:607/653).
-func (e *Engine) SetIndexTie(on bool) { e.tie = on }
+func (e *Engine) SetIndexTie(on bool) { e.tie = on; e.gen++ }
 
 // MirrorSprite returns the NR$34 mirror sprite number (bits 6:0 — the
 // value NR$34 reads back as '0' & sprite_mirror_id, zxnext.vhd:6033).
@@ -257,6 +269,7 @@ func (e *Engine) applyAttr(sprite, idx int, val byte) {
 	if s == nil {
 		return
 	}
+	e.gen++
 	switch idx {
 	case 0:
 		s.X = (s.X & 0x100) | int16(val)
@@ -498,6 +511,7 @@ func (e *Engine) Set(idx int, a Attr) {
 		return
 	}
 	e.attrs[idx] = a
+	e.gen++
 }
 
 // SetPatternAddr installs the pattern-RAM write cursor directly,
@@ -516,6 +530,7 @@ func (e *Engine) SetPatternAddr(addr uint16) {
 func (e *Engine) WritePatternByte(b byte) {
 	e.pattern[e.selPattAddr] = b
 	e.selPattAddr = (e.selPattAddr + 1) % PatternRAMSize
+	e.gen++
 }
 
 // PatternByte returns the byte at the given pattern-RAM offset.

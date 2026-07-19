@@ -1314,10 +1314,16 @@ func (u *ULA) Render() *image.RGBA {
 	// the per-pixel transparency path).
 	if u.ulaOutputDisabled {
 		fill := u.ulaDisabledFill()
-		for y := 0; y < u.totalHeight; y++ {
-			for x := 0; x < TotalWidth; x++ {
-				u.putPix(x, y, fill)
-			}
+		// Row-pattern fill: write the first row once, copy it to the
+		// rest — byte-identical to the per-pixel putPix walk (#187
+		// performance; this fill runs every frame for Layer 2-only
+		// content like Atic Atac).
+		rowBytes := TotalWidth * u.xs * 4
+		for x := 0; x < TotalWidth; x++ {
+			u.putPix(x, 0, fill)
+		}
+		for y := 1; y < u.totalHeight; y++ {
+			copy(u.img.Pix[y*u.img.Stride:y*u.img.Stride+rowBytes], u.img.Pix[:rowBytes])
 		}
 		if u.nextCompositor != nil {
 			u.applyNextCompositor(stale)
@@ -1331,13 +1337,17 @@ func (u *ULA) Render() *image.RGBA {
 		return u.img
 	}
 
-	// Draw borders with per-scanline colours
+	// Draw borders with per-scanline colours. Segment fills instead of a
+	// per-pixel conditional walk (#187 performance): full rows above/
+	// below the paper, left/right strips beside it — the same pixels the
+	// old putPix loop painted.
 	for y := 0; y < u.totalHeight; y++ {
 		borderColor := u.palette[borderPerLine[y]]
-		for x := 0; x < TotalWidth; x++ {
-			if x < BorderLeft || x >= BorderLeft+ScreenWidth || y < u.borderTop || y >= u.borderTop+ScreenHeight {
-				u.putPix(x, y, borderColor)
-			}
+		if y < u.borderTop || y >= u.borderTop+ScreenHeight {
+			u.fillRowSegment(y, 0, TotalWidth, borderColor)
+		} else {
+			u.fillRowSegment(y, 0, BorderLeft, borderColor)
+			u.fillRowSegment(y, BorderLeft+ScreenWidth, TotalWidth, borderColor)
 		}
 	}
 
@@ -3049,6 +3059,20 @@ func (u *ULA) putPix(x, y int, c color.RGBA) {
 		u.img.Pix[off+2] = c.B
 		u.img.Pix[off+3] = c.A
 		off += 4
+	}
+}
+
+// fillRowSegment paints frame columns [x0, x1) of frame row y with one
+// colour — the segment counterpart of putPix (xs output pixels per frame
+// pixel), replacing per-pixel loops on uniform spans.
+func (u *ULA) fillRowSegment(y, x0, x1 int, c color.RGBA) {
+	off := y*u.img.Stride + x0*u.xs*4
+	end := y*u.img.Stride + x1*u.xs*4
+	for ; off < end; off += 4 {
+		u.img.Pix[off+0] = c.R
+		u.img.Pix[off+1] = c.G
+		u.img.Pix[off+2] = c.B
+		u.img.Pix[off+3] = c.A
 	}
 }
 

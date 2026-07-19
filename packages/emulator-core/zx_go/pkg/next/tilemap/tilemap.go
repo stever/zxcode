@@ -68,7 +68,18 @@ type Tilemap struct {
 	clipX2        byte
 	clipY1        byte // visible Y is [clipY1, clipY2]
 	clipY2        byte
+
+	// gen counts render-input mutations (registers, scroll, clip, the
+	// per-line scroll tables) — every mutator bumps it. Consumers (the
+	// compositor's per-render row cache, #187 performance) use it to
+	// prove a row rendered earlier in the same render pass is still
+	// exact: RenderScanlineWithBelow is a pure function of (y, tilemap
+	// state, RAM), and RAM cannot change inside a render bracket.
+	gen uint32
 }
+
+// Gen returns the render-input mutation counter (see the gen field).
+func (t *Tilemap) Gen() uint32 { return t.gen }
 
 // New constructs a tilemap reader. Disabled by default; clip window
 // defaults to the full area ({0, 0x9F, 0, 0xFF} per the FPGA reset). The
@@ -78,7 +89,7 @@ func New(mem BankReader) *Tilemap {
 }
 
 // SetEnabled toggles tilemap rendering (NR$6B bit 7).
-func (t *Tilemap) SetEnabled(on bool) { t.enabled = on }
+func (t *Tilemap) SetEnabled(on bool) { t.enabled = on; t.gen++ }
 
 // Enabled reports current state.
 func (t *Tilemap) Enabled() bool { return t.enabled }
@@ -86,13 +97,13 @@ func (t *Tilemap) Enabled() bool { return t.enabled }
 // SetControl writes NR$6B low 7 bits (the enable bit is handled
 // separately by SetEnabled, but in practice the wire layer
 // decomposes the byte and calls both).
-func (t *Tilemap) SetControl(v byte) { t.control = v & 0x7F }
+func (t *Tilemap) SetControl(v byte) { t.control = v & 0x7F; t.gen++ }
 
 // SetMode40 is a convenience for tests: clears the 80-col bit.
-func (t *Tilemap) SetMode40() { t.control &^= 1 << 6 }
+func (t *Tilemap) SetMode40() { t.control &^= 1 << 6; t.gen++ }
 
 // SetMode80 is the dual.
-func (t *Tilemap) SetMode80() { t.control |= 1 << 6 }
+func (t *Tilemap) SetMode80() { t.control |= 1 << 6; t.gen++ }
 
 // SetStripFlags toggles NR$6B bit 5 — when set, the per-tile flag
 // byte is omitted from the map and defaultAttr is used.
@@ -102,16 +113,17 @@ func (t *Tilemap) SetStripFlags(on bool) {
 	} else {
 		t.control &^= 1 << 5
 	}
+	t.gen++
 }
 
 // SetDefaultAttr writes NR$6C (used when StripFlags is set).
-func (t *Tilemap) SetDefaultAttr(v byte) { t.defaultAttr = v }
+func (t *Tilemap) SetDefaultAttr(v byte) { t.defaultAttr = v; t.gen++ }
 
 // SetTileMapBase writes NR$6E.
-func (t *Tilemap) SetTileMapBase(v byte) { t.mapBase = v }
+func (t *Tilemap) SetTileMapBase(v byte) { t.mapBase = v; t.gen++ }
 
 // SetTilesBase writes NR$6F.
-func (t *Tilemap) SetTilesBase(v byte) { t.tilesBase = v }
+func (t *Tilemap) SetTilesBase(v byte) { t.tilesBase = v; t.gen++ }
 
 // OnTop reports whether NR$6B bit 0 (tm_on_top) is set. When on,
 // the FPGA renders the tilemap as ALWAYS opaque over every layer
@@ -141,8 +153,8 @@ func (t *Tilemap) Is80Col() bool { return t.control&(1<<6) != 0 }
 // tilemap wraps as a torus. When a raster-line source is wired
 // (SetRasterLineSource) each write is stamped with the beam line so
 // FoldScrollStamps can apply mid-frame changes from their raster row.
-func (t *Tilemap) SetScrollX(v int) { t.logScroll(false, t.scrollX, v); t.scrollX = v }
-func (t *Tilemap) SetScrollY(v int) { t.logScroll(true, t.scrollY, v); t.scrollY = v }
+func (t *Tilemap) SetScrollX(v int) { t.logScroll(false, t.scrollX, v); t.scrollX = v; t.gen++ }
+func (t *Tilemap) SetScrollY(v int) { t.logScroll(true, t.scrollY, v); t.scrollY = v; t.gen++ }
 
 // scrollStamp is one raster-stamped mid-frame scroll write.
 type scrollStamp struct {
@@ -206,6 +218,7 @@ func (t *Tilemap) logScroll(isY bool, old, new int) {
 // identically; a fresh fold with an already-consumed log means the
 // frame wrote no scroll — the log is dropped.
 func (t *Tilemap) FoldScrollStamps(stale bool) {
+	t.gen++
 	t.foldActive = false
 	if t.rasterLine == nil {
 		return
@@ -274,6 +287,7 @@ func (t *Tilemap) CaptureRowScroll(rasterLine int) {
 	}
 	t.scrollXLine[rasterLine], t.scrollYLine[rasterLine] = t.scrollX, t.scrollY
 	t.foldActive = true
+	t.gen++
 }
 
 // EndScrollCapture closes the render bracket: scroll writes are CPU
@@ -303,6 +317,7 @@ func (t *Tilemap) scrollForRow(y int) (int, int) {
 // full tilemap.
 func (t *Tilemap) SetClip(x1, x2, y1, y2 byte) {
 	t.clipX1, t.clipX2, t.clipY1, t.clipY2 = x1, x2, y1, y2
+	t.gen++
 }
 
 // RenderScanline writes len(dst) palette-indexed bytes for visible
@@ -409,12 +424,29 @@ func (t *Tilemap) RenderScanlineWithBelow(y int, dst, below []byte) {
 	// 256+, addressed via attr bit 0); ignoring it renders tile 0 everywhere.
 	mode512 := t.control&(1<<1) != 0
 
-	for x := 0; x < len(dst); x++ {
-		if x < clipXStart || x > clipXEnd {
-			continue // outside the clip window — leave transparent
-		}
+	// Per-TILE-run walk (#187 performance): every pixel of a run shares
+	// its tile's map entry, attribute and (in textmode) definition byte,
+	// so those are fetched once per run instead of once per pixel. A run
+	// is the span of consecutive x values mapping into one tile — up to
+	// 8 pixels, shorter at the clip/scroll boundaries. Pixel-level
+	// results are computed exactly as the per-pixel walk did.
+	x0 := clipXStart
+	if x0 < 0 {
+		x0 = 0
+	}
+	x1 := clipXEnd
+	if x1 > len(dst)-1 {
+		x1 = len(dst) - 1
+	}
+	onTop := t.control&0x01 != 0
+	for x := x0; x <= x1; {
 		absX := x + rowScrollX
 		tileX := (absX / TileWidth) % tilesPerRow
+		pixelInTile := absX % TileWidth
+		run := TileWidth - pixelInTile
+		if x+run-1 > x1 {
+			run = x1 - x + 1
+		}
 		mapEntry := mapOffsetBase + (tileY*tilesPerRow+tileX)*bytesPerTile
 		mapEntry &= 0x3FFF
 		// Per-tile attribute, or the global default_attr when
@@ -430,11 +462,11 @@ func (t *Tilemap) RenderScanlineWithBelow(y int, dst, below []byte) {
 		// Per-pixel tm_below (tilemap.vhd:388): attr bit 0 ("ULA over
 		// tilemap") OR 512-mode, unless tm_on_top forces on-top. The
 		// same formula applies in textmode (:388 is unconditional).
-		if below != nil && x < len(below) &&
-			(attr&0x01 != 0 || mode512) && t.control&0x01 == 0 {
-			below[x] = 1
+		if below != nil && (attr&0x01 != 0 || mode512) && !onTop {
+			for i := x; i < x+run && i < len(below); i++ {
+				below[i] = 1
+			}
 		}
-		pixelInTile := absX % TileWidth
 
 		if textmode {
 			// 1bpp tile: 8 bytes/tile, one byte per row, MSB-first.
@@ -443,41 +475,52 @@ func (t *Tilemap) RenderScanlineWithBelow(y int, dst, below []byte) {
 			// bits" — i.e. (attr & 0xFE) | bit. Index 0 stays the
 			// transparent slot so the compositor falls through to ULA.
 			defAddr := (tilesOffsetBase + int(tileIdx)*8 + pixelRow) & 0x3FFF
-			bit := (tilesBuf[defAddr] >> (7 - uint(pixelInTile))) & 1
-			dst[x] = (attr & 0xFE) | bit
+			db := tilesBuf[defAddr]
+			base := attr & 0xFE
+			for i := 0; i < run; i++ {
+				bit := (db >> (7 - uint(pixelInTile+i))) & 1
+				dst[x+i] = base | bit
+			}
+			x += run
 			continue
 		}
 
 		// Per-tile transform (FPGA tilemap.vhd:320-324): attr bit 3 = X
 		// mirror, bit 2 = Y mirror, bit 1 = rotate (swaps X/Y, and a
 		// rotation also inverts the X mirror). textmode (above) skips it.
-		tx, ty := pixelInTile, pixelRow
-		if (attr>>3)&1 != (attr>>1)&1 { // effective X mirror
-			tx = (TileWidth - 1) - tx
-		}
+		xMirror := (attr>>3)&1 != (attr>>1)&1 // effective X mirror
+		ty := pixelRow
 		if attr&0x04 != 0 { // Y mirror
 			ty = (TileHeight - 1) - ty
 		}
-		if attr&0x02 != 0 { // rotate: exchange X and Y
-			tx, ty = ty, tx
-		}
+		rotate := attr&0x02 != 0
 		// Standard 4bpp tile defs: 32 bytes per tile (8 rows × 4
 		// bytes); attr bits 7:4 are the palette offset, the pixel is a
 		// nibble. ty selects the 4-byte row, tx the pixel within it.
 		paletteOffset := (attr >> 4) & 0x0F
-		tileDataBase := (tilesOffsetBase + int(tileIdx)*32 + ty*4) & 0x3FFF
-		b := tilesBuf[tileDataBase+tx/2]
-		var nibble byte
-		if tx&1 == 0 {
-			nibble = (b >> 4) & 0x0F
-		} else {
-			nibble = b & 0x0F
+		tileBase := tilesOffsetBase + int(tileIdx)*32
+		for i := 0; i < run; i++ {
+			tx, tty := pixelInTile+i, ty
+			if xMirror {
+				tx = (TileWidth - 1) - tx
+			}
+			if rotate { // rotate: exchange X and Y
+				tx, tty = tty, tx
+			}
+			b := tilesBuf[((tileBase+tty*4)&0x3FFF)+tx/2]
+			var nibble byte
+			if tx&1 == 0 {
+				nibble = (b >> 4) & 0x0F
+			} else {
+				nibble = b & 0x0F
+			}
+			if nibble == 0 {
+				// Index 0 is the standard transparent slot — pass through.
+				dst[x+i] = 0
+			} else {
+				dst[x+i] = (paletteOffset << 4) | nibble
+			}
 		}
-		if nibble == 0 {
-			// Index 0 is the standard transparent slot — pass through.
-			dst[x] = 0
-		} else {
-			dst[x] = (paletteOffset << 4) | nibble
-		}
+		x += run
 	}
 }
