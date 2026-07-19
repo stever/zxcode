@@ -38,7 +38,7 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r73-l2-paloff-fold';
+const ENGINE_REV = 'r74-browser-perf';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
@@ -212,6 +212,7 @@ export class GoEmulator extends EventEmitter {
         this.acc = 0; this.lastTick = 0;
         this.audioBase = null; this.audioProduced = 0;
         this.audioCushion = 2646; // 60ms; widened on worklet underrun reports
+        this.frameCostEma = 0; // measured ms per zxFrame call; gates bursts
         this.rafId = null;
 
         this.audioNode = null;
@@ -256,8 +257,16 @@ export class GoEmulator extends EventEmitter {
             node.port.onmessage = () => { // underrun: widen the cushion (max 120ms)
                 this.audioCushion = Math.min(this.audioCushion + 882, 5292);
                 this.audioUnderruns = (this.audioUnderruns || 0) + 1;
-                console.debug('[zxplay] audio underrun #' + this.audioUnderruns
-                    + ' - cushion now ' + Math.round(this.audioCushion / 44.1) + 'ms');
+                // Rate-limited to one line per 5s: when the machine can't
+                // hold real time, underruns arrive at the stutter frequency
+                // and per-event console output (expensive with DevTools
+                // open) compounds the very stall it reports.
+                const now = performance.now();
+                if (!this.underrunLogT || now - this.underrunLogT > 5000) {
+                    this.underrunLogT = now;
+                    console.debug('[zxplay] audio underrun #' + this.audioUnderruns
+                        + ' - cushion now ' + Math.round(this.audioCushion / 44.1) + 'ms');
+                }
             };
             this.audioNode = node;
             // Browsers keep the context suspended until a user gesture, and
@@ -277,6 +286,7 @@ export class GoEmulator extends EventEmitter {
         // whether or not init succeeded, so a failed pipeline can still be
         // inspected (audioInitError says why).
         window.__zxgoAudio = () => {
+            this.audioDiag = true; // enables pumpAudio's amplitude scan
             const actx = this.audioNode && this.audioNode.context;
             const now = performance.now();
             const dt = (now - (this.diagT0 || now)) / 1000;
@@ -314,12 +324,16 @@ export class GoEmulator extends EventEmitter {
         const chunk = this.audioPullU8.slice(0, n * 2);
         // Diagnostics: pull rate + amplitude range of the last chunk (see
         // __zxgoAudio). A healthy idle stream pulls ~44100/s of near-zero
-        // samples; DC rails, steps and starvation all show up here.
+        // samples; DC rails, steps and starvation all show up here. The
+        // amplitude scan only runs while a __zxgoAudio() session watches —
+        // no per-sample work on the hot path otherwise.
         this.diagPulled = (this.diagPulled || 0) + n;
-        const s16 = new Int16Array(chunk.buffer, 0, n);
-        let mn = 32767, mx = -32768;
-        for (let i = 0; i < n; i++) { const v = s16[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
-        this.diagMin = mn; this.diagMax = mx;
+        if (this.audioDiag) {
+            const s16 = new Int16Array(chunk.buffer, 0, n);
+            let mn = 32767, mx = -32768;
+            for (let i = 0; i < n; i++) { const v = s16[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+            this.diagMin = mn; this.diagMax = mx;
+        }
         this.audioNode.port.postMessage(chunk.buffer, [chunk.buffer]);
         return n;
     }
@@ -344,6 +358,20 @@ export class GoEmulator extends EventEmitter {
         if (!this.fpsT) this.fpsT = t;
         if (t - this.fpsT >= 1000) {
             window.__zxgoFps = Math.round(this.fpsCount * 1000 / (t - this.fpsT));
+            // Rolling per-frame core cost (ms, EMA over zxFrame calls) —
+            // the wasm-side execute+render+copy budget. Read it from the
+            // console as window.__zxgoFrameMs; under 20 means the core
+            // can hold 50fps and any shortfall is host-side. Logged (at
+            // most once per 5s) only while it exceeds the real-time
+            // budget, so a healthy machine stays silent.
+            window.__zxgoFrameMs = Math.round(this.frameCostEma * 100) / 100;
+            if (this.frameCostEma > 20
+                && (!this.frameMsLogT || t - this.frameMsLogT > 5000)) {
+                this.frameMsLogT = t;
+                console.debug('[zxplay] core frame cost '
+                    + window.__zxgoFrameMs + 'ms (>20ms budget) - fps '
+                    + window.__zxgoFps);
+            }
             this.fpsCount = 0;
             this.fpsT = t;
         }
@@ -363,7 +391,9 @@ export class GoEmulator extends EventEmitter {
             this.off.width = d.w; this.off.height = d.h;
             this.offCtx = this.off.getContext('2d');
         } else if (this.frameBuf) {
-            this.imageData.data.set(this.frameBuf);
+            // No copy here: imageData.data was constructed OVER
+            // frameBuf.buffer (same ArrayBuffer), and zxFrame's
+            // CopyBytesToJS has already written this frame into it.
             this.offCtx.putImageData(this.imageData, 0, 0);
             const g = this.ctx;
             // Filler in the frame's own border colour (corner
@@ -428,27 +458,50 @@ export class GoEmulator extends EventEmitter {
             return;
         }
         let owed;
+        // Catch-up burst cap, gated by the MEASURED per-frame core cost
+        // (frameCostEma, updated below). Bursting owed>1 frames into one
+        // rAF tick only helps when the core outruns real time (a late
+        // tick's backlog clears and the cushion refills). When a heavy
+        // title pushes one frame's execute+render near or past the 20ms
+        // real-time budget, a 3-4 frame burst just stretches the tick —
+        // every burst frame pays a full compositor render — so the
+        // DISPLAYED rate collapses to a fraction of what the core can do
+        // while the audio ledger's clamp discards the debt anyway (#187:
+        // Atic Atac at 28MHz fell into a locked owed=3 cadence, one
+        // presented frame per ~3 rendered). One frame per tick is then
+        // the fastest the machine can visibly run. The EMA tracks a
+        // 100ms-clamped sample per tick, so a one-off GC/resume spike
+        // cannot pin the cap low for long, and bursts return as soon as
+        // the core shows headroom again (hidden-tab catch-up unchanged
+        // for classic machines).
+        const burstCap = this.frameCostEma > 3.5
+            ? Math.max(1, Math.floor(14 / this.frameCostEma))
+            : 4;
         const actx = this.audioNode && this.audioNode.context;
         const audioPaced = !!(actx && actx.state === 'running');
         if (audioPaced) {
             if (this.audioBase === null) { this.audioBase = actx.currentTime; this.audioProduced = 0; }
             const consumed = (actx.currentTime - this.audioBase) * 44100;
             if (this.audioProduced < consumed) this.audioProduced = consumed;
-            owed = Math.min(Math.max(Math.ceil((consumed + this.audioCushion - this.audioProduced) / SAMPLES_PER_FRAME), 0), 4);
+            owed = Math.min(Math.max(Math.ceil((consumed + this.audioCushion - this.audioProduced) / SAMPLES_PER_FRAME), 0), burstCap);
             this.acc = 0; this.lastTick = t;
         } else {
             this.acc = Math.min(this.acc + (this.lastTick ? t - this.lastTick : 20), 80);
             this.lastTick = t;
-            owed = Math.floor(this.acc / 20);
+            owed = Math.min(Math.floor(this.acc / 20), burstCap);
             this.acc -= owed * 20;
         }
         this.tallyFps(t, owed || 0);
         if (owed && globalThis.zxFrame) {
+            const tf0 = performance.now();
             for (let i = 1; i < owed; i++) globalThis.zxFrame();
             // No destination buffer until the core has reported its frame
             // dimensions once — zxFrame() without args runs the frame and
             // just returns {w,h}.
             const d = this.frameBuf ? globalThis.zxFrame(this.frameBuf) : globalThis.zxFrame();
+            // Per-frame core cost feeding the burst cap above.
+            const cost = Math.min((performance.now() - tf0) / owed, 100);
+            this.frameCostEma = this.frameCostEma ? this.frameCostEma * 0.8 + cost * 0.2 : cost;
             const pumped = this.pumpAudio();
             if (audioPaced) {
                 // Account what the core REALLY produced: under a guest

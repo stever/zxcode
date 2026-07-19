@@ -283,22 +283,44 @@ func setupWasmExports() {
 	}))
 
 	// zxTapeStatus() -> {inserted, playing, block, blocks}. Polled by the host
-	// each frame to derive the playingTape/stoppedTape events.
+	// each frame to derive the playingTape/stoppedTape events. The return
+	// object is CACHED and mutated field-by-field on change: a fresh
+	// js.ValueOf(map[...]) per poll costs a Go map allocation plus an
+	// Object construction and four syscall/js property writes, 50 times a
+	// second, and the host reads the fields synchronously without
+	// retaining the object.
+	tapeRet := js.ValueOf(map[string]any{"inserted": false, "playing": false, "block": 0, "blocks": 0})
+	var tapeInserted, tapePlaying bool
+	var tapeBlock, tapeBlocks int
+	setTapeRet := func(inserted, playing bool, block, blocks int) js.Value {
+		if tapeInserted != inserted {
+			tapeInserted = inserted
+			tapeRet.Set("inserted", inserted)
+		}
+		if tapePlaying != playing {
+			tapePlaying = playing
+			tapeRet.Set("playing", playing)
+		}
+		if tapeBlock != block {
+			tapeBlock = block
+			tapeRet.Set("block", block)
+		}
+		if tapeBlocks != blocks {
+			tapeBlocks = blocks
+			tapeRet.Set("blocks", blocks)
+		}
+		return tapeRet
+	}
 	g.Set("zxTapeStatus", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		e := wasmEmu
 		if e == nil || e.ula == nil {
-			return js.ValueOf(map[string]any{"inserted": false, "playing": false, "block": 0, "blocks": 0})
+			return setTapeRet(false, false, 0, 0)
 		}
 		tp := e.ula.GetTapePlayer()
 		if tp == nil {
-			return js.ValueOf(map[string]any{"inserted": false, "playing": false, "block": 0, "blocks": 0})
+			return setTapeRet(false, false, 0, 0)
 		}
-		return js.ValueOf(map[string]any{
-			"inserted": true,
-			"playing":  tp.IsPlaying(),
-			"block":    tp.CurrentBlock(),
-			"blocks":   tp.BlockCount(),
-		})
+		return setTapeRet(true, tp.IsPlaying(), tp.CurrentBlock(), tp.BlockCount())
 	}))
 
 	// zxTapeTraps(bool). Toggle the LD-BYTES fast-load trap ("instant tape
@@ -441,15 +463,38 @@ func setupWasmExports() {
 		return ""
 	}))
 
-	// zxFrame(optional Uint8Array dst) -> {w,h[,debug,paused,pc]}. Advances one
+	// zxFrame(optional Uint8Array dst) -> {w,h,debug,paused,pc}. Advances one
 	// frame and, if dst is given, copies the RGBA framebuffer into it. While a
 	// debug session (wasm_debug_js.go) holds the machine paused, execution is
 	// skipped and only the framebuffer is (re)rendered, so the page can keep
 	// repainting after register/memory pokes; the debug fields let the frame
 	// loop observe pause transitions (breakpoint hits, step-over landings).
+	// The return object is CACHED and mutated field-by-field on change —
+	// this is the hottest export (50+ calls/s, more during catch-up bursts
+	// and the boot fast-forward), and a fresh js.ValueOf(map[...]) per call
+	// costs a Go map allocation plus an Object construction and per-key
+	// syscall/js writes. Every consumer (GoEmulator.js loop/debugRender,
+	// gif-service runFrame) reads the fields synchronously within its own
+	// tick and never retains the object. debug/paused/pc are now always
+	// present (false/0 when no session is attached) — consumers truth-test
+	// d.debug, so the shape change is invisible to them.
+	frameRet := js.ValueOf(map[string]any{"w": 0, "h": 0, "debug": false, "paused": false, "pc": 0})
+	var frameW, frameH, framePC int
+	var frameDebug, framePaused bool
+	setFrameDims := func(w, h int) {
+		if frameW != w {
+			frameW = w
+			frameRet.Set("w", w)
+		}
+		if frameH != h {
+			frameH = h
+			frameRet.Set("h", h)
+		}
+	}
 	g.Set("zxFrame", js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if wasmEmu == nil {
-			return js.ValueOf(map[string]any{"w": 0, "h": 0})
+			setFrameDims(0, 0)
+			return frameRet
 		}
 		e := wasmEmu
 		dbgPaused := wasmDebugPaused(e)
@@ -476,13 +521,23 @@ func setupWasmExports() {
 			js.CopyBytesToJS(a[0], img.Pix)
 		}
 		b := img.Bounds()
-		ret := map[string]any{"w": b.Dx(), "h": b.Dy()}
-		if wasmDebugAttached(e) {
-			ret["debug"] = true
-			ret["paused"] = dbgPaused
-			ret["pc"] = int(e.cpu.PC)
+		setFrameDims(b.Dx(), b.Dy())
+		dbg := wasmDebugAttached(e)
+		if frameDebug != dbg {
+			frameDebug = dbg
+			frameRet.Set("debug", dbg)
 		}
-		return js.ValueOf(ret)
+		if dbg {
+			if framePaused != dbgPaused {
+				framePaused = dbgPaused
+				frameRet.Set("paused", dbgPaused)
+			}
+			if pc := int(e.cpu.PC); framePC != pc {
+				framePC = pc
+				frameRet.Set("pc", pc)
+			}
+		}
+		return frameRet
 	}))
 
 	// zxType — printable runes via TypeRune. Named keys deferred (boot and .nex

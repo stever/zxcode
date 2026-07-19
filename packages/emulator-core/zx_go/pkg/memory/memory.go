@@ -340,6 +340,27 @@ type Memory struct {
 	slotBank    [8]byte
 	mmuOverride [8]bool
 
+	// readFast is the per-8K-CPU-slot read fast path: readFast[slot]
+	// non-nil means every Read in that slot resolves to exactly
+	// readFast[slot][addr&0x1FFF] — a direct slice over the backing
+	// RAM half-bank — with NO hooks, overlays or tracking applicable.
+	// This collapses the hot Read dispatch (the CPU performs ~5 reads
+	// per instruction; under Go-wasm the branchy readValue cascade
+	// dominated the 28 MHz frame budget, #187) to two loads. Slots
+	// 0-1 ($0000-$3FFF) are NEVER cached — the bottom 16K carries the
+	// bootrom/divMMC/Multiface/Alt-ROM/config/Beta overlay cascade and
+	// ROM dispatch, all of which stay on readValue.
+	//
+	// COHERENCE CONTRACT: any mutation of state the cached dispatch
+	// depends on MUST call invalidateReadFast(). That state is:
+	// memoryPageReadMap, slotBank/mmuOverride, the m.ram bank slices,
+	// l2RdEn, currentModel, ramReadHook/allReadHook and TrackUninit.
+	// The cache is rebuilt lazily on the next Read (rebuildReadFast);
+	// readFastValid=false marks it dirty (the zero value, so a fresh
+	// Memory starts dirty and self-populates).
+	readFast      [8][]byte
+	readFastValid bool
+
 	// bankTracer, when non-nil, fires after every change to the
 	// ROM-bank selection (port 7FFD/1FFD writes, NextReg $8E
 	// handler via SetROMBank) and every MMU slot reassignment
@@ -530,6 +551,7 @@ func (m *Memory) SetMMU(slot, bank byte) {
 	}
 	m.slotBank[slot] = bank
 	m.mmuOverride[slot] = true
+	m.invalidateReadFast()
 	if m.bankTracer != nil {
 		m.bankTracer(slot, int(bank), "NEXTREG_50+slot")
 	}
@@ -747,6 +769,7 @@ func (m *Memory) syncMMUFromPage(page16k int) {
 	m.slotBank[s+1] = hi
 	m.mmuOverride[s] = false
 	m.mmuOverride[s+1] = false
+	m.invalidateReadFast()
 }
 
 // syncAllMMU resyncs all 8 MMU slots from the classic page maps.
@@ -1154,6 +1177,9 @@ func (m *Memory) setupModel(model roms.SpectrumModel) error {
 	if m.TStates != nil {
 		m.ContentionEnabled = !m.contentionDisabled
 	}
+	// Model/page-map/bank state changed wholesale (this also covers
+	// SwitchModel's lazy bank allocation, which runs just before).
+	m.invalidateReadFast()
 	return nil
 }
 
@@ -1466,11 +1492,76 @@ func (m *Memory) SwitchModel(model roms.SpectrumModel) error {
 // first-divergence comparison against a reference emulator. The
 // per-read nil check is free when the hook is unset.
 func (m *Memory) Read(addr uint16) byte {
+	// Hot fast path (see the readFast field docs): a cached slot
+	// resolves in two loads, bypassing the full dispatch cascade.
+	// Value-identical to readValue by construction — a slot is only
+	// cached when no hook, overlay, tracking or redirect can apply.
+	if p := m.readFast[addr>>13]; p != nil {
+		return p[addr&0x1FFF]
+	}
+	if !m.readFastValid {
+		m.rebuildReadFast()
+		if p := m.readFast[addr>>13]; p != nil {
+			return p[addr&0x1FFF]
+		}
+	}
 	v := m.readValue(addr)
 	if m.allReadHook != nil {
 		m.allReadHook(addr, v)
 	}
 	return v
+}
+
+// invalidateReadFast drops the read fast-path cache. MUST be called by
+// every mutation of the state the cache encodes — see the readFast
+// field's coherence contract. Cheap (8 nil stores), so callers on
+// paging-port paths need not condition it.
+func (m *Memory) invalidateReadFast() {
+	m.readFast = [8][]byte{}
+	m.readFastValid = false
+}
+
+// rebuildReadFast recomputes the read fast-path cache from the live
+// dispatch state, mirroring readValue's branch structure exactly. A
+// slot is cached ONLY when its reads provably reduce to a plain RAM
+// load: global read hooks and uninit tracking off, slots 2-7 only
+// (the bottom 16K keeps its overlay cascade on readValue), Layer-2
+// read paging off (its window is bank-configurable, so it is gated
+// wholesale rather than range-checked), and the slot resolving to a
+// mapped RAM bank — via the MMU shadow on ModelNext (bank $FF = ROM
+// half stays slow), via the classic 16K page map otherwise (ROM pages
+// >= 16 stay slow: the ROM area consults PeripheralRead per read).
+func (m *Memory) rebuildReadFast() {
+	m.readFast = [8][]byte{}
+	m.readFastValid = true
+	if m.allReadHook != nil || m.ramReadHook != nil || m.TrackUninit {
+		return
+	}
+	isNext := m.currentModel == roms.ModelNext
+	if isNext && m.l2RdEn {
+		return
+	}
+	for slot := 2; slot < 8; slot++ {
+		if isNext && m.mmuOverride[slot] {
+			bank8k := m.slotBank[slot]
+			if bank8k == 0xFF {
+				continue
+			}
+			bank16k := int(bank8k) >> 1
+			if bank16k >= len(m.ram) || m.ram[bank16k] == nil {
+				continue
+			}
+			base := int(bank8k&1) << 13
+			m.readFast[slot] = m.ram[bank16k][base : base+0x2000]
+			continue
+		}
+		pageIndex := m.memoryPageReadMap[slot>>1]
+		if pageIndex < 0 || pageIndex >= 16 || pageIndex >= len(m.ram) || m.ram[pageIndex] == nil {
+			continue
+		}
+		base := int(slot&1) << 13
+		m.readFast[slot] = m.ram[pageIndex][base : base+0x2000]
+	}
 }
 
 // readValue is the dispatch body for Read.
@@ -1845,6 +1936,7 @@ func (m *Memory) GetRAMWriteHook() func(bank int, addr uint16, val byte) {
 // active spec is nil.
 func (m *Memory) SetRAMReadHook(fn func(bank int, addr uint16, val byte)) {
 	m.ramReadHook = fn
+	m.invalidateReadFast()
 }
 
 // SetAllReadHook installs a callback fired on EVERY Read (logical
@@ -1854,6 +1946,7 @@ func (m *Memory) SetRAMReadHook(fn func(bank int, addr uint16, val byte)) {
 // divergent value is the bug even when code is banked through a window).
 func (m *Memory) SetAllReadHook(fn func(addr uint16, val byte)) {
 	m.allReadHook = fn
+	m.invalidateReadFast()
 }
 
 // SetAllWriteHook installs a callback fired on every successful Write
@@ -1877,6 +1970,7 @@ func (m *Memory) SetLayer2MapControl(v byte) {
 	} else {
 		m.l2Offset = v & 0x07
 	}
+	m.invalidateReadFast()
 }
 
 // Layer2MapControl composes the readable state of port $123B the way the
@@ -1974,6 +2068,7 @@ func (m *Memory) EnableUninitTracking() {
 		}
 	}
 	m.TrackUninit = true
+	m.invalidateReadFast()
 }
 
 // markRAMWritten records a guest write to pool byte (bank16k, off).
@@ -2126,6 +2221,7 @@ func (m *Memory) RestorePagingState(state *PagingState) {
 	m.memoryPageWriteMap = state.memoryPageWriteMap
 	m.ScreenPage = state.screenPage
 	m.PagingEnabled = state.pagingEnabled
+	m.invalidateReadFast()
 }
 
 // PageMemory handles the 128K memory paging mechanism.
