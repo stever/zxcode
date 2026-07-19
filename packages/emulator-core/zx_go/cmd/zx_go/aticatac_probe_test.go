@@ -639,7 +639,9 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 			t.Logf("frame %6d $2660-$2700: % x", frame, blk2)
 			emu.nextRegs.SetTracer(func(reg, val byte, write bool) {
-				if !write || (reg == 0x02 && (val == 0x00 || val == 0x04)) {
+				// NR$7F: the pacer list's ~140k/frame copper pad MOVEs —
+				// logging them blew the log past the disk quota.
+				if !write || reg == 0x7F || (reg == 0x02 && (val == 0x00 || val == 0x04)) {
 					return
 				}
 				t.Logf("frame %6d NRW $%02X <- $%02X refT=%d pc=$%04X",
@@ -866,7 +868,7 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 			}
 			_ = os.WriteFile(outDir+"/emu_CF80.bin", seq[:], 0644)
 			t.Logf("frame %d: dumped $CF80-$D0C0 sequencer region", frame)
-		case 5150, 5300, 6100, 7000, 8500, 10500, 12000, 14500, 17500, 20000, 25000:
+		case 5060, 5075, 5090, 5105, 5120, 5135, 5150, 5300, 6100, 7000, 8500, 8650, 8800, 10500, 12000, 14500, 17500, 20000, 25000:
 			shot(frame, "stage")
 		}
 		// Gameplay-progress record (#187 task 4): with the stackless-NMI

@@ -184,3 +184,86 @@ func TestLayer2_PaletteOffset640(t *testing.T) {
 		t.Errorf("640 offset 3: dst[0,1]=%#x,%#x, want 0x3A,0x3B", dst[0], dst[1])
 	}
 }
+
+// TestLayer2MidFrameScrollFold pins the raster-stamped scroll fold
+// (#187, Atic Atac's cinematic): a CPU that raster-waits and rewrites
+// the X scroll mid-frame must split the layer — rows whose raster line
+// precedes the write render with the old scroll, rows at/after it with
+// the new one. The FPGA samples the scroll registers combinationally
+// per pixel (layer2.vhd:152/:156), never once per frame.
+func TestLayer2MidFrameScrollFold(t *testing.T) {
+	f := newFakeBanks()
+	l := New(f)
+	l.SetActiveBank(9)
+	l.SetEnabled(true)
+
+	line := 0
+	l.SetRasterLineSource(func() int { return line })
+
+	// Frame execution: scroll 0 at the top, X scroll 8 written at raw
+	// raster line 100 (paper row 36).
+	line = 100
+	l.SetScrollX(8)
+
+	// Render bracket, as ULA.Render drives it.
+	l.FoldScrollStamps(false)
+	dst := make([]byte, Width)
+
+	// Paper row 0 (raster 64, before the write): frame-start scroll 0.
+	l.RenderScanline(0, dst)
+	if want := byte((9*7 + 0) & 0xFF); dst[0] != want {
+		t.Errorf("row 0 col 0: got %#x, want %#x (pre-write scroll 0)", dst[0], want)
+	}
+	// Paper row 40 (raster 104, after the write): scroll 8.
+	l.RenderScanline(40, dst)
+	if want := byte((9*7 + 40*256 + 8) & 0xFF); dst[0] != want {
+		t.Errorf("row 40 col 0: got %#x, want %#x (post-write scroll 8)", dst[0], want)
+	}
+	l.EndScrollCapture()
+
+	// Live registers unchanged by the render bracket.
+	if l.ScrollX() != 8 {
+		t.Errorf("live ScrollX = %d after render, want 8", l.ScrollX())
+	}
+
+	// Next render with no new writes: the fold deactivates (log
+	// consumed) and every row uses the live scroll again.
+	l.FoldScrollStamps(false)
+	l.RenderScanline(0, dst)
+	if want := byte((9*7 + 8) & 0xFF); dst[0] != want {
+		t.Errorf("next-frame row 0 col 0: got %#x, want %#x (live scroll 8)", dst[0], want)
+	}
+	l.EndScrollCapture()
+}
+
+// TestLayer2WideModeScrollFoldAnchor pins the wide-mode raster anchor:
+// in 320×256 (res 1) the layer row 0 scans at raw raster 32, so a write
+// stamped at raster 200 splits at layer row 168.
+func TestLayer2WideModeScrollFoldAnchor(t *testing.T) {
+	f := newFakeBanks()
+	l := New(f)
+	l.SetActiveBank(9)
+	l.SetEnabled(true)
+	l.SetResolution(1)
+
+	line := 0
+	l.SetRasterLineSource(func() int { return line })
+	line = 200
+	l.SetScrollY(1)
+
+	l.FoldScrollStamps(false)
+	dst := make([]byte, 320)
+
+	// Wide row 167 (raster 199): pre-write scroll Y 0. Column-major
+	// wide layout: byte offset = x*256 + y.
+	l.RenderScanline(167, dst)
+	if want := byte((9*7 + 167) & 0xFF); dst[0] != want {
+		t.Errorf("wide row 167 col 0: got %#x, want %#x (pre-write Y 0)", dst[0], want)
+	}
+	// Wide row 168 (raster 200): post-write scroll Y 1.
+	l.RenderScanline(168, dst)
+	if want := byte((9*7 + 169) & 0xFF); dst[0] != want {
+		t.Errorf("wide row 168 col 0: got %#x, want %#x (post-write Y 1)", dst[0], want)
+	}
+	l.EndScrollCapture()
+}

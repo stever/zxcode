@@ -713,8 +713,17 @@ func WireContentionDisable(d *nextregs.Dispatcher, mem *memory.Memory) {
 // WireLayer2 installs the NextReg 0x12 / 0x13 / 0x70 / scroll OnWrite
 // handlers. 0x12 / 0x13 select the active / shadow framebuffer
 // banks. NR$69 (Display Control — Layer 2 enable bit 7 among its ULA
-// bits) is owned by WireULAControl.
-func WireLayer2(d *nextregs.Dispatcher, l *layer2.Layer2) {
+// bits) is owned by WireULAControl. ulaNext, when it exposes
+// BeamPosition, supplies the raster clock that stamps mid-frame scroll
+// writes for the render's per-line fold (Atic Atac's raster-synced
+// NR$16/$71 split scroll, #187) — pass nil to keep unstamped scrolls.
+func WireLayer2(d *nextregs.Dispatcher, l *layer2.Layer2, ulaNext ULANextSink) {
+	if bp, ok := ulaNext.(interface{ BeamPosition() (int, int) }); ok {
+		l.SetRasterLineSource(func() int {
+			line, _ := bp.BeamPosition()
+			return line
+		})
+	}
 	d.SetOnWrite(0x12, func(disp *nextregs.Dispatcher, val byte) {
 		l.SetActiveBank(val)
 		// Per zxnext.vhd read NR$12 = '0' || active_bank(6:0).
@@ -1392,7 +1401,7 @@ func Wire(opts WireOpts) {
 		WireDivMMCEntryPoints(opts.Dispatcher, eps)
 	}
 	if opts.Layer2 != nil {
-		WireLayer2(opts.Dispatcher, opts.Layer2)
+		WireLayer2(opts.Dispatcher, opts.Layer2, opts.ULANext)
 		// Let memory's Layer-2 write/read paging track the live NR$12/$13
 		// banks for its redirect into Layer-2 RAM.
 		if opts.Memory != nil {
@@ -2337,24 +2346,6 @@ func WireReset(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcS
 	d.Store(0x02, resetType&0x03)
 	d.SetOnWrite(0x02, func(disp *nextregs.Dispatcher, val byte) {
 		triggerPC := cpu.PC // capture before any reset zeroes it
-		// Capture the bytes the CPU sees at the trigger PC BEFORE the reset
-		// remaps memory — reveals whether a $3BF5-style trigger is a
-		// divMMC-RAM NOP-slide (non-bank0 paging → zeros decoding as
-		// NEXTREG $02,$01) or a legitimate NEXTREG $02 in real code.
-		var trigBytes [0x20]byte
-		for i := range trigBytes {
-			trigBytes[i] = mem.Read(triggerPC - 0x1A + uint16(i))
-		}
-		// divMMC paging context captured PRE-reset (the reset re-arms EPs /
-		// deasserts CS, which can perturb post-reset reads).
-		divInfo := "n/a"
-		if q, ok := divmmcSPI.(interface {
-			LastE3() byte
-			IsPagedIn() bool
-		}); ok {
-			e3 := q.LastE3()
-			divInfo = fmt.Sprintf("paged=%v E3=$%02X bank=%d conmem=%v", q.IsPagedIn(), e3, e3&0x0F, e3&0x80 != 0)
-		}
 		// Fire on every write that has the trigger bit set — the FPGA
 		// does NOT use a bit-0→1-edge gate. The FPGA bootrom itself
 		// relies on this: it reads NR$02 back as $01 on cold boot
@@ -2364,6 +2355,37 @@ func WireReset(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcS
 		// the previously-stored value.
 		softFire := val&0x01 != 0
 		hardFire := val&0x02 != 0
+		// Soft-reset diagnostics for the slog.Debug at the end of the
+		// softFire branch, captured BEFORE the reset remaps memory.
+		// Gated on softFire: NR$02 is also the software-NMI pulse
+		// register — a copper NMI pacer (Atic Atac, ~416 writes/frame,
+		// #187) lands here per pulse, and capturing 32 memory reads +
+		// a Sprintf per pulse was the CPU loop's dominant allocation
+		// source (2 allocs per delivered NMI). trigBytes is a slice
+		// (allocated inside the branch), not a top-level array: the
+		// array form escapes into the slog call and Go heap-allocates
+		// it unconditionally at function entry.
+		var trigBytes []byte
+		divInfo := "n/a"
+		if softFire {
+			// The bytes the CPU sees at the trigger PC — reveals whether a
+			// $3BF5-style trigger is a divMMC-RAM NOP-slide (non-bank0
+			// paging → zeros decoding as NEXTREG $02,$01) or a legitimate
+			// NEXTREG $02 in real code.
+			trigBytes = make([]byte, 0x20)
+			for i := range trigBytes {
+				trigBytes[i] = mem.Read(triggerPC - 0x1A + uint16(i))
+			}
+			// divMMC paging context captured PRE-reset (the reset re-arms
+			// EPs / deasserts CS, which can perturb post-reset reads).
+			if q, ok := divmmcSPI.(interface {
+				LastE3() byte
+				IsPagedIn() bool
+			}); ok {
+				e3 := q.LastE3()
+				divInfo = fmt.Sprintf("paged=%v E3=$%02X bank=%d conmem=%v", q.IsPagedIn(), e3, e3&0x0F, e3&0x80 != 0)
+			}
+		}
 		// NR$02 bits 3/2 generate the Multiface / divMMC NMI
 		// (nextreg.txt:51-52): writing 1 fires the NMI and latches the
 		// read-back source bit; writing 0 clears the source bit without
@@ -2562,7 +2584,7 @@ func WireReset(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcS
 			slog.Debug("soft-reset complete (NR$03 preserved, divMMC EPs re-armed)",
 				"rom_bank", rb, "port7FFD", p7, "port1FFD", p1,
 				"trigger_pc", fmt.Sprintf("$%04X", triggerPC), "nr02_written", fmt.Sprintf("$%02X", val),
-				"trigger_bytes", fmt.Sprintf("% 02X", trigBytes[:]), "divMMC", divInfo,
+				"trigger_bytes", fmt.Sprintf("% 02X", trigBytes), "divMMC", divInfo,
 				"sp", fmt.Sprintf("$%04X", sp), "stack", fmt.Sprintf("% 02X", stk[:]))
 		}
 	})

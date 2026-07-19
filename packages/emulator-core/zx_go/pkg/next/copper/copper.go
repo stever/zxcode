@@ -126,6 +126,21 @@ type Copper struct {
 	// precompute a frame of copper execution; a generation bump tells
 	// them their schedule is stale.
 	gen uint32
+	// genHook, when set (SetGenerationHook), fires on every gen bump.
+	genHook func()
+
+	// noopRun caches, per program index, the length of the consecutive
+	// NOOP run starting there (0 for a non-NOOP). NOOPs have no side
+	// effects, so both engines advance a whole run with one add instead
+	// of one Decode per copper cycle — Atic Atac's pacer list is 687
+	// consecutive NOOPs out of a 1361-cycle wrap, stepped ~417 times
+	// per frame by the render pass (#187 performance). Lazily built by
+	// noopRuns(); invalidated by every program mutation (bumpGen).
+	noopRun   [MaxInstructions]int32
+	noopRunOK bool
+	// videoMoves caches HasVideoMoves() (gen-invalidated like noopRun).
+	videoMoves   bool
+	videoMovesOK bool
 
 	// startPhase, when set (SetStartPhaseSource), returns the current
 	// CPU position within the frame in COPPER CYCLES (28 MHz; 8 per
@@ -157,6 +172,102 @@ type Copper struct {
 // NR$60-$63 write (program data, cursor, start mode) — anything that
 // can change what a precomputed execution schedule would have done.
 func (c *Copper) Generation() uint32 { return c.gen }
+
+// SetGenerationHook installs a callback fired on every generation bump
+// (NR$60-$63 write). The NMI pacer uses it to void the CPU's ExtNMI
+// dispatch gate immediately, so its next-instruction poll observes the
+// bump and clears the stale schedule at once — the pre-gate "poll every
+// instruction" promptness, without polling every instruction.
+func (c *Copper) SetGenerationHook(fn func()) { c.genHook = fn }
+
+// bumpGen advances the mutation counter and fires the hook.
+func (c *Copper) bumpGen() {
+	c.gen++
+	c.noopRunOK = false
+	c.videoMovesOK = false
+	if c.genHook != nil {
+		c.genHook()
+	}
+}
+
+// HasVideoMoves reports whether the program contains any MOVE targeting
+// a register that can affect rendered output. MOVEs to NR$02 (reset /
+// NMI pulses — no video function; the production render writer filters
+// them to the CPU-timeline NMI pacer) and NR$7F (user scratch register)
+// cannot change a pixel, so a list containing only those — Atic Atac's
+// ~20 kHz NMI pacer: NOOP pads + MOVE NR$7F pads + one MOVE NR$02 —
+// lets the ULA render keep its coalesced fast stride even though copper
+// instructions retire on every line; per-half-pixel pacing exists to
+// place VIDEO writes at their raster instant (#187 performance). The
+// classification is program-level and conservative: any other MOVE
+// target (palette, scroll, NR$60-$63 self-modification, …) counts as
+// video-affecting. Gen-cached; a program with no video moves cannot
+// self-modify into one mid-render (NR$60-$63 are video-classified), so
+// the flag is stable across a render pass.
+func (c *Copper) HasVideoMoves() bool {
+	if !c.videoMovesOK {
+		c.videoMoves = false
+		for _, w := range c.program {
+			if w&0x8000 != 0 {
+				continue // WAIT/HALT
+			}
+			reg := byte((w >> 8) & 0x7F)
+			if reg == 0 {
+				continue // MOVE to NR$00 is the NOOP encoding family
+			}
+			if reg != 0x02 && reg != 0x7F {
+				c.videoMoves = true
+				break
+			}
+		}
+		c.videoMovesOK = true
+	}
+	return c.videoMoves
+}
+
+// skipInertDupMove reports whether the MOVE at program index pc may
+// skip its dispatcher write: it targets NR$7F (user scratch register —
+// no hardware function, no OnWrite handler) and the NEXT program word
+// is the IDENTICAL instruction, which will store the same value two
+// cycles later. Identical writes to a handler-less register are
+// idempotent, the CPU never runs between them (both engines execute at
+// render time), and the run's LAST write always lands — so the stored
+// NR$7F value is exact at every observable point even if the engine's
+// budget stops mid-run. Atic Atac's NMI pacer list pads with 336
+// consecutive `MOVE NR$7F,$00` entries (~140k dispatcher round-trips
+// per frame before this, the render pass's dominant copper cost, #187).
+func (c *Copper) skipInertDupMove(pc uint16) bool {
+	w := c.program[pc&(MaxInstructions-1)]
+	if (w>>8)&0x7F != 0x7F || w&0x8000 != 0 {
+		return false
+	}
+	return c.program[(pc+1)&(MaxInstructions-1)] == w
+}
+
+// noopRuns returns the NOOP-run-length table, rebuilding it after any
+// program mutation. Two backward passes over the wrapped index chain
+// resolve runs that cross the 1024-entry wrap; the length cap covers
+// the all-NOOP program (one full-list run — advancing a whole list of
+// NOOPs returns to the same pc, which is exactly what stepping does).
+func (c *Copper) noopRuns() *[MaxInstructions]int32 {
+	if !c.noopRunOK {
+		for pass := 0; pass < 2; pass++ {
+			for i := MaxInstructions - 1; i >= 0; i-- {
+				if Decode(c.program[i]).Op != OpNOOP {
+					c.noopRun[i] = 0
+					continue
+				}
+				rl := c.noopRun[(i+1)&(MaxInstructions-1)] + 1
+				if rl > MaxInstructions {
+					rl = MaxInstructions
+				}
+				c.noopRun[i] = rl
+			}
+		}
+		c.noopRunOK = true
+	}
+	return &c.noopRun
+}
 
 // New returns an empty copper.
 func New() *Copper { return &Copper{stopped: true, lineCycles: 456 * CyclesPerHcount} }
@@ -199,7 +310,7 @@ func (c *Copper) SetRegWriter(rw RegWriter) { c.regs = rw }
 // address patches just the low byte of that instruction, unlike the
 // NR$63 staged pair.
 func (c *Copper) WriteData(b byte) {
-	c.gen++
+	c.bumpGen()
 	i := (c.addr >> 1) & (MaxInstructions - 1)
 	if c.addr&1 == 0 {
 		c.stored = b // nr_copper_data_stored latches even bytes too (:5419)
@@ -217,7 +328,7 @@ func (c *Copper) WriteData(b byte) {
 // with write_8 = '0'), so the copper never executes a half-updated
 // instruction.
 func (c *Copper) WriteData16(b byte) {
-	c.gen++
+	c.bumpGen()
 	i := (c.addr >> 1) & (MaxInstructions - 1)
 	if c.addr&1 == 0 {
 		c.stored = b
@@ -239,7 +350,7 @@ func (c *Copper) WriteData16(b byte) {
 // reset-to-Welcome bug): the FPGA needs no separate pairing latch
 // for NR$60 and neither do we.
 func (c *Copper) SetWritePtrLow(b byte) {
-	c.gen++
+	c.bumpGen()
 	c.addr = (c.addr & 0x0700) | uint16(b)
 }
 
@@ -253,7 +364,7 @@ func (c *Copper) SetWritePtrLow(b byte) {
 // base/Copper test's Z80 line-animation patcher does every frame)
 // does not disturb the running program.
 func (c *Copper) SetWritePtrHighAndMode(b byte) {
-	c.gen++
+	c.bumpGen()
 	c.addr = (c.addr & 0x00FF) | (uint16(b&0x07) << 8)
 	mode := StartMode((b >> 6) & 0x03)
 	if mode == c.mode {
@@ -401,14 +512,21 @@ func (c *Copper) RunToCycle(vcount uint16, cycle int) {
 		inst := Decode(c.program[c.pc&(MaxInstructions-1)])
 		switch inst.Op {
 		case OpMOVE:
-			if c.regs != nil {
+			if c.regs != nil && !c.skipInertDupMove(c.pc) {
 				c.regs.WriteReg(inst.Reg, inst.Val)
 			}
 			c.pc = (c.pc + 1) & (MaxInstructions - 1)
 			c.linePos += 2
 		case OpNOOP:
-			c.pc = (c.pc + 1) & (MaxInstructions - 1)
-			c.linePos++
+			// Batch the whole side-effect-free NOOP run (n >= 1): NOOPs
+			// start while linePos <= cycle, one cycle each — identical
+			// to stepping them.
+			n := int(c.noopRuns()[c.pc&(MaxInstructions-1)])
+			if avail := cycle - c.linePos + 1; n > avail {
+				n = avail
+			}
+			c.pc = (c.pc + uint16(n)) & (MaxInstructions - 1)
+			c.linePos += n
 		case OpWAIT:
 			if inst.Y != vcount { // strict line equality (copper.vhd:94)
 				return
@@ -517,7 +635,7 @@ func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 		inst := Decode(c.program[c.pc&(MaxInstructions-1)])
 		switch inst.Op {
 		case OpMOVE:
-			if c.regs != nil {
+			if c.regs != nil && !c.skipInertDupMove(c.pc) {
 				c.regs.WriteReg(inst.Reg, inst.Val)
 			}
 			c.pc = (c.pc + 1) & (MaxInstructions - 1)
@@ -556,8 +674,15 @@ func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 			// dead across frames (RunToCycle parks the same way).
 			return executed
 		case OpNOOP:
-			c.pc = (c.pc + 1) & (MaxInstructions - 1)
-			spent++
+			// Batch the side-effect-free NOOP run (n >= 1): NOOPs start
+			// while spent < cycleBudget, one cycle each — identical to
+			// stepping them.
+			n := int(c.noopRuns()[c.pc&(MaxInstructions-1)])
+			if avail := cycleBudget - spent; n > avail {
+				n = avail
+			}
+			c.pc = (c.pc + uint16(n)) & (MaxInstructions - 1)
+			spent += n
 		}
 	}
 	// Free-running carry: the cycles the final instruction consumed
@@ -616,6 +741,50 @@ func (c *Copper) FrameMoveInstants(reg byte, lines, cyclesPerLine int) []MoveIns
 	}
 	sim := *c
 	var out []MoveInstant
+	// Uniform-run batching: the sim only OBSERVES MOVEs to reg — NOOPs
+	// and MOVEs to other registers just advance pc and cycles (NOOP 1,
+	// MOVE 2). Precompute, per program index, the length of the
+	// consecutive same-cost observation-free run starting there, so the
+	// per-line walk advances whole runs with one add instead of one
+	// Decode per copper cycle (a ~567k-cycle frame at the 28 MHz copper
+	// clock was the pacer's dominant per-frame cost, #187). Costs
+	// within a run are uniform, so the partial fit at a line's end is
+	// exact arithmetic: instructions start while spent < cyclesPerLine,
+	// the last may overrun — identical to stepping. runClass: 0 = event
+	// (WAIT/HALT/MOVE-to-reg, never batched), 1 = NOOP, 2 = other-MOVE
+	// (the class doubles as the per-instruction cycle cost).
+	var runLen [MaxInstructions]int32
+	var runClass [MaxInstructions]int8
+	for i := 0; i < MaxInstructions; i++ {
+		inst := Decode(sim.program[i])
+		switch {
+		case inst.Op == OpNOOP:
+			runClass[i] = 1
+		case inst.Op == OpMOVE && inst.Reg != reg:
+			runClass[i] = 2
+		}
+	}
+	// Two backward passes over the doubled index range resolve the
+	// wrap-around runs; lengths cap at MaxInstructions (an all-plain
+	// program is one full-list run).
+	for pass := 0; pass < 2; pass++ {
+		for i := MaxInstructions - 1; i >= 0; i-- {
+			if runClass[i] == 0 {
+				runLen[i] = 0
+				continue
+			}
+			next := (i + 1) & (MaxInstructions - 1)
+			if runClass[next] == runClass[i] {
+				rl := runLen[next] + 1
+				if rl > MaxInstructions {
+					rl = MaxInstructions
+				}
+				runLen[i] = rl
+			} else {
+				runLen[i] = 1
+			}
+		}
+	}
 	// Resume from the authoritative copper's carried intra-line phase
 	// (continuous pacing's linePos + stepCarry) instead of re-anchoring
 	// at cycle 0: the FPGA's free-running list is a perfectly continuous
@@ -664,7 +833,20 @@ func (c *Copper) FrameMoveInstants(reg byte, lines, cyclesPerLine int) []MoveIns
 		}
 	lineLoop:
 		for spent < cyclesPerLine {
-			inst := Decode(sim.program[sim.pc&(MaxInstructions-1)])
+			p := sim.pc & (MaxInstructions - 1)
+			// Observation-free run: advance as many of its uniform-cost
+			// instructions as can START inside this line's budget, in one
+			// arithmetic step. Behaviourally identical to stepping them.
+			if n := runLen[p]; n > 0 {
+				cost := int32(runClass[p])
+				if fit := (int32(cyclesPerLine-spent) + cost - 1) / cost; n > fit {
+					n = fit
+				}
+				sim.pc = (sim.pc + uint16(n)) & (MaxInstructions - 1)
+				spent += int(n * cost)
+				continue
+			}
+			inst := Decode(sim.program[p])
 			switch inst.Op {
 			case OpMOVE:
 				if inst.Reg == reg {

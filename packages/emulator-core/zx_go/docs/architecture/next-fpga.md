@@ -204,7 +204,19 @@ shape, zxnext.vhd:6543-6552). The pieces:
   column-major (NR$70), 9-bit X scroll, palette offset added per the
   VHDL, clip window. The address generation and pixel fetch are verbatim
   ports of layer2.vhd. Port $123B additionally maps Layer 2 banks into
-  CPU space for writing.
+  CPU space for writing. Mid-frame scroll changes (NR$16/$17/$71)
+  apply from their raster row via the same raster-stamped per-line
+  fold as the tilemap below (FoldScrollStamps / CaptureRowScroll,
+  bracketed by the compositor's FoldLayerScrolls): the FPGA re-latches
+  the scroll registers every 7 MHz pixel clock and feeds them into the
+  address generator combinationally (layer2.vhd:105-116 "capture
+  settings for pixel period", :152/:156), so a CPU raster-waiting on
+  NR$1E/$1F and rewriting NR$16/$71 splits the screen — Atic Atac's
+  cinematic scroll-text band and menu logo (#187). RenderScanline
+  swaps the row's folded values into the address path; the 256 mode's
+  raster anchor is the paper (row 0 = raster 64), the wide modes' the
+  320×256 frame (row 0 = raster 32). Pinned by
+  `TestLayer2MidFrameScrollFold` / `TestLayer2WideModeScrollFoldAnchor`.
 - Tilemap (`pkg/next/tilemap`): 40/80×32 tiles, 4bpp, optional per-tile
   attributes (palette offset, mirror X/Y, rotate, priority), 1bpp text
   mode, 512-tile mode, pixel scroll with torus wrap, clip. Bases from
@@ -362,6 +374,21 @@ shape, zxnext.vhd:6543-6552). The pieces:
   Pinned by TestCopperNMIPacerDeliversAtHardwareRate,
   TestNR02NMIGatedOnNR06, TestNR02DivMMCNMINeverNests,
   TestFrameMoveInstantsAticPacer, TestCopperNMIPacerEnvelopeReopen.
+  Performance shape (#187, browser 28 MHz): the ExtNMIFunc dispatch is
+  DEADLINE-GATED — after each poll the pacer converts its next
+  instant to the exact raw T-state it crosses (`CPU.ArmExtNMIDeadline`;
+  self-clearing on speed changes/frame origins, voided by the copper's
+  generation hook on any NR$60-$63 write) so the per-instruction and
+  per-HALT-T-state closure calls collapse to one integer compare
+  between instants, with delivery points bit-identical. The
+  simulation and render engines batch runs: `FrameMoveInstants`
+  precomputes uniform observation-free runs (NOOPs / MOVEs to other
+  regs) and advances them arithmetically; Step/RunToCycle batch NOOP
+  runs via a gen-cached run table and skip consecutive-identical
+  `MOVE NR$7F` pad writes (inert user register, last write always
+  lands); and rows are half-pixel-paced only when the program CAN
+  affect video (`Copper.HasVideoMoves` — MOVEs solely to NR$02/NR$7F
+  keep the coalesced stride, the pacer list's case).
 - Live-palette ULA render (`pkg/ula` renderNextULARow +
   `Compositor.ULARGBA`): on the Next, ULA inner-screen and border
   pixels resolve through the LIVE ULA palette exactly like the FPGA's

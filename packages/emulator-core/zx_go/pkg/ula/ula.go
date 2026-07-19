@@ -623,15 +623,16 @@ type nextPaletteSubLineReplay interface {
 	PaletteLineHasStamps(line int) bool
 }
 
-// nextTilemapScrollFold is the optional compositor extension for the
-// raster-stamped tilemap scroll: Render opens the bracket (fold CPU
-// stamps + start render-time capture), the compositor walk feeds
-// per-row captures of copper scroll writes, and the deferred End
-// re-enables CPU-write stamping after the wide passes.
-type nextTilemapScrollFold interface {
-	FoldTilemapScroll(stale bool)
-	CaptureTilemapRowScroll(rasterLine int)
-	EndTilemapScrollCapture()
+// nextLayerScrollFold is the optional compositor extension for the
+// raster-stamped layer scrolls (tilemap NR$2F/$30/$31 AND Layer 2
+// NR$16/$17/$71): Render opens the bracket (fold CPU stamps + start
+// render-time capture), the compositor walk feeds per-row captures of
+// copper scroll writes, and the deferred End re-enables CPU-write
+// stamping after the wide passes.
+type nextLayerScrollFold interface {
+	FoldLayerScrolls(stale bool)
+	CaptureLayerRowScroll(rasterLine int)
+	EndLayerScrollCapture()
 }
 
 // NextDAC is the contract for the four Spectrum Next DAC channels.
@@ -1224,20 +1225,22 @@ func (u *ULA) Render() *image.RGBA {
 		}
 	}
 
-	// Raster-stamped tilemap-scroll bracket (Next): fold the frame's
-	// CPU scroll stamps into the per-line table now, and capture the
+	// Raster-stamped layer-scroll bracket (Next): fold the frame's CPU
+	// scroll stamps into the per-line tables now, and capture the
 	// copper's render-time scroll writes per row as the walk proceeds
-	// (CaptureTilemapRowScroll from the paper/border passes) — so
-	// EVERY tilemap pass this render, the post-walk wide-L2 overpaint
+	// (CaptureLayerRowScroll from the paper/border passes) — so EVERY
+	// scrolled-layer pass this render, the post-walk wide passes
 	// included, applies the scroll in force at each row's raster line.
 	// RAMS band-scrolls the Galaxian player ship with per-line copper
-	// MOVEs to NR$30; the FPGA registers are combinational into the
-	// pixel pipeline (tilemap.vhd:326). The deferred End re-enables
-	// CPU-write stamping once the whole render (wide passes included)
-	// is done.
-	if tsf, ok := u.nextCompositor.(nextTilemapScrollFold); ok {
-		tsf.FoldTilemapScroll(stale)
-		defer tsf.EndTilemapScrollCapture()
+	// MOVEs to NR$30; Atic Atac raster-waits on NR$1E/$1F and rewrites
+	// the Layer 2 X scroll (NR$16/$71) mid-frame for its cinematic
+	// scroll-text band (#187). The FPGA registers are combinational
+	// into both pixel pipelines (tilemap.vhd:326; layer2.vhd:152/:156).
+	// The deferred End re-enables CPU-write stamping once the whole
+	// render (wide passes included) is done.
+	if tsf, ok := u.nextCompositor.(nextLayerScrollFold); ok {
+		tsf.FoldLayerScrolls(stale)
+		defer tsf.EndLayerScrollCapture()
 	}
 
 	// Build per-scanline border colour map from recorded changes.
@@ -2445,6 +2448,21 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		paced, _ = u.nextCopper.(nextCopperCyclePaced)
 		copperPeek, _ = u.nextCopper.(nextCopperLinePeek)
 	}
+	// Video-effect gate for the paced stride (#187 performance): a
+	// program whose MOVEs cannot touch video state (only NR$02 NMI
+	// pulses / NR$7F scratch — Atic Atac's free-running ~20 kHz NMI
+	// pacer list) retires instructions on EVERY line, but per-half-pixel
+	// pacing exists solely to place video writes at their raster
+	// instant, so such rows keep the coalesced fast stride and the
+	// copper advances at the row-end RunToCycle instead. A program with
+	// no video moves cannot self-modify into one mid-render (NR$60-$63
+	// count as video), so one program-level check covers the pass.
+	pacedVideo := true
+	if paced != nil {
+		if vm, ok := paced.(interface{ HasVideoMoves() bool }); ok {
+			pacedVideo = vm.HasVideoMoves()
+		}
+	}
 	// The 512-half-pixel compose passes: the FUSED live pass (state read
 	// per half-pixel inside the copper interleave — the real
 	// compositor) and the sub=2 row pass (reduced test mocks). Mocks
@@ -2472,7 +2490,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// The tilemap-scroll fold/capture bracket was opened by Render
 	// (nextTilemapScrollFold) before any compositor pass; this walk
 	// feeds it per-row captures below.
-	scrollCap, _ := u.nextCompositor.(nextTilemapScrollFold)
+	scrollCap, _ := u.nextCompositor.(nextLayerScrollFold)
 	// Raster order of one display row's border pixels (hcount = pixel+12,
 	// 448 hcounts per line): the left border's first 20 pixels display
 	// during the PREVIOUS line's tail (hcount 428..447) and its last 12
@@ -2577,11 +2595,11 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			// stale-looking ships). Row granularity: a mid-row MOVE lands
 			// on the next row, the render's documented line quantum.
 			if scrollCap != nil {
-				scrollCap.CaptureTilemapRowScroll(64 + y)
+				scrollCap.CaptureLayerRowScroll(64 + y)
 			}
 			u.nextCopper.Step(uint16(y), 455, copperCyclesPerScanline)
 		} else if scrollCap != nil {
-			scrollCap.CaptureTilemapRowScroll(64 + y)
+			scrollCap.CaptureLayerRowScroll(64 + y)
 		}
 		rowStart := (u.borderTop+y)*u.img.Stride + BorderLeft*u.xs*4
 		pushPriority(u.ulaVideoLine[u.borderTop+y].nr15)
@@ -2596,7 +2614,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		// identical output, since nothing can change between the two
 		// halves' lookups.
 		rowPaced := false
-		if paced != nil && (copperPeek == nil || copperPeek.CanRetireOnLine(uint16(y))) {
+		if paced != nil && pacedVideo && (copperPeek == nil || copperPeek.CanRetireOnLine(uint16(y))) {
 			rowPaced = true
 		}
 		// Half-pixel-distinct content: fine-scroll-X shifts the source
@@ -2753,7 +2771,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			// BEFORE this line's copper ops — the start-of-line state
 			// (see the paper walk's capture comment).
 			if imgRow >= 0 && scrollCap != nil {
-				scrollCap.CaptureTilemapRowScroll(imgRow + 32)
+				scrollCap.CaptureLayerRowScroll(imgRow + 32)
 			}
 			// Stamped-palette replay for the sweep rows. Bottom border
 			// rows scan at raster v+64, straight after the paper. The
@@ -2780,7 +2798,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			// == end state, provably identical). Frame pixels 0..19 of
 			// a border row displayed during the PREVIOUS line's tail
 			// (hcount 428..447), so they take the line-START state.
-			rowEvents := paced != nil && liveULA && imgRow >= 0 &&
+			rowEvents := paced != nil && pacedVideo && liveULA && imgRow >= 0 &&
 				(copperPeek == nil || copperPeek.CanRetireOnLine(uint16(v)))
 			if rowEvents {
 				pushSelect(u.ulaVideoLine[imgRow].ulaPalSecond)

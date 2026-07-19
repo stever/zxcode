@@ -151,6 +151,19 @@ type CPU struct {
 	// machine deadlocks.
 	ExtNMIFunc func(tstates uint64)
 
+	// extNMIDeadline gates the ExtNMIFunc dispatch: the callback is
+	// only invoked once the raw T-state counter reaches this value.
+	// 0 (the default) means "poll at every sample point" — exactly the
+	// pre-deadline behaviour, so callers that never arm it see no
+	// change. A pacer whose next scheduled instant is far away arms the
+	// deadline (ArmExtNMIDeadline) after each poll, collapsing the
+	// per-instruction (and per-HALT-T-state) closure dispatch — the
+	// wasm build's dominant per-instruction overhead at 28 MHz (#187)
+	// — into one integer compare. The deadline self-clears at every
+	// point the raw↔reference mapping it was computed under changes:
+	// foldRefClock (speed changes, frame wrap) and each frame origin.
+	extNMIDeadline uint64
+
 	// IntAckFunc, when non-nil, is consulted at IM 2 interrupt
 	// acceptance for the data-bus vector byte. On the Spectrum Next
 	// in hardware-IM2 vectored mode (NR$C0 bit 0) the im2 daisy chain
@@ -820,6 +833,11 @@ func (c *CPU) SetRETNHook(fn func()) { c.retnHook = fn }
 func (c *CPU) foldRefClock() {
 	c.refClock8 += (c.tstates - c.refMark) * 8 / uint64(c.SpeedMultiplier())
 	c.refMark = c.tstates
+	// The raw↔reference mapping just changed (speed change or frame
+	// wrap): any armed ExtNMI deadline was computed under the old
+	// segment and is void — force a poll at the next sample point so
+	// the owner re-arms against the new mapping.
+	c.extNMIDeadline = 0
 }
 
 // RefTstates returns the CPU timeline in 3.5 MHz-reference T-states: raw
@@ -845,6 +863,35 @@ func (c *CPU) Ref8Tstates() uint64 {
 // stamping) derives from it so raster reads and interrupt placement can
 // never drift apart.
 func (c *CPU) FrameOriginRefTstates() uint64 { return c.frameOriginRef }
+
+// ArmExtNMIDeadline converts an absolute 28 MHz-reference instant
+// (Ref8Tstates timeline) into the EARLIEST raw T-state at which
+// Ref8Tstates() >= ref8 under the current speed segment, and arms the
+// ExtNMIFunc dispatch gate with it: sample points before that raw
+// T-state skip the callback. Exactness matters — the gated poll must
+// fire at the same instruction end it would have without the gate.
+// Ref8Tstates() = refClock8 + (tstates-refMark)*8/mult (floor), so
+// Ref8 >= ref8 ⇔ tstates >= refMark + ceil((ref8-refClock8)*mult/8).
+// The gate self-clears whenever the segment mapping changes
+// (foldRefClock) and at every frame origin, forcing a re-arming poll.
+func (c *CPU) ArmExtNMIDeadline(ref8 uint64) {
+	if ref8 <= c.refClock8 {
+		c.extNMIDeadline = 0
+		return
+	}
+	d := ref8 - c.refClock8
+	c.extNMIDeadline = c.refMark + (d*uint64(c.SpeedMultiplier())+7)/8
+}
+
+// DisarmExtNMIDeadline parks the ExtNMIFunc gate at "no pending
+// instant": no further polls until a KickExtNMIDeadline, a speed
+// change, or the next frame origin (all of which clear the gate).
+func (c *CPU) DisarmExtNMIDeadline() { c.extNMIDeadline = ^uint64(0) }
+
+// KickExtNMIDeadline clears the ExtNMIFunc gate so the very next
+// sample point polls — the owner's invalidation hook (schedule
+// changed, source reprogrammed).
+func (c *CPU) KickExtNMIDeadline() { c.extNMIDeadline = 0 }
 
 // setSpeed applies a validated speed selector: it folds the reference
 // clock at the outgoing speed and rescales any in-flight ExecuteFrame
@@ -1048,6 +1095,10 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	budget := uint64(tstatesPerFrame) * uint64(c.SpeedMultiplier())
 	frameStart := c.tstates
 	c.frameOriginRef = c.RefTstates()
+	// New frame origin: clear the ExtNMI gate so a schedule keyed to
+	// the frame origin (the copper NMI pacer's per-frame rebuild) gets
+	// its poll on the frame's first sample point.
+	c.extNMIDeadline = 0
 	c.frameEnd = c.tstates + budget
 	// Keep the step path's frame bookkeeping in sync. nextFrameBoundary
 	// is otherwise only maintained by StepInstructionWithIRQ itself, so
@@ -1129,8 +1180,10 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 		}
 		// External NMI sources (copper NR$02 pacer): polled here so they
 		// keep running while the CPU is halted — the halted branch below
-		// only consumes PendingNMI, it never fetches instructions.
-		if c.ExtNMIFunc != nil {
+		// only consumes PendingNMI, it never fetches instructions. The
+		// extNMIDeadline gate skips the dispatch until the source's next
+		// scheduled instant (see ArmExtNMIDeadline); 0 = poll always.
+		if c.ExtNMIFunc != nil && c.tstates >= c.extNMIDeadline {
 			c.ExtNMIFunc(c.tstates)
 		}
 		// INT sample point — equivalent to the Z80's M1-boundary
@@ -1213,8 +1266,9 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 		// the loop-top poll it would be seen one instruction late
 		// (the poll precedes execution, the consume follows it), a
 		// systematic ~one-instruction delivery lag against the
-		// copper NR$02 pacer's lattice (#187).
-		if c.ExtNMIFunc != nil {
+		// copper NR$02 pacer's lattice (#187). Same deadline gate as
+		// the loop-top poll.
+		if c.ExtNMIFunc != nil && c.tstates >= c.extNMIDeadline {
 			c.ExtNMIFunc(c.tstates)
 		}
 		// NMI check after each instruction (NMI is non-maskable)
@@ -1512,6 +1566,7 @@ func (c *CPU) StepInstructionWithIRQ() {
 		}
 		c.nextFrameBoundary = ((c.tstates / frameBudget) + 1) * frameBudget
 		c.frameOriginRef = c.RefTstates()
+		c.extNMIDeadline = 0 // new frame origin — see ExecuteFrame
 		c.lineIntFired = false
 		c.frameIntFired = false
 		c.frameIntDeasct = false
@@ -1545,7 +1600,7 @@ func (c *CPU) StepInstructionWithIRQ() {
 	if c.ExtIntFunc != nil && c.ExtIntFunc(c.tstates) {
 		c.IRQPending.Store(true)
 	}
-	if c.ExtNMIFunc != nil {
+	if c.ExtNMIFunc != nil && c.tstates >= c.extNMIDeadline {
 		c.ExtNMIFunc(c.tstates)
 	}
 

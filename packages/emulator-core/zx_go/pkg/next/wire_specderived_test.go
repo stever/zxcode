@@ -1011,7 +1011,7 @@ func TestSpec_NR6F_TilesBase_Bit6Dropped(t *testing.T) {
 func TestSpec_NR70_Layer2Resolution_ReservedBitsMasked(t *testing.T) {
 	disp := nextregs.New()
 	l := layer2.New(nil)
-	WireLayer2(disp, l)
+	WireLayer2(disp, l, nil)
 
 	disp.WriteReg(0x70, 0xFF)
 	if got := disp.ReadReg(0x70); got != 0x3F {
@@ -1038,7 +1038,7 @@ func TestSpec_NR70_Layer2Resolution_ReservedBitsMasked(t *testing.T) {
 func TestSpec_NR71_Layer2ScrollX_OnlyBit0(t *testing.T) {
 	disp := nextregs.New()
 	WirePeripheralMasks(disp)
-	WireLayer2(disp, layer2.New(nil))
+	WireLayer2(disp, layer2.New(nil), nil)
 
 	disp.WriteReg(0x71, 0xFF)
 	if got := disp.ReadReg(0x71); got != 0x01 {
@@ -1234,7 +1234,7 @@ func TestSpec_NR1C_ClipIdxReset_ReadsPackedIndices(t *testing.T) {
 func TestSpec_NR12_Layer2ActiveBank_Bit7Reserved(t *testing.T) {
 	disp := nextregs.New()
 	l := layer2.New(nil)
-	WireLayer2(disp, l)
+	WireLayer2(disp, l, nil)
 
 	disp.WriteReg(0x12, 0xFF)
 	got := disp.ReadReg(0x12)
@@ -1251,7 +1251,7 @@ func TestSpec_NR12_Layer2ActiveBank_Bit7Reserved(t *testing.T) {
 func TestSpec_NR13_Layer2ShadowBank_Bit7Reserved(t *testing.T) {
 	disp := nextregs.New()
 	l := layer2.New(nil)
-	WireLayer2(disp, l)
+	WireLayer2(disp, l, nil)
 
 	disp.WriteReg(0x13, 0xFF)
 	got := disp.ReadReg(0x13)

@@ -94,7 +94,35 @@ type copperNMIPacer struct {
 const quietRebuildM1s = 64
 
 func newCopperNMIPacer(cop *copper.Copper, cpu *z80.CPU, mem *memory.Memory, disp *nextregs.Dispatcher) *copperNMIPacer {
-	return &copperNMIPacer{cop: cop, cpu: cpu, mem: mem, disp: disp}
+	p := &copperNMIPacer{cop: cop, cpu: cpu, mem: mem, disp: disp}
+	// Deadline-gated dispatch (#187 performance): after each poll the
+	// pacer arms the CPU's ExtNMI gate with its next instant, so the
+	// per-instruction (and per-HALT-T-state) closure call collapses to
+	// an integer compare between instants — the wasm build's dominant
+	// per-instruction overhead at 28 MHz. Any copper reprogramming
+	// voids the gate at once so the next sample point re-polls and the
+	// stale schedule clears with pre-gate promptness.
+	cop.SetGenerationHook(cpu.KickExtNMIDeadline)
+	return p
+}
+
+// armDeadline publishes the pacer's next pending instant into the
+// CPU's ExtNMI dispatch gate: the next poll happens exactly at the
+// first sample point whose reference time reaches that instant —
+// the same point the ungated per-instruction poll would have fired.
+// With nothing pending the gate parks until the next frame origin
+// (the CPU clears it there; the origin poll rebuilds the schedule).
+// Never armed while dirty: the quiet-gap counter needs every sample
+// point.
+func (p *copperNMIPacer) armDeadline(origin uint64) {
+	if p.dirty {
+		return
+	}
+	if p.idx >= len(p.instants) {
+		p.cpu.DisarmExtNMIDeadline()
+		return
+	}
+	p.cpu.ArmExtNMIDeadline(uint64(p.instants[p.idx]) + origin*8)
 }
 
 // poll is the CPU's ExtNMIFunc: called at every instruction's INT
@@ -155,6 +183,7 @@ func (p *copperNMIPacer) poll(_ uint64) {
 		p.rebuild()
 	}
 	if p.idx >= len(p.instants) {
+		p.armDeadline(origin)
 		return
 	}
 	// 28 MHz-granular comparison: an instant fires once the reference
@@ -168,6 +197,7 @@ func (p *copperNMIPacer) poll(_ uint64) {
 		p.disp.WriteReg(0x02, p.vals[p.idx])
 		p.idx++
 	}
+	p.armDeadline(origin)
 }
 
 // noteEnvelopeReopen models the FPGA NMI arbiter's mid-RETN gate
@@ -193,10 +223,17 @@ func (p *copperNMIPacer) poll(_ uint64) {
 // their write (those paths are not gated by this arbiter latch).
 func (p *copperNMIPacer) noteEnvelopeReopen(reopen8 uint64) {
 	origin8 := p.cpu.FrameOriginRefTstates() * 8
+	dropped := false
 	for p.idx < len(p.instants) &&
 		uint64(p.instants[p.idx])+origin8 < reopen8 &&
 		p.vals[p.idx] == 0x04 {
 		p.idx++
+		dropped = true
+	}
+	// The armed dispatch gate points at a dropped instant now — void it
+	// so the next sample point re-polls and re-arms on the new head.
+	if dropped {
+		p.cpu.KickExtNMIDeadline()
 	}
 }
 

@@ -727,32 +727,42 @@ func (c *Compositor) EndPaletteReplay() {
 	}
 }
 
-// FoldTilemapScroll builds the tilemap's per-raster-line scroll table
-// from the frame's stamped NR$2F/$30/$31 writes, so every tilemap row
-// pass this render (inner, border, wide-L2 overpaint) applies mid-frame
-// scroll changes from their raster row (tilemap.FoldScrollStamps).
+// FoldLayerScrolls builds the scrolled layers' per-raster-line scroll
+// tables from the frame's stamped writes — the tilemap's NR$2F/$30/$31
+// and Layer 2's NR$16/$17/$71 — so every layer pass this render (inner,
+// border, wide passes) applies mid-frame scroll changes from their
+// raster row (tilemap.FoldScrollStamps / layer2.FoldScrollStamps).
 // Called by the ULA at the top of its compositor pass, alongside the
 // palette replay bracket.
-func (c *Compositor) FoldTilemapScroll(stale bool) {
+func (c *Compositor) FoldLayerScrolls(stale bool) {
 	if c.tilemap != nil {
 		c.tilemap.FoldScrollStamps(stale)
 	}
-}
-
-// CaptureTilemapRowScroll snapshots the copper's render-time scroll for
-// one raster line (tilemap.CaptureRowScroll) — fed per row by the ULA's
-// compositor walk.
-func (c *Compositor) CaptureTilemapRowScroll(rasterLine int) {
-	if c.tilemap != nil {
-		c.tilemap.CaptureRowScroll(rasterLine)
+	if c.l2 != nil {
+		c.l2.FoldScrollStamps(stale)
 	}
 }
 
-// EndTilemapScrollCapture closes the render bracket opened by
-// FoldTilemapScroll (deferred from ULA.Render, after the wide passes).
-func (c *Compositor) EndTilemapScrollCapture() {
+// CaptureLayerRowScroll snapshots the copper's render-time scroll for
+// one raster line (tilemap/layer2 CaptureRowScroll) — fed per row by
+// the ULA's compositor walk.
+func (c *Compositor) CaptureLayerRowScroll(rasterLine int) {
+	if c.tilemap != nil {
+		c.tilemap.CaptureRowScroll(rasterLine)
+	}
+	if c.l2 != nil {
+		c.l2.CaptureRowScroll(rasterLine)
+	}
+}
+
+// EndLayerScrollCapture closes the render bracket opened by
+// FoldLayerScrolls (deferred from ULA.Render, after the wide passes).
+func (c *Compositor) EndLayerScrollCapture() {
 	if c.tilemap != nil {
 		c.tilemap.EndScrollCapture()
+	}
+	if c.l2 != nil {
+		c.l2.EndScrollCapture()
 	}
 }
 

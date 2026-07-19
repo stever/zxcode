@@ -58,7 +58,48 @@ type Layer2 struct {
 	// note Y2=191, which is why wide-mode software must widen the
 	// window itself to see rows 192-255.
 	clipX1, clipX2, clipY1, clipY2 byte
+
+	// Raster-stamped mid-frame scroll (see logScroll/FoldScrollStamps —
+	// the same machinery as pkg/next/tilemap): the FPGA feeds the scroll
+	// registers into the Layer 2 address generator combinationally
+	// (layer2.vhd:152 x_pre = hc_eff + scroll_x, :156 y_pre = vc_eff +
+	// scroll_y — sampled per pixel, no per-frame latch), so a CPU that
+	// raster-waits on NR$1E/$1F and rewrites NR$16/$71 mid-frame splits
+	// the screen: rows above the write keep the old scroll, rows below
+	// take the new one (Atic Atac's cinematic scroll-text band, #187).
+	// The per-line fold lets the render apply each row's scroll from its
+	// raster row instead of one end-of-frame value for all rows.
+	rasterLine     func() int
+	scrollStamps   []scrollStamp
+	scrollOverflow bool
+	scrollConsumed bool
+	foldActive     bool
+	// captureActive marks the render bracket (FoldScrollStamps →
+	// EndScrollCapture): scroll writes inside it are the COPPER's
+	// render-time MOVEs — not stamped as CPU writes, but captured per
+	// row into the table by CaptureRowScroll once dirty.
+	captureActive bool
+	captureDirty  bool
+	scrollXLine   [frameRasterLines]uint16
+	scrollYLine   [frameRasterLines]byte
 }
+
+// scrollStamp is one raster-stamped mid-frame scroll write.
+type scrollStamp struct {
+	line   int // raw raster line (paper top = 64, BeamPosition convention)
+	isY    bool
+	oldVal uint16
+	newVal uint16
+}
+
+// frameRasterLines bounds the per-line scroll fold (311 raster lines on
+// 128K/Next timing; 312 leaves headroom for the 48K's 312).
+const frameRasterLines = 312
+
+// maxScrollStamps caps the per-frame log; overflow degrades that frame
+// to the end-of-frame scroll resolution instead of growing without
+// limit.
+const maxScrollStamps = 512
 
 // New constructs a Layer 2 reader backed by the given memory bus.
 // Disabled by default — guest code (or test code) flips it on
@@ -131,16 +172,162 @@ func (l *Layer2) PaletteOffset() byte { return l.paletteOffset }
 
 // SetScrollX installs the 9-bit Layer 2 X scroll (NR$71 bit0 || NR$16). Only
 // the low 9 bits are kept. Feeds the FPGA address generator (layer2.vhd:152).
-func (l *Layer2) SetScrollX(v uint16) { l.scrollX = v & 0x1FF }
+// When a raster-line source is wired (SetRasterLineSource) each write is
+// stamped with the beam line so FoldScrollStamps can apply mid-frame changes
+// from their raster row.
+func (l *Layer2) SetScrollX(v uint16) {
+	v &= 0x1FF
+	l.logScroll(false, l.scrollX, v)
+	l.scrollX = v
+}
 
 // ScrollX returns the current 9-bit X scroll.
 func (l *Layer2) ScrollX() uint16 { return l.scrollX }
 
 // SetScrollY installs the 8-bit Layer 2 Y scroll (NR$17, layer2.vhd:156).
-func (l *Layer2) SetScrollY(v byte) { l.scrollY = v }
+// Raster-stamped like SetScrollX.
+func (l *Layer2) SetScrollY(v byte) {
+	l.logScroll(true, uint16(l.scrollY), uint16(v))
+	l.scrollY = v
+}
 
 // ScrollY returns the current 8-bit Y scroll.
 func (l *Layer2) ScrollY() byte { return l.scrollY }
+
+// SetRasterLineSource wires the raster-line clock (the ULA's
+// BeamPosition line) that stamps each scroll write. Nil disables
+// stamping — SetScrollX/Y then behave exactly as before.
+func (l *Layer2) SetRasterLineSource(fn func() int) { l.rasterLine = fn }
+
+// logScroll records a scroll write with the current raster stamp. The
+// FPGA's scroll registers feed the address generator combinationally
+// (layer2.vhd:152/:156), so a mid-frame write re-anchors the layer from
+// the next pixel — Atic Atac raster-waits on NR$1E/$1F and rewrites
+// NR$16/$71 at cvc 184 for its cinematic scroll-text band (#187).
+func (l *Layer2) logScroll(isY bool, old, new uint16) {
+	if l.rasterLine == nil || old == new {
+		return
+	}
+	// Render-time (copper MOVE) write: no CPU stamp — the walk captures
+	// the live value per row from here on (CaptureRowScroll).
+	if l.captureActive {
+		l.captureDirty = true
+		return
+	}
+	// First write after a fold consumed the log: start a fresh frame.
+	if l.scrollConsumed {
+		l.scrollStamps = l.scrollStamps[:0]
+		l.scrollConsumed = false
+		l.scrollOverflow = false
+	}
+	if len(l.scrollStamps) >= maxScrollStamps {
+		l.scrollOverflow = true
+		return
+	}
+	l.scrollStamps = append(l.scrollStamps, scrollStamp{
+		line: l.rasterLine(), isY: isY, oldVal: old, newVal: new,
+	})
+}
+
+// FoldScrollStamps builds the per-raster-line scroll table from the
+// frame's stamped writes, activating per-row scroll for the render
+// passes. With no stamps (the common case) the fold deactivates and
+// RenderScanline uses the live registers — zero cost, identical to the
+// pre-stamp behaviour. A STALE fold (no execution since the last
+// render — the harness screenshot path) replays the consumed log
+// identically; a fresh fold with an already-consumed log means the
+// frame wrote no scroll — the log is dropped.
+func (l *Layer2) FoldScrollStamps(stale bool) {
+	l.foldActive = false
+	if l.rasterLine == nil {
+		return
+	}
+	// Open the render bracket: scroll writes from here to
+	// EndScrollCapture are the copper's render-time MOVEs.
+	l.captureActive = true
+	l.captureDirty = false
+	if !stale && l.scrollConsumed {
+		l.scrollStamps = l.scrollStamps[:0]
+		l.scrollConsumed = false
+		l.scrollOverflow = false
+	}
+	if l.scrollOverflow || len(l.scrollStamps) == 0 {
+		l.scrollStamps = l.scrollStamps[:0]
+		l.scrollOverflow = false
+		// No CPU stamps: prefill the table with the live scroll so
+		// per-row copper captures overlay a correct baseline (rows
+		// before the copper's first write keep the frame value).
+		for line := 0; line < frameRasterLines; line++ {
+			l.scrollXLine[line], l.scrollYLine[line] = l.scrollX, l.scrollY
+		}
+		return
+	}
+	// Frame-start values: each stamp records the value it replaced, so
+	// the first stamp per axis carries the frame-start state.
+	x, y := l.scrollX, l.scrollY
+	seenX, seenY := false, false
+	for _, s := range l.scrollStamps {
+		if s.isY && !seenY {
+			y, seenY = byte(s.oldVal), true
+		}
+		if !s.isY && !seenX {
+			x, seenX = s.oldVal, true
+		}
+	}
+	idx := 0
+	for line := 0; line < frameRasterLines; line++ {
+		for idx < len(l.scrollStamps) && l.scrollStamps[idx].line <= line {
+			if l.scrollStamps[idx].isY {
+				y = byte(l.scrollStamps[idx].newVal)
+			} else {
+				x = l.scrollStamps[idx].newVal
+			}
+			idx++
+		}
+		l.scrollXLine[line], l.scrollYLine[line] = x, y
+	}
+	l.scrollConsumed = true
+	l.foldActive = true
+}
+
+// CaptureRowScroll snapshots the LIVE scroll into the per-line table
+// for one raster line, once a render-time (copper) scroll write made
+// the live registers diverge from the fold. Called by the ULA's walk
+// after the copper ran for each row, in raster order.
+func (l *Layer2) CaptureRowScroll(rasterLine int) {
+	if !l.captureActive || !l.captureDirty {
+		return
+	}
+	if rasterLine < 0 || rasterLine >= frameRasterLines {
+		return
+	}
+	l.scrollXLine[rasterLine], l.scrollYLine[rasterLine] = l.scrollX, l.scrollY
+	l.foldActive = true
+}
+
+// EndScrollCapture closes the render bracket: scroll writes are CPU
+// (execution-time) writes again and get raster-stamped.
+func (l *Layer2) EndScrollCapture() { l.captureActive = false }
+
+// scrollForRow returns the folded scroll pair for the layer row y
+// RenderScanline is drawing, or the live registers when no mid-frame
+// write was stamped this frame. Raster mapping follows the layer's
+// vertical anchor: the 256×192 mode is paper-aligned (row 0 = raster
+// 64), the wide modes span the full 320×256 display (row 0 = raster
+// 32) — the same whc/wvc counters the tilemap and sprites use.
+func (l *Layer2) scrollForRow(y int) (uint16, byte) {
+	if !l.foldActive {
+		return l.scrollX, l.scrollY
+	}
+	r := y + 64
+	if l.resolution != 0 {
+		r = y + 32
+	}
+	if r < 0 || r >= frameRasterLines {
+		return l.scrollX, l.scrollY
+	}
+	return l.scrollXLine[r], l.scrollYLine[r]
+}
 
 // fpgaFrameAddr is the faithful port of the Layer 2 framebuffer-address
 // generator (video/layer2.vhd:145-167). Given the effective raster coordinate
@@ -305,6 +492,20 @@ func (l *Layer2) RenderScanline(y int, dst []byte) {
 	w := l.LineWidth()
 	if y < 0 || y >= l.LineHeight() || len(dst) < w {
 		return
+	}
+	// Per-row folded scroll (mid-frame CPU/copper scroll writes): swap
+	// the row's raster-stamped values into the live fields for the
+	// duration of this row's address math, restoring after. fpgaFrameAddr
+	// reads the fields directly, so the swap keeps the golden-verified
+	// address path untouched. No-op unless a write was stamped this
+	// frame (foldActive).
+	if l.foldActive {
+		rx, ry := l.scrollForRow(y)
+		if rx != l.scrollX || ry != l.scrollY {
+			saveX, saveY := l.scrollX, l.scrollY
+			l.scrollX, l.scrollY = rx, ry
+			defer func() { l.scrollX, l.scrollY = saveX, saveY }()
+		}
 	}
 	if !l.enabled {
 		// Production callers (the compositor) short-circuit BEFORE
