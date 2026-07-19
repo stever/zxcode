@@ -1,5 +1,6 @@
 {
   "nav": {
+    "loadFile": "Načíst soubor",
     "fullScreen": "Celá obrazovka",
     "view": "Zobrazit",
     "info": "Informace",

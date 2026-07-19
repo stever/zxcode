@@ -1,5 +1,6 @@
 {
   "nav": {
+    "loadFile": "Încarcă fișier",
     "fullScreen": "Ecran complet",
     "view": "Vizualizare",
     "info": "Informații",

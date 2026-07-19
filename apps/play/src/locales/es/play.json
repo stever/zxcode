@@ -1,5 +1,6 @@
 {
   "nav": {
+    "loadFile": "Cargar archivo",
     "fullScreen": "Pantalla completa",
     "view": "Ver",
     "info": "Información",

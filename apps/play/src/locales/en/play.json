@@ -1,5 +1,6 @@
 {
   "nav": {
+    "loadFile": "Load File",
     "fullScreen": "Full Screen",
     "view": "View",
     "info": "Info",

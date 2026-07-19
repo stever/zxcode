@@ -121,14 +121,17 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
                     dispatch(setMachine('next'));
                 }
             },
-            {
-                label: t('nav.loadFile', 'Load file...'),
-                icon: 'pi pi-fw pi-folder-open',
-                command: () => {
-                    dispatch(showOpenFileDialog());
-                }
-            },
         ]
+    };
+
+    // Top-level, not tucked inside Machine: loading a program is the site's
+    // primary action and players were missing it in the submenu (#191).
+    const loadFileButton = {
+        label: t('nav.loadFile', 'Load File'),
+        icon: 'pi pi-fw pi-folder-open',
+        command: () => {
+            dispatch(showOpenFileDialog());
+        }
     };
 
     const resetButton = {
@@ -161,6 +164,7 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
     };
 
     return [
+        loadFileButton,
         viewMenu,
         machineMenu,
         joystickMenu,
