@@ -62,7 +62,7 @@ Exports (`wasm_js.go`, all globals; `zxReady` is set last):
 | --- | --- |
 | Boot / machine | `zxRegisterROM(name, bytes)`, `zxBootNext(sd)`, `zxBoot48()`, `zxBoot128()`, `zxBoot(model)`, `zxReset()`, `zxModel()` |
 | Frame / audio | `zxFrame(dst?) → {w,h,debug,paused,pc}`, `zxPullAudio(dst) → n`, `zxFastBoot()`, `zxMacroActive()`, `zxMacroProgress() → 0..1 \| -1` |
-| Input | `zxMatrixKey(row, mask, down)`, `zxType(rune)`, `zxKeyName(name, down, shift)` |
+| Input | `zxMatrixKey(row, mask, down)`, `zxType(rune)`, `zxKeyName(name, down, shift)`, `zxJoystickType(name) → "" \| err`, `zxJoystickState(bits)` |
 | Tape | `zxLoadTap`, `zxTapeInsert`, `zxTapePlay`, `zxTapeStop`, `zxTapeStatus`, `zxTapeTraps` |
 | Programs / files | `zxLoadSnapshot(bytes, ext)`, `zxRunNex(name, bytes)`, `zxRunBas(name, bytes)`, `zxPutFile(path, bytes)` |
 | Debug | `zxDebugAttach/Detach`, `zxDebugCmd(line)`, `zxDebugState`, `zxDebugMem`, `zxDebugDisasm`, `zxDebugPaging`, `zxDebugStepFrame` |
@@ -98,6 +98,20 @@ replacement for the JSSpeccy3 Emulator class:
   modules).
 - Keyboard: a worker-shaped shim feeds the JSSpeccy3 KeyboardHandler's
   `{row, mask}` messages into `zxMatrixKey`.
+- Gamepad (r77, #161): `src/zxgo/gamepad.js` polls `navigator.getGamepads()`
+  once per rAF tick — before the frame executes, so a button press isn't a
+  frame late — and pushes the FPGA's 12-bit i_JOY vector (bits 11..0 =
+  MODE X Z Y START A C B U D L R) through `zxJoystickState`. The transport
+  is STATE-based: the core diffs snapshots, so a dropped poll cannot strand
+  a held direction. Standard-mapping pads map by meaning (dpad 12-15, face
+  buttons onto the Megadrive six); unrecognised devices fall back to
+  axes 0/1 plus "any button fires", since their button order is
+  device-specific — `window.__zxgoPads()` dumps raw pad state for mapping
+  work. The interface (`zxJoystickType`) is a Joystick menu in the JSSpeccy
+  chrome, persisted in localStorage. It defaults to None, which the core
+  routes to Kempston on the Next but leaves inert on classic machines —
+  a live port $1F would confuse 48K titles that read it expecting the
+  floating bus. Desktop (Fyne/GLFW) has no pad source yet.
 - Assets: the PRIMARY source (r60) is the official SpecNext distro zip
   (`sn-emulator-24.11.zip`: the two NextZXOS ROMs + the full 1 GB
   `cspect-next-1gb.img`), fetched through the same-origin `/specnext/`

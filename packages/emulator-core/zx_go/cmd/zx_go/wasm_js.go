@@ -412,6 +412,41 @@ func setupWasmExports() {
 		return nil
 	}))
 
+	// zxJoystickType(name) -> "" | errorString. Selects the joystick
+	// interface the host pad drives: "None", "Kempston", "Sinclair1",
+	// "Sinclair2" or "Cursor" (the pkg/config spellings). Anything held on
+	// the previous interface is released, so switching mid-game can't latch
+	// a direction on.
+	g.Set("zxJoystickType", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if wasmEmu == nil {
+			return "not booted"
+		}
+		if len(a) < 1 {
+			return "missing joystick type"
+		}
+		t, ok := joystickTypeFromName(a[0].String())
+		if !ok {
+			return "unknown joystick type: " + a[0].String()
+		}
+		wasmEmu.setJoystickType(t)
+		return ""
+	}))
+
+	// zxJoystickState(bits). The whole pad as the FPGA's 12-bit i_JOY
+	// vector, active high, bits 11..0 = MODE X Z Y START A C B U D L R.
+	// State-based, not edge-based: the host polls its gamepad and hands us
+	// the snapshot each frame, and we dispatch the difference. A dropped
+	// poll therefore can't strand a held direction, which is the classic
+	// way pad input sticks. Buttons above bit 4 are Megadrive-only and
+	// reach the guest through NR $B2 and the MD modes of ports $1F/$37.
+	g.Set("zxJoystickState", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if wasmEmu == nil || len(a) < 1 {
+			return nil
+		}
+		wasmEmu.SetJoystickState(uint16(a[0].Int()))
+		return nil
+	}))
+
 	// zxReset() -> "". Reboot the current machine (cold reset): 48K/128K return
 	// to their boot ROM, Next to the welcome screen.
 	g.Set("zxReset", js.FuncOf(func(_ js.Value, _ []js.Value) any {

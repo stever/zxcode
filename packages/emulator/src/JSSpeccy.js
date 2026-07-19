@@ -28,6 +28,9 @@ export const JSSpeccy = (container, opts) => {
         tapeTrapsEnabled: ('tapeTrapsEnabled' in opts) ? opts.tapeTrapsEnabled : true,
         // IDE mode: translate compiled TAPs to run ON the Next.
         tapToNext: opts.tapToNext || false,
+        // Joystick interface the host gamepad drives (see the Joystick
+        // menu below). Apps pass their persisted choice here.
+        joystick: opts.joystick || 'None',
     });
 
     const ui = new UIController(container, emu, {zoom: opts.zoom || 1, sandbox: opts.sandbox});
@@ -85,6 +88,33 @@ export const JSSpeccy = (container, opts) => {
     const machineNextItem = machineMenu.addItem('ZX Spectrum Next', () => {
         emu.setMachine('next');
     });
+
+    // Joystick menu. Which interface the host gamepad drives — a game
+    // reads exactly one, and there's no way to detect which, so it's the
+    // user's call. "None" still leaves the pad working on the Next: the
+    // FPGA always decodes the Kempston port, so the core routes an
+    // unconfigured Next joystick there (classic machines get nothing,
+    // which is the safe default — a live port $1F would confuse 48K
+    // titles that read it expecting the floating bus).
+    const joystickMenu = ui.menuBar.addMenu('Joystick');
+
+    const joystickItems = {
+        None: joystickMenu.addItem('None (Kempston on Next)', () => emu.setJoystick('None')),
+        Kempston: joystickMenu.addItem('Kempston', () => emu.setJoystick('Kempston')),
+        Sinclair1: joystickMenu.addItem('Sinclair 1 (keys 1-5)', () => emu.setJoystick('Sinclair1')),
+        Sinclair2: joystickMenu.addItem('Sinclair 2 (keys 6-0)', () => emu.setJoystick('Sinclair2')),
+        Cursor: joystickMenu.addItem('Cursor / Protek', () => emu.setJoystick('Cursor')),
+    };
+
+    const setJoystickBullet = (type) => {
+        for (const [name, item] of Object.entries(joystickItems)) {
+            if (name === type) item.setBullet();
+            else item.unsetBullet();
+        }
+    };
+
+    emu.on('setJoystick', setJoystickBullet);
+    setJoystickBullet(emu.joystickType);
 
     const displayMenu = ui.menuBar.addMenu('Display');
 
@@ -244,6 +274,10 @@ export const JSSpeccy = (container, opts) => {
         openTAPFile: (data, sdFiles) => emu.openTAPFile(data, sdFiles),
         onMachineChange: (callback) => {
             emu.on('setMachine', callback);
+        },
+        setJoystick: (type) => emu.setJoystick(type),
+        onJoystickChange: (callback) => {
+            emu.on('setJoystick', callback);
         },
         onReady: (callback) => {
             if (emu.isReady) {

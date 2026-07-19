@@ -202,6 +202,11 @@ type emulator struct {
 	// Currently active joystick interface. Mutated only from the UI thread.
 	joystickType JoystickType
 
+	// Last host joystick vector applied by SetJoystickState (12-bit
+	// i_JOY layout). Held so a poll-based host input source can hand us
+	// whole snapshots and we dispatch only the edges. UI thread only.
+	joyState uint16
+
 	// RZX session state. At most one of rzxPlayback / rzxRecord is
 	// non-nil at any given time (FUSE rzx.c:164,278). Atomic so the
 	// per-frame read in the emulation goroutine doesn't need a lock,
@@ -805,9 +810,7 @@ func (e *emulator) releaseAllInput() {
 	for len(e.keyQueue) > 0 {
 		<-e.keyQueue
 	}
-	if e.ula != nil {
-		e.ula.KempstonState = 0
-	}
+	e.clearJoystickState()
 	if e.kbd != nil {
 		e.kbd.ReleaseAll()
 	}
@@ -880,9 +883,7 @@ func (e *emulator) reboot() {
 	for len(e.keyQueue) > 0 {
 		<-e.keyQueue
 	}
-	if e.ula != nil {
-		e.ula.KempstonState = 0
-	}
+	e.clearJoystickState()
 	if e.kbd != nil {
 		e.kbd.ReleaseAll()
 	}

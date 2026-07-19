@@ -220,6 +220,13 @@ type ULA struct {
 	KempstonEnabled bool
 	KempstonState   byte
 
+	// Megadrive-only buttons of the left pad, held in their i_JOY
+	// vector positions (bits 11..5 = MODE X Z Y START A C). The low
+	// five bits of that vector are KempstonState, so they are not
+	// duplicated here — MDJoyLeft composes the two. Read back by the
+	// Next's NR $B2 and by the MD modes of ports $1F/$37.
+	MDExtraState uint16
+
 	// ulaOutputDisabled mirrors NextReg $68 bit 7 ("Disable ULA output").
 	// When set the ULA layer paints nothing — the screen area shows the
 	// lower layers (Layer 2 / Tilemap) or the NR$4A fallback colour, never
@@ -2019,6 +2026,30 @@ func (u *ULA) SetKempstonButton(mask byte, pressed bool) {
 	}
 }
 
+// Megadrive-only button bits of the 12-bit i_JOY vector, in their
+// vector positions (zxnext.vhd:90). Bits 4..0 (B U D L R) are not
+// listed: they ARE the Kempston bits above and live in KempstonState.
+const (
+	MDJoyC     = 0x0020
+	MDJoyA     = 0x0040
+	MDJoyStart = 0x0080
+	MDJoyY     = 0x0100
+	MDJoyZ     = 0x0200
+	MDJoyX     = 0x0400
+	MDJoyMode  = 0x0800
+
+	// mdExtraMask is every bit SetMDExtraButtons owns (11..5).
+	mdExtraMask = 0x0FE0
+)
+
+// SetMDExtraButtons sets the Megadrive-only buttons of the left pad
+// (C A START Y Z X MODE) as a whole vector, in i_JOY bit positions.
+// Bits outside 11..5 are ignored: the directions and B live in
+// KempstonState, so a caller cannot accidentally clobber them here.
+func (u *ULA) SetMDExtraButtons(vec uint16) {
+	u.MDExtraState = vec & mdExtraMask
+}
+
 // ExtendedKeys exposes the keyboard's Spectrum Next extended-key vector
 // (i_KBD_EXTENDED_KEYS) for the NR $B0/$B1 read-back — see
 // keyboard.ExtendedKeys for the bit layout and derivation.
@@ -2028,14 +2059,15 @@ func (u *ULA) ExtendedKeys() uint16 {
 
 // MDJoyLeft returns the left joystick as the FPGA's 12-bit i_JOY_LEFT
 // vector, active high, bits 11..0 = MODE X Z Y START A C B U D L R
-// (zxnext.vhd:90). Our joystick state is the Kempston byte, whose low
-// five bits (Fire=B, U, D, L, R) are the same order as i_JOY(4:0) —
-// the FPGA feeds i_JOY(5:0) straight to the Kempston port read
-// (zxnext.vhd:3479). The Megadrive-only buttons (START A C, and the
-// X Z Y MODE that NR $B2 reads) have no emulator-side source yet and
-// read idle (0).
+// (zxnext.vhd:90). The low five bits (Fire=B, U, D, L, R) are the
+// Kempston byte, whose bit order is the same as i_JOY(4:0) — the FPGA
+// feeds i_JOY(5:0) straight to the Kempston port read
+// (zxnext.vhd:3479). The Megadrive-only buttons above them come from
+// SetMDExtraButtons, so a host pad drives both halves; with no pad
+// attached MDExtraState stays 0 and the vector degrades to the plain
+// Kempston reading.
 func (u *ULA) MDJoyLeft() uint16 {
-	return uint16(u.KempstonState & 0x1F)
+	return uint16(u.KempstonState&0x1F) | u.MDExtraState
 }
 
 // MDJoyRight is the right joystick's i_JOY_RIGHT vector. Only one
@@ -3528,6 +3560,7 @@ func (u *ULA) Reset() {
 	u.flash = false
 	u.flashCount = 0
 	u.KempstonState = 0
+	u.MDExtraState = 0
 	// The FPGA clears the whole port_ff_reg on reset (zxnext.vhd:3611).
 	// Only the frame-INT disable latch (bit 6) is cleared here: a stale
 	// disable would leave the machine INT-less after a reset, while the

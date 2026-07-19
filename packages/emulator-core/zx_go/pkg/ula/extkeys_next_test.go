@@ -56,4 +56,18 @@ func TestNextExtendedKeysFullStack(t *testing.T) {
 	if got := d.ReadReg(0xB2); got != 0x00 {
 		t.Errorf("Kempston fire+up held: NR$B2 = $%02X, want $00 (no MD extra buttons)", got)
 	}
+
+	// A host pad's Megadrive-only buttons DO reach NR$B2. Left-pad bits
+	// land in the low nibble (wire.go:1169): X->bit 3, Z->bit 2, Y->bit 1,
+	// MODE->bit 0; the high nibble is the right pad, which isn't modelled.
+	u.SetMDExtraButtons(MDJoyX | MDJoyMode)
+	if got := d.ReadReg(0xB2); got != 0x09 {
+		t.Errorf("MD X+MODE held: NR$B2 = $%02X, want $09", got)
+	}
+	// START/A/C are port-$1F buttons, not NR$B2 ones — setting them must
+	// not disturb the register.
+	u.SetMDExtraButtons(MDJoyStart | MDJoyA | MDJoyC)
+	if got := d.ReadReg(0xB2); got != 0x00 {
+		t.Errorf("MD START+A+C held: NR$B2 = $%02X, want $00 (port buttons only)", got)
+	}
 }

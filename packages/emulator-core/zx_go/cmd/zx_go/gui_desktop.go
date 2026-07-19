@@ -2300,19 +2300,10 @@ func desktopMain() {
 			}
 
 			selectJoystick := func(t JoystickType) {
-				// Release whatever's currently held on the active interface
-				// so a held direction doesn't stick in the keyboard matrix
-				// (Sinclair/Cursor) or as a Kempston port bit when switching.
-				for dir := 0; dir < 5; dir++ {
-					emu.dispatchJoystick(dir, false)
-				}
-				if emu.joystickType == JoystickKempston {
-					emu.ula.KempstonEnabled = false
-				}
-				emu.joystickType = t
-				if t == JoystickKempston {
-					emu.ula.KempstonEnabled = true
-				}
+				// setJoystickType releases whatever the old interface was
+				// holding, so a held direction doesn't stick in the keyboard
+				// matrix (Sinclair/Cursor) or as a Kempston port bit.
+				emu.setJoystickType(t)
 				saveConfig()
 				fyne.Do(func() {
 					updateLabels()

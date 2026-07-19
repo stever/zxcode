@@ -101,8 +101,13 @@ drift. Highlights:
 - Input read-back: `WireExtendedKeys` (NR$B0/$B1 extended keys, NR$B2
   MD-pad extra buttons) — read-only registers composed on every read
   from the live ULA input state (keyboard-matrix composites + the
-  Kempston-backed joystick vector), the same live-source pattern as
-  NR$69. The joystick ports $1F/$37 themselves are composed in
+  joystick vector), the same live-source pattern as NR$69. That vector
+  is split across two ULA fields: `KempstonState` holds bits 4..0
+  (B U D L R — bit-identical to the Kempston port byte, zxnext.vhd:3479)
+  and `MDExtraState` bits 11..5 (MODE X Z Y START A C), with
+  `MDJoyLeft()` composing them. A host gamepad drives both halves
+  (r77, #161); `MDJoyRight()` is still constant 0, so NR$B2's high
+  nibble reads idle. The joystick ports $1F/$37 themselves are composed in
   `pkg/ula` (`nextJoyPortByte`): low-address-byte decode, idle $00
   (never floating bus), NR$05 routing incl. the MD-mode START/A bits
   (zxnext.vhd:2546-2547, :3472-3507).

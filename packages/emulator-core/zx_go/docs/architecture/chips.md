@@ -27,6 +27,7 @@ FPGA blocks are summarised here and detailed in
 | SD card | SPI-mode SD/SDHC | `pkg/next/sdcard` | protocol-accurate SPI state machine, CSD v1/v2, CRC16 | SD spec + SPI golden test + boot behaviour |
 | ESP Wi-Fi | ESP8266 AT firmware | `pkg/next/uart` (ports $133B-$163B via ULA.SetNextUART) | deliberate stub (AT responder, no networking; NR$A8/$A9 are the ESP GPIO regs, not the UART) | scope decision |
 | Kempston joystick | — | `pkg/ula` | port $1F bitmap | classic behaviour |
+| Megadrive pad (Next) | 3/6-button MD controller | `pkg/ula` (MDJoyLeft/MDExtraState), `pkg/next` (NR$B2) | left pad only: 12-bit i_JOY vector fed by the host gamepad; ports $1F/$37 per NR$05 routing. The pad's own 3-state select/multiplex protocol is not modelled — the FPGA presents the decoded vector, so there is nothing to multiplex | zxnext.vhd:90, :3472-3507, :6206-6215 |
 | Kempston mouse | — | `pkg/kempmouse` | free-running 8-bit counters, atomics | port decode masks |
 | ZX Printer | — | `pkg/zxprinter` | cycle-accurate drum timing | ROM polling behaviour |
 | SAM ASIC | MGT ASIC | `pkg/sam` | line-accurate lazy renderer + contention tables | SAM technical docs; spec tests |

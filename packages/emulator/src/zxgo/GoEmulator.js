@@ -28,6 +28,7 @@ import { StandardKeyboardHandler, RecreatedZXSpectrumHandler } from '../Keyboard
 import { tapToNext } from './tapToNext.js';
 import { assetUrl } from './assetManifest.js';
 import { nativeZipEntries } from './zipExtract.js';
+import { GamepadPoller, loadJoystickPreference, saveJoystickPreference } from './gamepad.js';
 
 const scriptUrl = document.currentScript.src;
 
@@ -38,7 +39,7 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r76-exec-fastpath';
+const ENGINE_REV = 'r77-gamepad';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
@@ -177,6 +178,38 @@ export class GoEmulator extends EventEmitter {
             // keyboard).
             this.canvas.addEventListener('blur', () => this.releaseAllMatrixKeys());
         }
+
+        // Gamepad input, polled per displayed frame from loop(). Unlike the
+        // keyboard this is deliberately NOT focus-scoped: a pad can't type
+        // into the page, so there is nothing to steal by reading it whenever
+        // the machine runs.
+        this.gamepad = new GamepadPoller();
+        // A pad is invisible to the page until the user presses something on
+        // it (a browser fingerprinting defence), and the page must have focus
+        // at that moment. That makes "nothing happens" ambiguous: no pad, or
+        // a pad the browser is still hiding? These log the transition, so the
+        // console answers it without anyone having to poll from devtools —
+        // which is itself unreliable, since devtools can hold the focus the
+        // browser is waiting on.
+        window.addEventListener('gamepadconnected', (e) => {
+            console.info(`[zxplay] gamepad connected: ${e.gamepad.id}`
+                + ` (mapping: ${e.gamepad.mapping || 'none'},`
+                + ` ${e.gamepad.buttons.length} buttons, ${e.gamepad.axes.length} axes)`);
+        });
+        window.addEventListener('gamepaddisconnected', (e) => {
+            console.info(`[zxplay] gamepad disconnected: ${e.gamepad.id}`);
+        });
+        // Joystick interface the pad drives. Defaults to None, which the
+        // core turns into Kempston on the Next (the FPGA always decodes
+        // port $1F) while leaving classic machines untouched — enabling
+        // Kempston there would make port $1F answer for 48K titles that
+        // read it expecting the floating bus.
+        // An explicit opt wins over the remembered choice, so an app can
+        // pin the interface if it ever needs to.
+        this.joystickType = opts.joystick && opts.joystick !== 'None'
+            ? opts.joystick
+            : loadJoystickPreference(opts.joystick || 'None');
+        window.__zxgoPads = () => this.gamepad.describe();
 
         this.isRunning = false;
         this.isInitiallyPaused = (!opts.autoStart);
@@ -505,6 +538,10 @@ export class GoEmulator extends EventEmitter {
             this.acc -= owed * 20;
         }
         this.tallyFps(t, owed || 0);
+        // Input before execution: polled here rather than next to pollTape()
+        // below, so a button pressed this tick is visible to the frames this
+        // tick is about to run instead of landing one frame late.
+        this.pollGamepad();
         if (owed && globalThis.zxFrame) {
             const tf0 = performance.now();
             for (let i = 1; i < owed; i++) globalThis.zxFrame();
@@ -573,6 +610,34 @@ export class GoEmulator extends EventEmitter {
         for (const {row, mask} of Array.from(this.heldMatrixKeys.values())) {
             this.setMatrixKey(row, mask, false);
         }
+    }
+
+    // pollGamepad reads the host pad and forwards it to the core. The
+    // poller returns null when there is nothing to say (no pad, or an
+    // unchanged vector), so an idle session costs one getGamepads() call
+    // per frame and no wasm boundary crossing at all.
+    pollGamepad() {
+        if (!globalThis.zxJoystickState) return;
+        const bits = this.gamepad.poll();
+        if (bits === null) return;
+        globalThis.zxJoystickState(bits);
+    }
+
+    // setJoystick selects which interface the pad drives: 'None',
+    // 'Kempston', 'Sinclair1', 'Sinclair2' or 'Cursor'. Remembered
+    // locally so it can be re-applied after a machine boot, which
+    // rebuilds the core's emulator and takes its joystick state with it.
+    setJoystick(type) {
+        this.joystickType = type;
+        saveJoystickPreference(type);
+        this.applyJoystickType();
+        this.emit('setJoystick', type);
+    }
+
+    applyJoystickType() {
+        if (!globalThis.zxJoystickType) return;
+        const err = globalThis.zxJoystickType(String(this.joystickType));
+        if (err) console.warn(`[zxplay] joystick: ${err}`);
     }
 
     start() {
@@ -689,6 +754,9 @@ export class GoEmulator extends EventEmitter {
         }
         this.machineType = type;
         this.pendingBoot = null; // classic boot completes synchronously here
+        // A boot builds a fresh core emulator, whose joystick selection
+        // starts at the default — re-assert ours.
+        this.applyJoystickType();
         this.emit('setMachine', type);
     }
 
@@ -941,6 +1009,7 @@ export class GoEmulator extends EventEmitter {
         // Wait for the Next machine to replace the previous one (goroutine).
         await this.waitForModel('Next');
         this.machineType = 'next';
+        this.applyJoystickType(); // fresh core emulator — see setMachine
         this.emit('setMachine', 'next');
     }
 
@@ -1027,6 +1096,7 @@ export class GoEmulator extends EventEmitter {
     reset() {
         this.debugDetach();
         if (globalThis.zxReset) globalThis.zxReset();
+        this.applyJoystickType(); // reboot clears the core's selection
     }
 
     loadSnapshotBytes(arrayBuffer, ext) {
