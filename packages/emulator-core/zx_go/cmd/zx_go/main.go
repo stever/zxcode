@@ -481,6 +481,11 @@ func newEmulator(model roms.SpectrumModel) (*emulator, error) {
 	ula.SetPeripherals(pm)
 	mem.PeripheralRead = pm.HandleMemoryRead
 	mem.PeripheralWrite = pm.HandleMemoryWrite
+	// Fast-path enablement (#187): the manager's peripherals only
+	// intercept the bottom 16K, and enable/disable/insert transitions
+	// invalidate the memory's bottom fast path.
+	mem.SetPeripheralWriteBottomOnly(true)
+	mem.SetBottomOverlayProbe(pm.BottomOverlayPossible)
 
 	// NMI: keyboard goroutine sets a flag, CPU processes it on the emulator
 	// goroutine. The NMICallback pages in the Multiface ROM at the exact

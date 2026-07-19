@@ -71,6 +71,13 @@ type CTCBlock struct {
 	// not gated by the channels' int enables (the im2 daisy chain
 	// applies its own i_int_en gating). Bit n = channel n.
 	zcMask byte
+
+	// rescheduleNotify, if non-nil, fires whenever the block's INT
+	// schedule may have changed (every reschedule/Reset). Wired to
+	// z80.CPU.KickExtIntDeadline so the CPU's gated ExtIntFunc poll
+	// (armed from NextAssertRef8) re-samples after any CTC
+	// reprogramming (#187).
+	rescheduleNotify func()
 }
 
 // NewCTCBlock builds the four hard-reset channels. clk28 supplies the
@@ -96,6 +103,9 @@ func (b *CTCBlock) Reset() {
 	b.pulseUntil28 = 0
 	if b.clk28 != nil {
 		b.last28 = b.clk28()
+	}
+	if b.rescheduleNotify != nil {
+		b.rescheduleNotify()
 	}
 }
 
@@ -201,6 +211,34 @@ func (b *CTCBlock) reschedule() {
 			}
 		}
 	}
+	if b.rescheduleNotify != nil {
+		b.rescheduleNotify()
+	}
+}
+
+// SetRescheduleNotify installs the schedule-change callback (see the
+// rescheduleNotify field docs). Pass nil to disable.
+func (b *CTCBlock) SetRescheduleNotify(fn func()) { b.rescheduleNotify = fn }
+
+// NextAssertRef8 is the z80.CPU.ExtIntDeadlineFunc: the earliest
+// Ref8Tstates instant at which IntLine could next return true. 0 =
+// poll now (pulse currently asserted, or a scheduled ZC already due);
+// ^uint64(0) = nothing armed (park until a reschedule kicks the CPU);
+// otherwise the exact nextZC28 deadline — before which every IntLine
+// call provably returns false with no side effects, so skipping the
+// polls is delivery-identical.
+func (b *CTCBlock) NextAssertRef8() uint64 {
+	now := b.clk28()
+	if now < b.pulseUntil28 {
+		return 0
+	}
+	if b.nextZC28 == 0 {
+		return ^uint64(0)
+	}
+	if now >= b.nextZC28 {
+		return 0
+	}
+	return b.nextZC28
 }
 
 // ClaimsPort reports whether addr decodes to a CTC channel port:

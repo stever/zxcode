@@ -1494,6 +1494,11 @@ func Wire(opts WireOpts) {
 func WireCTC(d *nextregs.Dispatcher, cpu *z80.CPU) *CTCBlock {
 	b := NewCTCBlock(cpu.Ref8Tstates, cpu.SpeedMultiplier)
 	cpu.ExtIntFunc = b.IntLine
+	// Deadline-gate the poll (#187): the block predicts its next
+	// possible assert instant and every reschedule (port writes,
+	// NR$C5, reset) kicks the gate so the prediction never goes stale.
+	cpu.ExtIntDeadlineFunc = b.NextAssertRef8
+	b.SetRescheduleNotify(cpu.KickExtIntDeadline)
 	d.SetOnWrite(0xC5, func(disp *nextregs.Dispatcher, v byte) {
 		disp.Store(0xC5, v&0x0F)
 		b.WriteIntEnable(v)
@@ -1527,6 +1532,9 @@ func WireIM2(d *nextregs.Dispatcher, cpu *z80.CPU, ctcBlock *CTCBlock) *IM2Block
 	blk := NewIM2Block(cpu, ctcBlock, d)
 
 	cpu.ExtIntFunc = blk.IntLine
+	// Pulse mode inherits the CTC's exact deadline; hw-im2 mode
+	// declines to predict (always polls). See IM2Block.NextAssertRef8.
+	cpu.ExtIntDeadlineFunc = blk.NextAssertRef8
 	cpu.IntAckFunc = blk.Ack
 	cpu.OnRETI = blk.Reti
 	cpu.RouteIntFunc = blk.RouteInt

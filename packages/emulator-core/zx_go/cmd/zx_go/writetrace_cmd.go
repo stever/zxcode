@@ -115,7 +115,9 @@ func (d *remoteDebugger) ensureTraceWritesHook() {
 	}
 	d.traceWrites.installed = true
 	d.traceWrites.prior = d.emu.mem.WriteObserver
-	d.emu.mem.WriteObserver = func(addr uint16, val byte, pc uint16) {
+	// SetWriteObserver (not a direct field assignment) so the memory's
+	// write fast path is dropped and every subsequent write is observed.
+	d.emu.mem.SetWriteObserver(func(addr uint16, val byte, pc uint16) {
 		if d.traceWrites.prior != nil {
 			d.traceWrites.prior(addr, val, pc)
 		}
@@ -144,5 +146,5 @@ func (d *remoteDebugger) ensureTraceWritesHook() {
 			"mmu_override", ovr,
 			"rom_bank", d.currentROMBank(),
 			"insns", cpu.InstructionCount())
-	}
+	})
 }

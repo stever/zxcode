@@ -154,6 +154,18 @@ type Pager struct {
 	// ZX_GO_DIVMMC_PAGE_TRACE env flag.
 	pageLogger func(event string, pc uint16)
 
+	// mapNotify, if non-nil, fires after every mutation that can change
+	// the overlay's EFFECTIVE memory decode: automap page-in (all
+	// variants, including the delayed conversion at the next M1),
+	// page-out ($1FFx off-area, RETN, automap disable), any port $E3
+	// write (CONMEM force-in/out, bank select, MAPRAM), the global
+	// enable, and the NR$09 MAPRAM escape. Wired to
+	// memory.InvalidateBottomFast so the bottom-16K read/write fast
+	// path never serves a stale mapping (#187) — the callback must be
+	// O(1): the automap toggles at NMI cadence (~832 transitions per
+	// Atic Atac frame).
+	mapNotify func()
+
 	// framesBump, if non-nil, is invoked from Step() whenever the
 	// CPU M1-fetches at divMMC-RAM-bank-1 $2009 with the overlay
 	// paged in. See SetFramesBumper.
@@ -333,6 +345,28 @@ func (p *Pager) pageOut() {
 	p.pendingPageIn = false
 	p.pendingRom3 = false
 	p.rom3 = false
+	p.notifyMap()
+}
+
+// notifyMap fires the map-change notifier (see mapNotify).
+func (p *Pager) notifyMap() {
+	if p.mapNotify != nil {
+		p.mapNotify()
+	}
+}
+
+// SetMapChangeNotifier installs the effective-decode change callback
+// (see the mapNotify field docs). Pass nil to disable.
+func (p *Pager) SetMapChangeNotifier(fn func()) { p.mapNotify = fn }
+
+// OverlayActive reports whether the divMMC overlay currently
+// intercepts $0000-$3FFF memory accesses: the automap-held latch OR
+// the CONMEM force-in, gated by the global enable — exactly the
+// condition under which HandleRead/HandleWrite claim an access. The
+// memory's bottom-16K fast path probes this; every change of the
+// answer is reported through the map-change notifier.
+func (p *Pager) OverlayActive() bool {
+	return (p.pagedIn || p.lastE3&0x80 != 0) && p.enabled
 }
 
 // AutomapEnabled reports whether automatic paging on trigger PCs
@@ -366,6 +400,7 @@ func (p *Pager) MAPRAM() bool { return p.mapram }
 func (p *Pager) ClearMAPRAM() {
 	p.mapram = false
 	p.lastE3 &^= 0x40
+	p.notifyMap()
 }
 
 // LastE3 returns the last byte written to port $E3. Bit 7 = CONMEM,
@@ -401,6 +436,7 @@ func (p *Pager) Step(pc uint16) {
 		p.pendingPageIn = false
 		p.pagedIn = true
 		p.rom3 = p.pendingRom3
+		p.notifyMap()
 		if p.pageLogger != nil {
 			p.pageLogger("in(delayed)", pc)
 		}
@@ -460,6 +496,7 @@ func (p *Pager) Step(pc uint16) {
 		if p.epTiming0&bit != 0 {
 			p.pagedIn = true // instant_on
 			p.rom3 = rom3
+			p.notifyMap()
 			if p.pageLogger != nil {
 				p.pageLogger("in(rst-instant)", pc)
 			}
@@ -490,6 +527,7 @@ func (p *Pager) Step(pc uint16) {
 			// the handler's esxDOS RST-$08 calls ($0008 etc.).
 			p.pagedIn = true
 			p.nmiButton = false // button_nmi clears once the automap engages (vhd:112)
+			p.notifyMap()
 			if p.pageLogger != nil {
 				p.pageLogger("in(nmi)", pc)
 			}
@@ -527,6 +565,7 @@ func (p *Pager) Step(pc uint16) {
 			if p.rom3Query == nil || p.rom3Query(pc) {
 				p.pagedIn = true
 				p.rom3 = true
+				p.notifyMap()
 				if p.pageLogger != nil {
 					p.pageLogger("in(3dxx)", pc)
 				}
@@ -730,7 +769,10 @@ func (p *Pager) HandleRETN() {
 // SetEnabled toggles the divMMC global enable (FPGA i_en). When false the
 // overlay never maps — o_divmmc_rom_en/ram_en are gated to 0 — regardless of
 // CONMEM or automap. Defaults true.
-func (p *Pager) SetEnabled(on bool) { p.enabled = on }
+func (p *Pager) SetEnabled(on bool) {
+	p.enabled = on
+	p.notifyMap()
+}
 
 // DisableNMI mirrors device/divmmc.vhd o_disable_nmi = automap OR button_nmi:
 // the divMMC suppresses the maskable NMI whenever its overlay is engaged or a
@@ -1060,6 +1102,10 @@ func (p *Pager) WritePort(port uint16, val byte) bool {
 			// Sticky bit: once set, latched until hardware reset.
 			p.mapram = true
 		}
+		// Any $E3 write can change the effective decode (CONMEM
+		// force-in/out, RAM-bank select, MAPRAM latch) — the memory's
+		// bottom-16K fast path must re-derive. O(1), so unconditional.
+		p.notifyMap()
 		if p.pageLogger != nil {
 			if conmem := val&0x80 != 0; conmem != prevConmem {
 				if conmem {

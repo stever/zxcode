@@ -360,6 +360,7 @@ func (m *Memory) SetFPGABootROM(rom []byte) {
 	if len(rom) == 0 {
 		m.fpgaBootROM = nil
 		m.fpgaBootROMActive = false
+		m.InvalidateBottomFast()
 		return
 	}
 	m.fpgaBootROM = rom
@@ -369,6 +370,7 @@ func (m *Memory) SetFPGABootROM(rom []byte) {
 	// expects to find itself in config mode so its $00-$03 NR$04
 	// writes can route 16K of CPU writes into each ROM bank.
 	m.configModeActive = true
+	m.InvalidateBottomFast()
 }
 
 // ClearFPGABootROM disables bootrom mode but keeps the loaded
@@ -376,6 +378,7 @@ func (m *Memory) SetFPGABootROM(rom []byte) {
 // the loader if a peripheral wants to). Idempotent.
 func (m *Memory) ClearFPGABootROM() {
 	m.fpgaBootROMActive = false
+	m.InvalidateBottomFast()
 }
 
 // RearmFPGABootROM re-enables bootrom mode using the retained
@@ -388,6 +391,7 @@ func (m *Memory) ClearFPGABootROM() {
 func (m *Memory) RearmFPGABootROM() {
 	if len(m.fpgaBootROM) > 0 {
 		m.fpgaBootROMActive = true
+		m.InvalidateBottomFast()
 	}
 }
 
@@ -417,19 +421,26 @@ func (m *Memory) FPGABootROMActive() bool { return m.fpgaBootROMActive }
 // once the personality is selected.
 func (m *Memory) SetConfigModeRAMPage(page byte) {
 	m.configModeRAMPage = page
+	m.InvalidateBottomFast()
 }
 
 // ClearConfigMode exits the Next config-mode window. Called from
 // the NextReg $03 OnWrite handler when guest code installs a real
 // machine personality (bits 2-0 != 0).
-func (m *Memory) ClearConfigMode() { m.configModeActive = false }
+func (m *Memory) ClearConfigMode() {
+	m.configModeActive = false
+	m.InvalidateBottomFast()
+}
 
 // EnterConfigMode is the symmetric counterpart to ClearConfigMode.
 // Called from the NextReg $03 OnWrite handler when guest code
 // requests bits 2-0 = 111 (the "re-enter config mode" pattern).
 // Also exposed for tests that need to drive the config-mode read /
 // write paths without standing up the full NextReg wire layer.
-func (m *Memory) EnterConfigMode() { m.configModeActive = true }
+func (m *Memory) EnterConfigMode() {
+	m.configModeActive = true
+	m.InvalidateBottomFast()
+}
 
 // DivMMCAccessor lets pkg/memory route config-mode writes into the
 // divMMC RAM that lives in pkg/next/divmmc, without taking a direct

@@ -235,6 +235,12 @@ func newNext() (*Harness, error) {
 		}
 		return pm.HandleMemoryWrite(addr, val)
 	}
+	// Fast-path enablement (#187) — mirrors cmd/zx_go/next.go.
+	mem.SetPeripheralWriteBottomOnly(true)
+	mem.SetBottomOverlayProbe(func() bool {
+		return pager.OverlayActive() || pm.BottomOverlayPossible()
+	})
+	pager.SetMapChangeNotifier(mem.InvalidateBottomFast)
 
 	return &Harness{
 		cpu:         cpu,

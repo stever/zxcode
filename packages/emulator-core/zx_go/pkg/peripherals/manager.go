@@ -105,6 +105,7 @@ func (pm *PeripheralManager) EnableDisciple(romPath string) error {
 	}
 
 	pm.discipleEnabled = true
+	pm.noteBottomOverlayChange()
 	log.Println("Disciple disk interface enabled")
 	return nil
 }
@@ -113,6 +114,7 @@ func (pm *PeripheralManager) EnableDisciple(romPath string) error {
 func (pm *PeripheralManager) DisableDisciple() {
 	pm.discipleEnabled = false
 	pm.disciple = nil
+	pm.noteBottomOverlayChange()
 	log.Println("Disciple disk interface disabled")
 }
 
@@ -130,6 +132,7 @@ func (pm *PeripheralManager) EnableMultiface(variant multiface.MultifaceType, ro
 
 	pm.multifaceEnabled = true
 	pm.multifaceVariant = variant
+	pm.noteBottomOverlayChange()
 	log.Printf("%s enabled", multiface.GetVariantName(variant))
 	return nil
 }
@@ -138,6 +141,7 @@ func (pm *PeripheralManager) EnableMultiface(variant multiface.MultifaceType, ro
 func (pm *PeripheralManager) DisableMultiface() {
 	pm.multifaceEnabled = false
 	pm.multiface = nil
+	pm.noteBottomOverlayChange()
 	log.Println("Multiface disabled")
 }
 
@@ -163,6 +167,7 @@ func (pm *PeripheralManager) EnableInterface1(romBytes []byte) error {
 	}
 	pm.if1 = dev
 	pm.if1Enabled = true
+	pm.noteBottomOverlayChange()
 	log.Println("Interface 1 enabled")
 	return nil
 }
@@ -172,6 +177,7 @@ func (pm *PeripheralManager) EnableInterface1(romBytes []byte) error {
 func (pm *PeripheralManager) DisableInterface1() {
 	pm.if1Enabled = false
 	pm.if1 = nil
+	pm.noteBottomOverlayChange()
 	log.Println("Interface 1 disabled")
 }
 
@@ -191,6 +197,7 @@ func (pm *PeripheralManager) InsertInterface2Cartridge(path string) error {
 		return err
 	}
 	pm.if2 = cart
+	pm.noteBottomOverlayChange()
 	log.Printf("Interface 2 cartridge inserted: %s", cart.Name)
 	return nil
 }
@@ -205,6 +212,7 @@ func (pm *PeripheralManager) RemoveInterface2Cartridge() {
 	}
 	log.Printf("Interface 2 cartridge ejected: %s", pm.if2.Name)
 	pm.if2 = nil
+	pm.noteBottomOverlayChange()
 }
 
 func (pm *PeripheralManager) IsInterface2CartridgeInserted() bool {
@@ -544,6 +552,27 @@ func (pm *PeripheralManager) HandleOpcodeRead(addr uint16) bool {
 	}
 
 	return false
+}
+
+// BottomOverlayPossible reports whether ANY managed peripheral could
+// currently intercept a $0000-$3FFF memory access through
+// HandleMemoryRead/HandleMemoryWrite — deliberately conservative: an
+// ENABLED Multiface/DISCiPLE counts even while its ROM is not paged
+// in, so their per-NMI page-in/out transitions need no invalidation
+// choke points of their own. The memory's bottom-16K fast path (#187)
+// consults this through its bottomOverlayProbe; enable/disable/insert
+// transitions call noteBottomOverlayChange so a cached answer never
+// goes stale.
+func (pm *PeripheralManager) BottomOverlayPossible() bool {
+	return pm.if2 != nil || pm.multifaceEnabled || pm.discipleEnabled || pm.if1Enabled
+}
+
+// noteBottomOverlayChange drops the memory's bottom-16K fast path
+// after a change to BottomOverlayPossible's answer.
+func (pm *PeripheralManager) noteBottomOverlayChange() {
+	if pm.memory != nil {
+		pm.memory.InvalidateBottomFast()
+	}
 }
 
 // HandleMemoryRead handles memory reads that might be intercepted by peripherals

@@ -15,8 +15,9 @@ import (
 // on every model); "ramSlow" forces the pre-cache dispatch for the
 // same address by installing a no-op allReadHook (the cache's global
 // gate), so the hit/miss delta is the fast path's per-read saving.
-// "rom" reads $0100 — slots 0-1 are never cached, so this is the
-// bottom-16K overlay-cascade cost games pay for ROM/OS calls.
+// "rom" reads $0100 — ROM pages are never cached (only plain RAM
+// mappings are, including MMU RAM in slots 0-1 since #187's bottom-16K
+// extension), so this is the overlay-cascade cost of ROM/OS calls.
 func BenchmarkRead(b *testing.B) {
 	testDir := b.TempDir()
 	createBenchROMs(b, testDir)
@@ -38,6 +39,45 @@ func BenchmarkRead(b *testing.B) {
 			var v byte
 			for i := 0; i < b.N; i++ {
 				v = mem.Read(cfg.addr + uint16(i&0x1FFF))
+			}
+			_ = v
+		})
+	}
+}
+
+// BenchmarkReadWriteBottomMMU measures the #187 Atic Atac shape: Next
+// model, game code MMU-mapped into the bottom 16K (slots 0/1). "read"/
+// "write" hit the fast tables; the "Slow" variants force the pre-cache
+// overlay-cascade dispatch (the cost every bottom-16K access paid
+// before the bottom extension) via the value-neutral global gates.
+func BenchmarkReadWriteBottomMMU(b *testing.B) {
+	for _, cfg := range []struct {
+		name  string
+		slow  bool
+		write bool
+	}{{"read", false, false}, {"readSlow", true, false}, {"write", false, true}, {"writeSlow", true, true}} {
+		b.Run(cfg.name, func(b *testing.B) {
+			mem, err := New("", roms.ModelNext)
+			if err != nil {
+				b.Fatalf("New: %v", err)
+			}
+			mem.SetMMU(0, 16)
+			mem.SetMMU(1, 17)
+			if cfg.slow {
+				mem.SetAllReadHook(func(addr uint16, val byte) {})
+				mem.SetWriteObserver(func(addr uint16, val byte, pc uint16) {})
+			}
+			mem.Read(0x0100)
+			mem.Write(0x0100, 0)
+			b.ResetTimer()
+			var v byte
+			for i := 0; i < b.N; i++ {
+				a := uint16(i & 0x3FFF)
+				if cfg.write {
+					mem.Write(a, byte(i))
+				} else {
+					v = mem.Read(a)
+				}
 			}
 			_ = v
 		})

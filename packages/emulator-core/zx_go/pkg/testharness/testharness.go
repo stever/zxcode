@@ -107,6 +107,9 @@ func New(model roms.SpectrumModel) (*Harness, error) {
 	u.SetPeripherals(pm)
 	mem.PeripheralRead = pm.HandleMemoryRead
 	mem.PeripheralWrite = pm.HandleMemoryWrite
+	// Fast-path enablement (#187) — mirrors cmd/zx_go/main.go.
+	mem.SetPeripheralWriteBottomOnly(true)
+	mem.SetBottomOverlayProbe(pm.BottomOverlayPossible)
 
 	h := &Harness{
 		cpu:         cpu,

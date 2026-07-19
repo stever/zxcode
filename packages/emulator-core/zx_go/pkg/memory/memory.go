@@ -340,26 +340,66 @@ type Memory struct {
 	slotBank    [8]byte
 	mmuOverride [8]bool
 
-	// readFast is the per-8K-CPU-slot read fast path: readFast[slot]
-	// non-nil means every Read in that slot resolves to exactly
-	// readFast[slot][addr&0x1FFF] — a direct slice over the backing
-	// RAM half-bank — with NO hooks, overlays or tracking applicable.
-	// This collapses the hot Read dispatch (the CPU performs ~5 reads
+	// readFast/writeFast are the per-8K-CPU-slot fast paths:
+	// readFast[slot] non-nil means every Read in that slot resolves to
+	// exactly readFast[slot][addr&0x1FFF] — a direct slice over the
+	// backing RAM half-bank — with NO hooks, overlays or tracking
+	// applicable; writeFast[slot] is the symmetric write target. This
+	// collapses the hot Read/Write dispatch (the CPU performs ~5 reads
 	// per instruction; under Go-wasm the branchy readValue cascade
-	// dominated the 28 MHz frame budget, #187) to two loads. Slots
-	// 0-1 ($0000-$3FFF) are NEVER cached — the bottom 16K carries the
-	// bootrom/divMMC/Multiface/Alt-ROM/config/Beta overlay cascade and
-	// ROM dispatch, all of which stay on readValue.
+	// dominated the 28 MHz frame budget, #187) to two loads / a store.
+	//
+	// Slots 0-1 ($0000-$3FFF) carry the bootrom/divMMC/Multiface/
+	// Alt-ROM/config/Beta overlay cascade and the ROM dispatch. They
+	// are cached ONLY when the effective mapping provably reduces to
+	// plain RAM (fastSlotPages): on the Next that means MMU-mapped (or
+	// EFF7-revealed) RAM with the bootrom, config mode, Multiface and
+	// divMMC overlays all inactive — the divMMC via the
+	// bottomOverlayProbe below — and the Alt-ROM redirect either
+	// disabled or outranked by the MMU RAM mapping. Atic Atac (#187)
+	// executes its whole engine from MMU RAM at $0000-$3FFF, so
+	// without this every opcode fetch paid the full cascade.
 	//
 	// COHERENCE CONTRACT: any mutation of state the cached dispatch
-	// depends on MUST call invalidateReadFast(). That state is:
-	// memoryPageReadMap, slotBank/mmuOverride, the m.ram bank slices,
-	// l2RdEn, currentModel, ramReadHook/allReadHook and TrackUninit.
-	// The cache is rebuilt lazily on the next Read (rebuildReadFast);
-	// readFastValid=false marks it dirty (the zero value, so a fresh
-	// Memory starts dirty and self-populates).
-	readFast      [8][]byte
-	readFastValid bool
+	// depends on MUST call invalidateReadFast() (full) or, for
+	// bottom-16K-only overlay state that toggles at NMI cadence
+	// (divMMC automap in/out ~832 transitions per Atic frame),
+	// InvalidateBottomFast() (O(1): nils four slot pointers; the two
+	// bottom slots are re-derived lazily by rebuildBottomFast). Full-
+	// invalidation state: page maps, slotBank/mmuOverride, m.ram bank
+	// slices, l2RdEn/l2WrEn, currentModel, all read/write hooks and
+	// TrackUninit. Bottom-only state: fpgaBootROMActive,
+	// configModeActive, mfActive, altROMReg, betaEnabled and the
+	// bottomOverlayProbe's answer (divMMC page-in/out, port $E3,
+	// classic peripheral enables). Caches rebuild lazily on the next
+	// Read/Write (rebuildFast); readFastValid=false marks the whole
+	// table dirty (the zero value, so a fresh Memory starts dirty and
+	// self-populates), bottomFastValid=false just the bottom pair.
+	readFast        [8][]byte
+	writeFast       [8][]byte
+	readFastValid   bool
+	bottomFastValid bool
+
+	// bottomOverlayProbe, when non-nil, reports whether a peripheral
+	// overlay (divMMC automap/CONMEM — or a classic bus peripheral
+	// that could page over the bottom 16K) is currently able to
+	// intercept $0000-$3FFF accesses through PeripheralRead/Write.
+	// Consulted by fastSlotPages on ModelNext: with PeripheralRead/
+	// Write installed and no probe (or the probe answering true) the
+	// bottom slots stay on the slow dispatch. The prober MUST arrange
+	// InvalidateBottomFast() on every answer change (the divMMC pager's
+	// map-change notifier; classic peripheral enable/disable).
+	bottomOverlayProbe func() bool
+
+	// peripheralWriteBottomOnly declares that the installed
+	// PeripheralWrite hook only ever intercepts addresses < $4000 and
+	// is side-effect-free when it declines a write. Write consults
+	// PeripheralWrite for EVERY address, so without this declaration
+	// no write slot can be cached while a hook is installed. All
+	// production hooks (the divMMC pager chain and the classic
+	// PeripheralManager) satisfy it; tests installing custom hooks
+	// that reach above $4000 simply leave it false.
+	peripheralWriteBottomOnly bool
 
 	// bankTracer, when non-nil, fires after every change to the
 	// ROM-bank selection (port 7FFD/1FFD writes, NextReg $8E
@@ -402,9 +442,15 @@ func (m *Memory) MultifaceActive() bool { return m.mfActive }
 // SetMultifaceActive pages the Next Multiface overlay in (true — done on
 // the MF NMI, before it vectors to $0066) or out (false — done on RETN).
 // The MF RAM is persistent SRAM (zero at power-on), not cleared per NMI.
-func (m *Memory) SetMultifaceActive(on bool) { m.mfActive = on }
+func (m *Memory) SetMultifaceActive(on bool) {
+	m.mfActive = on
+	m.InvalidateBottomFast()
+}
 
-func (m *Memory) SetAltROMReg(val byte) { m.altROMReg = val }
+func (m *Memory) SetAltROMReg(val byte) {
+	m.altROMReg = val
+	m.InvalidateBottomFast()
+}
 
 // AltROMReg returns the current NextReg $8C value.
 func (m *Memory) AltROMReg() byte { return m.altROMReg }
@@ -1352,6 +1398,7 @@ func (m *Memory) EnableBeta(rom []byte) {
 	}
 	m.betaEnabled = true
 	m.betaActive = false
+	m.InvalidateBottomFast()
 	// The 48 BASIC ROM is ROM 0 on the 48K and the second editor/BASIC ROM
 	// (ROM 1 → read-map page 17) on the 128/+2/Pentagon.
 	switch m.currentModel {
@@ -1366,6 +1413,7 @@ func (m *Memory) EnableBeta(rom []byte) {
 func (m *Memory) DisableBeta() {
 	m.betaEnabled = false
 	m.betaActive = false
+	m.InvalidateBottomFast()
 }
 
 // IsBetaActive reports whether the TR-DOS ROM is currently paged over the
@@ -1500,7 +1548,12 @@ func (m *Memory) Read(addr uint16) byte {
 		return p[addr&0x1FFF]
 	}
 	if !m.readFastValid {
-		m.rebuildReadFast()
+		m.rebuildFast()
+		if p := m.readFast[addr>>13]; p != nil {
+			return p[addr&0x1FFF]
+		}
+	} else if addr < 0x4000 && !m.bottomFastValid {
+		m.rebuildBottomFast()
 		if p := m.readFast[addr>>13]; p != nil {
 			return p[addr&0x1FFF]
 		}
@@ -1512,56 +1565,203 @@ func (m *Memory) Read(addr uint16) byte {
 	return v
 }
 
-// invalidateReadFast drops the read fast-path cache. MUST be called by
-// every mutation of the state the cache encodes — see the readFast
-// field's coherence contract. Cheap (8 nil stores), so callers on
-// paging-port paths need not condition it.
+// invalidateReadFast drops the whole read+write fast-path cache. MUST
+// be called by every mutation of the full-invalidation state the cache
+// encodes — see the readFast field's coherence contract. Cheap (16 nil
+// stores), so callers on paging-port paths need not condition it.
 func (m *Memory) invalidateReadFast() {
 	m.readFast = [8][]byte{}
+	m.writeFast = [8][]byte{}
 	m.readFastValid = false
+	m.bottomFastValid = false
 }
 
-// rebuildReadFast recomputes the read fast-path cache from the live
-// dispatch state, mirroring readValue's branch structure exactly. A
-// slot is cached ONLY when its reads provably reduce to a plain RAM
-// load: global read hooks and uninit tracking off, slots 2-7 only
-// (the bottom 16K keeps its overlay cascade on readValue), Layer-2
-// read paging off (its window is bank-configurable, so it is gated
-// wholesale rather than range-checked), and the slot resolving to a
-// mapped RAM bank — via the MMU shadow on ModelNext (bank $FF = ROM
-// half stays slow), via the classic 16K page map otherwise (ROM pages
-// >= 16 stay slow: the ROM area consults PeripheralRead per read).
-func (m *Memory) rebuildReadFast() {
+// InvalidateBottomFast drops just the bottom-16K (slots 0-1) fast-path
+// entries — O(1), for the overlay state that toggles at NMI cadence
+// (divMMC automap page-in/page-out, port $E3, Multiface, Alt-ROM,
+// bootrom/config mode). The pair is re-derived lazily by
+// rebuildBottomFast on the next bottom-16K access; slots 2-7 and the
+// global gates are untouched (their mutations all invalidate fully).
+func (m *Memory) InvalidateBottomFast() {
+	m.readFast[0], m.readFast[1] = nil, nil
+	m.writeFast[0], m.writeFast[1] = nil, nil
+	m.bottomFastValid = false
+}
+
+// SetBottomOverlayProbe installs the bottom-16K overlay predicate (see
+// the bottomOverlayProbe field docs). Pass nil to remove — bottom slots
+// then stay on the slow dispatch whenever PeripheralRead/Write is set.
+func (m *Memory) SetBottomOverlayProbe(fn func() bool) {
+	m.bottomOverlayProbe = fn
+	m.invalidateReadFast()
+}
+
+// SetPeripheralWriteBottomOnly declares (or retracts) the installed
+// PeripheralWrite hook's bottom-16K-only contract — see the
+// peripheralWriteBottomOnly field docs. Without the declaration no
+// write slot is ever cached while a PeripheralWrite hook is installed.
+func (m *Memory) SetPeripheralWriteBottomOnly(v bool) {
+	m.peripheralWriteBottomOnly = v
+	m.invalidateReadFast()
+}
+
+// SetWriteObserver installs (or, with nil, removes) the debug write
+// observer. Prefer this over assigning the WriteObserver field
+// directly: the setter drops the write fast path so every subsequent
+// Write is observed. (Direct assignment before the first Read/Write —
+// construction-time wiring — is still safe: the cache builds lazily.)
+func (m *Memory) SetWriteObserver(fn func(addr uint16, val byte, pc uint16)) {
+	m.WriteObserver = fn
+	m.invalidateReadFast()
+}
+
+// fastGates computes the global (whole-table) gates for the fast-path
+// caches. Reads: any installed read hook or uninit tracking forces the
+// slow path (the hooks must observe every read). Writes additionally
+// require no write observer/hooks and — because Write offers EVERY
+// address to PeripheralWrite — either no hook or the bottom-only
+// declaration. Layer-2 legacy paging ($123B) is gated wholesale: its
+// window is bank-configurable, so it is not range-checked per slot.
+func (m *Memory) fastGates() (readOK, writeOK bool) {
+	readOK = m.allReadHook == nil && m.ramReadHook == nil && !m.TrackUninit && !m.l2RdEn
+	writeOK = m.WriteObserver == nil && m.allWriteHook == nil && m.ramWriteHook == nil &&
+		!m.TrackUninit && !m.l2WrEn &&
+		(m.PeripheralWrite == nil || m.peripheralWriteBottomOnly)
+	return readOK, writeOK
+}
+
+// rebuildFast recomputes the read+write fast-path caches from the live
+// dispatch state, mirroring readValue/writeValue's branch structure
+// exactly. A slot is cached ONLY when its accesses provably reduce to
+// a plain RAM load/store — see fastGates and fastSlotPages.
+func (m *Memory) rebuildFast() {
 	m.readFast = [8][]byte{}
+	m.writeFast = [8][]byte{}
 	m.readFastValid = true
-	if m.allReadHook != nil || m.ramReadHook != nil || m.TrackUninit {
+	m.bottomFastValid = true
+	readOK, writeOK := m.fastGates()
+	if !readOK && !writeOK {
 		return
 	}
-	isNext := m.currentModel == roms.ModelNext
-	if isNext && m.l2RdEn {
-		return
-	}
-	for slot := 2; slot < 8; slot++ {
-		if isNext && m.mmuOverride[slot] {
-			bank8k := m.slotBank[slot]
-			if bank8k == 0xFF {
-				continue
-			}
-			bank16k := int(bank8k) >> 1
-			if bank16k >= len(m.ram) || m.ram[bank16k] == nil {
-				continue
-			}
-			base := int(bank8k&1) << 13
-			m.readFast[slot] = m.ram[bank16k][base : base+0x2000]
-			continue
+	for slot := 0; slot < 8; slot++ {
+		rd, wr := m.fastSlotPages(slot)
+		if readOK {
+			m.readFast[slot] = rd
 		}
-		pageIndex := m.memoryPageReadMap[slot>>1]
-		if pageIndex < 0 || pageIndex >= 16 || pageIndex >= len(m.ram) || m.ram[pageIndex] == nil {
-			continue
+		if writeOK {
+			m.writeFast[slot] = wr
 		}
-		base := int(slot&1) << 13
-		m.readFast[slot] = m.ram[pageIndex][base : base+0x2000]
 	}
+}
+
+// rebuildBottomFast re-derives just slots 0-1 after an
+// InvalidateBottomFast. Only valid while the rest of the table is
+// current (readFastValid true — every global-gate mutation invalidates
+// fully, so the gates recomputed here can only have changed alongside
+// a full invalidation).
+func (m *Memory) rebuildBottomFast() {
+	m.bottomFastValid = true
+	readOK, writeOK := m.fastGates()
+	for slot := 0; slot < 2; slot++ {
+		rd, wr := m.fastSlotPages(slot)
+		if readOK {
+			m.readFast[slot] = rd
+		} else {
+			m.readFast[slot] = nil
+		}
+		if writeOK {
+			m.writeFast[slot] = wr
+		} else {
+			m.writeFast[slot] = nil
+		}
+	}
+}
+
+// fastSlotPages resolves the plain-RAM backing an 8K CPU slot's reads
+// and writes reduce to, or nil where the slot must stay on the slow
+// dispatch. For the bottom two slots it first applies the overlay
+// cascade gates in readValue/writeValue's priority order; slots 2-7
+// have no overlays (PeripheralRead is only consulted below $4000 on
+// the Next and only for ROM pages on classic models — and ROM pages
+// are never cached).
+func (m *Memory) fastSlotPages(slot int) (rd, wr []byte) {
+	if slot < 2 {
+		if m.currentModel == roms.ModelNext {
+			// Bootrom masks reads and (outside config mode) drops
+			// writes; config mode owns the window; the Multiface
+			// overlay maps MF ROM+RAM. All three beat MMU-mapped RAM.
+			if m.fpgaBootROMActive || m.configModeActive || m.mfActive {
+				return nil, nil
+			}
+			// divMMC overlay (PeripheralRead/Write) beats even
+			// MMU-mapped RAM (zxnext.vhd final mux). Cached only when
+			// a probe positively reports the overlay inactive.
+			if m.PeripheralRead != nil || m.PeripheralWrite != nil {
+				if m.bottomOverlayProbe == nil || m.bottomOverlayProbe() {
+					return nil, nil
+				}
+			}
+			rd, wr = m.slotRAMBacking(slot)
+			// Alt-ROM redirects apply only when the MMU does NOT map
+			// RAM here (sram_pre_override — see readValue/writeValue).
+			if !(m.mmuOverride[slot] && m.slotBank[slot] != 0xFF) {
+				if m.altROMRedirectsReads() {
+					rd = nil
+				}
+				if m.altROMRedirectsWrites() {
+					wr = nil
+				}
+			}
+			return rd, wr
+		}
+		// Classic bottom 16K (RAM-mapped only under +3 special paging
+		// or the ZX8x layout). Beta Disk auto-paging toggles per M1
+		// with no invalidation choke point — keep the window slow
+		// while enabled. Classic peripheral READ overlays are only
+		// consulted for ROM pages (never cached), but Write offers
+		// every bottom address to PeripheralWrite (Multiface/DISCiPLE
+		// paged RAM), so bottom writes stay slow while a hook exists.
+		rd, wr = m.slotRAMBacking(slot)
+		if m.betaEnabled {
+			rd = nil
+		}
+		if m.PeripheralWrite != nil {
+			wr = nil
+		}
+		return rd, wr
+	}
+	return m.slotRAMBacking(slot)
+}
+
+// slotRAMBacking resolves the 8K half-bank a CPU slot's accesses land
+// in through the MMU/classic dispatch alone (no overlays — the caller
+// gates those): the MMU shadow on ModelNext when overridden (bank $FF
+// = ROM half stays slow), the classic 16K page maps otherwise. ROM
+// pages (>= 16) and unmapped/unallocated banks return nil — ROM reads
+// consult PeripheralRead per read, ROM writes are dropped but classic
+// peripherals may still claim them.
+func (m *Memory) slotRAMBacking(slot int) (rd, wr []byte) {
+	if m.currentModel == roms.ModelNext && m.mmuOverride[slot] {
+		bank8k := m.slotBank[slot]
+		if bank8k == 0xFF {
+			return nil, nil
+		}
+		bank16k := int(bank8k) >> 1
+		if bank16k >= len(m.ram) || m.ram[bank16k] == nil {
+			return nil, nil
+		}
+		base := int(bank8k&1) << 13
+		p := m.ram[bank16k][base : base+BankSize]
+		return p, p
+	}
+	half := int(slot&1) << 13
+	if rmap := m.memoryPageReadMap[slot>>1]; rmap >= 0 && rmap < 16 && rmap < len(m.ram) && m.ram[rmap] != nil {
+		rd = m.ram[rmap][half : half+BankSize]
+	}
+	if wmap := m.memoryPageWriteMap[slot>>1]; wmap >= 0 && wmap < 16 && wmap < len(m.ram) && m.ram[wmap] != nil {
+		wr = m.ram[wmap][half : half+BankSize]
+	}
+	return rd, wr
 }
 
 // readValue is the dispatch body for Read.
@@ -1750,6 +1950,32 @@ func (m *Memory) readValue(addr uint16) byte {
 // slotBank shadow into banks 0..223; non-overridden slots use the
 // classic 16K dispatch.
 func (m *Memory) Write(addr uint16, val byte) {
+	// Hot fast path (see the readFast/writeFast field docs): a cached
+	// slot stores directly into the backing RAM half-bank. Value-
+	// identical to writeValue by construction — a slot is only cached
+	// when no observer, hook, overlay, redirect or tracking can apply.
+	if p := m.writeFast[addr>>13]; p != nil {
+		p[addr&0x1FFF] = val
+		return
+	}
+	if !m.readFastValid {
+		m.rebuildFast()
+		if p := m.writeFast[addr>>13]; p != nil {
+			p[addr&0x1FFF] = val
+			return
+		}
+	} else if addr < 0x4000 && !m.bottomFastValid {
+		m.rebuildBottomFast()
+		if p := m.writeFast[addr>>13]; p != nil {
+			p[addr&0x1FFF] = val
+			return
+		}
+	}
+	m.writeValue(addr, val)
+}
+
+// writeValue is the dispatch body for Write.
+func (m *Memory) writeValue(addr uint16, val byte) {
 	if m.WriteObserver != nil {
 		// PC isn't directly available here; pass 0 — callers
 		// that want a PC must wire WriteObserver via a closure
@@ -1916,6 +2142,7 @@ func (m *Memory) Write(addr uint16, val byte) {
 // obvious from the NextReg sequence alone.
 func (m *Memory) SetRAMWriteHook(fn func(bank int, addr uint16, val byte)) {
 	m.ramWriteHook = fn
+	m.invalidateReadFast()
 }
 
 // GetRAMWriteHook returns the currently-installed RAM-write hook,
@@ -1955,6 +2182,7 @@ func (m *Memory) SetAllReadHook(fn func(addr uint16, val byte)) {
 // used to watch a logical address for the write that should set it.
 func (m *Memory) SetAllWriteHook(fn func(addr uint16, val byte)) {
 	m.allWriteHook = fn
+	m.invalidateReadFast()
 }
 
 // SetLayer2MapControl applies a write to the legacy Layer-2 port $123B

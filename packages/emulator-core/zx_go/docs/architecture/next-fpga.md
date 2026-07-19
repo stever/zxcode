@@ -133,6 +133,26 @@ Contention: the classic pattern applies at 3.5 MHz only. At any turbo
 speed the FPGA does not assert contention, and neither does the
 emulator. NR$08 bit 1 disables RAM contention outright.
 
+Hot-path caches (#187, wasm exec cost): `Read`/`Write` first consult
+per-8K-slot fast tables (`readFast`/`writeFast` in `pkg/memory`) that
+point straight into the backing RAM half-bank whenever a slot's
+dispatch provably reduces to a plain RAM access — no hooks/observers,
+no uninit tracking, Layer 2 $123B paging off, and (bottom 16K) none of
+the overlay cascade active. The bottom two slots are included because
+games run whole engines from MMU RAM there (Atic Atac, banks 16/17):
+the divMMC pager reports its effective decode through the memory's
+`bottomOverlayProbe` and calls `InvalidateBottomFast` (O(1)) from every
+transition choke point — automap page-in (all variants incl. the
+delayed next-M1 conversion), $1FFx off-area page-out, RETN unmap, port
+$E3 (CONMEM/bank/MAPRAM), enable, NR$09 MAPRAM escape — at the pacer's
+NMI cadence. Multiface/bootrom/config/Alt-ROM/EFF7/beta and the classic
+peripheral enables invalidate from their setters; paging/MMU/model/hook
+mutations invalidate the whole table. Timing is untouched: waits and
+contention are charged in the CPU cycle helpers, not in Read/Write.
+Value identity is pinned by `pkg/memory/fastpath_xcheck_test.go`
+(randomized churn vs a slow-path reference, plus the divMMC transition
+shapes).
+
 ## Boot chain
 
 Diagram: [next-boot-chain.drawio](diagrams/next-boot-chain.drawio).
@@ -390,7 +410,18 @@ shape, zxnext.vhd:6543-6552). The pieces:
   self-clearing on speed changes/frame origins, voided by the copper's
   generation hook on any NR$60-$63 write) so the per-instruction and
   per-HALT-T-state closure calls collapse to one integer compare
-  between instants, with delivery points bit-identical. The
+  between instants, with delivery points bit-identical. The ExtIntFunc
+  poll (the CTC pulse INT line) is gated the same way (#187 wave 3 —
+  IM2Block/CTCBlock `IntLine` + `Ref8Tstates` were ~half the native
+  28 MHz exec profile, dominated by Atic's per-HALT-T-state polls):
+  `CPU.ExtIntDeadlineFunc` (CTCBlock.NextAssertRef8 — the block's
+  `nextZC28`, before which every IntLine call provably returns false
+  without side effects; parked when no int-enabled channel is armed)
+  arms `extIntDeadline` after each false poll, every CTC
+  reschedule/reset kicks the gate (`SetRescheduleNotify` →
+  `CPU.KickExtIntDeadline`), a true poll holds the gate open so
+  level-triggered re-raise keeps sampling, and hw-IM2 mode declines to
+  predict (polls every sample point, the pre-gate behaviour). The
   simulation and render engines batch runs: `FrameMoveInstants`
   precomputes uniform observation-free runs (NOOPs / MOVEs to other
   regs) and advances them arithmetically; Step/RunToCycle batch NOOP

@@ -736,7 +736,9 @@ func installWriteWatchers(emu *emulator, spec string, onBreak func(e watchWriteE
 	}
 	cpu := emu.cpu
 	prev := emu.mem.WriteObserver
-	emu.mem.WriteObserver = func(addr uint16, val byte, _ uint16) {
+	// SetWriteObserver (not a direct field assignment) so the memory's
+	// write fast path is dropped and every subsequent write is observed.
+	emu.mem.SetWriteObserver(func(addr uint16, val byte, _ uint16) {
 		if prev != nil {
 			prev(addr, val, 0)
 		}
@@ -776,7 +778,7 @@ func installWriteWatchers(emu *emulator, spec string, onBreak func(e watchWriteE
 			}
 			return
 		}
-	}
+	})
 }
 
 // formatHexBytes is a tiny helper for hex dumps. n bytes

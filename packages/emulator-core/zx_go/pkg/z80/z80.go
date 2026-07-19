@@ -138,6 +138,32 @@ type CPU struct {
 	// samples the line level.
 	ExtIntFunc func(tstates uint64) bool
 
+	// ExtIntDeadlineFunc, when non-nil, reports the earliest
+	// Ref8Tstates instant at which ExtIntFunc could NEXT return true,
+	// assuming no further CPU-visible reprogramming (which must call
+	// KickExtIntDeadline). Return contract: ^uint64(0) = nothing
+	// scheduled (park the gate until kicked); 0 = unpredictable (poll
+	// every sample point — the pre-gate behaviour); otherwise the
+	// exact instant (the CTC block's nextZC28). The CPU consults it
+	// after every ExtIntFunc poll that returned FALSE and arms
+	// extIntDeadline with the equivalent raw T-state — identical
+	// delivery by construction, because between arming and that
+	// instant every skipped poll would have returned false without
+	// side effects. While the line is asserted (poll returned true)
+	// the gate stays at 0 so level-triggered re-raise semantics are
+	// unchanged. This collapses the per-sample-point (and per-HALT-
+	// T-state) closure dispatch that dominated the 28 MHz exec profile
+	// (#187: IM2Block/CTCBlock IntLine + Ref8Tstates ≈ half the
+	// native frame) into one integer compare.
+	ExtIntDeadlineFunc func() uint64
+
+	// extIntDeadline gates the ExtIntFunc dispatch exactly like
+	// extNMIDeadline gates ExtNMIFunc: sample points before this raw
+	// T-state skip the callback; 0 = poll always. Self-clears wherever
+	// extNMIDeadline does (foldRefClock, frame origins) and on
+	// KickExtIntDeadline (CTC/IM2 reprogramming).
+	extIntDeadline uint64
+
 	// ExtNMIFunc, when non-nil, is polled at the same sample points as
 	// ExtIntFunc — including every T-state of a HALT — for NMI sources
 	// that must keep running while the CPU sleeps. The callback owns its
@@ -838,6 +864,7 @@ func (c *CPU) foldRefClock() {
 	// segment and is void — force a poll at the next sample point so
 	// the owner re-arms against the new mapping.
 	c.extNMIDeadline = 0
+	c.extIntDeadline = 0
 }
 
 // RefTstates returns the CPU timeline in 3.5 MHz-reference T-states: raw
@@ -881,6 +908,52 @@ func (c *CPU) ArmExtNMIDeadline(ref8 uint64) {
 	}
 	d := ref8 - c.refClock8
 	c.extNMIDeadline = c.refMark + (d*uint64(c.SpeedMultiplier())+7)/8
+}
+
+// KickExtIntDeadline clears the ExtIntFunc gate so the very next
+// sample point polls the source again. MUST be called by anything
+// that can change the source's next-assert schedule out from under an
+// armed gate: CTC port writes / NR$C5 / reset (CTCBlock.reschedule's
+// notifier), the IM2 block's mode/pend mutations. Cheap and
+// idempotent.
+func (c *CPU) KickExtIntDeadline() { c.extIntDeadline = 0 }
+
+// armExtIntDeadline converts the ExtIntDeadlineFunc answer (an
+// absolute Ref8Tstates instant, or the park/poll sentinels) into the
+// raw-T-state gate, using the same exact ceil mapping as
+// ArmExtNMIDeadline: Ref8 >= ref8 ⇔ tstates >= refMark +
+// ceil((ref8-refClock8)·mult/8). Overflow-clamped so the ^uint64(0)
+// "nothing scheduled" sentinel parks the gate outright.
+func (c *CPU) armExtIntDeadline(ref8 uint64) {
+	if ref8 <= c.refClock8 {
+		c.extIntDeadline = 0
+		return
+	}
+	d := ref8 - c.refClock8
+	mult := uint64(c.SpeedMultiplier())
+	if d > (^uint64(0)-7)/mult {
+		c.extIntDeadline = ^uint64(0)
+		return
+	}
+	c.extIntDeadline = c.refMark + (d*mult+7)/8
+}
+
+// pollExtInt runs one gated ExtIntFunc sample: skip while the armed
+// deadline is in the future; on a false poll re-arm from the source's
+// own schedule; on a true poll assert IRQPending and hold the gate
+// open (level-triggered re-raise must keep sampling every point).
+func (c *CPU) pollExtInt() {
+	if c.ExtIntFunc == nil || c.tstates < c.extIntDeadline {
+		return
+	}
+	if c.ExtIntFunc(c.tstates) {
+		c.IRQPending.Store(true)
+		c.extIntDeadline = 0
+		return
+	}
+	if c.ExtIntDeadlineFunc != nil {
+		c.armExtIntDeadline(c.ExtIntDeadlineFunc())
+	}
 }
 
 // DisarmExtNMIDeadline parks the ExtNMIFunc gate at "no pending
@@ -1095,10 +1168,11 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	budget := uint64(tstatesPerFrame) * uint64(c.SpeedMultiplier())
 	frameStart := c.tstates
 	c.frameOriginRef = c.RefTstates()
-	// New frame origin: clear the ExtNMI gate so a schedule keyed to
-	// the frame origin (the copper NMI pacer's per-frame rebuild) gets
-	// its poll on the frame's first sample point.
+	// New frame origin: clear the ExtNMI/ExtInt gates so a schedule
+	// keyed to the frame origin (the copper NMI pacer's per-frame
+	// rebuild) gets its poll on the frame's first sample point.
 	c.extNMIDeadline = 0
+	c.extIntDeadline = 0
 	c.frameEnd = c.tstates + budget
 	// Keep the step path's frame bookkeeping in sync. nextFrameBoundary
 	// is otherwise only maintained by StepInstructionWithIRQ itself, so
@@ -1159,8 +1233,12 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 	for c.tstates < c.frameEnd {
 		// Narrow-pulse frame INT: raise at the pulse start, withdraw once
 		// at the pulse end if un-accepted. Runs BEFORE the line-INT block
-		// so a later line INT still re-raises the shared latch.
-		if narrowPulse {
+		// so a later line INT still re-raises the shared latch. Once the
+		// pulse has fired AND been withdrawn/consumed the call is a
+		// provable no-op for the rest of the frame (both switch arms and
+		// the FrameIntDisabled branch fall through) — skip it: this runs
+		// once per HALT T-state (#187).
+		if narrowPulse && !(c.frameIntFired && c.frameIntDeasct) {
 			c.frameIntPulse(frameStart)
 		}
 		// Line-interrupt assertion at the target scan-line tstate.
@@ -1175,9 +1253,8 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 			c.lineIntFired = true
 		}
 		// External (non-raster) INT sources — CTC pulse interrupts.
-		if c.ExtIntFunc != nil && c.ExtIntFunc(c.tstates) {
-			c.IRQPending.Store(true)
-		}
+		// Deadline-gated: see pollExtInt/ExtIntDeadlineFunc.
+		c.pollExtInt()
 		// External NMI sources (copper NR$02 pacer): polled here so they
 		// keep running while the CPU is halted — the halted branch below
 		// only consumes PendingNMI, it never fetches instructions. The
@@ -1226,8 +1303,11 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 			}
 			// NMI during HALT: the CPU is waiting with IFF1=true (after EI).
 			// This is the ideal time for NMI — IFF2 captures IFF1=true so
-			// RETN can restore interrupts correctly.
-			if c.PendingNMI.CompareAndSwap(true, false) {
+			// RETN can restore interrupts correctly. Load-before-CAS: this
+			// runs once per HALT T-state and the locked CAS is measurably
+			// hotter than the plain load on the (overwhelmingly common)
+			// no-NMI path (#187); the CAS still arbitrates the consume.
+			if c.PendingNMI.Load() && c.PendingNMI.CompareAndSwap(true, false) {
 				if c.NMICallback != nil {
 					c.NMICallback()
 				}
@@ -1271,8 +1351,9 @@ func (c *CPU) ExecuteFrame(tstatesPerFrame int) {
 		if c.ExtNMIFunc != nil && c.tstates >= c.extNMIDeadline {
 			c.ExtNMIFunc(c.tstates)
 		}
-		// NMI check after each instruction (NMI is non-maskable)
-		if c.PendingNMI.CompareAndSwap(true, false) {
+		// NMI check after each instruction (NMI is non-maskable).
+		// Load-before-CAS — see the HALT-branch note (#187).
+		if c.PendingNMI.Load() && c.PendingNMI.CompareAndSwap(true, false) {
 			if c.NMICallback != nil {
 				c.NMICallback()
 			}
@@ -1567,6 +1648,7 @@ func (c *CPU) StepInstructionWithIRQ() {
 		c.nextFrameBoundary = ((c.tstates / frameBudget) + 1) * frameBudget
 		c.frameOriginRef = c.RefTstates()
 		c.extNMIDeadline = 0 // new frame origin — see ExecuteFrame
+		c.extIntDeadline = 0
 		c.lineIntFired = false
 		c.frameIntFired = false
 		c.frameIntDeasct = false
@@ -1597,9 +1679,8 @@ func (c *CPU) StepInstructionWithIRQ() {
 	}
 
 	// External (non-raster) INT sources — CTC pulse interrupts.
-	if c.ExtIntFunc != nil && c.ExtIntFunc(c.tstates) {
-		c.IRQPending.Store(true)
-	}
+	// Deadline-gated: see pollExtInt/ExtIntDeadlineFunc.
+	c.pollExtInt()
 	if c.ExtNMIFunc != nil && c.tstates >= c.extNMIDeadline {
 		c.ExtNMIFunc(c.tstates)
 	}

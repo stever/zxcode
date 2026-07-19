@@ -38,7 +38,7 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r75-render-trims';
+const ENGINE_REV = 'r76-exec-fastpath';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS

@@ -24,7 +24,9 @@ func (d *remoteDebugger) ensureProvenanceHook() {
 	}
 	d.provenance.installed = true
 	d.provenance.prior = d.emu.mem.WriteObserver
-	d.emu.mem.WriteObserver = func(addr uint16, val byte, pc uint16) {
+	// SetWriteObserver (not a direct field assignment) so the memory's
+	// write fast path is dropped and every subsequent write is observed.
+	d.emu.mem.SetWriteObserver(func(addr uint16, val byte, pc uint16) {
 		if d.provenance.prior != nil {
 			d.provenance.prior(addr, val, pc)
 		}
@@ -33,7 +35,7 @@ func (d *remoteDebugger) ensureProvenanceHook() {
 		}
 		cpu := d.emu.cpu
 		d.provenance.record(addr, val, cpu.InstructionCount(), cpu.PC, d.currentROMBank())
-	}
+	})
 
 	// Phase 2: chain the RAM write hook for physical-pool keying. It
 	// fires only on successful RAM writes, with the resolved 16K bank

@@ -105,6 +105,9 @@ func (b *IM2Block) SetControl(val byte) {
 		b.chainActive = false
 		b.clearPending()
 	}
+	// The mode switch changes what NextAssertRef8 predicts — force the
+	// CPU's gated ExtIntFunc poll to re-sample (#187).
+	b.cpu.KickExtIntDeadline()
 }
 
 // HWMode reports whether hardware-IM2 vectored mode is active.
@@ -118,6 +121,7 @@ func (b *IM2Block) Reset() {
 	b.chain.Tick(IM2Inputs{HWIM2: false, Reset: true})
 	b.chainActive = false
 	b.clearPending()
+	b.cpu.KickExtIntDeadline()
 }
 
 func (b *IM2Block) clearPending() {
@@ -205,6 +209,20 @@ func (b *IM2Block) inputs() IM2Inputs {
 	in.IntReq[12] = true
 	in.IntReq[13] = true
 	return in
+}
+
+// NextAssertRef8 is the z80.CPU.ExtIntDeadlineFunc. In pulse mode the
+// prediction is the CTC block's; in hw-im2 mode the chain is a
+// stateful machine fed by pend* events (RouteInt/Unq/uart levels), so
+// it declines to predict (0 = poll every sample point — exactly the
+// pre-gate behaviour). Mode flips kick the CPU gate (SetControl), so
+// an armed pulse-mode deadline never outlives the mode it was
+// computed under.
+func (b *IM2Block) NextAssertRef8() uint64 {
+	if b.hwMode {
+		return 0
+	}
+	return b.ctc.NextAssertRef8()
 }
 
 // IntLine is the z80.CPU.ExtIntFunc. In pulse mode it defers to the

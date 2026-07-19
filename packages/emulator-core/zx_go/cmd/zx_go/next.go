@@ -1610,6 +1610,18 @@ sdReady:
 		}
 		return pm.HandleMemoryWrite(addr, val)
 	}
+	// Fast-path enablement (#187): both hooks in the chain only ever
+	// intercept < $4000 (pager.HandleWrite declines >= $4000; the
+	// classic manager's peripherals all live in the bottom 16K), and
+	// the bottom-16K overlay state is fully probed — the divMMC pager
+	// reports its effective decode and invalidates on every transition
+	// (automap in/out, RETN, port $E3, enable), the classic manager
+	// invalidates on enable/disable/insert.
+	mem.SetPeripheralWriteBottomOnly(true)
+	mem.SetBottomOverlayProbe(func() bool {
+		return pager.OverlayActive() || pm.BottomOverlayPossible()
+	})
+	pager.SetMapChangeNotifier(mem.InvalidateBottomFast)
 
 	// NMI: on Next, NextZXOS owns the vector by default. Always
 	// flag a PendingNMI on keyboard event; the CPU NMI handler
@@ -1721,9 +1733,13 @@ func unwireNextSubsystems(e *emulator) {
 	u.SetNextDivMMC(nil)
 	u.SetNextDAC(nil) // also detaches DAC from the running audio mixer
 
-	// Restore the classic peripheral-only memory hooks.
+	// Restore the classic peripheral-only memory hooks. The manager's
+	// hooks keep the bottom-16K-only write contract; the divMMC probe
+	// is replaced by the manager's own (the pager is unhooked above).
 	mem.PeripheralRead = pm.HandleMemoryRead
 	mem.PeripheralWrite = pm.HandleMemoryWrite
+	mem.SetPeripheralWriteBottomOnly(true)
+	mem.SetBottomOverlayProbe(pm.BottomOverlayPossible)
 
 	// Restore the classic NMI policy: only fire on Multiface
 	// enable. This matches newEmulator's setup so the behaviour
