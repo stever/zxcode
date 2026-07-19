@@ -142,11 +142,44 @@ func TestSetJoystickTypeReleasesHeldDirection(t *testing.T) {
 	if e.ula.KempstonState != 0 {
 		t.Fatalf("switching interface left Kempston $%02X held", e.ula.KempstonState)
 	}
-	if e.ula.KempstonEnabled {
-		t.Fatal("KempstonEnabled should clear when leaving the Kempston interface")
-	}
 	if e.joyState != 0 {
 		t.Fatalf("joyState = $%03X after switch; want 0 so the next poll re-dispatches", e.joyState)
+	}
+}
+
+// TestKempstonInterfaceStaysFitted pins the fix for the Manic Miner case.
+// Games probe for a Kempston by polling $1F in a tight loop and judging
+// whether it reads consistently; the answer must therefore never change
+// underneath them. It has to be true from construction (before any guest
+// code runs) and must survive switching the pad to another scheme —
+// choosing to play with Sinclair keys does not unplug the Kempston card.
+func TestKempstonInterfaceStaysFitted(t *testing.T) {
+	mem, err := memory.New("", roms.Model48K)
+	if err != nil {
+		t.Fatalf("memory.New: %v", err)
+	}
+	e, err := newEmulator(roms.Model48K)
+	if err != nil {
+		t.Skipf("newEmulator: %v", err)
+	}
+	_ = mem
+
+	if !e.ula.KempstonEnabled {
+		t.Fatal("Kempston interface not fitted at construction — a game's " +
+			"detection loop would see floating garbage on its first reads")
+	}
+	// The very first read a guest makes must already be the real answer.
+	if v, ok := e.ula.ReadPort(0x001F); !ok || v != 0x00 {
+		t.Fatalf("first port $1F read = ($%02X, %v); want ($00, true)", v, ok)
+	}
+
+	e.setJoystickType(JoystickSinclair1)
+	if !e.ula.KempstonEnabled {
+		t.Fatal("selecting Sinclair un-fitted the Kempston interface")
+	}
+	e.setJoystickType(JoystickNone)
+	if !e.ula.KempstonEnabled {
+		t.Fatal("selecting None un-fitted the Kempston interface")
 	}
 }
 

@@ -43,6 +43,49 @@ func TestSetMDExtraButtonsIgnoresLowBits(t *testing.T) {
 	}
 }
 
+// TestKempstonPortReadCounter pins the diagnostic counter, and — more
+// importantly — that adding it did NOT change what a read returns. The
+// counter sits in front of the enabled check on a hot path, so a mistake
+// here would silently make port $1F answer for machines with no Kempston
+// interface, breaking 48K titles that read it expecting the floating bus.
+func TestKempstonPortReadCounter(t *testing.T) {
+	u := newNextJoyULA(t, 0x70)
+	u.KempstonEnabled = false
+	// A Next always decodes $1F, so use a classic machine to see the
+	// disabled path.
+	u.mem = nil
+
+	before := u.KempstonPortReads
+	u.ReadPort(0x001F)
+	u.ReadPort(0x001F)
+	if got := u.KempstonPortReads - before; got != 2 {
+		t.Fatalf("counted %d Kempston reads; want 2 — must count with no interface attached", got)
+	}
+
+	// The while-held subset is what tells "we never delivered input" apart
+	// from "the game had the input and ignored it".
+	before = u.KempstonReadsWhileHeld
+	u.ReadPort(0x001F)
+	if got := u.KempstonReadsWhileHeld - before; got != 0 {
+		t.Fatalf("counted %d held-reads with nothing pressed; want 0", got)
+	}
+	u.SetKempstonButton(KempstonRight, true)
+	u.ReadPort(0x001F)
+	u.ReadPort(0x001F)
+	if got := u.KempstonReadsWhileHeld - before; got != 2 {
+		t.Fatalf("counted %d held-reads while right was held; want 2", got)
+	}
+	u.SetKempstonButton(KempstonRight, false)
+
+	// Non-Kempston ports must not be counted.
+	before = u.KempstonPortReads
+	u.ReadPort(0xFFFE)
+	u.ReadPort(0x00FE)
+	if got := u.KempstonPortReads - before; got != 0 {
+		t.Fatalf("counted %d reads on non-Kempston ports; want 0", got)
+	}
+}
+
 // TestNextJoyPortMDButtons is the port-side half of the MD-pad wiring:
 // with a real button source the MD mode's bits 7:6 (START/A) now carry
 // data instead of idling. Complements TestNextJoyPortRouting, which

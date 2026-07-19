@@ -4,6 +4,8 @@ package main
 
 import (
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"syscall/js"
 	"time"
@@ -445,6 +447,72 @@ func setupWasmExports() {
 		}
 		wasmEmu.SetJoystickState(uint16(a[0].Int()))
 		return nil
+	}))
+
+	// zxJoystickDebug() -> {type, effective, kempstonEnabled, state,
+	// kempstonPortReads}. Splits the three ways pad input can appear to do
+	// nothing, which are indistinguishable from the outside:
+	//   state == 0          -> the host isn't delivering input
+	//   kempstonEnabled off -> the interface didn't arm (a machine switch
+	//                          rebuilds the emulator and drops it)
+	//   portReads == 0      -> the game never reads the Kempston port, so
+	//                          it wants a different interface entirely
+	g.Set("zxJoystickDebug", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		e := wasmEmu
+		if e == nil {
+			return nil
+		}
+		out := map[string]any{
+			"type":         joystickToConfigString(e.joystickType),
+			"effective":    joystickToConfigString(e.effectiveJoystick()),
+			"state":        int(e.joyState),
+			// Cumulative: these survive letting go of the pad, so they
+			// answer "did input EVER arrive?" rather than "is a button
+			// down right now?".
+			"bitsSeen":     int(e.joyBitsSeen),
+			"nonZeroCount": int(e.joyNonZeroCount),
+		}
+		if e.ula != nil {
+			out["kempstonStateSeen"] = int(e.joyBitsSeen & 0x1F)
+		}
+		if e.ula != nil {
+			out["kempstonEnabled"] = e.ula.KempstonEnabled
+			out["kempstonState"] = int(e.ula.KempstonState)
+			out["kempstonPortReads"] = int(e.ula.KempstonPortReads)
+			out["kempstonReadsWhileHeld"] = int(e.ula.KempstonReadsWhileHeld)
+			// The ports the guest read that nothing answered, busiest
+			// first. A game whose joystick "does nothing" is usually
+			// polling one of these — and whether its low byte has A5
+			// clear says whether a real Kempston interface would have
+			// answered where we did not.
+			tally := e.ula.UnattachedPortReads()
+			type portCount struct {
+				port byte
+				n    uint64
+			}
+			var busy []portCount
+			for p, n := range tally {
+				if n > 0 {
+					busy = append(busy, portCount{byte(p), n})
+				}
+			}
+			sort.Slice(busy, func(i, j int) bool { return busy[i].n > busy[j].n })
+			if len(busy) > 8 {
+				busy = busy[:8]
+			}
+			top := []any{}
+			for _, b := range busy {
+				top = append(top, map[string]any{
+					"port":   "0x" + strconv.FormatUint(uint64(b.port), 16),
+					"reads":  int(b.n),
+					// A real Kempston decodes on A5 low; if this is
+					// true, hardware would have answered where we did not.
+					"a5low": b.port&0x20 == 0,
+				})
+			}
+			out["unattachedPorts"] = top
+		}
+		return js.ValueOf(out)
 	}))
 
 	// zxReset() -> "". Reboot the current machine (cold reset): 48K/128K return

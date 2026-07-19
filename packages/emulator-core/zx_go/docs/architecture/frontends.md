@@ -107,11 +107,35 @@ replacement for the JSSpeccy3 Emulator class:
   buttons onto the Megadrive six); unrecognised devices fall back to
   axes 0/1 plus "any button fires", since their button order is
   device-specific — `window.__zxgoPads()` dumps raw pad state for mapping
-  work. The interface (`zxJoystickType`) is a Joystick menu in the JSSpeccy
-  chrome, persisted in localStorage. It defaults to None, which the core
-  routes to Kempston on the Next but leaves inert on classic machines —
-  a live port $1F would confuse 48K titles that read it expecting the
-  floating bus. Desktop (Fyne/GLFW) has no pad source yet.
+  work. The interface is chosen with `zxJoystickType`; the default 'None'
+  means "decide for me" and resolves to Kempston on EVERY model, because
+  a Kempston interface is fitted at construction on classic machines too
+  (`newEmulator`) and the Next FPGA always decodes port $1F.
+  That timing is load-bearing, not incidental: games probe for a Kempston
+  by polling $1F in a tight loop and judging whether it reads consistently
+  (Manic Miner does exactly 256 reads at startup), so the interface must
+  be present before the guest's FIRST read. An earlier r77 attempt to
+  DETECT the port being polled and arm the interface mid-loop made such
+  games conclude "no joystick" and stop looking — the failure it was
+  meant to fix. Safe because the decode is A7..A5 low while the
+  conventional floating-bus port is $FF (A7..A5 high), so games sampling
+  the bus on purpose (Arkanoid, Sidewize) are unaffected.
+  NOTE there is deliberately NO joystick picker in this package's menu
+  bar: every consumer calls `hideUI()` on mount, so anything added there
+  is unreachable. The picker belongs in each app's own UI, via the
+  `setJoystick`/`onJoystickChange` handle — NOT YET BUILT, so Sinclair
+  and Cursor are currently unreachable in the apps. Desktop (Fyne/GLFW)
+  has no pad source yet.
+  Diagnostics: `window.__zxgoJoy()` reports the host-side and core-side
+  vectors CUMULATIVELY (live state reads idle by the time anyone can
+  inspect it), whether they agree (`boundaryOK`), how often the guest
+  read the Kempston port, how often it did so while a button was held,
+  and the busiest ports no device answered. Between them these separate
+  "input never arrived" from "the game never looked" from "the game had
+  the input and ignored it" — the last being common and NOT an emulator
+  fault: many titles require selecting the joystick in their own control
+  menu (Arkanoid needs `J`) and will ignore a perfectly emulated stick
+  until you do.
 - Assets: the PRIMARY source (r60) is the official SpecNext distro zip
   (`sn-emulator-24.11.zip`: the two NextZXOS ROMs + the full 1 GB
   `cspect-next-1gb.img`), fetched through the same-origin `/specnext/`

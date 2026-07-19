@@ -28,7 +28,7 @@ import { StandardKeyboardHandler, RecreatedZXSpectrumHandler } from '../Keyboard
 import { tapToNext } from './tapToNext.js';
 import { assetUrl } from './assetManifest.js';
 import { nativeZipEntries } from './zipExtract.js';
-import { GamepadPoller, loadJoystickPreference, saveJoystickPreference } from './gamepad.js';
+import { GamepadPoller } from './gamepad.js';
 
 const scriptUrl = document.currentScript.src;
 
@@ -39,7 +39,7 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r77-gamepad';
+const ENGINE_REV = 'r78-joydiag';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
@@ -204,12 +204,32 @@ export class GoEmulator extends EventEmitter {
         // port $1F) while leaving classic machines untouched — enabling
         // Kempston there would make port $1F answer for 48K titles that
         // read it expecting the floating bus.
-        // An explicit opt wins over the remembered choice, so an app can
-        // pin the interface if it ever needs to.
-        this.joystickType = opts.joystick && opts.joystick !== 'None'
-            ? opts.joystick
-            : loadJoystickPreference(opts.joystick || 'None');
+        // The app supplies and persists this (its own UI owns the picker —
+        // this package's menu bar is hidden by every consumer). 'None' is
+        // "decide for me": the core routes it to Kempston on the Next, and
+        // on classic machines auto-arms Kempston once a game is seen
+        // polling port $1F.
+        this.joystickType = opts.joystick || 'None';
         window.__zxgoPads = () => this.gamepad.describe();
+        // Companion to __zxgoPads: that one says what the BROWSER sees,
+        // this one what the MACHINE sees. Together they localise a dead
+        // pad to the host, the interface, or the game itself.
+        window.__zxgoJoy = () => {
+            const core = globalThis.zxJoystickDebug ? globalThis.zxJoystickDebug() : {};
+            const hostBits = this.gamepad.bitsSeen;
+            return {
+                selected: this.joystickType,
+                // Host side, cumulative — what the BROWSER produced.
+                hostBitsSeen: '0x' + hostBits.toString(16).padStart(3, '0'),
+                hostNonZeroPolls: this.gamepad.nonZeroCount,
+                ...core,
+                // If the browser saw input the core never did, the loss is
+                // at the wasm boundary; if neither saw it, the pad or the
+                // mapping is at fault; if both saw it, the game simply
+                // isn't acting on it.
+                boundaryOK: hostBits === (core.bitsSeen ?? 0),
+            };
+        };
 
         this.isRunning = false;
         this.isInitiallyPaused = (!opts.autoStart);
@@ -629,7 +649,6 @@ export class GoEmulator extends EventEmitter {
     // rebuilds the core's emulator and takes its joystick state with it.
     setJoystick(type) {
         this.joystickType = type;
-        saveJoystickPreference(type);
         this.applyJoystickType();
         this.emit('setJoystick', type);
     }
@@ -1103,6 +1122,11 @@ export class GoEmulator extends EventEmitter {
         const res = globalThis.zxLoadSnapshot(new Uint8Array(arrayBuffer), ext);
         if (res === '48' || res === '128') {
             this.machineType = parseInt(res, 10);
+            // A snapshot whose model differs from the running machine makes
+            // the core build a WHOLE NEW emulator (wasm_js.go: newEmulator +
+            // wasmEmu reassign), so the joystick selection goes with it —
+            // re-assert it, exactly as the boot paths do.
+            this.applyJoystickType();
             this.emit('setMachine', this.machineType);
             return Promise.resolve({ mediaType: 'snapshot' });
         }

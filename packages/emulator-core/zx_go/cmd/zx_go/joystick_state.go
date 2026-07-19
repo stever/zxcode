@@ -43,6 +43,14 @@ func (e *emulator) SetJoystickState(vec uint16) {
 	vec &= 0x0FFF
 	changed := vec ^ e.joyState
 	e.joyState = vec
+	// Accumulate for diagnostics. The live state is useless for
+	// answering "did the pad ever reach the machine?", because nobody
+	// can hold a direction and inspect the emulator at the same moment —
+	// by the time you look, everything has been released.
+	e.joyBitsSeen |= vec
+	if vec != 0 {
+		e.joyNonZeroCount++
+	}
 	if changed == 0 {
 		return
 	}
@@ -70,13 +78,12 @@ func (e *emulator) setJoystickType(t JoystickType) {
 		e.dispatchJoystick(dir, false)
 	}
 	e.joyState = 0
-	if e.joystickType == JoystickKempston && e.ula != nil {
-		e.ula.KempstonEnabled = false
-	}
 	e.joystickType = t
-	if t == JoystickKempston && e.ula != nil {
-		e.ula.KempstonEnabled = true
-	}
+	// KempstonEnabled is deliberately NOT touched here. The interface is
+	// fitted at construction and stays fitted for the machine's life:
+	// un-fitting it mid-run would change what port $1F reads underneath a
+	// game that has already probed it, and on real hardware choosing to
+	// play with Sinclair keys does not unplug the Kempston card.
 }
 
 // joystickTypeFromName parses the frontend-facing joystick names. The

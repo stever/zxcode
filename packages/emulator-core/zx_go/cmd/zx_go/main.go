@@ -207,6 +207,13 @@ type emulator struct {
 	// whole snapshots and we dispatch only the edges. UI thread only.
 	joyState uint16
 
+	// Diagnostic accumulators over every vector SetJoystickState has
+	// applied: the OR of all bits ever seen, and how many non-idle
+	// vectors arrived. Live state cannot answer "did input reach the
+	// machine?" after the user lets go.
+	joyBitsSeen     uint16
+	joyNonZeroCount uint64
+
 	// RZX session state. At most one of rzxPlayback / rzxRecord is
 	// non-nil at any given time (FUSE rzx.c:164,278). Atomic so the
 	// per-frame read in the emulation goroutine doesn't need a lock,
@@ -465,6 +472,24 @@ func newEmulator(model roms.SpectrumModel) (*emulator, error) {
 		return nil, err
 	}
 	ula := ula.New(mem, kbd)
+	// A Kempston interface is fitted from power-on, so port $1F answers
+	// consistently from the guest's very first read.
+	//
+	// This MUST be decided before the guest runs, not once a game has been
+	// seen using the port. Games detect a Kempston by polling $1F in a
+	// tight loop and judging whether it reads consistently or as floating
+	// garbage — Manic Miner does exactly 256 reads at startup. Attaching
+	// the interface partway through that loop answers "absent, absent,
+	// absent, present", which such a routine reads as absent, and it then
+	// stops polling for good. A consistent answer from read zero is the
+	// only one a detection routine can act on.
+	//
+	// Safe because the decode is A7..A5 low with A4..A0 high; the
+	// conventional floating-bus port is $FF, whose A7..A5 are high, so
+	// programs sampling the bus do not land here. An unfitted stick and a
+	// fitted-but-idle one both read $00, so this is an honest model of a
+	// machine with the interface installed and nothing pressed.
+	ula.KempstonEnabled = true
 	cpu := z80.New(mem, ula)
 	configureClassicIntTiming(cpu, model)
 
@@ -647,20 +672,25 @@ func (e *emulator) handleKeyDown(ev *fyne.KeyEvent) {
 }
 
 // effectiveJoystickFor resolves the joystick scheme that should handle arrow
-// keys for a given configured choice and machine model. An unconfigured
-// (None) joystick on the Spectrum Next falls back to Kempston: the Next FPGA
-// always decodes the Kempston port ($1F) and nearly all Next software reads
-// it, so without this a fresh user's arrows drive nothing and Kempston-only
-// games (e.g. Sonic) are uncontrollable. Any explicit choice is preserved,
-// and every other model keeps None (the user opts in via Peripherals menu).
+// keys and pad input for a given configured choice and machine model.
+//
+// An unconfigured (None) joystick falls back to Kempston on EVERY model.
+// The Next FPGA always decodes port $1F and nearly all Next software reads
+// it; classic machines are given the interface at construction for the same
+// reason (see newEmulator), so the fallback is equally true there. Without
+// it a fresh user's arrows and gamepad drive nothing at all, and the most
+// common interface on the most common games is the one they cannot reach.
+//
+// Any explicit choice is preserved, including an explicit None — only the
+// default means "decide for me".
 func effectiveJoystickFor(configured JoystickType, model roms.SpectrumModel) JoystickType {
-	if configured == JoystickNone && model == roms.ModelNext {
+	if configured == JoystickNone {
 		return JoystickKempston
 	}
 	return configured
 }
 
-// effectiveJoystick is effectiveJoystickFor applied to the live model.
+// effectiveJoystick is effectiveJoystickFor applied to the live model,
 func (e *emulator) effectiveJoystick() JoystickType {
 	model := roms.Model48K
 	if e.mem != nil {

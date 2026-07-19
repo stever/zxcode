@@ -89,32 +89,10 @@ export const JSSpeccy = (container, opts) => {
         emu.setMachine('next');
     });
 
-    // Joystick menu. Which interface the host gamepad drives — a game
-    // reads exactly one, and there's no way to detect which, so it's the
-    // user's call. "None" still leaves the pad working on the Next: the
-    // FPGA always decodes the Kempston port, so the core routes an
-    // unconfigured Next joystick there (classic machines get nothing,
-    // which is the safe default — a live port $1F would confuse 48K
-    // titles that read it expecting the floating bus).
-    const joystickMenu = ui.menuBar.addMenu('Joystick');
-
-    const joystickItems = {
-        None: joystickMenu.addItem('None (Kempston on Next)', () => emu.setJoystick('None')),
-        Kempston: joystickMenu.addItem('Kempston', () => emu.setJoystick('Kempston')),
-        Sinclair1: joystickMenu.addItem('Sinclair 1 (keys 1-5)', () => emu.setJoystick('Sinclair1')),
-        Sinclair2: joystickMenu.addItem('Sinclair 2 (keys 6-0)', () => emu.setJoystick('Sinclair2')),
-        Cursor: joystickMenu.addItem('Cursor / Protek', () => emu.setJoystick('Cursor')),
-    };
-
-    const setJoystickBullet = (type) => {
-        for (const [name, item] of Object.entries(joystickItems)) {
-            if (name === type) item.setBullet();
-            else item.unsetBullet();
-        }
-    };
-
-    emu.on('setJoystick', setJoystickBullet);
-    setJoystickBullet(emu.joystickType);
+    // No Joystick menu here: both apps call hideUI() the moment they
+    // mount, so anything added to this menu bar is unreachable. The
+    // picker belongs in each app's own UI, driven through the
+    // setJoystick/onJoystickChange handle below.
 
     const displayMenu = ui.menuBar.addMenu('Display');
 

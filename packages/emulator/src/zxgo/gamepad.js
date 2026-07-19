@@ -105,39 +105,16 @@ export function padVector(pad) {
     return bits;
 }
 
-const JOYSTICK_KEY = 'zxJoystick';
-const JOYSTICK_TYPES = ['None', 'Kempston', 'Sinclair1', 'Sinclair2', 'Cursor'];
-
-// The joystick choice is persisted HERE rather than in the apps' Redux
-// stores (where the machine and keyboard-side preferences live), because
-// the picker is emulator chrome: the menu is built in JSSpeccy.js and
-// both apps mount it, so app-side persistence would mean duplicating the
-// same reducer twice for a setting neither app otherwise knows about. An
-// explicit `joystick` opt still wins, so an app CAN drive it if it grows
-// a reason to.
-export function loadJoystickPreference(fallback) {
-    try {
-        const saved = localStorage.getItem(JOYSTICK_KEY);
-        if (JOYSTICK_TYPES.includes(saved)) return saved;
-    } catch (e) {
-        console.error('Failed to load joystick preference:', e);
-    }
-    return fallback;
-}
-
-export function saveJoystickPreference(type) {
-    try {
-        localStorage.setItem(JOYSTICK_KEY, type);
-    } catch (e) {
-        console.error('Failed to save joystick preference:', e);
-    }
-}
-
 export class GamepadPoller {
     constructor() {
         this.lastVector = 0;
         this.hadPad = false;
         this.loggedId = null;
+        // Cumulative, for diagnostics: the OR of every vector produced
+        // and how many non-idle ones there were. Live state is useless
+        // once the user lets go of the pad to go and look at it.
+        this.bitsSeen = 0;
+        this.nonZeroCount = 0;
     }
 
     // firstPad returns the lowest-indexed connected pad, or null. Pads
@@ -175,6 +152,8 @@ export class GamepadPoller {
                 + ` ${pad.buttons.length} buttons, ${pad.axes.length} axes)`);
         }
         const bits = padVector(pad);
+        this.bitsSeen |= bits;
+        if (bits !== 0) this.nonZeroCount++;
         if (bits === this.lastVector) return null;
         this.lastVector = bits;
         return bits;

@@ -227,6 +227,17 @@ type ULA struct {
 	// Next's NR $B2 and by the MD modes of ports $1F/$37.
 	MDExtraState uint16
 
+	// Count of guest reads decoding as the Kempston port, incremented
+	// even when no Kempston interface is attached, and of the subset of
+	// those made while a button was actually held. Diagnostic only —
+	// neither affects what a read returns.
+	KempstonPortReads      uint64
+	KempstonReadsWhileHeld uint64
+
+	// Per-low-byte tally of IN reads no device answered — see
+	// UnattachedPortReads. Diagnostic only.
+	unattachedReads [256]uint64
+
 	// ulaOutputDisabled mirrors NextReg $68 bit 7 ("Disable ULA output").
 	// When set the ULA layer paints nothing — the screen area shows the
 	// lower layers (Layer 2 / Tilemap) or the NR$4A fallback colour, never
@@ -1864,8 +1875,26 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// (On the Next the branch above handles $1F; this stays as the
 	// classic-interface path, and as a fallback for Next wirings with
 	// no NextReg dispatcher attached.)
-	if (u.KempstonEnabled || isNext) && (addr&0x00E0) == 0x0000 && (addr&0x001F) == 0x001F {
-		return u.KempstonState & 0x1F, true
+	if (addr&0x00E0) == 0x0000 && (addr&0x001F) == 0x001F {
+		// Counted whether or not a Kempston interface is attached: a game
+		// polling this port is asking for a Kempston stick, and that is
+		// the one joystick scheme a host CAN detect (Sinclair and Cursor
+		// are ordinary keyboard reads, indistinguishable from a game
+		// reading its own menu keys). Lets a frontend tell "the pad isn't
+		// reaching the machine" apart from "this game never looks".
+		u.KempstonPortReads++
+		if u.KempstonState != 0 {
+			// The game read the port at a moment when a button was
+			// genuinely held. This is the decisive diagnostic: it means
+			// real input was handed to the guest. If the game still does
+			// not respond, the emulator delivered and the game chose to
+			// ignore it — typically because its own control-select menu
+			// is set to keyboard — and no emulator-side fix applies.
+			u.KempstonReadsWhileHeld++
+		}
+		if u.KempstonEnabled || isNext {
+			return u.KempstonState & 0x1F, true
+		}
 	}
 
 	// Floating-bus: on 48K and 128K, an unattached IN returns
@@ -1874,7 +1903,21 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// The +2A/+3 memory controller disables this behaviour;
 	// ModelNext also returns 0xFF for compatibility with most
 	// post-Sinclair software that's clean about port use.
+	// Record what the guest asked for and got nothing. A joystick that
+	// "does not work" is usually a game polling an address we do not
+	// decode: it gets floating-bus garbage, reads it as noise or as every
+	// button held, and gives up. Which address it used is the one fact
+	// that settles it, and guessing at Kempston clone decodes is how you
+	// break the games (Arkanoid included) that read the bus ON PURPOSE.
+	// Low byte only — that is what every interface decodes on.
+	u.unattachedReads[byte(addr)]++
 	return u.floatingBusByte(), false
+}
+
+// UnattachedPortReads returns a copy of the per-low-byte tally of IN
+// reads that no device answered. Diagnostic only.
+func (u *ULA) UnattachedPortReads() [256]uint64 {
+	return u.unattachedReads
 }
 
 // floatingBusByte computes the value an unattached IN returns
