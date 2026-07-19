@@ -122,10 +122,17 @@ replacement for the JSSpeccy3 Emulator class:
   the bus on purpose (Arkanoid, Sidewize) are unaffected.
   NOTE there is deliberately NO joystick picker in this package's menu
   bar: every consumer calls `hideUI()` on mount, so anything added there
-  is unreachable. The picker belongs in each app's own UI, via the
-  `setJoystick`/`onJoystickChange` handle — NOT YET BUILT, so Sinclair
-  and Cursor are currently unreachable in the apps. Desktop (Fyne/GLFW)
-  has no pad source yet.
+  is unreachable. Each app owns its own picker instead, driven through
+  the `setJoystick`/`onJoystickChange` handle — a Joystick menu in both
+  apps' `Nav`, persisted in their Redux stores under the `joystick`
+  localStorage key, threaded into `emuParams` at construction so the
+  choice is live before any program runs, and mirrored back through
+  `onJoystickChange` so engine-initiated changes keep the checkmark
+  honest (the same two-action pattern as `machine`). The apps offer the
+  four real interfaces and default to Kempston; 'None' is not exposed,
+  since it now resolves to Kempston everywhere and a second entry with
+  identical behaviour would be a lie. Desktop (Fyne/GLFW) has no pad
+  source yet.
   Diagnostics: `window.__zxgoJoy()` reports the host-side and core-side
   vectors CUMULATIVELY (live state reads idle by the time anyone can
   inspect it), whether they agree (`boundaryOK`), how often the guest

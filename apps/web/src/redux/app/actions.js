@@ -9,6 +9,8 @@ export const actionTypes = {
     toggleBreakpointGutter: 'app/toggleBreakpointGutter',
     setMachine: 'app/setMachine',
     machineChanged: 'app/machineChanged',
+    setJoystick: 'app/setJoystick',
+    joystickChanged: 'app/joystickChanged',
 };
 
 export const showActiveEmulator = () => ({
@@ -58,4 +60,17 @@ export const setMachine = (machine) => ({
 export const machineChanged = (machine) => ({
     type: actionTypes.machineChanged,
     machine
+})
+
+// Which joystick interface the host gamepad drives. Games read exactly one
+// and there is no way to detect which, so it is the user's choice.
+export const setJoystick = (joystick) => ({
+    type: actionTypes.setJoystick,
+    joystick
+});
+
+// State-only mirror of an engine-initiated change, matching machineChanged.
+export const joystickChanged = (joystick) => ({
+    type: actionTypes.joystickChanged,
+    joystick
 })

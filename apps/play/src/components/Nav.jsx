@@ -3,7 +3,7 @@ import {useDispatch, useSelector} from "react-redux";
 import {useNavigate} from "react-router-dom";
 import {Nav as Deck} from "@zxplay/ui";
 import {viewFullScreen, showOpenFileDialog} from "../redux/jsspeccy/actions";
-import {resetEmulator, setMachine, setKeyboardSide} from "../redux/app/actions";
+import {resetEmulator, setMachine, setKeyboardSide, setJoystick} from "../redux/app/actions";
 import {useTranslation} from "@zxplay/i18n";
 
 export default function Nav({compact = false} = {}) {
@@ -20,8 +20,9 @@ export default function Nav({compact = false} = {}) {
     const machine = useSelector(state => state?.app.machine);
     const machineLocked = useSelector(state => state?.app.machineLocked);
     const keyboardSide = useSelector(state => state?.app.keyboardSide);
+    const joystick = useSelector(state => state?.app.joystick);
 
-    const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide);
+    const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide, joystick);
 
     return (
         <Deck
@@ -33,7 +34,7 @@ export default function Nav({compact = false} = {}) {
     );
 }
 
-function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide) {
+function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide, joystick) {
     const viewFullScreenMenuItem = {
         label: t('nav.fullScreen'),
         icon: 'pi pi-fw pi-window-maximize',
@@ -138,9 +139,31 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
         }
     };
 
+    // Which interface the gamepad drives. A game reads exactly one and there
+    // is no way to detect which, so the player chooses. The labels name the
+    // keys the keyboard-based schemes press, since that is how a player
+    // recognises them from a game's own control screen.
+    const joystickMenu = {
+        label: t('nav.joystick', 'Joystick'),
+        icon: 'pi pi-fw pi-directions',
+        items: [
+            ['Kempston', t('nav.joystickKempston', 'Kempston')],
+            ['Sinclair1', t('nav.joystickSinclair1', 'Sinclair 1 (keys 1-5)')],
+            ['Sinclair2', t('nav.joystickSinclair2', 'Sinclair 2 (keys 6-0)')],
+            ['Cursor', t('nav.joystickCursor', 'Cursor / Protek')],
+        ].map(([value, label]) => ({
+            label,
+            icon: joystick === value ? 'pi pi-fw pi-check' : 'pi pi-fw',
+            command: () => {
+                dispatch(setJoystick(value));
+            }
+        }))
+    };
+
     return [
         viewMenu,
         machineMenu,
+        joystickMenu,
         infoMenu,
         resetButton,
     ];

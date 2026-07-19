@@ -9,6 +9,11 @@
     "machine": "Machine",
     "machine48": "Spectrum 48K",
     "machine128": "Spectrum 128K",
+    "joystick": "Joystick",
+    "joystickKempston": "Kempston",
+    "joystickSinclair1": "Sinclair 1 (keys 1-5)",
+    "joystickSinclair2": "Sinclair 2 (keys 6-0)",
+    "joystickCursor": "Cursor / Protek",
     "keyboardSide": "Keyboard Side",
     "keyboardSideLeft": "Left",
     "keyboardSideRight": "Right"

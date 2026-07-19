@@ -8,6 +8,8 @@ export const actionTypes = {
     setMachine: 'app/setMachine',
     machineChanged: 'app/machineChanged',
     setKeyboardSide: 'app/setKeyboardSide',
+    setJoystick: 'app/setJoystick',
+    joystickChanged: 'app/joystickChanged',
 };
 
 export const showActiveEmulator = () => ({
@@ -34,4 +36,18 @@ export const machineChanged = (machine) => ({
 export const setKeyboardSide = (side) => ({
     type: actionTypes.setKeyboardSide,
     side
+})
+
+// Which joystick interface the host gamepad drives. Games read exactly one
+// and there is no way to detect which, so it is the player's choice.
+export const setJoystick = (joystick) => ({
+    type: actionTypes.setJoystick,
+    joystick
+});
+
+// State-only mirror of an engine-initiated change, matching machineChanged:
+// updates the menu checkmark without driving the emulator back.
+export const joystickChanged = (joystick) => ({
+    type: actionTypes.joystickChanged,
+    joystick
 })

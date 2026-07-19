@@ -8,6 +8,13 @@ import {parseKeyConfig} from "../../lib/layout";
 
 const MACHINE_KEY = 'machine';
 const KEYBOARD_SIDE_KEY = 'keyboardSide';
+const JOYSTICK_KEY = 'joystick';
+
+// Joystick interfaces the host gamepad can drive. A game reads exactly one
+// and there is no way to detect which, so the player picks. Kempston is the
+// default: it is the commonest interface, and the emulator fits the
+// interface on every machine so it is never a wrong-but-harmful choice.
+const JOYSTICK_TYPES = ['Kempston', 'Sinclair1', 'Sinclair2', 'Cursor'];
 
 // Full ZX Spectrum keyboard. Games may override the keys (and rows) via the "k"
 // query parameter.
@@ -37,6 +44,16 @@ const loadKeyboardSide = () => {
         console.error('Failed to load keyboard side preference:', e);
     }
     return 'right';
+};
+
+const loadJoystick = () => {
+    try {
+        const saved = localStorage.getItem(JOYSTICK_KEY);
+        if (JOYSTICK_TYPES.includes(saved)) return saved;
+    } catch (e) {
+        console.error('Failed to load joystick preference:', e);
+    }
+    return 'Kempston';
 };
 
 const parseMachine = (value) => {
@@ -79,7 +96,8 @@ const initialState = {
     machine: machineState.machine,
     machineLocked: machineState.machineLocked,
     keyConfig: loadKeyConfig(),
-    keyboardSide: loadKeyboardSide()
+    keyboardSide: loadKeyboardSide(),
+    joystick: loadJoystick()
 };
 
 // -----------------------------------------------------------------------------
@@ -126,6 +144,19 @@ function setKeyboardSide(state, action) {
     }
 }
 
+function setJoystick(state, action) {
+    if (!JOYSTICK_TYPES.includes(action.joystick)) return state;
+    try {
+        localStorage.setItem(JOYSTICK_KEY, action.joystick);
+    } catch (e) {
+        console.error('Failed to save joystick preference:', e);
+    }
+    return {
+        ...state,
+        joystick: action.joystick
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Reducer
 // -----------------------------------------------------------------------------
@@ -136,6 +167,8 @@ const actionsMap = {
     [actionTypes.setMachine]: setMachine,
     [actionTypes.machineChanged]: setMachine,
     [actionTypes.setKeyboardSide]: setKeyboardSide,
+    [actionTypes.setJoystick]: setJoystick,
+    [actionTypes.joystickChanged]: setJoystick,
 };
 
 export default function reducer(state = initialState, action) {

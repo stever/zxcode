@@ -10,7 +10,7 @@ import {
 } from "./actions";
 import {reset as resetProject} from "../project/actions";
 import {setJsspeccy} from "./handle";
-import {showActiveEmulator, machineChanged, actionTypes as appActionTypes} from "../app/actions";
+import {showActiveEmulator, machineChanged, joystickChanged, actionTypes as appActionTypes} from "../app/actions";
 import {handleException} from "../../errors";
 import {store} from "../store";
 
@@ -93,6 +93,11 @@ export function* watchForSetMachineActions() {
     yield takeLatest(appActionTypes.setMachine, handleSetMachineActions);
 }
 
+// noinspection JSUnusedGlobalSymbols
+export function* watchForSetJoystickActions() {
+    yield takeLatest(appActionTypes.setJoystick, handleSetJoystickActions);
+}
+
 // -----------------------------------------------------------------------------
 // Action handlers
 // -----------------------------------------------------------------------------
@@ -112,11 +117,15 @@ function* handleRenderEmulatorActions(action) {
         // Boot with the selected machine: the "m" query parameter (incl. Pentagon
         // m=5) if present, otherwise the persisted menu choice, else the default.
         const machine = yield select((state) => state?.app.machine);
+        const joystick = yield select((state) => state?.app.joystick);
 
         const emuParams = {
             zoom,
             machine: machine || 48, // 48, 128 or 'next'
             autoLoadTapes: true,
+            // Which interface the gamepad drives. Passed at construction so
+            // the choice is live before any program runs.
+            joystick: joystick || 'Kempston',
             // IDE mode: compiled TAPs opened while the Next is selected are
             // translated to run ON the Next (autoexec-free LOAD / .nexload).
             // Without this flag (the play site), tapes are classic media and
@@ -149,6 +158,7 @@ function* handleRenderEmulatorActions(action) {
         // Next), and this mirrors those switches into app state without
         // re-triggering the boot saga.
         jsspeccy.onMachineChange((m) => store.dispatch(machineChanged(m)));
+        jsspeccy.onJoystickChange((j) => store.dispatch(joystickChanged(j)));
 
         if (doFilter) {
             // TODO: Investigate this option, and narrow the element selector.
@@ -283,6 +293,17 @@ function* handleOpenUrlActions(action) {
         jsspeccy.reset();
         setTimeout(() => jsspeccy.start(), 100);
         setTimeout(() => jsspeccy.openUrl(action.url), 100);
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleSetJoystickActions(action) {
+    try {
+        // Unlike the machine, this needs no reset: the engine re-applies the
+        // interface to the running machine, so a program keeps running.
+        if (!jsspeccy) return;
+        jsspeccy.setJoystick(action.joystick);
     } catch (e) {
         handleException(e);
     }

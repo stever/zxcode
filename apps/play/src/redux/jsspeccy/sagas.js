@@ -7,7 +7,7 @@ import {
     reset,
     start
 } from "./actions";
-import {showActiveEmulator, machineChanged, actionTypes as appActionTypes} from "../app/actions";
+import {showActiveEmulator, machineChanged, joystickChanged, actionTypes as appActionTypes} from "../app/actions";
 import {handleException} from "../../errors";
 import {store} from "../store";
 
@@ -85,6 +85,11 @@ export function* watchForSetMachineActions() {
     yield takeLatest(appActionTypes.setMachine, handleSetMachineActions);
 }
 
+// noinspection JSUnusedGlobalSymbols
+export function* watchForSetJoystickActions() {
+    yield takeLatest(appActionTypes.setJoystick, handleSetJoystickActions);
+}
+
 // -----------------------------------------------------------------------------
 // Action handlers
 // -----------------------------------------------------------------------------
@@ -105,11 +110,15 @@ function* handleRenderEmulatorActions(action) {
         // Boot with the selected machine: the "m" query parameter (incl. Pentagon
         // m=5) if present, otherwise the persisted menu choice, else the default.
         const machine = yield select((state) => state?.app.machine);
+        const joystick = yield select((state) => state?.app.joystick);
 
         const emuParams = {
             zoom,
             machine: machine || 48, // 48, 128 or 'next'
-            autoLoadTapes: true
+            autoLoadTapes: true,
+            // Which interface the gamepad drives. Passed at construction so
+            // the choice is live before any program runs.
+            joystick: joystick || 'Kempston'
         };
 
         let doFilter = false;
@@ -136,6 +145,7 @@ function* handleRenderEmulatorActions(action) {
         // Next), and this mirrors those switches into app state without
         // re-triggering the boot saga.
         jsspeccy.onMachineChange((m) => store.dispatch(machineChanged(m)));
+        jsspeccy.onJoystickChange((j) => store.dispatch(joystickChanged(j)));
 
         if (doFilter) {
             // TODO: Investigate this option, and narrow the element selector.
@@ -256,6 +266,17 @@ function* handleOpenUrlActions(action) {
         jsspeccy.reset();
         setTimeout(() => jsspeccy.start(), 100);
         setTimeout(() => jsspeccy.openUrl(action.url), 100);
+    } catch (e) {
+        handleException(e);
+    }
+}
+
+function* handleSetJoystickActions(action) {
+    try {
+        // Unlike the machine, this needs no reset: the engine re-applies the
+        // interface to the running machine, so a game keeps playing.
+        if (!jsspeccy) return;
+        jsspeccy.setJoystick(action.joystick);
     } catch (e) {
         handleException(e);
     }

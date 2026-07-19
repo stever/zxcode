@@ -32,6 +32,23 @@ const loadBreakpointGutter = () => {
 };
 
 const MACHINE_KEY = 'machine';
+const JOYSTICK_KEY = 'joystick';
+
+// Joystick interfaces the host gamepad can drive. A game reads exactly one
+// and there is no way to detect which, so the user picks. Kempston is the
+// default: it is the commonest interface, and the emulator fits it on every
+// machine, so it is never a wrong-but-harmful choice.
+const JOYSTICK_TYPES = ['Kempston', 'Sinclair1', 'Sinclair2', 'Cursor'];
+
+const loadJoystick = () => {
+    try {
+        const saved = localStorage.getItem(JOYSTICK_KEY);
+        if (JOYSTICK_TYPES.includes(saved)) return saved;
+    } catch (e) {
+        console.error('Failed to load joystick preference:', e);
+    }
+    return 'Kempston';
+};
 
 const parseMachine = (value) => {
     if (value === '128' || value === 128) return 128;
@@ -73,7 +90,8 @@ const initialState = {
     lineNumbers: loadLineNumbers(),
     breakpointGutter: loadBreakpointGutter(),
     machine: machineState.machine,
-    machineLocked: machineState.machineLocked
+    machineLocked: machineState.machineLocked,
+    joystick: loadJoystick()
 };
 
 // -----------------------------------------------------------------------------
@@ -135,6 +153,19 @@ function setMachine(state, action) {
 // Reducer
 // -----------------------------------------------------------------------------
 
+function setJoystick(state, action) {
+    if (!JOYSTICK_TYPES.includes(action.joystick)) return state;
+    try {
+        localStorage.setItem(JOYSTICK_KEY, action.joystick);
+    } catch (e) {
+        console.error('Failed to save joystick preference:', e);
+    }
+    return {
+        ...state,
+        joystick: action.joystick
+    }
+}
+
 const actionsMap = {
     [actionTypes.receivePrivacyPolicy]: receivePrivacyPolicy,
     [actionTypes.receiveTermsOfUse]: receiveTermsOfUse,
@@ -142,6 +173,8 @@ const actionsMap = {
     [actionTypes.toggleBreakpointGutter]: toggleBreakpointGutter,
     [actionTypes.setMachine]: setMachine,
     [actionTypes.machineChanged]: setMachine,
+    [actionTypes.setJoystick]: setJoystick,
+    [actionTypes.joystickChanged]: setJoystick,
 };
 
 export default function reducer(state = initialState, action) {

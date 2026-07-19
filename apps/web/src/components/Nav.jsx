@@ -10,7 +10,7 @@ import {
 import { downloadProjectTap } from "../redux/eightbit/actions";
 import { getUserInfo } from "../redux/identity/actions";
 import { login, logout } from "../auth";
-import { resetEmulator, setMachine } from "../redux/app/actions";
+import { resetEmulator, setMachine, setJoystick } from "../redux/app/actions";
 import { getLanguageLabel, isBasicLang } from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
 import Constants from "../constants";
@@ -30,6 +30,7 @@ export default function Nav() {
   const userSlug = useSelector((state) => state?.identity.userSlug);
   const lang = useSelector((state) => state?.project.lang);
   const machine = useSelector((state) => state?.app.machine);
+  const joystick = useSelector((state) => state?.app.joystick);
   const machineLocked = useSelector((state) => state?.app.machineLocked);
 
   const model = getMenuItems(
@@ -41,7 +42,8 @@ export default function Nav() {
     lang,
     emuVisible,
     machine,
-    machineLocked
+    machineLocked,
+    joystick
   );
 
   const isMobile = useSelector((state) => state?.window.isMobile);
@@ -60,7 +62,7 @@ export default function Nav() {
   );
 }
 
-function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible, machine, machineLocked) {
+function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible, machine, machineLocked, joystick) {
   const sep = {
     separator: true,
   };
@@ -342,6 +344,27 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     ],
   };
 
+  // Which interface the gamepad drives. A game reads exactly one and there is
+  // no way to detect which, so the user chooses. The labels name the keys the
+  // keyboard-based schemes press, since that is how a game's own control
+  // screen describes them.
+  const joystickMenu = {
+    label: t("nav.joystick", "Joystick"),
+    icon: "pi pi-fw pi-directions",
+    items: [
+      ["Kempston", t("nav.joystickKempston", "Kempston")],
+      ["Sinclair1", t("nav.joystickSinclair1", "Sinclair 1 (keys 1-5)")],
+      ["Sinclair2", t("nav.joystickSinclair2", "Sinclair 2 (keys 6-0)")],
+      ["Cursor", t("nav.joystickCursor", "Cursor / Protek")],
+    ].map(([value, label]) => ({
+      label,
+      icon: joystick === value ? "pi pi-fw pi-check" : "pi pi-fw",
+      command: () => {
+        dispatch(setJoystick(value));
+      },
+    })),
+  };
+
   const resetButton = {
     label: t("nav.reset"),
     icon: "pi pi-fw pi-power-off",
@@ -358,5 +381,5 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
-  return [projectMenu, viewMenu, machineMenu, infoMenu, resetButton, loginButton];
+  return [projectMenu, viewMenu, machineMenu, joystickMenu, infoMenu, resetButton, loginButton];
 }
