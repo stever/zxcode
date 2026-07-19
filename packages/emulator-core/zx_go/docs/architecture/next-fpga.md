@@ -382,7 +382,19 @@ shape, zxnext.vhd:6543-6552). The pieces:
   cycles as a start debt (`Copper.SetStartPhaseSource`/`startDebt`,
   wired from the CPU reference clock in cmd/zx_go) that Step,
   RunToCycle and FrameMoveInstants all consume before executing, so a
-  mid-frame start is not silently re-anchored to the frame top. A
+  mid-frame start is not silently re-anchored to the frame top. The
+  debt is rebased into the COPPER's frame origin before it is banked
+  (`copperStartPhase`): the render walk drives copper vcount in PAPER
+  rows, and guest WAIT lines follow that convention, but the CPU's
+  frame origin is the frame INT — MinVActive lines earlier. A restart
+  at or before paper top therefore carries NO debt. Charging the raw
+  CPU-origin offset starved the copper for the first (write − paper
+  top) paper lines, which is long enough to miss an early WAIT; because
+  a WAIT releases on strict line EQUALITY the copper then parked for
+  the whole frame. Quantum Storm re-arms its list from the ISR inside
+  the top border and lost its per-band tilemap scroll on alternate
+  frames, shaking the menu rows (#197). Pinned by
+  TestCopperStartPhaseRebasesToPaperTop. A
   free-running pacer wrap (Atic's 1361 cycles, frame-incommensurate)
   keeps that phase for its whole life, so the anchor decides where
   every later raster-slaved guest sequence sits inside the NMI period.

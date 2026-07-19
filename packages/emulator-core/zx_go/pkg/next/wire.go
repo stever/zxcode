@@ -736,6 +736,17 @@ func WireLayer2(d *nextregs.Dispatcher, l *layer2.Layer2, ulaNext ULANextSink) {
 		// Bit 7 reserved.
 		disp.Store(0x13, val&0x7F)
 	})
+	// Seed the live bank selects from the register file's power-on
+	// values. nextregs.New() plants the tbblue_reset_common defaults
+	// (NR$12 = $08, NR$13 = $0B) straight into the backing array, so
+	// unlike Dispatcher.Reset() — which re-drives every default through
+	// write() — construction never reaches the handlers above. Without
+	// this the register file reads back bank 8 while the renderer is
+	// still on its Go zero value, bank 0: any program that relies on the
+	// default NR$12 instead of writing its own displays ZX RAM bank 0-2
+	// as Layer 2 (#197).
+	l.SetActiveBank(d.Raw(0x12))
+	l.SetShadowBank(d.Raw(0x13))
 	d.SetOnWrite(0x70, func(disp *nextregs.Dispatcher, val byte) {
 		// Per zxnext.vhd:5475-5477 (read at :6114): bits 5:4 = Layer 2
 		// resolution (0 = 256×192, 1 = 320×256, 2 = 640×256), bits 3:0 =

@@ -734,8 +734,26 @@ func wireNextSubsystems(e *emulator) error {
 	// uncertainty. A free-running NMI-pacer list keeps this phase for
 	// its whole life, so the anchor decides where every later
 	// raster-slaved walk sits inside the NMI period (#187).
+	// The debt is rebased into the COPPER's frame origin, which is not the
+	// CPU's: the render walk drives the copper's vcount in PAPER rows
+	// (ula.go's paper pass passes y = 0..191, the same convention the
+	// guest's WAIT lines use — a 24-band list of `WAIT y=8k` covers the
+	// 192 paper lines exactly), while the CPU's frame origin is the frame
+	// INT, MinVActive lines earlier. Charging CPU-origin cycles against a
+	// paper-origin vcount starves the copper for the first
+	// (write - paper top) lines of the list; a guest that re-arms its
+	// copper from the ISR — stop, rewrite the list, restart, all inside
+	// the top border — then blows past its first WAIT, and because a WAIT
+	// releases on strict line EQUALITY (copper.vhd:94) it parks for the
+	// whole frame. Quantum Storm does exactly this and lost its per-band
+	// tilemap scroll on alternate frames, shaking the menu rows (#197).
+	// A restart at or before paper top has no debt at all: the copper's
+	// own frame has not started yet, so it begins cleanly at vcount 0.
 	cop.SetStartPhaseSource(func() int {
-		return int(cpu.Ref8Tstates() - cpu.FrameOriginRefTstates()*8)
+		g := mem.NextGeometry()
+		return copperStartPhase(
+			int(cpu.Ref8Tstates()-cpu.FrameOriginRefTstates()*8),
+			g.MinVActive, g.TStatesPerLine)
 	})
 	// The render pass's copper MOVEs write video registers through the
 	// dispatcher, but NR$02 (NMI generation) is delivered on the CPU
@@ -1799,4 +1817,24 @@ func parseRTCFixed(v string) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return tm, true
+}
+
+// copperStartPhase rebases a stopped→running copper start from the CPU's
+// frame origin (the frame INT) into the COPPER's frame origin (paper top,
+// MinVActive lines later — the convention the render walk drives vcount
+// in). cpuPhase and the result are 28 MHz copper cycles, 8 per reference
+// T-state; tStatesPerLine is the geometry's line length, so a line is
+// tStatesPerLine*8 copper cycles.
+//
+// A start at or before paper top returns 0: the copper's frame has not
+// begun, so the list runs from its own vcount 0 with no debt. Without the
+// rebase the copper is charged the whole CPU-origin offset and executes
+// nothing for the first (MinVActive - startLine) paper lines — long
+// enough to miss an early WAIT, which parks it for the frame (#197).
+func copperStartPhase(cpuPhase, minVActive, tStatesPerLine int) int {
+	paperTop := minVActive * tStatesPerLine * 8
+	if cpuPhase <= paperTop {
+		return 0
+	}
+	return cpuPhase - paperTop
 }
