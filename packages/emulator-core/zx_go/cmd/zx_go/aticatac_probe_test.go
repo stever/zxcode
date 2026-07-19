@@ -57,6 +57,90 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		defer fp.Close()
 		_ = png.Encode(fp, emu.renderFrame())
 	}
+	// Boot-mode divergence forensics (#187 direct-boot black scroll band):
+	// dump the FULL NextReg file + Layer 2 render state next to a
+	// screenshot so the two boot modes can be diffed at the same game
+	// phase. Gated by ZX_GO_ATIC_REGDUMP=1.
+	regdump := func(frame int, tag string) {
+		if os.Getenv("ZX_GO_ATIC_REGDUMP") == "" {
+			return
+		}
+		var b []byte
+		for r := 0; r < 256; r++ {
+			b = append(b, fmt.Sprintf("NR%02X=%02X\n", r, emu.nextRegs.Raw(byte(r)))...)
+		}
+		if l2 := emu.nextLayer2; l2 != nil {
+			b = append(b, fmt.Sprintf("L2 enabled=%v active=%02X shadow=%02X res=%d palOff=%d scrollX=%03X scrollY=%02X\n",
+				l2.Enabled(), l2.ActiveBank(), l2.ShadowBank(), l2.Resolution(), l2.PaletteOffset(), l2.ScrollX(), l2.ScrollY())...)
+			firstY, lastY := -1, -1
+			x0, x1 := 0, 0
+			for y := 0; y < 256; y++ {
+				if a, bx, vis := l2.ClipBounds(y); vis {
+					if firstY < 0 {
+						firstY = y
+						x0, x1 = a, bx
+					}
+					lastY = y
+				}
+			}
+			b = append(b, fmt.Sprintf("L2 clip visibleRows=[%d,%d] x=[%d,%d]\n", firstY, lastY, x0, x1)...)
+		}
+		_ = os.WriteFile(fmt.Sprintf("%s/probe_%06d_%s.regs.txt", outDir, frame, tag), b, 0644)
+		// ZX_GO_ATIC_L2DUMP=1: also dump the Layer 2 framebuffer banks
+		// (active bank + 4 = the full 320x256 column-major buffer) for
+		// offline render-hypothesis testing.
+		if os.Getenv("ZX_GO_ATIC_L2DUMP") != "" {
+			if l2 := emu.nextLayer2; l2 != nil {
+				var fb []byte
+				for bk := 0; bk < 5; bk++ {
+					pg := emu.mem.GetPage(int(l2.ActiveBank()) + bk)
+					if pg == nil {
+						break
+					}
+					fb = append(fb, pg...)
+				}
+				_ = os.WriteFile(fmt.Sprintf("%s/probe_%06d_%s.l2.bin", outDir, frame, tag), fb, 0644)
+			}
+		}
+	}
+	// Screenshot window: defaults preserve the direct-boot repro schedule;
+	// env overrides let the faithful control run shoot a shifted range
+	// (its game timeline lags direct boot by ~200+ frames).
+	shotFrom, shotTo, shotEvery := 4300, 5060, 80
+	if s := os.Getenv("ZX_GO_ATIC_SHOT_FROM"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			shotFrom = v
+		}
+	}
+	if s := os.Getenv("ZX_GO_ATIC_SHOT_TO"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			shotTo = v
+		}
+	}
+	if s := os.Getenv("ZX_GO_ATIC_SHOT_EVERY"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			shotEvery = v
+		}
+	}
+	bootTag := "dboot"
+	if os.Getenv("ZX_GO_NEXT_DIRECT_BOOT") == "" {
+		bootTag = "faith"
+	}
+	// ZX_GO_ATIC_SCROLL_TRACE_FROM/TO: log every video-register write
+	// (L2 banks/scroll/res, clip, priority, display control) with the
+	// beam position across a frame window — the moon-screen scroll
+	// program forensics (#187 black band).
+	scrollTraceFrom, scrollTraceTo := -1, -1
+	if s := os.Getenv("ZX_GO_ATIC_SCROLL_TRACE_FROM"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			scrollTraceFrom = v
+		}
+	}
+	if s := os.Getenv("ZX_GO_ATIC_SCROLL_TRACE_TO"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			scrollTraceTo = v
+		}
+	}
 
 	// Log every write to the audio-engine gate block: $F996 (event byte),
 	// $F9E3/$F9E4 (music position word), $F990 (slow countdown observed at
@@ -769,6 +853,24 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 				emu.sdCard.SetByteLogger(nil)
 			}
 		}
+		if frame == scrollTraceFrom {
+			emu.nextRegs.SetTracer(func(reg, val byte, write bool) {
+				if !write {
+					return
+				}
+				switch reg {
+				case 0x12, 0x13, 0x15, 0x16, 0x17, 0x18, 0x69, 0x70, 0x71:
+				default:
+					return
+				}
+				line, hpos := emu.ula.BeamPosition()
+				t.Logf("frame %6d SCRTRACE NR$%02X <- $%02X beam=(%d,%d) pc=$%04X",
+					frame, reg, val, line, hpos, emu.cpu.PC)
+			})
+		}
+		if frame == scrollTraceTo {
+			emu.nextRegs.SetTracer(nil)
+		}
 		emu.cpu.ExecuteFrame(frameTStatesForModel(roms.ModelNext))
 		if ledgerFrame(frame) {
 			t.Logf("frame %d LEDGER: tick=%d rets=%v d107=%d sps=%v d030=%d nmi=%d pcEnd=$%04X F990=$%02X",
@@ -783,6 +885,15 @@ func TestAticAtacDoorsProbe(t *testing.T) {
 		}
 		if frame == 4602 && len(handlerSpans) > 0 {
 			t.Logf("frame %d: handler spans entry->RETN (refT): %v", frame, handlerSpans)
+		}
+		if frame >= shotFrom && frame <= shotTo && frame%shotEvery == 0 {
+			shot(frame, bootTag)
+			regdump(frame, bootTag)
+		}
+		if frame == 4500 {
+			g := emu.mem.NextGeometry()
+			t.Logf("frame %d: NR03=%02X NR05=%02X geometry lines=%d tpl=%d frameT=%d", frame,
+				emu.nextRegs.Raw(0x03), emu.nextRegs.Raw(0x05), g.Lines, g.TStatesPerLine, g.FrameTStates())
 		}
 		if frame == 4500 || frame == 5015 {
 			t.Logf("frame %d: NR B8=%02X B9=%02X BA=%02X BB=%02X B0=%02X 61=%02X 62=%02X 07=%02X", frame,

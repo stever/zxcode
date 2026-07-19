@@ -212,11 +212,21 @@ shape, zxnext.vhd:6543-6552). The pieces:
   address generator combinationally (layer2.vhd:105-116 "capture
   settings for pixel period", :152/:156), so a CPU raster-waiting on
   NR$1E/$1F and rewriting NR$16/$71 splits the screen — Atic Atac's
-  cinematic scroll-text band and menu logo (#187). RenderScanline
-  swaps the row's folded values into the address path; the 256 mode's
-  raster anchor is the paper (row 0 = raster 64), the wide modes' the
-  320×256 frame (row 0 = raster 32). Pinned by
-  `TestLayer2MidFrameScrollFold` / `TestLayer2WideModeScrollFoldAnchor`.
+  cinematic scroll-text band and menu logo (#187). The NR$70 palette
+  offset rides the SAME per-line fold (also inside the per-pixel
+  "capture settings" latch, layer2.vhd:105-116): Atic Atac's
+  moon/character-select screen band-fades its credits text by cycling
+  the offset per raster band (7 outside, stepped to 0 inside raster
+  128-253) — a per-frame offset rendered the whole band through the
+  black group-7 palette in BOTH boot modes. RenderScanline swaps the
+  row's folded values into the address path and pixel mapping; the 256
+  mode's raster anchor is the paper (row 0 = raster 64), the wide
+  modes' the 320×256 frame (row 0 = raster 32). Pinned by
+  `TestLayer2MidFrameScrollFold` / `TestLayer2WideModeScrollFoldAnchor`
+  / `TestLayer2MidFramePaletteOffsetFold`. Mid-frame NR$70 RESOLUTION
+  changes stay per-frame-latched (no known consumer; a mid-frame
+  res switch also changes the row layout, which the per-row swap
+  cannot express).
 - Tilemap (`pkg/next/tilemap`): 40/80×32 tiles, 4bpp, optional per-tile
   attributes (palette offset, mirror X/Y, rotate, priority), 1bpp text
   mode, 512-tile mode, pixel scroll with torus wrap, clip. Bases from

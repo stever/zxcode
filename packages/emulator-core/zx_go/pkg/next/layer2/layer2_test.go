@@ -236,6 +236,59 @@ func TestLayer2MidFrameScrollFold(t *testing.T) {
 	l.EndScrollCapture()
 }
 
+// TestLayer2MidFramePaletteOffsetFold pins the raster-stamped NR$70
+// palette-offset fold (#187, Atic Atac's moon/character-select screen):
+// the game band-fades its Layer 2 credits text by rewriting the palette
+// offset per raster band (offset 7 outside the band, 0 inside — the
+// FPGA re-latches NR$70 per 7 MHz pixel, layer2.vhd:105-116). A
+// once-per-frame offset renders the whole band with the end-of-frame
+// value and blacks the text out.
+func TestLayer2MidFramePaletteOffsetFold(t *testing.T) {
+	f := newFakeBanks()
+	l := New(f)
+	l.SetActiveBank(9)
+	l.SetEnabled(true)
+	l.SetResolution(1)
+	l.SetPaletteOffset(7)
+
+	line := 0
+	l.SetRasterLineSource(func() int { return line })
+	// Band open at raster 128, close at raster 254 (Atic Atac's shape).
+	line = 128
+	l.SetPaletteOffset(0)
+	line = 254
+	l.SetPaletteOffset(7)
+
+	l.FoldScrollStamps(false)
+	dst := make([]byte, 320)
+	off7 := func(b byte) byte { return (((b>>4)+7)&0x0F)<<4 | (b & 0x0F) }
+
+	// Wide row 95 (raster 127, above the band): offset 7.
+	raw := byte((9*7 + 95) & 0xFF)
+	l.RenderScanline(95, dst)
+	if dst[0] != off7(raw) {
+		t.Errorf("row 95 col 0: got %#x, want %#x (offset 7)", dst[0], off7(raw))
+	}
+	// Wide row 96 (raster 128, band start): offset 0 — raw index.
+	raw = byte((9*7 + 96) & 0xFF)
+	l.RenderScanline(96, dst)
+	if dst[0] != raw {
+		t.Errorf("row 96 col 0: got %#x, want %#x (offset 0)", dst[0], raw)
+	}
+	// Wide row 222 (raster 254, band end): offset 7 again.
+	raw = byte((9*7 + 222) & 0xFF)
+	l.RenderScanline(222, dst)
+	if dst[0] != off7(raw) {
+		t.Errorf("row 222 col 0: got %#x, want %#x (offset 7)", dst[0], off7(raw))
+	}
+	l.EndScrollCapture()
+
+	// Live register keeps the end-of-frame value.
+	if l.PaletteOffset() != 7 {
+		t.Errorf("live PaletteOffset = %d, want 7", l.PaletteOffset())
+	}
+}
+
 // TestLayer2WideModeScrollFoldAnchor pins the wide-mode raster anchor:
 // in 320×256 (res 1) the layer row 0 scans at raw raster 32, so a write
 // stamped at raster 200 splits at layer row 168.

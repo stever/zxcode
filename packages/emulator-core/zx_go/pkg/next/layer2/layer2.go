@@ -82,12 +82,27 @@ type Layer2 struct {
 	captureDirty  bool
 	scrollXLine   [frameRasterLines]uint16
 	scrollYLine   [frameRasterLines]byte
+	palOffLine    [frameRasterLines]byte
 }
 
-// scrollStamp is one raster-stamped mid-frame scroll write.
+// stampKind discriminates what a raster stamp recorded: the two scroll
+// axes, or the NR$70 palette offset (Atic Atac's moon/character-select
+// screen band-fades its Layer 2 credits text by rewriting the palette
+// offset per raster band, #187 — the FPGA latches NR$70 per 7 MHz pixel
+// exactly like the scroll registers, layer2.vhd:105-116).
+type stampKind uint8
+
+const (
+	stampX stampKind = iota
+	stampY
+	stampPalOff
+)
+
+// scrollStamp is one raster-stamped mid-frame video-register write
+// (scroll axis or palette offset).
 type scrollStamp struct {
 	line   int // raw raster line (paper top = 64, BeamPosition convention)
-	isY    bool
+	kind   stampKind
 	oldVal uint16
 	newVal uint16
 }
@@ -165,7 +180,15 @@ func (l *Layer2) SetResolution(v byte) { l.resolution = v & 0x03 }
 func (l *Layer2) Resolution() byte { return l.resolution }
 
 // SetPaletteOffset installs the NR$70 palette offset (bits 3:0).
-func (l *Layer2) SetPaletteOffset(v byte) { l.paletteOffset = v & 0x0F }
+// Raster-stamped like the scroll registers: the FPGA re-latches NR$70
+// into the pixel pipeline every 7 MHz pixel (layer2.vhd:105-116 —
+// "capture settings for pixel period"), so software band-fades by
+// rewriting the offset mid-frame (Atic Atac's credits band, #187).
+func (l *Layer2) SetPaletteOffset(v byte) {
+	v &= 0x0F
+	l.logStamp(stampPalOff, uint16(l.paletteOffset), uint16(v))
+	l.paletteOffset = v
+}
 
 // PaletteOffset returns the current NR$70 palette offset.
 func (l *Layer2) PaletteOffset() byte { return l.paletteOffset }
@@ -177,7 +200,7 @@ func (l *Layer2) PaletteOffset() byte { return l.paletteOffset }
 // from their raster row.
 func (l *Layer2) SetScrollX(v uint16) {
 	v &= 0x1FF
-	l.logScroll(false, l.scrollX, v)
+	l.logStamp(stampX, l.scrollX, v)
 	l.scrollX = v
 }
 
@@ -187,7 +210,7 @@ func (l *Layer2) ScrollX() uint16 { return l.scrollX }
 // SetScrollY installs the 8-bit Layer 2 Y scroll (NR$17, layer2.vhd:156).
 // Raster-stamped like SetScrollX.
 func (l *Layer2) SetScrollY(v byte) {
-	l.logScroll(true, uint16(l.scrollY), uint16(v))
+	l.logStamp(stampY, uint16(l.scrollY), uint16(v))
 	l.scrollY = v
 }
 
@@ -199,12 +222,15 @@ func (l *Layer2) ScrollY() byte { return l.scrollY }
 // stamping — SetScrollX/Y then behave exactly as before.
 func (l *Layer2) SetRasterLineSource(fn func() int) { l.rasterLine = fn }
 
-// logScroll records a scroll write with the current raster stamp. The
-// FPGA's scroll registers feed the address generator combinationally
-// (layer2.vhd:152/:156), so a mid-frame write re-anchors the layer from
-// the next pixel — Atic Atac raster-waits on NR$1E/$1F and rewrites
-// NR$16/$71 at cvc 184 for its cinematic scroll-text band (#187).
-func (l *Layer2) logScroll(isY bool, old, new uint16) {
+// logStamp records a scroll or palette-offset write with the current
+// raster stamp. The FPGA's scroll registers feed the address generator
+// combinationally (layer2.vhd:152/:156) and NR$70 is re-latched per
+// pixel (:105-116), so a mid-frame write re-anchors the layer from the
+// next pixel — Atic Atac raster-waits on NR$1E/$1F and rewrites
+// NR$16/$71 at cvc 184 for its cinematic scroll-text band, and cycles
+// the NR$70 palette offset per raster band to fade its credits text
+// (#187).
+func (l *Layer2) logStamp(kind stampKind, old, new uint16) {
 	if l.rasterLine == nil || old == new {
 		return
 	}
@@ -225,13 +251,13 @@ func (l *Layer2) logScroll(isY bool, old, new uint16) {
 		return
 	}
 	l.scrollStamps = append(l.scrollStamps, scrollStamp{
-		line: l.rasterLine(), isY: isY, oldVal: old, newVal: new,
+		line: l.rasterLine(), kind: kind, oldVal: old, newVal: new,
 	})
 }
 
-// FoldScrollStamps builds the per-raster-line scroll table from the
-// frame's stamped writes, activating per-row scroll for the render
-// passes. With no stamps (the common case) the fold deactivates and
+// FoldScrollStamps builds the per-raster-line scroll + palette-offset
+// tables from the frame's stamped writes, activating per-row state for
+// the render passes. With no stamps (the common case) the fold deactivates and
 // RenderScanline uses the live registers — zero cost, identical to the
 // pre-stamp behaviour. A STALE fold (no execution since the last
 // render — the harness screenshot path) replays the consumed log
@@ -254,37 +280,50 @@ func (l *Layer2) FoldScrollStamps(stale bool) {
 	if l.scrollOverflow || len(l.scrollStamps) == 0 {
 		l.scrollStamps = l.scrollStamps[:0]
 		l.scrollOverflow = false
-		// No CPU stamps: prefill the table with the live scroll so
+		// No CPU stamps: prefill the table with the live state so
 		// per-row copper captures overlay a correct baseline (rows
 		// before the copper's first write keep the frame value).
 		for line := 0; line < frameRasterLines; line++ {
 			l.scrollXLine[line], l.scrollYLine[line] = l.scrollX, l.scrollY
+			l.palOffLine[line] = l.paletteOffset
 		}
 		return
 	}
 	// Frame-start values: each stamp records the value it replaced, so
-	// the first stamp per axis carries the frame-start state.
-	x, y := l.scrollX, l.scrollY
-	seenX, seenY := false, false
+	// the first stamp per kind carries the frame-start state.
+	x, y, p := l.scrollX, l.scrollY, l.paletteOffset
+	seenX, seenY, seenP := false, false, false
 	for _, s := range l.scrollStamps {
-		if s.isY && !seenY {
-			y, seenY = byte(s.oldVal), true
-		}
-		if !s.isY && !seenX {
-			x, seenX = s.oldVal, true
+		switch s.kind {
+		case stampX:
+			if !seenX {
+				x, seenX = s.oldVal, true
+			}
+		case stampY:
+			if !seenY {
+				y, seenY = byte(s.oldVal), true
+			}
+		case stampPalOff:
+			if !seenP {
+				p, seenP = byte(s.oldVal), true
+			}
 		}
 	}
 	idx := 0
 	for line := 0; line < frameRasterLines; line++ {
 		for idx < len(l.scrollStamps) && l.scrollStamps[idx].line <= line {
-			if l.scrollStamps[idx].isY {
-				y = byte(l.scrollStamps[idx].newVal)
-			} else {
+			switch l.scrollStamps[idx].kind {
+			case stampX:
 				x = l.scrollStamps[idx].newVal
+			case stampY:
+				y = byte(l.scrollStamps[idx].newVal)
+			case stampPalOff:
+				p = byte(l.scrollStamps[idx].newVal)
 			}
 			idx++
 		}
 		l.scrollXLine[line], l.scrollYLine[line] = x, y
+		l.palOffLine[line] = p
 	}
 	l.scrollConsumed = true
 	l.foldActive = true
@@ -302,6 +341,7 @@ func (l *Layer2) CaptureRowScroll(rasterLine int) {
 		return
 	}
 	l.scrollXLine[rasterLine], l.scrollYLine[rasterLine] = l.scrollX, l.scrollY
+	l.palOffLine[rasterLine] = l.paletteOffset
 	l.foldActive = true
 }
 
@@ -309,24 +349,24 @@ func (l *Layer2) CaptureRowScroll(rasterLine int) {
 // (execution-time) writes again and get raster-stamped.
 func (l *Layer2) EndScrollCapture() { l.captureActive = false }
 
-// scrollForRow returns the folded scroll pair for the layer row y
-// RenderScanline is drawing, or the live registers when no mid-frame
-// write was stamped this frame. Raster mapping follows the layer's
-// vertical anchor: the 256×192 mode is paper-aligned (row 0 = raster
-// 64), the wide modes span the full 320×256 display (row 0 = raster
-// 32) — the same whc/wvc counters the tilemap and sprites use.
-func (l *Layer2) scrollForRow(y int) (uint16, byte) {
+// scrollForRow returns the folded scroll pair + palette offset for the
+// layer row y RenderScanline is drawing, or the live registers when no
+// mid-frame write was stamped this frame. Raster mapping follows the
+// layer's vertical anchor: the 256×192 mode is paper-aligned (row 0 =
+// raster 64), the wide modes span the full 320×256 display (row 0 =
+// raster 32) — the same whc/wvc counters the tilemap and sprites use.
+func (l *Layer2) scrollForRow(y int) (uint16, byte, byte) {
 	if !l.foldActive {
-		return l.scrollX, l.scrollY
+		return l.scrollX, l.scrollY, l.paletteOffset
 	}
 	r := y + 64
 	if l.resolution != 0 {
 		r = y + 32
 	}
 	if r < 0 || r >= frameRasterLines {
-		return l.scrollX, l.scrollY
+		return l.scrollX, l.scrollY, l.paletteOffset
 	}
-	return l.scrollXLine[r], l.scrollYLine[r]
+	return l.scrollXLine[r], l.scrollYLine[r], l.palOffLine[r]
 }
 
 // fpgaFrameAddr is the faithful port of the Layer 2 framebuffer-address
@@ -493,18 +533,18 @@ func (l *Layer2) RenderScanline(y int, dst []byte) {
 	if y < 0 || y >= l.LineHeight() || len(dst) < w {
 		return
 	}
-	// Per-row folded scroll (mid-frame CPU/copper scroll writes): swap
-	// the row's raster-stamped values into the live fields for the
-	// duration of this row's address math, restoring after. fpgaFrameAddr
-	// reads the fields directly, so the swap keeps the golden-verified
-	// address path untouched. No-op unless a write was stamped this
-	// frame (foldActive).
+	// Per-row folded scroll + palette offset (mid-frame CPU/copper
+	// writes): swap the row's raster-stamped values into the live fields
+	// for the duration of this row's address math and pixel mapping,
+	// restoring after. fpgaFrameAddr/fpgaPixel read the fields directly,
+	// so the swap keeps the golden-verified paths untouched. No-op
+	// unless a write was stamped this frame (foldActive).
 	if l.foldActive {
-		rx, ry := l.scrollForRow(y)
-		if rx != l.scrollX || ry != l.scrollY {
-			saveX, saveY := l.scrollX, l.scrollY
-			l.scrollX, l.scrollY = rx, ry
-			defer func() { l.scrollX, l.scrollY = saveX, saveY }()
+		rx, ry, rp := l.scrollForRow(y)
+		if rx != l.scrollX || ry != l.scrollY || rp != l.paletteOffset {
+			saveX, saveY, saveP := l.scrollX, l.scrollY, l.paletteOffset
+			l.scrollX, l.scrollY, l.paletteOffset = rx, ry, rp
+			defer func() { l.scrollX, l.scrollY, l.paletteOffset = saveX, saveY, saveP }()
 		}
 	}
 	if !l.enabled {
