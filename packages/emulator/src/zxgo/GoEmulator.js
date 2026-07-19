@@ -31,6 +31,15 @@ import { nativeZipEntries } from './zipExtract.js';
 
 const scriptUrl = document.currentScript.src;
 
+// Bump ENGINE_REV whenever engine/translator behavior changes: the boot
+// log shows at a glance whether a dev server is serving a stale bundle
+// (workspace-package edits don't reliably trigger webpack-dev-server
+// rebuilds through the node_modules symlinks), and the wasm fetch below
+// carries it as a cache-buster so a rev bump always forces the browser
+// to refetch the core (the JS tag and a cached zx.wasm can otherwise
+// silently diverge).
+const ENGINE_REV = 'r72-l2-scroll-fold-perf';
+
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
 // headers, and the CSP pins connect-src to 'self'). The version is PINNED:
@@ -71,7 +80,7 @@ function loadGoRuntime() {
         // back. Env is snapshotted at go.run(), so it must be set here.
         go.env.ZX_GO_NO_FPGA_BOOTROM = '1';
         go.env.ZX_GO_NEXT_DIRECT_BOOT = '1';
-        const resp = await fetch(await assetUrl('/dist/zx.wasm', scriptUrl));
+        const resp = await fetch(`${await assetUrl('/dist/zx.wasm', scriptUrl)}?v=${ENGINE_REV}`);
         if (!resp.ok) throw new Error(`zx.wasm: HTTP ${resp.status}`);
         const result = await WebAssembly.instantiateStreaming
             ? await WebAssembly.instantiateStreaming(resp, go.importObject)
@@ -210,11 +219,6 @@ export class GoEmulator extends EventEmitter {
 
         this.initAudio(); // fire and forget; pump no-ops until it lands
 
-        // Bump ENGINE_REV whenever engine/translator behavior changes: the
-        // boot log then shows at a glance whether a dev server is serving a
-        // stale bundle (workspace-package edits don't reliably trigger
-        // webpack-dev-server rebuilds through the node_modules symlinks).
-        const ENGINE_REV = 'r72-l2-scroll-fold-perf';
         console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
