@@ -151,6 +151,22 @@ type Compositor struct {
 	sprRowScanC [frameRows][FullWidth]byte
 	sprRowCovC  [frameRows][FullWidth]bool
 
+	// ulaBase is a copy of the pure classic-ULA frame (border + paper,
+	// before the sprite/tilemap overlay pass mutates it), captured by
+	// CaptureULABase for the wide-L2 U-above-L repaint: in the hi-res
+	// Layer 2 modes the L2 overlay covers the whole frame, and the
+	// NR$15 orderings that place the ULA above Layer 2 (SUL/USL/ULS)
+	// must repaint the ULA's non-transparent pixels back on top —
+	// Space Invaders (#204) runs USL with NR$14=black so its white
+	// arcade overlay sits above the 320x256 planet backdrop. Valid for
+	// one render only; invalidated whenever the capture conditions
+	// don't hold.
+	ulaBase       []byte
+	ulaBaseStride int
+	ulaBaseW      int
+	ulaBaseH      int
+	ulaBaseValid  bool
+
 	// prioGenBase snapshots the priority source's write generation at
 	// the start of a render walk (BeginPaletteReplay). While the
 	// generation is unchanged, the raster-stamped per-row override
@@ -384,18 +400,20 @@ func (c *Compositor) HasActiveSprites() bool {
 // OverpaintWideL2Row restores, in the active NR$15 order, the layers
 // that sit ABOVE Layer 2 after the hi-res L2 overlay covered the base
 // frame: sprites in every mode except the L2-topmost LSU/LUS and ULS
-// (where sprites are the bottom layer), and the ULA+TM slot's TILEMAP
-// in the U-above-L modes (SUL/USL/ULS — zxnext.vhd's priority chain
-// places the combined ULA+TM result above Layer 2 there). Ordering
-// within the overpaint: SUL is S-over-U, so its tilemap paints below
-// the sprites; USL/ULS paint it above. The classic ULA pixels of the
-// U slot are NOT repainted (documented residue — that needs per-pixel
-// ULA data at this point in the pipeline; content that disables the
-// ULA output via NR$68 bit 7, like RAMS, has none to lose). The blend
-// modes 6/7 keep the sprites-only overpaint. Last, priority-bit L2
-// pixels are repainted on top (composeL2PriorityOverlayRow) in every
-// mode whose mixer ladder promotes them. dst is a full frame row
-// at xScale output pixels per frame pixel (1 = 320-wide, 2 = 640).
+// (where sprites are the bottom layer), and the ULA+TM slot (classic
+// ULA pixels from the CaptureULABase snapshot + the tilemap) in the
+// U-above-L modes (SUL/USL/ULS — zxnext.vhd's priority chain places
+// the combined ULA+TM result above Layer 2 there). Ordering within
+// the overpaint: SUL is S-over-U, so its ULA+TM slot paints below the
+// sprites; USL/ULS paint it above. Within the slot the ULA paints
+// first and the tilemap over it — the per-pixel tm_below arbitration
+// against an opaque ULA pixel (zxnext.vhd:7116) is not applied here
+// (documented residue; below-tiles above wide L2 need the ULA
+// opacity threaded into the tilemap overlay). The blend modes 6/7
+// keep the sprites-only overpaint. Last, priority-bit L2 pixels are
+// repainted on top (composeL2PriorityOverlayRow) in every mode whose
+// mixer ladder promotes them. dst is a full frame row at xScale
+// output pixels per frame pixel (1 = 320-wide, 2 = 640).
 func (c *Compositor) OverpaintWideL2Row(frameY int, dst []byte, xScale int) {
 	mode := ModeSLU
 	if c.prioritySource != nil {
@@ -403,13 +421,15 @@ func (c *Compositor) OverpaintWideL2Row(frameY int, dst []byte, xScale int) {
 	}
 	sprites := mode != ModeLSU && mode != ModeLUS && mode != ModeULS
 	tilemap := mode == ModeSUL || mode == ModeUSL || mode == ModeULS
-	if tilemap && mode == ModeSUL {
+	if mode == ModeSUL {
+		c.composeULAOverlayRow(frameY, dst)
 		c.composeTilemapOverlayRow(frameY, dst, xScale)
 	}
 	if sprites {
 		c.composeSpriteOverlayRow(frameY, dst, xScale)
 	}
 	if tilemap && mode != ModeSUL {
+		c.composeULAOverlayRow(frameY, dst)
 		c.composeTilemapOverlayRow(frameY, dst, xScale)
 	}
 	// Priority-bit L2 pixels (NR$44 bit 7) end on top of the overpainted
@@ -418,6 +438,65 @@ func (c *Compositor) OverpaintWideL2Row(frameY int, dst []byte, xScale int) {
 	// Heels' door frames over the player sprite in the 320-wide mode).
 	if mode != ModeLSU && mode != ModeLUS {
 		c.composeL2PriorityOverlayRow(frameY, dst, xScale)
+	}
+}
+
+// CaptureULABase snapshots the pure classic-ULA frame (border + paper,
+// before the sprite/tilemap overlay pass mutates it) for the wide-L2
+// U-above-L repaint. pkg/ula calls it right before applyNextCompositor.
+// The copy only happens when the overlay will actually consume it —
+// hi-res Layer 2 active, a U-above-L NR$15 mode, ULA output enabled
+// (NR$68 bit 7 clear: a disabled ULA is everywhere-transparent,
+// zxnext.vhd:7103, so there is nothing to repaint) — otherwise the
+// capture is invalidated and composeULAOverlayRow is a no-op.
+func (c *Compositor) CaptureULABase(pix []byte, stride, w, h int) {
+	c.ulaBaseValid = false
+	if c.ulaOutputDisabled || !c.HiResLayer2Active() {
+		return
+	}
+	switch c.resolveMode() {
+	case ModeSUL, ModeUSL, ModeULS:
+	default:
+		return
+	}
+	need := h * stride
+	if need <= 0 || len(pix) < need {
+		return
+	}
+	if cap(c.ulaBase) < need {
+		c.ulaBase = make([]byte, need)
+	}
+	c.ulaBase = c.ulaBase[:need]
+	copy(c.ulaBase, pix[:need])
+	c.ulaBaseStride, c.ulaBaseW, c.ulaBaseH = stride, w, h
+	c.ulaBaseValid = true
+}
+
+// composeULAOverlayRow repaints the classic ULA pixels of frame row y
+// above the wide Layer 2 overlay — the U slot of the U-above-L modes.
+// Pixels equal to the NR$14 transparency (via the classic palette
+// projection + the value-driven redefined-entry set, ulaPixTransparent)
+// stay transparent, so content like Space Invaders' NR$14=black arcade
+// overlay shows only its ink above the 320x256 backdrop (#204). The
+// captured base is already at output resolution, so rows map 1:1.
+// Residue: the NR$1A ULA clip window is not applied (the base render
+// is unclipped); out-of-window ULA pixels above wide L2 would need the
+// clip state threaded in here.
+func (c *Compositor) composeULAOverlayRow(y int, dst []byte) {
+	if !c.ulaBaseValid || y < 0 || y >= c.ulaBaseH {
+		return
+	}
+	row := c.ulaBase[y*c.ulaBaseStride:]
+	n := c.ulaBaseW
+	if len(dst) < n*4 || len(row) < n*4 {
+		return
+	}
+	for x := 0; x < n; x++ {
+		px := [4]byte{row[x*4+0], row[x*4+1], row[x*4+2], row[x*4+3]}
+		if c.ulaPixTransparent(px) {
+			continue
+		}
+		dst[x*4+0], dst[x*4+1], dst[x*4+2], dst[x*4+3] = px[0], px[1], px[2], px[3]
 	}
 }
 

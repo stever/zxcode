@@ -49,6 +49,7 @@ func (m *replayMock) EndPaletteReplay() {
 	m.log = append(m.log, "end")
 }
 func (m *replayMock) OverpaintWideL2Row(y int, dst []byte, xScale int) {}
+func (m *replayMock) CaptureULABase(pix []byte, stride, w, h int)      {}
 
 func TestApplyNextCompositorPaletteReplaySequence(t *testing.T) {
 	dir := t.TempDir()

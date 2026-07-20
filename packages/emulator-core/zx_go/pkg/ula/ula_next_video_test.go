@@ -51,6 +51,7 @@ func (m *liveULAMock) SetULAActivePalette(second bool) {
 	m.selectCalls = append(m.selectCalls, second)
 }
 func (m *liveULAMock) OverpaintWideL2Row(y int, dst []byte, xScale int) {}
+func (m *liveULAMock) CaptureULABase(pix []byte, stride, w, h int)      {}
 
 func newNextVideoULA(t *testing.T) (*ULA, *liveULAMock, *memory.Memory) {
 	t.Helper()

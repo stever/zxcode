@@ -328,10 +328,13 @@ shape, zxnext.vhd:6543-6552). The pieces:
   320×256 frame coordinate system (see "Frame geometry" above). The
   hi-res Layer 2 overlay repaints the layers the NR$15 mode places
   above L2 from their sources (OverpaintWideL2Row): sprites in the
-  non-L-topmost modes, tilemap in the U-above-L modes (SUL below
-  sprites, USL/ULS above), then priority-bit L2 pixels back on top
-  (composeL2PriorityOverlayRow, #195). Classic ULA pixels above wide L2
-  remain approximated as covered (known-gaps).
+  non-L-topmost modes, the ULA+TM slot in the U-above-L modes (SUL
+  below sprites, USL/ULS above — classic ULA pixels repaint from the
+  CaptureULABase pure-ULA frame snapshot with per-pixel NR$14
+  transparency, r94/#204 Space Invaders, then the tilemap over them),
+  then priority-bit L2 pixels back on top (composeL2PriorityOverlayRow,
+  #195). Residues: the ULA repaint ignores the NR$1A clip window and
+  the ULA-vs-below-tile per-pixel arbitration (known-gaps).
 - Copper (`pkg/next/copper`): 1024 × 16-bit instruction store, MOVE /
   WAIT / NOOP / HALT, four start modes (NR$62, list restart only on a
   mode TRANSITION into 01/11 per copper.vhd's edge detect), and the

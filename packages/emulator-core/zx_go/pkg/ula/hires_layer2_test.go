@@ -32,6 +32,7 @@ func (m *hiResL2Mock) ComposeWideLayer2Row(y int, dst []byte, xs int) {
 	}
 }
 func (m *hiResL2Mock) OverpaintWideL2Row(y int, dst []byte, xScale int) {}
+func (m *hiResL2Mock) CaptureULABase(pix []byte, stride, w, h int)      {}
 
 // TestRenderHiResLayer2DispatchesWidePass verifies that when Layer 2 is in
 // a hi-res mode the display path routes through renderHiResLayer2 and

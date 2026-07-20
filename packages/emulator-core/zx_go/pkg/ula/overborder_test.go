@@ -32,6 +32,7 @@ func (m *overBorderMock) HiResLayer2Active() bool                          { ret
 func (m *overBorderMock) Layer2Width() int                                 { return 320 }
 func (m *overBorderMock) ComposeWideLayer2Row(y int, dst []byte, xs int)   {}
 func (m *overBorderMock) OverpaintWideL2Row(y int, dst []byte, xScale int) {}
+func (m *overBorderMock) CaptureULABase(pix []byte, stride, w, h int)      {}
 
 // TestNextRenderShowsOverBorderSprites locks in that, when the Next sprite
 // layer is active, the display returns the full 320x256 over-border frame (not
@@ -110,3 +111,4 @@ func (m *noSpriteMock) HiResLayer2Active() bool                                 
 func (m *noSpriteMock) Layer2Width() int                                                   { return 320 }
 func (m *noSpriteMock) ComposeWideLayer2Row(y int, dst []byte, xs int)                     {}
 func (m *noSpriteMock) OverpaintWideL2Row(y int, dst []byte, xScale int)                   {}
+func (m *noSpriteMock) CaptureULABase(pix []byte, stride, w, h int)                        {}

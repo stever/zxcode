@@ -457,10 +457,16 @@ type NextCompositor interface {
 	ComposeWideLayer2Row(y int, dst []byte, xScale int)
 	// OverpaintWideL2Row restores the layers the wide Layer 2 overlay
 	// covered, in the active NR$15 order: sprites (non-L-topmost
-	// modes) and the tilemap (the U-above-L modes) — the hi-res
-	// Layer 2 path's layer-order repair. xScale is output pixels per
-	// frame pixel (1 = 320, 2 = 640).
+	// modes) and the ULA+tilemap slot (the U-above-L modes) — the
+	// hi-res Layer 2 path's layer-order repair. xScale is output
+	// pixels per frame pixel (1 = 320, 2 = 640).
 	OverpaintWideL2Row(frameY int, dst []byte, xScale int)
+	// CaptureULABase snapshots the pure classic-ULA frame before the
+	// overlay pass mutates it, so OverpaintWideL2Row can repaint
+	// non-transparent ULA pixels above wide Layer 2 in the U-above-L
+	// modes. A no-op (and invalidation) when those conditions don't
+	// hold — call it every render, right before applyNextCompositor.
+	CaptureULABase(pix []byte, stride, w, h int)
 }
 
 // NextSpritePort is the contract for port $303B: SelectSprite on a
@@ -1430,6 +1436,10 @@ func (u *ULA) Render() *image.RGBA {
 			copy(u.img.Pix[y*u.img.Stride:y*u.img.Stride+rowBytes], u.img.Pix[:rowBytes])
 		}
 		if u.nextCompositor != nil {
+			// Invalidates any prior pure-ULA capture: a disabled ULA is
+			// everywhere-transparent, so the wide-L2 overpaint must not
+			// repaint stale pixels (CaptureULABase self-gates on it).
+			u.nextCompositor.CaptureULABase(u.img.Pix, u.img.Stride, TotalWidth*u.xs, u.totalHeight)
 			u.applyNextCompositor(stale)
 			if u.nextCompositor.HiResLayer2Active() {
 				return u.renderHiResLayer2()
@@ -1511,8 +1521,12 @@ func (u *ULA) Render() *image.RGBA {
 	// blend Layer 2 (and, later, Tilemap and Sprites) over the
 	// active display region row by row. The compositor pulls
 	// Layer 2 data internally; we just hand it the existing ULA
-	// scanline and write the result back.
+	// scanline and write the result back. The pure-ULA frame is
+	// snapshotted first (CaptureULABase, a no-op unless hi-res L2 +
+	// a U-above-L mode needs it) so the wide-L2 overpaint can
+	// repaint classic ULA pixels above the Layer 2 overlay (#204).
 	if u.nextCompositor != nil {
+		u.nextCompositor.CaptureULABase(u.img.Pix, u.img.Stride, TotalWidth*u.xs, u.totalHeight)
 		u.applyNextCompositor(stale)
 		if u.nextCompositor.HiResLayer2Active() {
 			// Layer 2 in 320×256 / 640×256 hi-res mode spans the full
@@ -1631,10 +1645,12 @@ func (u *ULA) renderTimexHiRes() *image.RGBA {
 // lines show. After the L2 overlay covers the base frame, the layers
 // the active NR$15 mode places ABOVE Layer 2 are repainted from their
 // sources (Compositor.OverpaintWideL2Row): sprites in the non-L-topmost
-// modes, and the ULA+TM slot's tilemap in the U-above-L modes (RAMS:
-// USL with the ULA output disabled — its menu text and Galaxian's
-// formation/HUD live on the tilemap above the L2 art). Classic ULA
-// pixels above wide L2 remain approximated as covered (known-gaps.md).
+// modes, and the ULA+TM slot in the U-above-L modes: the tilemap
+// (RAMS: USL with the ULA output disabled — its menu text and
+// Galaxian's formation/HUD live on the tilemap above the L2 art) and
+// the classic ULA pixels from the CaptureULABase snapshot (Space
+// Invaders #204: USL with NR$14=black — the white arcade overlay
+// paints above the 320x256 planet backdrop).
 // The frame is already 640 wide (xs = 2), so a 320-wide Layer 2 paints
 // two output pixels per L2 pixel and a 640-wide one paints natively.
 func (u *ULA) renderHiResLayer2() *image.RGBA {
