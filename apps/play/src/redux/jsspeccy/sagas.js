@@ -291,10 +291,13 @@ function* handleSetMachineActions(action) {
         // jsspeccy may not be rendered yet; the redux state still records the
         // choice so the menu reflects it and the emulator boots with it later.
         if (!jsspeccy) return;
+        // setMachine cold-boots on every zxgo path (zxBoot for the classics,
+        // a fresh-card bootNext for the Next), so no reset() follow-up: the
+        // Next boot is async and a reset would land on the OLD machine,
+        // visibly booting NextZXOS twice back to back. start() alone keeps
+        // the old behaviour of a paused emulator waking to show the boot.
         jsspeccy.setMachine(action.machine);
-        // Switching model leaves the machine running mid-execution under the new
-        // ROM/paging, so cold-boot the selected machine like the menu-bar Reset.
-        yield put(reset());
+        yield put(start());
     } catch (e) {
         handleException(e);
     }
