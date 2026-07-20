@@ -114,6 +114,16 @@ the loader-activity auto-pause (`tapeFrameHook`, shared by desktop /
 wasm / headless loops) parks an unpolled deck within 1.5 s — wider
 than the 48 ROM's 1 s read-free LD-START settle delay — and resumes it
 losslessly when a loader polls again (#192, Hewson custom loaders).
+A second fast trap at LD-EDGE-1 ($05E7, which also covers the $05E3
+LD-EDGE-2 entry via its fall-through) emulates the ROM's edge-sampling
+loop in O(1) for custom loaders the block trap can never serve: it
+advances the CPU clock by exactly the T-states the loop would burn and
+computes B on the same 59 T sample grid, so bit discrimination (the B
+count) and loader timing checks are preserved — the emulated timeline
+is unchanged, only the host cost collapses (`tapeTrapLDEdge`,
+byte-exactness + timeline-neutrality pinned by TestLDEdgeTrapByteExact
+and the corpus goldens). Loaders that copy the routine into RAM
+(Speedlock class) still interpret at real time under the turbo.
 
 Contention lives in `pkg/memory` (pattern {6,5,4,3,2,1,0,0}, display
 window only, per-model enables/anchors: 48K 14335 on 224 T lines,

@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"io"
 	"log/slog"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -672,15 +673,28 @@ func (e *emulator) tapeFrameHook() bool {
 	return heavy
 }
 
+// tapeTurboActive reports whether fast-tape turbo should be compressing time
+// RIGHT NOW: fast-tape on and the deck mid-load (playing with blocks left).
+// The gate is the deck state, NOT the $FE read rate — with the LD-EDGE trap a
+// load's read-free stretches (the ROM's 1 s LD-START settle, decrunch phases)
+// are still part of one continuous load, and gating on reads parked the
+// turbo at 1x through all of them. The loader-activity auto-pause (which
+// stays read-driven) bounds the window: a program that truly stops loading
+// has its deck parked within 1.5 s of emulated time, ending the turbo.
+func (e *emulator) tapeTurboActive() bool {
+	return e.fastTape.Load() && e.tapeLoadingActive()
+}
+
 // tapeTurboFrames returns how many emulated frames the CURRENT 50 Hz display
-// tick should run: tapeTurboFramesPerTick while a fast-tape load is actively
-// edge-reading, 1 otherwise. Also applies the whole-load audio mute (see
-// tapeAudioMuted). Shared by the desktop tick and the wasm zxFrame path.
+// tick should run: tapeTurboFramesPerTick while a fast-tape load is in
+// progress, 1 otherwise. Also applies the whole-load audio mute (see
+// tapeAudioMuted). Shared by the desktop tick and the wasm zxFrame path
+// (which upgrades the fixed burst to a wall-clock budget).
 func (e *emulator) tapeTurboFrames() int {
 	if e.ula != nil {
 		e.ula.SetFastLoad(e.tapeAudioMuted())
 	}
-	if e.fastTape.Load() && e.tapeLoadingActive() && e.tapeReadActive {
+	if e.tapeTurboActive() {
 		return tapeTurboFramesPerTick
 	}
 	return 1
@@ -1507,14 +1521,25 @@ var tapeTrace = os.Getenv("ZX_GO_TAPE_TRACE") != ""
 
 func installTapeTrap(emu *emulator) {
 	emu.cpu.TrapCheck = func(pc uint16) bool {
-		// The trap drives the Spectrum ULA tape player; machines without a
-		// ULA (SAM Coupé, ZX80/81) share the $0556 PC but must never trap.
+		// The traps drive the Spectrum ULA tape player; machines without a
+		// ULA (SAM Coupé, ZX80/81) share the trap PCs but must never trap.
 		if emu.ula == nil {
 			return false
 		}
-		if pc != 0x0556 {
-			return false
+		switch pc {
+		case 0x0556:
+			return tapeTrapLDBytes(emu)
+		case 0x05E7:
+			return tapeTrapLDEdge(emu)
 		}
+		return false
+	}
+}
+
+// tapeTrapLDBytes is the block-level fast-load trap at the LD-BYTES entry
+// ($0556) — see the contract documented above installTapeTrap's callers.
+func tapeTrapLDBytes(emu *emulator) bool {
+	{
 		if tapeTrace {
 			tp := emu.ula.GetTapePlayer()
 			blk, more := -1, false
@@ -1609,6 +1634,136 @@ func installTapeTrap(emu *emulator) {
 		slog.Debug("tape trap: loaded bytes", "count", count, "addr", fmt.Sprintf("$%04X", dst), "success", success)
 		return true
 	}
+}
+
+// LD-EDGE-1 ($05E7) timing constants, derived from the byte-exact 48 ROM
+// routine (pkg/roms/data/48.rom):
+//
+//	05E7 LD A,$16 / 05E9 DEC A / 05EA JR NZ,05E9 / 05EC AND A
+//	05ED LD-SAMPLE: INC B / RET Z / LD A,$7F / IN A,($FE) / RRA / RET NC
+//	                / XOR C / AND $20 / JR Z,LD-SAMPLE
+//	05FA exit: LD A,C / CPL / LD C,A / AND $07 / OR $08 / OUT ($FE),A / SCF / RET
+//
+// Settle before the first sample: 7 + 21*(4+12) + (4+7) + 4 = 358 T. A full
+// looping sample iteration costs 59 T with the IN completing 27 T in. The
+// successful final iteration plus exit tail costs 54 + 51 = 105 T; the
+// timeout iteration (INC B wraps, RET Z taken) costs 4 + 11 = 15 T.
+const (
+	ldEdgeSettleT   = 358
+	ldEdgeLoopT     = 59
+	ldEdgeSampleOff = 27
+	ldEdgeExitT     = 105
+	ldEdgeTimeoutT  = 15
+)
+
+// tapeTrapLDEdge is the O(1) fast trap for the ROM's edge-sampling routine
+// LD-EDGE-1 ($05E7). Custom loaders that the block-level $0556 trap can never
+// serve — Exolon enters LD-BYTES mid-routine, Firelord byte-loops in RAM
+// calling ROM LD-EDGE (#192) — spend ~95% of their load inside this loop, so
+// emulating its contract analytically makes their real-time loads nearly free
+// to execute while leaving the EMULATED timeline byte-for-byte and
+// T-state-for-T-state equivalent: the trap advances the CPU clock by exactly
+// the time the loop would have burned and computes B from the same 59 T
+// sample grid the loop would have counted on, so bit discrimination (which IS
+// the B count) and loader timing checks are preserved. Trapping $05E7 alone
+// also covers LD-EDGE-2 ($05E3): that entry is CALL $05E7 / RET NC / fall
+// through into $05E7, so its second edge re-enters the trap point.
+//
+// Contract on entry: B = timeout counter, C bit 5 = last EAR level (in the
+// RRA-shifted position), C bits 0-2 = border colour. Returns via RET with:
+// success — carry set, B += samples, C complemented, A = (C&7)|8 written to
+// port $FE (border stripe + MIC); timeout (B wrapped) — carry clear, Z set,
+// B = 0, A = 0.
+func tapeTrapLDEdge(emu *emulator) bool {
+	if !tapeTrapROMActive(emu.mem) {
+		return false
+	}
+	if emu.ula.GetTapePlayer() == nil {
+		return false
+	}
+	// Interrupt fidelity: loaders run under DI; with interrupts enabled the
+	// real loop could be preempted mid-sample, which O(1) emulation cannot
+	// reproduce. No ROM caller runs it with EI — fall back to interpretation.
+	if emu.cpu.IFF1 {
+		return false
+	}
+	// BREAK abort: the loop live-reads SPACE (bit 0 of the $7FFE half-row)
+	// every sample. Let the real code run while it's held so the abort path
+	// stays exact.
+	if emu.kbd != nil && emu.kbd.Scan(0x7FFE)&0x01 == 0 {
+		return false
+	}
+
+	level := emu.ula.TapeTrapSync() // advance the deck to "now"
+	expected := emu.cpu.C&0x20 != 0
+	b := emu.cpu.B
+	nInc := 256 - int(b) // INC B executions until RET Z would fire
+
+	// Find the 1-based sample index k whose IN sees a level different from
+	// C bit 5; k = 0 means the loop times out. Sample k reads EAR at
+	// settle + (k-1)*59 + 27 T after entry. A paused deck (or tape end)
+	// holds the level: instant success if it already differs, else timeout —
+	// exactly what the interpreted loop would observe.
+	k := 0
+	if nInc > 1 {
+		if level != expected {
+			k = 1
+		} else if dt, ok := emu.ula.TapeTstatesToNextEdge(); ok {
+			kk := 1
+			if first := uint64(ldEdgeSettleT + ldEdgeSampleOff); dt > first {
+				kk = int((dt-first+ldEdgeLoopT-1)/ldEdgeLoopT) + 1
+			}
+			if kk <= nInc-1 {
+				k = kk
+			}
+		}
+	}
+
+	var consumed uint64
+	samples := k
+	if k > 0 {
+		consumed = ldEdgeSettleT + uint64(k-1)*ldEdgeLoopT + ldEdgeExitT
+	} else {
+		consumed = ldEdgeSettleT + uint64(nInc-1)*ldEdgeLoopT + ldEdgeTimeoutT
+		samples = nInc - 1
+	}
+	emu.cpu.SetTstates(emu.cpu.Tstates() + consumed)
+	// The absorbed INs each hit port $FE: credit them so the read-rate
+	// signals (fast-tape turbo, loader-activity auto-pause) still see an
+	// active loader, then move the deck to the exit instant (past the edge
+	// on success), which also records the loading-sound transition.
+	if samples > 0 {
+		emu.ula.CreditTapeReads(uint64(samples))
+	}
+	emu.ula.TapeTrapSync()
+
+	if k > 0 {
+		emu.cpu.B = b + byte(k)
+		emu.cpu.C = ^emu.cpu.C
+		a := (emu.cpu.C & 0x07) | 0x08
+		emu.ula.WritePort(0x00FE, a) // the ROM's OUT: border stripe + MIC
+		emu.cpu.A = a
+		// Flags: OR $08 set S/Z/P from A (A is 8..15: S=0, Z=0), SCF then
+		// sets carry and clears N/H while preserving S/Z/P.
+		f := byte(z80.FLAG_C)
+		if bits.OnesCount8(a)%2 == 0 {
+			f |= z80.FLAG_PV
+		}
+		emu.cpu.F = f
+	} else {
+		// Timeout: A holds the last AND $20 result (0); INC B wrapped
+		// $FF->$00 setting Z and H (PV clear — no signed overflow), carry
+		// clear from that AND.
+		emu.cpu.A = 0
+		emu.cpu.B = 0
+		emu.cpu.F = z80.FLAG_Z | z80.FLAG_H
+	}
+	// RET.
+	low := emu.mem.Read(emu.cpu.SP)
+	high := emu.mem.Read(emu.cpu.SP + 1)
+	emu.cpu.SP += 2
+	emu.cpu.PC = uint16(high)<<8 | uint16(low)
+	return true
 }
 
 // parsePokes parses a multi-line poke string. Each non-empty, non-comment line

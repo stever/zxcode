@@ -55,12 +55,15 @@ Build: `GOOS=js GOARCH=wasm go build ./cmd/zx_go` via
 `scripts/build-wasm.sh` → `dist/zx.wasm` + `wasm_exec.js`. The Go wasm
 module runs on the browser MAIN thread. There is no Go-side loop: the
 CPU advances only inside `zxFrame()` calls from the page. While a tape
-loader is actively edge-reading, one `zxFrame()` call bursts up to
-`tapeTurboFramesPerTick` frames (the desktop tick's fast-tape turbo,
-shared via `tapeTurboFrames`/`tapeFrameHook`, #192) — the page's
-audio-clock pacing is unaffected because the render/audio flush still
-runs once per call, pushing one display frame's worth of (muted)
-samples.
+load is in progress (deck playing with blocks left), one `zxFrame()`
+call runs as many frames as fit a ~12 ms wall budget (the desktop
+tick's fast-tape turbo upgraded to a budget loop; shared gate/state via
+`tapeTurboActive`/`tapeFrameHook`, #192) — with the LD-EDGE trap making
+loader frames nearly free, a multi-minute custom-loader tape loads in a
+few seconds. The page's audio-clock pacing is unaffected because the
+render/audio flush still runs once per call, pushing one display
+frame's worth of (muted) samples; the loader-activity auto-pause is
+what ends the burst window when a program stops loading.
 
 Exports (`wasm_js.go`, all globals; `zxReady` is set last):
 

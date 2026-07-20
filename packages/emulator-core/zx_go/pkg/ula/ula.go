@@ -3738,6 +3738,34 @@ func (u *ULA) tapeLevel() bool {
 	return u.TapeIn
 }
 
+// TapeTrapSync advances the tape to the current tape-clock instant and
+// returns the live EAR level — the LD-EDGE fast trap's entry/exit sync.
+// Identical to a port-$FE read's tapeLevel(), including the loading-sound
+// event capture, but without the keyboard scan.
+func (u *ULA) TapeTrapSync() bool {
+	if u.tape == nil {
+		return u.TapeIn
+	}
+	return u.tapeLevel()
+}
+
+// TapeTstatesToNextEdge reports the tape T-states until the next EAR toggle
+// (see TapePlayer.TstatesToNextEdge). ok=false with no tape mounted.
+func (u *ULA) TapeTstatesToNextEdge() (uint64, bool) {
+	if u.tape == nil {
+		return 0, false
+	}
+	return u.tape.TstatesToNextEdge()
+}
+
+// CreditTapeReads adds n to the port-$FE read counter. The LD-EDGE fast trap
+// replaces the ROM's sampling loop — thousands of INs per frame — with O(1)
+// emulation; crediting the reads it absorbs keeps the read-rate signals
+// (fast-tape turbo, loader-activity auto-pause) seeing an ACTIVE loader.
+func (u *ULA) CreditTapeReads(n uint64) {
+	u.feReadCount += n
+}
+
 // GetTapePlayer returns the currently loaded tape player (or nil).
 func (u *ULA) GetTapePlayer() *TapePlayer {
 	return u.tape

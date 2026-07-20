@@ -243,6 +243,81 @@ func (tp *TapePlayer) NextBlock() []byte {
 	return out
 }
 
+// firstPulseDuration returns the duration of the first pulse a block will
+// emit — the pilot pulse for pilot-bearing blocks, else the first data-bit
+// pulse of a TZX pure-data block. Zero for an empty block.
+func firstPulseDuration(blk tapeBlock) uint64 {
+	if len(blk.data) == 0 {
+		return 0
+	}
+	if !blk.turbo {
+		return 2168 // standard pilot
+	}
+	if blk.pilotLen > 0 {
+		return uint64(blk.pilotPulse)
+	}
+	// Pure data: first pulse encodes bit 7 of the first byte.
+	if blk.data[0]&0x80 != 0 {
+		return uint64(blk.onePulse)
+	}
+	return uint64(blk.zeroPulse)
+}
+
+// TstatesToNextEdge returns how many tape T-states separate the CURRENT
+// playback position from the next EAR toggle, and whether such an edge
+// exists. Completing a pilot/sync/data pulse toggles; trailing-pause chunks
+// do not (silence has no edges), so mid-pause the next edge is the completion
+// of the NEXT block's first pulse. ok=false when the deck is stopped or the
+// tape holds no further edge. Used by the LD-EDGE fast trap (#192 follow-up)
+// to emulate the ROM's edge-sampling loop in O(1).
+func (tp *TapePlayer) TstatesToNextEdge() (uint64, bool) {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+	if !tp.playing {
+		return 0, false
+	}
+	blockIdx := tp.blockIdx
+	if blockIdx >= len(tp.blocks) {
+		return 0, false
+	}
+	var t uint64
+	// Stale pulse state (the block trap advanced blockIdx, or playback just
+	// crossed a block): the next pulses are blocks[blockIdx]'s from the top —
+	// mirror Update's resync without mutating state.
+	if tp.pulseBlock != blockIdx || tp.pulseIdx >= len(tp.pulses) {
+		d := firstPulseDuration(tp.blocks[blockIdx])
+		if d == 0 {
+			return 0, false
+		}
+		return d, true
+	}
+	// Completing the current pulse toggles iff it's a pilot/sync/data pulse.
+	elapsed := tp.tstate - tp.lastToggle
+	remaining := uint64(tp.pulses[tp.pulseIdx])
+	if elapsed < remaining {
+		remaining -= elapsed
+	} else {
+		remaining = 0
+	}
+	if tp.pulseIdx < tp.dataPulses {
+		return remaining, true
+	}
+	// In the trailing pause: silence until the block's chunks run out, then
+	// the next block's first pulse completes for the edge.
+	t = remaining
+	for i := tp.pulseIdx + 1; i < len(tp.pulses); i++ {
+		t += uint64(tp.pulses[i])
+	}
+	if blockIdx+1 >= len(tp.blocks) {
+		return 0, false
+	}
+	d := firstPulseDuration(tp.blocks[blockIdx+1])
+	if d == 0 {
+		return 0, false
+	}
+	return t + d, true
+}
+
 // DebugState reports the real-time player's internal position for
 // diagnostics: current block, pulse index / total pulses, the pulse count
 // covering pilot+sync+data, the accumulated tape T-state clock, and whether

@@ -614,17 +614,21 @@ func setupWasmExports() {
 		dbgPaused := wasmDebugPaused(e)
 		if !dbgPaused {
 			t0 := time.Now()
-			// Fast tape loading (#192): while a loader is actively edge-reading
-			// the tape, run a burst of frames per display tick so a real-time
-			// load (custom loaders enter the ROM's edge-timed loops directly and
-			// can't be trap-accelerated) finishes in seconds instead of minutes.
-			// Same shared helpers as the desktop tick: tapeTurboFrames decides
-			// the burst + applies the whole-load audio mute, tapeFrameHook keeps
-			// the loader-activity signal + auto-pause per executed frame.
-			n := e.tapeTurboFrames()
-			for k := 0; k < n; k++ {
+			// Fast tape loading (#192): while a tape load is in progress, run
+			// as many frames as fit a ~12 ms wall budget per display tick —
+			// with the LD-EDGE trap making loader frames nearly free, that
+			// compresses a multi-minute real-time load into a couple of
+			// seconds. tapeTurboFrames applies the whole-load audio mute and
+			// says whether turbo is on at all (1 = plain single frame);
+			// tapeFrameHook keeps the loader-activity signal + auto-pause per
+			// executed frame, and its auto-pause ending the load is what
+			// flips tapeTurboActive false and ends the burst. The page's
+			// audio pacing is unaffected: the render/audio flush below still
+			// runs once per zxFrame call.
+			turbo := e.tapeTurboFrames() > 1
+			for {
 				e.cpu.ExecuteFrame(e.frameTStates())
-				heavy := e.tapeFrameHook()
+				e.tapeFrameHook()
 				if e.peripherals != nil {
 					e.peripherals.Frame()
 				}
@@ -637,12 +641,8 @@ func setupWasmExports() {
 				e.noteBootFrame()
 				// A breakpoint / watchpoint / one-shot may have fired mid-frame.
 				dbgPaused = wasmDebugPaused(e)
-				if dbgPaused {
-					break
-				}
-				// Load finished (or the loader went idle) mid-burst: stop
-				// skipping game time at 64x.
-				if n > 1 && !heavy {
+				if dbgPaused || !turbo || !e.tapeTurboActive() ||
+					time.Since(t0) >= 12*time.Millisecond {
 					break
 				}
 			}
