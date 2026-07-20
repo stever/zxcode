@@ -388,7 +388,9 @@ func (c *Compositor) HasActiveSprites() bool {
 // U slot are NOT repainted (documented residue — that needs per-pixel
 // ULA data at this point in the pipeline; content that disables the
 // ULA output via NR$68 bit 7, like RAMS, has none to lose). The blend
-// modes 6/7 keep the sprites-only overpaint. dst is a full frame row
+// modes 6/7 keep the sprites-only overpaint. Last, priority-bit L2
+// pixels are repainted on top (composeL2PriorityOverlayRow) in every
+// mode whose mixer ladder promotes them. dst is a full frame row
 // at xScale output pixels per frame pixel (1 = 320-wide, 2 = 640).
 func (c *Compositor) OverpaintWideL2Row(frameY int, dst []byte, xScale int) {
 	mode := ModeSLU
@@ -405,6 +407,65 @@ func (c *Compositor) OverpaintWideL2Row(frameY int, dst []byte, xScale int) {
 	}
 	if tilemap && mode != ModeSUL {
 		c.composeTilemapOverlayRow(frameY, dst, xScale)
+	}
+	// Priority-bit L2 pixels (NR$44 bit 7) end on top of the overpainted
+	// layers: every mode with a layer2Priority branch in the mixer — all
+	// but LSU/LUS, where nothing overpainted L2 anyway (#195, Head Over
+	// Heels' door frames over the player sprite in the 320-wide mode).
+	if mode != ModeLSU && mode != ModeLUS {
+		c.composeL2PriorityOverlayRow(frameY, dst, xScale)
+	}
+}
+
+// composeL2PriorityOverlayRow repaints the hi-res Layer 2 pixels whose
+// palette entry carries the priority bit above the overpainted layers —
+// the mixer's layer2Priority promotion places them at the very top of
+// the SLU ladder. dst/xScale as in OverpaintWideL2Row: a full frame row
+// at xScale output pixels per FRAME pixel; the L2 pixel scale is derived
+// from the row's native width (2 output px per L2 px at 320, 1 at 640).
+// In the blend modes 6/7 the raw L2 colour stands in for the blended
+// promotion, consistent with the wide path's unblended L2 overlay.
+func (c *Compositor) composeL2PriorityOverlayRow(y int, dst []byte, xScale int) {
+	if c.l2 == nil || !c.l2.Enabled() || c.pal == nil {
+		return
+	}
+	l2Pal := c.pal.PaletteForLayer(palette.LayerLayer2)
+	if l2Pal == nil {
+		return
+	}
+	// Skip the row render entirely when no palette entry carries the
+	// priority bit — the common case for non-isometric content.
+	anyPriority := false
+	for i := 0; i < 256; i++ {
+		if l2Pal.HasPriority(byte(i)) {
+			anyPriority = true
+			break
+		}
+	}
+	if !anyPriority {
+		return
+	}
+	w := c.l2.LineWidth()
+	xsL2 := FullWidth * xScale / w
+	if xsL2 < 1 || w > 2*FullWidth || len(dst) < w*xsL2*4 {
+		return
+	}
+	clipX0, clipX1, rowVisible := c.l2.ClipBounds(y)
+	if !rowVisible {
+		return
+	}
+	var scan [2 * FullWidth]byte
+	c.l2.RenderScanline(y, scan[:w])
+	for x := 0; x < w; x++ {
+		idx := scan[x]
+		if x < clipX0 || x > clipX1 || !l2Pal.HasPriority(idx) || c.l2Transparent(l2Pal, idx) {
+			continue
+		}
+		r, g, b := l2Pal.RGB(idx)
+		for i := 0; i < xsL2; i++ {
+			off := (x*xsL2 + i) * 4
+			dst[off+0], dst[off+1], dst[off+2], dst[off+3] = r, g, b, 0xFF
+		}
 	}
 }
 
@@ -1175,6 +1236,11 @@ func (c *Compositor) composePixelResolved(x int, ula [4]byte, mode PriorityMode,
 	case ModeSLU: // Sprites over Layer 2 over ULA+TM
 		c.paintL2(x, l2Pal, &pix)
 		c.paintSprites(x, sprPal, &pix)
+		// A priority-bit L2 pixel outranks the sprites even in SLU: the
+		// FPGA's SLU chain tests layer2Priority before the sprite (Mix
+		// case 0, from zxnext.vhd's 7196+ priority ladder) — the
+		// isometric-foreground trick (Head Over Heels' door frames, #195).
+		c.paintL2Priority(x, l2Pal, &pix)
 	case ModeLSU: // Layer 2 over Sprites over ULA+TM
 		c.paintSprites(x, sprPal, &pix)
 		c.paintL2(x, l2Pal, &pix)
@@ -1189,8 +1255,12 @@ func (c *Compositor) composePixelResolved(x int, ula [4]byte, mode PriorityMode,
 			pix = ula
 		}
 		c.paintTM(x, tmPal, ulaTrans, &pix)
-		c.paintL2Priority(x, l2Pal, &pix) // priority-bit L2 promoted above ULA+TM
 		c.paintSprites(x, sprPal, &pix)
+		// Priority-bit L2 promoted above ULA+TM AND the sprites — the
+		// FPGA's SUL ladder tests layer2_priority before the sprite,
+		// like SLU (zxnext.vhd "010" case; upstream Layer2Colours table
+		// row ppssuu → pp).
+		c.paintL2Priority(x, l2Pal, &pix)
 	case ModeLUS: // Layer 2 over ULA+TM over Sprites
 		c.paintSprites(x, sprPal, &pix)
 		if !ulaTrans {

@@ -301,8 +301,11 @@ shape, zxnext.vhd:6543-6552). The pieces:
   modes), global transparency NR$14 (sprite transparency NR$4B lives in
   the sprite ENGINE — see above), tilemap
   transparency nibble NR$4C, the SUL per-pixel stencil, Layer 2
-  priority-bit promotion, ULA+tilemap combine, and the NR$4A fallback
-  colour where every layer is transparent. `mixer.go` is a fully
+  priority-bit promotion — an opaque priority-bit L2 pixel outranks
+  EVERYTHING, sprites included, in every mode whose FPGA ladder tests
+  layer2_priority (all but LSU/LUS; #195 Head Over Heels' isometric
+  door frames over the player sprite) — ULA+tilemap combine, and the
+  NR$4A fallback colour where every layer is transparent. `mixer.go` is a fully
   faithful port of the FPGA video mixer, golden-tested; the scanline
   painter is the fast path, and its additive blend orders (modes 6/7)
   call `Mix` per pixel with the NR$68 blend-operand bits. The paint
@@ -326,8 +329,9 @@ shape, zxnext.vhd:6543-6552). The pieces:
   hi-res Layer 2 overlay repaints the layers the NR$15 mode places
   above L2 from their sources (OverpaintWideL2Row): sprites in the
   non-L-topmost modes, tilemap in the U-above-L modes (SUL below
-  sprites, USL/ULS above). Classic ULA pixels above wide L2 remain
-  approximated as covered (known-gaps).
+  sprites, USL/ULS above), then priority-bit L2 pixels back on top
+  (composeL2PriorityOverlayRow, #195). Classic ULA pixels above wide L2
+  remain approximated as covered (known-gaps).
 - Copper (`pkg/next/copper`): 1024 × 16-bit instruction store, MOVE /
   WAIT / NOOP / HALT, four start modes (NR$62, list restart only on a
   mode TRANSITION into 01/11 per copper.vhd's edge detect), and the

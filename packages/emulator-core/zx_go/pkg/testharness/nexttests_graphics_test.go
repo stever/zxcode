@@ -47,15 +47,20 @@ var (
 // The grid encodes the ordering semantics: e.g. band 1 (LSU) r0 c1 is
 // L2-green where band 0 (SLU) shows the sprite; bands 4/5 (USL/ULS)
 // differ exactly in r1 c1 (sprite-over-L2 vs L2-over-sprite); the
-// priority-bit columns (c4/c5 — and c3 where the sprite is absent) stay
-// promoted green in every order; r3 shows the NR$4A fallback wherever
-// every layer is transparent, with the sprite still covering c1/c3.
+// priority-bit columns (c3/c4/c5) stay promoted green in every order —
+// INCLUDING over the sprite at c3 (upstream ReadMe row "ppssuu → pp";
+// zxnext.vhd tests layer2_priority before the sprite in every ladder
+// that has it — the #195 Head Over Heels fix re-pinned SLU/SUL r0/r1
+// c3 from the sprite to the promoted green the hardware shows); r3
+// shows the NR$4A fallback wherever every layer is transparent, with
+// the sprite still covering c1/c3 (a TRANSPARENT priority pixel does
+// not promote: "pTssuu → ss").
 var mixCellExpect = func() [6][4][6][3]byte {
 	gl, gp, cy, ys, pk := mixL2Green, mixPrioGreen, mixULACyan, mixSprYellow, mixFallback
 	return [6][4][6][3]byte{
 		{ // SLU
-			{gl, ys, gl, ys, gp, gp},
-			{gl, ys, gl, ys, gp, gp},
+			{gl, ys, gl, gp, gp, gp},
+			{gl, ys, gl, gp, gp, gp},
 			{cy, ys, cy, ys, cy, cy},
 			{pk, ys, pk, ys, pk, pk},
 		},
@@ -66,8 +71,8 @@ var mixCellExpect = func() [6][4][6][3]byte {
 			{pk, ys, pk, ys, pk, pk},
 		},
 		{ // SUL
-			{cy, ys, cy, ys, gp, gp},
-			{gl, ys, gl, ys, gp, gp},
+			{cy, ys, cy, gp, gp, gp},
+			{gl, ys, gl, gp, gp, gp},
 			{cy, ys, cy, ys, cy, cy},
 			{pk, ys, pk, ys, pk, pk},
 		},
