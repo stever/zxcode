@@ -496,6 +496,13 @@ Pinned since (ULA group conformance work):
   mixer arithmetic per pixel (zxnext.vhd:7196-7355) with NR$68
   blend-operand bits (:5444-5450) — `TestComposeScanlineAdditiveBlend`
   + TestNexttestsGraphicsLightenDarken.
+- ✅ NR$68 bit 7 ULA-output disable forces the whole ULA/LoRes slot
+  transparent in the mixer (`ula_transparent <= ula_mix_transparent or
+  ula_en_2 = '0'`, zxnext.vhd:7103), so every NR$15 ordering shows the
+  lower layers: the ladders' U-repaint consumes the disable term and
+  the blend path drives Mix's ULAEn (blend operands keep the mix-level
+  signal, :7144) — `TestULADisabledLUSShowsSprites`/`USL` + enabled
+  control (#205: TX-1696's sprite-drawn LUS title menu rendered black).
 - ✅ Raster-stamped NR$15 (priority + LoRes enable) replay for CPU
   band rewrites — `TestLayerControlMidFrameRasterStamp` + the
   LayersMixing runners' six-band grids.

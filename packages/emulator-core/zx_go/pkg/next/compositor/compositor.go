@@ -1242,7 +1242,18 @@ func (c *Compositor) paintSprites(x int, sprPal *palette.Palette, pix *[4]byte) 
 func (c *Compositor) composePixelResolved(x int, ula [4]byte, mode PriorityMode,
 	l2Pal, tmPal, sprPal *palette.Palette) [4]byte {
 	r := &c.row
-	ulaTrans := c.ulaPixTransparent(ula)
+	// ula_mix_transparent (zxnext.vhd:7100) is the per-pixel value
+	// signal; ula_transparent (:7103) additionally forces the whole
+	// ULA/LoRes slot transparent while NR$68 bit 7 disables the ULA
+	// output (ula_en_2 = '0'). The priority ladders and the ULA-vs-
+	// tilemap arbitration consume the LATTER — without the disable
+	// term, every ordering that repaints ULA above a lower layer
+	// (LUS/SUL/USL/ULS) painted the opaque disabled-fill over sprites
+	// and Layer 2 (TX-1696's sprite-drawn title menu under LUS rendered
+	// pure black, #205). The blend modes keep the mix-level signal for
+	// their operand, as the FPGA does (:7144).
+	ulaMixTrans := c.ulaPixTransparent(ula)
+	ulaTrans := ulaMixTrans || c.ulaOutputDisabled
 
 	// Base: the ULA (or the NR$4A fallback where it is transparent) —
 	// a pixel left transparent by every layer shows the fallback.
@@ -1318,8 +1329,8 @@ func (c *Compositor) composePixelResolved(x int, ula [4]byte, mode PriorityMode,
 		// with the NR$68 bits 6:5 operand select. Verified by the
 		// MrKWatkins LightenDarken_L2_ULA test.
 		in := MixerInputs{
-			ULAEn:       true,
-			ULAClipped:  ulaTrans, // per-pixel transparency signal
+			ULAEn:       !c.ulaOutputDisabled,
+			ULAClipped:  ulaMixTrans, // per-pixel transparency signal
 			Transparent: c.transparency,
 			Fallback:    c.fallbackRaw,
 			StencilMode: c.stencilMode,
