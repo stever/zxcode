@@ -1,5 +1,7 @@
 package tilemap
 
+import "strconv"
+
 // BankReader is the minimum the tilemap needs from the memory bus:
 // fetch one 16 KB RAM bank by index. pkg/memory.Memory's GetPage
 // satisfies this — same contract as pkg/next/layer2.
@@ -601,4 +603,59 @@ func (t *Tilemap) RenderScanlineWithBelow(y int, dst, below []byte) {
 		}
 		x += run
 	}
+}
+
+// DebugFoldState reports the raster-stamp fold / capture machinery's
+// live state plus a sample of the folded per-line scroll table —
+// the diagnostic surface for the #205 browser-garble investigation.
+func (t *Tilemap) DebugFoldState() map[string]int {
+	b2i := func(b bool) int {
+		if b {
+			return 1
+		}
+		return 0
+	}
+	m := map[string]int{
+		"foldActive":    b2i(t.foldActive),
+		"mapSnapActive": b2i(t.mapSnapActive),
+		"mapSnapRow":    t.mapSnapRow,
+		"captureActive": b2i(t.captureActive),
+		"captureDirty":  b2i(t.captureDirty),
+		"stamps":        len(t.scrollStamps),
+		"consumed":      b2i(t.scrollConsumed),
+		"overflow":      b2i(t.scrollOverflow),
+		"scrollX":       t.scrollX,
+		"scrollY":       t.scrollY,
+	}
+	for _, line := range []int{40, 80, 120, 160, 200, 240} {
+		m["y"+strconv.Itoa(line)] = t.scrollYLine[line]
+		m["x"+strconv.Itoa(line)] = t.scrollXLine[line]
+	}
+	// Snapshot-vs-live map occupancy over the 2560-byte 40x32 map.
+	base := int(t.mapBase&0x3F) << 8
+	nz := func(b []byte) int {
+		c := 0
+		for i := base; i < base+2560 && i < len(b); i++ {
+			if b[i] != 0 {
+				c++
+			}
+		}
+		return c
+	}
+	if t.mapSnapValid {
+		m["snapNZ"] = nz(t.mapSnap)
+	}
+	if t.mem != nil {
+		bank := 5
+		if t.mapBase&0x80 != 0 {
+			bank = 7
+		}
+		m["liveNZ"] = nz(t.mem.GetPage(bank))
+	}
+	return m
+}
+
+// DebugClip reports the live clip window (#205 diagnostics).
+func (t *Tilemap) DebugClip() (x1, x2, y1, y2 byte) {
+	return t.clipX1, t.clipX2, t.clipY1, t.clipY2
 }

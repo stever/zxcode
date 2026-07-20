@@ -733,6 +733,32 @@ func setupWasmExports() {
 		return n
 	}))
 
+	// zxTmDebug() -> JSON of the tilemap raster-stamp fold diagnostics
+	// (#205 browser-garble investigation): fold/capture flags, stamp
+	// counts and a sample of the folded per-line scroll table.
+	g.Set("zxTmDebug", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		e := wasmEmu
+		if e == nil || e.nextTilemap == nil {
+			return "{}"
+		}
+		st := e.nextTilemap.DebugFoldState()
+		keys := make([]string, 0, len(st))
+		for k := range st {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var sb strings.Builder
+		sb.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteString(`"` + k + `":` + strconv.Itoa(st[k]))
+		}
+		sb.WriteByte('}')
+		return sb.String()
+	}))
+
 	// zxModel() -> "" | model name (e.g. "ZX Spectrum 48K", "ZX Spectrum Next").
 	// Empty until a machine has finished constructing — boots run in
 	// goroutines, so the host polls this to know when a model switch landed

@@ -178,6 +178,35 @@ type Copper struct {
 	// position includes its full budget), while the debt is an
 	// absolute intra-frame position.
 	startDebt int
+	// Mid-frame RUNNING→stop / stopped→start PAIR (#205): a game that
+	// stops the copper mid-raster, re-uploads its list and restarts it
+	// EVERY frame (TX-1696's per-band engine: NR$62=$00, ~512 NR$60
+	// writes, NR$62=$C0 each frame) must render as the FPGA's control
+	// timeline does — the list RUNS from the frame top (OnVBL reset)
+	// until the stop instant, freezes across [pauseAt, resumeAt), then
+	// resumes at the start instant with the start's pc. Charging the
+	// whole frame's head as startDebt instead (the start-only #197
+	// convention) deferred the program past its early-line WAITs, whose
+	// strict same-line release then parked it for the entire pass:
+	// every band write vanished from every displayed frame. midStopAt/
+	// midStopSeen bank the stop instant at execution time; the
+	// following start converts the pair into the pauseAt/resumeAt
+	// schedule consumed by Step and RunToCycle. pauseAt < 0 = no pair
+	// pending. All instants are on the startPhase clock (paper-top-
+	// rebased copper cycles). A start with NO mid-frame stop keeps the
+	// pure startDebt behaviour (#197's Quantum Storm contract). The
+	// list CONTENT the pass head runs is the post-upload one (this
+	// model has no per-frame program snapshot) — one frame early,
+	// a documented residue.
+	midStopAt   int
+	midStopSeen bool
+	pauseAt     int
+	resumeAt    int
+	resumePC    uint16
+	// dbg counters (#205 diagnostics)
+	dbgPairArms  int
+	dbgStartArms int
+	dbgStops     int
 }
 
 // Generation returns the CPU-write mutation counter. It bumps on every
@@ -312,7 +341,9 @@ func (c *Copper) dupRuns() *[MaxInstructions]int32 {
 }
 
 // New returns an empty copper.
-func New() *Copper { return &Copper{stopped: true, lineCycles: 456 * CyclesPerHcount} }
+func New() *Copper {
+	return &Copper{stopped: true, lineCycles: 456 * CyclesPerHcount, pauseAt: -1}
+}
 
 // SetLineCycles sets the scanline length in copper cycles (hcounts x
 // CyclesPerHcount) for the cross-line overrun carry. Defaults to the
@@ -416,6 +447,14 @@ func (c *Copper) SetWritePtrHighAndMode(b byte) {
 	c.mode = mode
 	switch c.mode {
 	case StartStop:
+		// A RUNNING→stop mid-frame banks the stop instant: if a start
+		// follows this frame, the pair renders as run-head / freeze /
+		// resume (see the pauseAt field block, #205).
+		if !c.stopped && c.continuous && c.startPhase != nil {
+			c.midStopAt = c.startPhase()
+			c.midStopSeen = true
+			c.dbgStops++
+		}
 		c.stopped = true
 	case StartFromZero, StartOnVBL:
 		c.pc = 0
@@ -431,7 +470,27 @@ func (c *Copper) SetWritePtrHighAndMode(b byte) {
 	// execution on the very next 28 MHz cycle (copper.vhd:70-83), not
 	// at the frame top. See the startPhase field comment (#187).
 	if wasStopped && !c.stopped && c.continuous && c.startPhase != nil {
-		c.startDebt = c.startPhase()
+		if c.midStopSeen {
+			// Stop→start pair within one frame: convert to the
+			// pause/resume schedule (see the pauseAt field block, #205).
+			// An inverted ordering (start instant before the banked
+			// stop — a stop carried over from a previous frame) falls
+			// back to freezing from the frame top, the start-only
+			// behaviour.
+			c.pauseAt = c.midStopAt
+			c.resumeAt = c.startPhase()
+			if c.resumeAt < c.pauseAt {
+				c.pauseAt = 0
+			}
+			c.resumePC = c.pc
+			c.midStopSeen = false
+			c.startDebt = 0
+			c.dbgPairArms++
+		} else {
+			c.startDebt = c.startPhase()
+			c.pauseAt = -1
+			c.dbgStartArms++
+		}
 		c.stepCarry = 0
 		c.linePos = 0
 	}
@@ -546,6 +605,34 @@ func (c *Copper) RunToCycle(vcount uint16, cycle int) {
 	if c.continuous && c.startDebt > 0 {
 		c.linePos += c.startDebt
 		c.startDebt = 0
+	}
+	// Mid-frame stop→start pair (#205): run the pass head normally,
+	// freeze across [pauseAt, resumeAt), resume with the start's pc.
+	// Calls are raster-monotonic, so clamping the call's target at the
+	// pause instant and floor-jumping at the resume instant realises
+	// the schedule at this engine's grain.
+	if c.pauseAt >= 0 && c.lineCycles > 0 {
+		lineStart := int(vcount) * c.lineCycles
+		switch {
+		case lineStart+cycle < c.pauseAt:
+			// wholly before the freeze — run normally
+		case lineStart >= c.resumeAt:
+			c.pc = c.resumePC
+			c.pauseAt = -1
+		case lineStart+cycle >= c.resumeAt:
+			// this call crosses the resume instant
+			c.pc = c.resumePC
+			if f := c.resumeAt - lineStart; c.linePos < f {
+				c.linePos = f
+			}
+			c.pauseAt = -1
+		default:
+			// inside the freeze window: execute only the pre-pause head
+			cycle = c.pauseAt - lineStart - 1
+			if cycle < 0 {
+				return
+			}
+		}
 	}
 	if c.mode == StartStop { // copper_en "00": no execution (copper.vhd:85)
 		return
@@ -685,6 +772,32 @@ func (c *Copper) Step(scanline uint16, hcount uint16, cycleBudget int) int {
 	if c.continuous && c.startDebt > 0 {
 		spent += c.startDebt
 		c.startDebt = 0
+	}
+	// Mid-frame stop→start pair (#205): run the pass head normally,
+	// freeze across [pauseAt, resumeAt), resume with the start's pc —
+	// per-line grain under this engine's one-call-per-line convention.
+	if c.pauseAt >= 0 && cycleBudget > 0 {
+		lineStart := int(scanline) * cycleBudget
+		lineEnd := lineStart + cycleBudget
+		switch {
+		case lineEnd <= c.pauseAt:
+			// wholly before the freeze — run normally
+		case lineStart >= c.resumeAt:
+			c.pc = c.resumePC
+			c.pauseAt = -1
+		case c.resumeAt < lineEnd:
+			// resume lands inside this line
+			c.pc = c.resumePC
+			if f := c.resumeAt - lineStart; spent < f {
+				spent = f
+			}
+			c.pauseAt = -1
+		case c.pauseAt > lineStart:
+			// the freeze begins inside this line: only the head runs
+			cycleBudget = c.pauseAt - lineStart
+		default:
+			return 0 // wholly inside the freeze window
+		}
 	}
 	for spent < cycleBudget {
 		inst := Decode(c.program[c.pc&(MaxInstructions-1)])
@@ -951,4 +1064,19 @@ func (c *Copper) FrameMoveInstants(reg byte, lines, cyclesPerLine int) []MoveIns
 		}
 	}
 	return out
+}
+
+// DebugPair reports the armed mid-frame stop/start schedule (#205
+// diagnostics): pauseAt/resumeAt on the startPhase clock, -1 when none.
+func (c *Copper) DebugPair() (pauseAt, resumeAt int) {
+	if c.pauseAt < 0 {
+		return -1, -1
+	}
+	return c.pauseAt, c.resumeAt
+}
+
+// DebugArms reports the #205 diagnostic counters: mid-frame stops
+// seen, stop/start pairs armed, start-only debts armed.
+func (c *Copper) DebugArms() (stops, pairs, starts int) {
+	return c.dbgStops, c.dbgPairArms, c.dbgStartArms
 }

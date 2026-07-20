@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/conorarmstrong/zx_go/pkg/next/palette"
+	"github.com/conorarmstrong/zx_go/pkg/roms"
 )
 
 // TestTX205Probe (diagnostic, #205): reproduce "TX-1696 doesn't start and
@@ -43,7 +45,9 @@ func TestTX205Probe(t *testing.T) {
 	if prev != nil {
 		nf = *prev
 	}
-	nf.noSound = true
+	// ZX_GO_TX205_SOUND=1 keeps the audio pipeline live (the browser
+	// condition); default noSound like the other headless probes.
+	nf.noSound = os.Getenv("ZX_GO_TX205_SOUND") == ""
 	cliFlagsActive = &nf
 	t.Cleanup(func() { cliFlagsActive = prev })
 	emu, err := newNextEmulator()
@@ -61,13 +65,21 @@ func TestTX205Probe(t *testing.T) {
 		t.Fatalf("mkdir %s: %v", outDir, err)
 	}
 	t.Logf("output -> %s", outDir)
-	shot := func(frame int, tag string) {
+	// shotImg encodes a GIVEN image; shot re-renders (a STALE re-render —
+	// no execution since the frame's own render). The distinction is the
+	// crux of the #205 garble: the browser canvas shows the frame's FIRST
+	// (live) render, so gameplay screenshots must use shotImg with the
+	// image runOneFrame's render produced, not a second render.
+	shotImg := func(frame int, tag string, img image.Image) {
 		fp, err := os.Create(fmt.Sprintf("%s/f%06d_%s.png", outDir, frame, tag))
 		if err != nil {
 			return
 		}
 		defer fp.Close()
-		_ = png.Encode(fp, emu.renderFrame())
+		_ = png.Encode(fp, img)
+	}
+	shot := func(frame int, tag string) {
+		shotImg(frame, tag, emu.renderFrame())
 	}
 
 	totalFrames := 20000
@@ -77,6 +89,10 @@ func TestTX205Probe(t *testing.T) {
 	shotEvery := 250
 	if s := os.Getenv("ZX_GO_TX205_SHOT_EVERY"); s != "" {
 		fmt.Sscanf(s, "%d", &shotEvery)
+	}
+	skipRender := 0
+	if s := os.Getenv("ZX_GO_TX205_SKIP_RENDER"); s != "" {
+		fmt.Sscanf(s, "%d", &skipRender)
 	}
 
 	type inputEv struct {
@@ -225,6 +241,11 @@ func TestTX205Probe(t *testing.T) {
 			t.Logf("frame %6d: tilemap palette (active=%d):\n%s", frame, which,
 				formatPaletteDump(tm, 32))
 		}
+		d := &remoteDebugger{emu: emu}
+		t.Logf("frame %6d: copper:\n%s", frame, d.cmdCopperDisasm())
+		t.Logf("frame %6d: frameTStates live=%d model=%d lines=%d", frame,
+			emu.frameTStates(), frameTStatesForModel(roms.ModelNext),
+			emu.mem.NextGeometry().Lines)
 	}
 
 	launchFrame := 3000
@@ -265,7 +286,94 @@ func TestTX205Probe(t *testing.T) {
 				emu.ula.SetKempstonButton(kemp, false)
 			}
 		}
-		runOneFrame(emu)
+		if skipRender > 1 && frame > launchFrame && frame%skipRender != 0 {
+			// Execute-without-render: emulate a frontend that drops
+			// renders (browser under load). Matches runOneFrame minus
+			// renderFrame.
+			emu.cpu.ExecuteFrame(frameTStatesForModel(roms.ModelNext))
+			if emu.peripherals != nil {
+				emu.peripherals.Frame()
+			}
+			if emu.kbd != nil {
+				emu.kbd.Tick()
+			}
+			if emu.nexloadMacro != nil && emu.nexloadMacro.tick(emu) {
+				emu.nexloadMacro = nil
+			}
+			emu.noteBootFrame()
+		} else {
+			// runOneFrame inlined so the frame's OWN (live) render image
+			// is capturable — a shot() re-render is a stale pass and can
+			// mask live-render bugs (see shotImg).
+			emu.cpu.ExecuteFrame(frameTStatesForModel(roms.ModelNext))
+			if emu.peripherals != nil {
+				emu.peripherals.Frame()
+			}
+			if emu.kbd != nil {
+				emu.kbd.Tick()
+			}
+			if emu.nexloadMacro != nil && emu.nexloadMacro.tick(emu) {
+				emu.nexloadMacro = nil
+			}
+			traceClip := frame == 10000
+			passTag := ""
+			if frame == 9999 || traceClip {
+				n60 := 0
+				emu.nextRegs.SetTracer(func(reg, val byte, isWrite bool) {
+					if !isWrite {
+						return
+					}
+					switch reg {
+					case 0x1B, 0x1C, 0x61, 0x62:
+						t.Logf("frame %6d [%s]: NR $%02X <- $%02X (pc=$%04X)",
+							frameNow, passTag, reg, val, emu.cpu.PC)
+					case 0x60:
+						n60++
+						if n60 <= 4 || n60%512 == 0 {
+							t.Logf("frame %6d [%s]: NR $60 <- $%02X (write #%d, pc=$%04X)",
+								frameNow, passTag, val, n60, emu.cpu.PC)
+						}
+					}
+				})
+				passTag = "LIVE"
+				if frame == 9999 {
+					passTag = "EXEC"
+				}
+			}
+			if frame >= 9990 && frame < 10005 && emu.nextCopper != nil {
+				p, r := emu.nextCopper.DebugPair()
+				st, pr, sa := emu.nextCopper.DebugArms()
+				t.Logf("frame %6d: PRE-RENDER copper pair pause=%d resume=%d stops=%d pairs=%d starts=%d",
+					frame, p, r, st, pr, sa)
+			}
+			liveImg := emu.renderFrame()
+			if frame >= launchFrame && frame%shotEvery == 0 {
+				shotImg(frame, "live", liveImg)
+				if emu.nextTilemap != nil {
+					x1, x2, y1, y2 := emu.nextTilemap.DebugClip()
+					t.Logf("frame %6d: post-LIVE  clip x=[%d,%d] y=[%d,%d]", frame, x1, x2, y1, y2)
+					passTag = "STALE"
+					shotImg(frame, "stale", emu.renderFrame())
+					x1, x2, y1, y2 = emu.nextTilemap.DebugClip()
+					t.Logf("frame %6d: post-STALE clip x=[%d,%d] y=[%d,%d]", frame, x1, x2, y1, y2)
+				}
+			}
+			if traceClip {
+				passTag = "EXEC-NEXT"
+			}
+			emu.noteBootFrame()
+		}
+		if frame == 10002 {
+			emu.nextRegs.SetTracer(nil)
+		}
+		if frame >= 9500 && frame%100 == 0 && emu.nextTilemap != nil {
+			t.Logf("frame %6d: tmfold %v", frame, emu.nextTilemap.DebugFoldState())
+			if emu.nextCopper != nil {
+				p, r := emu.nextCopper.DebugPair()
+				t.Logf("frame %6d: copper pair pause=%d resume=%d (lines %d/%d)",
+					frame, p, r, p/1824, r/1824)
+			}
+		}
 		if frame > launchFrame && frame-lastWindowFrame >= 500 {
 			t.Logf("frame %6d (t=%6.1fs): pc=$%04X sd_reads=%d dac_writes=%d ctc_writes=%d macro_done=%v",
 				frame, float64(frame-launchFrame)/50.0, emu.cpu.PC,

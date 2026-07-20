@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"log"
+	"os"
 	"sync/atomic"
 
 	"github.com/conorarmstrong/zx_go/pkg/audio"
@@ -2808,7 +2809,8 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		// identical output, since nothing can change between the two
 		// halves' lookups.
 		rowPaced := false
-		if paced != nil && pacedVideo && (copperPeek == nil || copperPeek.CanRetireOnLine(uint16(y))) {
+		if paced != nil && pacedVideo && (copperPeek == nil || copperPeek.CanRetireOnLine(uint16(y))) &&
+			os.Getenv("ZX_GO_NO_PACED_ROWS") == "" {
 			rowPaced = true
 		}
 		// Half-pixel-distinct content: fine-scroll-X shifts the source
