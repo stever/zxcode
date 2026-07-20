@@ -159,3 +159,55 @@ func TestScrollCaptureAppliesCopperRowWrites(t *testing.T) {
 		t.Errorf("post-bracket CPU stamp: row 200 = %02X, want 02", got)
 	}
 }
+
+// TestScrollFoldMapContentSnapshot pins the map-content snapshot taken
+// at the frame's first mid-frame CPU scroll stamp (#196, Atic Atac's
+// door/trapdoor jitter): a game that pairs a scroll write with a MAP
+// REWRITE in the same mid-frame update shows rows above the update
+// with the OLD map + OLD scroll on the FPGA (the beam read them before
+// the update). Rows above the stamp row must render from the snapshot;
+// rows at/after it from the live (rewritten) map. A frame with no
+// stamps drops back to live content everywhere.
+func TestScrollFoldMapContentSnapshot(t *testing.T) {
+	tm, f := scrollFoldTilemap()
+
+	pixAt := func(y, x int) byte {
+		var dst [Width40]byte
+		tm.RenderScanline(y, dst[:])
+		return dst[x]
+	}
+
+	line := 0
+	tm.SetRasterLineSource(func() int { return line })
+
+	// Mid-frame update at raster line 276 (render row 244, the Atic
+	// shape): scroll-Y write, then the map is rewritten — every column
+	// becomes tile 2.
+	line = 276
+	tm.SetScrollY(1) // stamps + snapshots the pre-rewrite map
+	for row := 0; row < 32; row++ {
+		for col := 0; col < 40; col++ {
+			f.data[row*40+col] = 2
+		}
+	}
+	tm.FoldScrollStamps(false)
+	defer tm.EndScrollCapture()
+
+	// Row 50 (above the update): pre-rewrite map — column 0 is tile 1.
+	// scroll-Y 0 is in force there, so the row content is the old map's.
+	if got := pixAt(50, 0); got != 0x01 {
+		t.Errorf("row above the update: pixel = %02X, want 01 (snapshot map)", got)
+	}
+	// Row 250 (at/after the update): live rewritten map — tile 2.
+	if got := pixAt(250, 0); got != 0x02 {
+		t.Errorf("row after the update: pixel = %02X, want 02 (live map)", got)
+	}
+
+	// Next frame writes no scroll: the fold drops the log and the live
+	// map shows everywhere again.
+	tm.EndScrollCapture()
+	tm.FoldScrollStamps(false)
+	if got := pixAt(50, 0); got != 0x02 {
+		t.Errorf("stamp-free frame: pixel = %02X, want 02 (live map everywhere)", got)
+	}
+}

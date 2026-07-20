@@ -64,6 +64,27 @@ type Tilemap struct {
 	// per row into the table by CaptureRowScroll once dirty.
 	captureActive bool
 	captureDirty  bool
+	// Map-content snapshot at the frame's FIRST CPU scroll stamp (#196):
+	// a game that pans by pairing a scroll-register write with a map
+	// REWRITE in the same mid-frame update (Atic Atac: NR$31 at raster
+	// ~276, then the whole 2560-byte map) must not have rows above the
+	// update rendered from the folded OLD register but the NEW map — on
+	// tile-boundary wrap frames that mismatch displaces those rows by a
+	// full tile row (the door/trapdoor jitter). The FPGA reads the map
+	// per beam row, so rows before the update show the OLD map with the
+	// OLD register. logScroll snapshots the whole map bank page at the
+	// first stamp (content still pre-rewrite there — the register write
+	// leads the map rewrite); the fold arms per-row source selection:
+	// rows before the stamp row read the snapshot, rows at/after it the
+	// live page. Games that never write tilemap scroll mid-frame take
+	// none of this (no snapshot, no cost); a game that rewrites the map
+	// WITHOUT a scroll write keeps today's end-of-frame content (no
+	// coherence signal to split on — documented residue).
+	mapSnap       []byte
+	mapSnapBank   int
+	mapSnapValid  bool
+	mapSnapRow    int // first render row that reads LIVE content
+	mapSnapActive bool
 	clipX1        byte // NR$1B clip window: visible X is [clipX1*2, clipX2*2+1]
 	clipX2        byte
 	clipY1        byte // visible Y is [clipY1, clipY2]
@@ -204,9 +225,40 @@ func (t *Tilemap) logScroll(isY bool, old, new int) {
 		t.scrollOverflow = true
 		return
 	}
+	// The frame's first stamp: snapshot the map bank's content as of
+	// this instant (see the mapSnap field docs — the pre-rewrite map
+	// for the rows above this raster line).
+	if len(t.scrollStamps) == 0 {
+		t.snapshotMapBank()
+	}
 	t.scrollStamps = append(t.scrollStamps, scrollStamp{
 		line: t.rasterLine(), isY: isY, oldVal: old, newVal: new,
 	})
+}
+
+// snapshotMapBank copies the tilemap map bank's 16K page (see the
+// mapSnap field docs). Runs at most once per execution frame, and only
+// for frames with mid-frame CPU scroll writes.
+func (t *Tilemap) snapshotMapBank() {
+	t.mapSnapValid = false
+	if t.mem == nil {
+		return
+	}
+	bank := 5
+	if t.mapBase&0x80 != 0 {
+		bank = 7
+	}
+	pg := t.mem.GetPage(bank)
+	if len(pg) < 0x4000 {
+		return
+	}
+	if cap(t.mapSnap) < 0x4000 {
+		t.mapSnap = make([]byte, 0x4000)
+	}
+	t.mapSnap = t.mapSnap[:0x4000]
+	copy(t.mapSnap, pg[:0x4000])
+	t.mapSnapBank = bank
+	t.mapSnapValid = true
 }
 
 // FoldScrollStamps builds the per-raster-line scroll table from the
@@ -235,6 +287,7 @@ func (t *Tilemap) FoldScrollStamps(stale bool) {
 	if t.scrollOverflow || len(t.scrollStamps) == 0 {
 		t.scrollStamps = t.scrollStamps[:0]
 		t.scrollOverflow = false
+		t.mapSnapActive = false
 		// No CPU stamps: prefill the table with the live scroll so
 		// per-row copper captures overlay a correct baseline (rows
 		// before the copper's first write keep the frame value).
@@ -242,6 +295,20 @@ func (t *Tilemap) FoldScrollStamps(stale bool) {
 			t.scrollXLine[line], t.scrollYLine[line] = t.scrollX, t.scrollY
 		}
 		return
+	}
+	// Arm the per-row map source split (see mapSnap): rows before the
+	// first stamp's row read the snapshot taken at that instant. A
+	// mid-frame NR$6E bank move invalidates it (different page).
+	t.mapSnapActive = false
+	if t.mapSnapValid {
+		bank := 5
+		if t.mapBase&0x80 != 0 {
+			bank = 7
+		}
+		if bank == t.mapSnapBank {
+			t.mapSnapRow = t.scrollStamps[0].line - 32
+			t.mapSnapActive = t.mapSnapRow > 0
+		}
 	}
 	// Frame-start values: each stamp records the value it replaced, so
 	// the first stamp per axis carries the frame-start state.
@@ -381,6 +448,17 @@ func (t *Tilemap) RenderScanlineWithBelow(y int, dst, below []byte) {
 	tilesBuf := t.mem.GetPage(tilesBank)
 	if len(mapBuf) < 0x4000 || len(tilesBuf) < 0x4000 {
 		return
+	}
+	// Rows above the frame's first mid-frame scroll stamp read the map
+	// content captured AT that stamp — the pre-rewrite map the FPGA's
+	// beam saw for those rows (see the mapSnap field docs, #196). Tile
+	// DEFINITIONS in the same bank take the snapshot too (content
+	// coherence); a tiles bank distinct from the map bank stays live.
+	if t.mapSnapActive && y < t.mapSnapRow && mapBank == t.mapSnapBank {
+		mapBuf = t.mapSnap
+		if tilesBank == mapBank {
+			tilesBuf = t.mapSnap
+		}
 	}
 
 	mapOffsetBase := int(t.mapBase&0x3F) << 8

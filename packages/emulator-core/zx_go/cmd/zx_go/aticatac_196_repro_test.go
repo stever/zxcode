@@ -120,6 +120,60 @@ func TestAtic196Repro(t *testing.T) {
 			})
 		}
 	}
+	// Tilemap scroll + map-write beam trace (ZX_GO_ATIC_TMTRACE=from:to):
+	// log NR$2F/$30/$31 writes with the beam line and count bank-5/7 map
+	// writes per frame — the door-jitter forensics (#196 flicker).
+	if s := os.Getenv("ZX_GO_ATIC_TMTRACE"); s != "" {
+		var from, to int
+		fmt.Sscanf(s, "%d:%d", &from, &to)
+		lastTM := [3]byte{0xFF, 0xFF, 0xFF}
+		mapWrites := 0
+		mapLineMin, mapLineMax := 999, -1
+		prevRW := emu.mem.GetRAMWriteHook()
+		emu.mem.SetRAMWriteHook(func(bank int, addr uint16, val byte) {
+			if prevRW != nil {
+				prevRW(bank, addr, val)
+			}
+			if frameNow < from || frameNow > to {
+				return
+			}
+			// Tilemap map strip: NR$6E base inside bank 5 (16K page 5).
+			base := uint16(emu.nextRegs.Raw(0x6E)&0x3F) << 8
+			if bank == 5 && addr >= base && addr < base+2560 {
+				mapWrites++
+				if l := emu.ula.ActiveVideoLine(); true {
+					if l < mapLineMin {
+						mapLineMin = l
+					}
+					if l > mapLineMax {
+						mapLineMax = l
+					}
+				}
+			}
+		})
+		emu.cpu.AddPreFetchHook("tmtrace-196", func(pc uint16) {
+			if frameNow < from || frameNow > to+1 {
+				return
+			}
+			for i, r := range [3]byte{0x2F, 0x30, 0x31} {
+				v := emu.nextRegs.Raw(r)
+				if v != lastTM[i] {
+					t.Logf("frame %d line %3d: NR%02X -> $%02X", frameNow, emu.ula.ActiveVideoLine(), r, v)
+					lastTM[i] = v
+				}
+			}
+		})
+		lastFrameLogged := -1
+		emu.cpu.AddPreFetchHook("tmtrace-frame-196", func(pc uint16) {
+			if frameNow != lastFrameLogged && frameNow > from && frameNow <= to+1 {
+				if mapWrites > 0 {
+					t.Logf("frame %d: %d tilemap map writes, lines %d..%d", lastFrameLogged, mapWrites, mapLineMin, mapLineMax)
+				}
+				mapWrites, mapLineMin, mapLineMax = 0, 999, -1
+				lastFrameLogged = frameNow
+			}
+		})
+	}
 	if mixTraceFrame >= 0 {
 		last := [4]byte{0xFF, 0xFF, 0xFF, 0xFF}
 		regs := [4]byte{0x68, 0x15, 0x6B, 0x43}
