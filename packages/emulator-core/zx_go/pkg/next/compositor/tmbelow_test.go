@@ -132,3 +132,43 @@ func TestTMBelow512ModeForcesBelow(t *testing.T) {
 		t.Errorf("512 mode: below tile over transparent ULA must paint")
 	}
 }
+
+// TestTMBelowWideOverlayULADisabled pins the WIDE-path tilemap overlay's
+// below-tile arbitration against a DISABLED ULA (#196, Atic Atac's story
+// scene and closed-door tiles). FPGA truth: NR$68 bit 7 makes every ULA
+// pixel transparent (ula_transparent <= ... or ula_en_2 = '0',
+// zxnext.vhd:7102), and the ulatm mux shows a below tile over a
+// transparent ULA (tm_pixel_below_2 = '0' OR ula_transparent = '1',
+// zxnext.vhd:7116). The overlay cannot see per-pixel ULA data, but with
+// the ULA disabled there is none to consult: below tiles must paint.
+// With the ULA enabled the overlay keeps the documented conservative
+// skip (it would need the per-pixel ULA data).
+func TestTMBelowWideOverlayULADisabled(t *testing.T) {
+	// Fixture frame row 32 holds the below tile at tile cell 4 (frame
+	// x 32-39) and the above tile at cell 5 (frame x 40-47).
+	const belowX, aboveX = 32, 40
+
+	overlayRow := func(disabled bool) []byte {
+		c := tmBelowFixture(t, 0x00)
+		c.SetULAOutputDisabled(disabled)
+		dst := make([]byte, FullWidth*4)
+		c.composeTilemapOverlayRow(32, dst, 1)
+		return dst
+	}
+
+	dst := overlayRow(true)
+	if !isGreen(dst, belowX) {
+		t.Errorf("ULA disabled: below tile must paint in the wide overlay (vhd:7102/7116)")
+	}
+	if !isGreen(dst, aboveX) {
+		t.Errorf("ULA disabled: above tile must paint in the wide overlay")
+	}
+
+	dst = overlayRow(false)
+	if isGreen(dst, belowX) {
+		t.Errorf("ULA enabled: below tile must keep the conservative skip in the wide overlay")
+	}
+	if !isGreen(dst, aboveX) {
+		t.Errorf("ULA enabled: above tile must paint in the wide overlay")
+	}
+}

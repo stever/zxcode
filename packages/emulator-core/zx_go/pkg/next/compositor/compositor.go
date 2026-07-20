@@ -82,6 +82,10 @@ type Compositor struct {
 	fallbackRaw    byte    // the raw NR$4A byte — the blend path feeds it to Mix
 	blendMode      byte    // NR$68 bits 6:5 — the (U|T) blend operand select for modes 6/7
 	stencilMode    bool    // NR$68 bit 0 — ULA/tilemap AND-stencil
+	// ulaOutputDisabled mirrors NR$68 bit 7 ("Disable ULA output") —
+	// the wide-path tilemap overlay's below-tile arbitration reads it
+	// (a below tile shows over the everywhere-transparent ULA).
+	ulaOutputDisabled bool
 
 	// ULA transparency: the classic ULA renders via its own 16-colour
 	// palette, so a ULA pixel is "transparent" (lets a lower layer show in
@@ -497,11 +501,18 @@ func (c *Compositor) composeSpriteOverlayRow(frameY int, dst []byte, xScale int)
 // composeTilemapOverlayRow paints the tilemap row for frame row frameY
 // over dst at xScale output pixels per frame pixel, with the same
 // rules as the inner pass's paintTilemapOnULA: opacity is the low
-// nibble against NR$4C (tilemap.vhd:427); a per-pixel BELOW tile
-// (tilemap.vhd:388) is skipped — this overlay cannot consult the ULA
-// pixel it would arbitrate against (the same documented residue as
+// nibble against NR$4C (tilemap.vhd:427). A per-pixel BELOW tile
+// (tilemap.vhd:388) arbitrates against the ULA pixel, which this
+// overlay cannot consult — EXCEPT when the ULA output is disabled
+// (NR$68 bit 7): then every ULA pixel is transparent
+// (ula_transparent, zxnext.vhd:7102) and the FPGA's ulatm mux shows
+// the below tile (tm_pixel_below_2 = '0' OR ula_transparent = '1',
+// zxnext.vhd:7116), so it paints here too. Atic Atac's story scene
+// and closed-door graphics are below-flagged tiles over a disabled
+// ULA (#196). With the ULA ENABLED a below tile is still skipped
+// (needs the per-pixel ULA data — the same documented residue as
 // the un-repainted classic ULA pixels), so a below tile over a
-// TRANSPARENT ULA pixel under-paints here.
+// TRANSPARENT ULA pixel under-paints there.
 func (c *Compositor) composeTilemapOverlayRow(frameY int, dst []byte, xScale int) {
 	if !c.HasActiveTilemap() {
 		return
@@ -516,7 +527,7 @@ func (c *Compositor) composeTilemapOverlayRow(frameY int, dst []byte, xScale int
 		if (idx & 0x0F) == c.tilemapTrans {
 			continue
 		}
-		if below[x] != 0 {
+		if below[x] != 0 && !c.ulaOutputDisabled {
 			continue
 		}
 		r, g, b := tilemapPal.RGB(idx)
@@ -662,6 +673,16 @@ func (c *Compositor) SetFallbackRaw(v byte) { c.fallbackRaw = v }
 func (c *Compositor) SetBlendConfig(mode byte, stencil bool) {
 	c.blendMode = mode & 0x03
 	c.stencilMode = stencil
+}
+
+// SetULAOutputDisabled mirrors NR$68 bit 7 ("Disable ULA output").
+// When set, every ULA pixel is transparent in the mixer
+// (ula_transparent <= ... or ula_en_2 = '0', zxnext.vhd:7102), which
+// the wide-path tilemap overlay needs to arbitrate BELOW-flagged tiles
+// (see composeTilemapOverlayRow). Pushed by the ULA
+// (SetULAOutputDisabled) from pkg/next.WireULAControl.
+func (c *Compositor) SetULAOutputDisabled(disabled bool) {
+	c.ulaOutputDisabled = disabled
 }
 
 // FallbackRGBA returns the NR$4A fallback colour. Used by the ULA when its

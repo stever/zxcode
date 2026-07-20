@@ -499,8 +499,16 @@ func (b *Bank) Write8(val byte) {
 	if val&0x03 != 0 {
 		v |= 1
 	}
-	b.logWrite(b.index, v, 0, false)
+	// A NR$41 write stores the WHOLE BRAM word, priority bits included:
+	// nr_palette_priority is forced "00" when nr_44_we = '0'
+	// (zxnext.vhd:4920) and the write data is always
+	// priority & "00000" & value (:6972/:7025) — so stale NR$44
+	// priority bits are CLEARED here, not preserved. Atic Atac's story
+	// scene rewrites a priority-carrying palette via NR$41 and its L2
+	// pixels must not stay promoted (#196).
+	b.logWrite(b.index, v, 0, true)
 	b.palettes[b.selected].Set(b.index, v)
+	b.palettes[b.selected].SetPriority(b.index, 0)
 	if !b.autoIncDisable {
 		b.index++
 	}

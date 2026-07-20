@@ -993,8 +993,15 @@ func (u *ULA) SetBorderTracer(fn func(port uint16, val byte, newBorder byte, sca
 }
 
 // SetULAOutputDisabled mirrors NextReg $68 bit 7. When true the ULA layer is
-// not painted (see Render). Idempotent and safe to call every frame.
-func (u *ULA) SetULAOutputDisabled(disabled bool) { u.ulaOutputDisabled = disabled }
+// not painted (see Render). Forwarded to the Next compositor, whose wide-path
+// tilemap overlay arbitrates BELOW-flagged tiles against the
+// everywhere-transparent ULA (#196). Idempotent and safe to call every frame.
+func (u *ULA) SetULAOutputDisabled(disabled bool) {
+	u.ulaOutputDisabled = disabled
+	if c, ok := u.nextCompositor.(interface{ SetULAOutputDisabled(bool) }); ok {
+		c.SetULAOutputDisabled(disabled)
+	}
+}
 
 // SetULANext mirrors the ULANext attribute-decode state: NR$43 bit 0
 // (enable) and NR$42 (ink colour mask). Pushed by the Next wiring

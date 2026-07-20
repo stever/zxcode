@@ -116,10 +116,21 @@ type Engine struct {
 	// exact: RenderScanline is a pure function of (y, engine state),
 	// and an unchanged gen means unchanged state.
 	gen uint32
+
+	// attrObserver, when non-nil, sees every attribute byte landed on a
+	// sprite slot (diagnostics; see SetAttrWriteObserver).
+	attrObserver func(sprite, byteIdx int, val byte)
 }
 
 // Gen returns the render-input mutation counter (see the gen field).
 func (e *Engine) Gen() uint32 { return e.gen }
+
+// SetAttrWriteObserver installs a callback invoked on every attribute
+// byte write (any route: port $57 stream, NR$35-$39/$75-$79 mirror).
+// Diagnostic use only; pass nil to remove.
+func (e *Engine) SetAttrWriteObserver(fn func(sprite, byteIdx int, val byte)) {
+	e.attrObserver = fn
+}
 
 // SetOverBorder sets NextReg $15 bit 1 ("sprites over border").
 func (e *Engine) SetOverBorder(on bool) { e.overBorder = on; e.gen++ }
@@ -268,6 +279,9 @@ func (e *Engine) applyAttr(sprite, idx int, val byte) {
 	s := e.Sprite(sprite)
 	if s == nil {
 		return
+	}
+	if e.attrObserver != nil {
+		e.attrObserver(sprite, idx, val)
 	}
 	e.gen++
 	switch idx {
