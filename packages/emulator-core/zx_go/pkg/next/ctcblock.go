@@ -78,6 +78,16 @@ type CTCBlock struct {
 	// (armed from NextAssertRef8) re-samples after any CTC
 	// reprogramming (#187).
 	rescheduleNotify func()
+
+	// zcConsumer, if non-nil (hw-im2 mode, IM2Block), is invoked by
+	// the CPU-visible access paths (port/NR$C5 writes and reads) when
+	// a catch-up banked fresh ZC pulses, BEFORE the access mutates the
+	// channel — so the daisy chain latches each pulse under the
+	// int-enable state in force when it FIRED. Without this, the
+	// deadline-gated poll (#208) could leave a disabled channel's ZC
+	// in zcMask until after a later enable write, latching a request
+	// the hardware never would have.
+	zcConsumer func()
 }
 
 // NewCTCBlock builds the four hard-reset channels. clk28 supplies the
@@ -220,6 +230,20 @@ func (b *CTCBlock) reschedule() {
 // rescheduleNotify field docs). Pass nil to disable.
 func (b *CTCBlock) SetRescheduleNotify(fn func()) { b.rescheduleNotify = fn }
 
+// SetZCConsumer installs the eager ZC drain (see the zcConsumer field
+// docs). Pass nil to disable.
+func (b *CTCBlock) SetZCConsumer(fn func()) { b.zcConsumer = fn }
+
+// drainZC hands any banked ZC pulses to the installed consumer. Called
+// after a catch-up and before the calling access mutates channel state;
+// the consumer's own ConsumeZC re-runs catchUp as a no-op (time has not
+// advanced) so the recursion terminates immediately.
+func (b *CTCBlock) drainZC() {
+	if b.zcMask != 0 && b.zcConsumer != nil {
+		b.zcConsumer()
+	}
+}
+
 // NextAssertRef8 is the z80.CPU.ExtIntDeadlineFunc: the earliest
 // Ref8Tstates instant at which IntLine could next return true. 0 =
 // poll now (pulse currently asserted, or a scheduled ZC already due);
@@ -250,6 +274,7 @@ func (b *CTCBlock) ClaimsPort(addr uint16) bool {
 // WritePort performs a CPU write to a CTC channel port.
 func (b *CTCBlock) WritePort(addr uint16, val byte) {
 	b.catchUp()
+	b.drainZC() // latch pre-write pulses under pre-write enables (#208)
 	sel := int(addr>>8) & 0x07
 	if sel < len(b.ch) {
 		b.ch[sel].Write(val)
@@ -262,6 +287,7 @@ func (b *CTCBlock) WritePort(addr uint16, val byte) {
 // FPGA's read mux ORs one-hot selected outputs (ctc.vhd).
 func (b *CTCBlock) ReadPort(addr uint16) byte {
 	b.catchUp()
+	b.drainZC()
 	b.reschedule()
 	sel := int(addr>>8) & 0x07
 	if sel < len(b.ch) {
@@ -274,6 +300,7 @@ func (b *CTCBlock) ReadPort(addr uint16) byte {
 // enable (zxnext.vhd:4078-4079; upper 4 bits unused, NUM_CTC=4).
 func (b *CTCBlock) WriteIntEnable(mask byte) {
 	b.catchUp()
+	b.drainZC() // latch pre-write pulses under pre-write enables (#208)
 	for i, c := range b.ch {
 		c.WriteIntEnable(mask&(1<<uint(i)) != 0)
 	}

@@ -94,8 +94,15 @@ type ULA struct {
 	// every frame.
 	compositorScan     []byte
 	compositorComposed []byte
-	compositorRow      []byte
-	palette            [16]color.RGBA
+	// Stride census of the last compositor walk (#208 diagnostics):
+	// paper rows that took the paced per-half-pixel stride, paper rows
+	// half-strided for any reason, and border sweep rows resolved per
+	// half-pixel (rowEvents). Plain counters — no gating, no cost.
+	dbgRowsPaced         int
+	dbgRowsHalf          int
+	dbgBorderRowsEvented int
+	compositorRow        []byte
+	palette              [16]color.RGBA
 	// borderTracer, if non-nil, fires on every border-colour change
 	// caused by an even-port write. Used by the debugger to observe
 	// border modulation through any port that matches the ULA's
@@ -2735,6 +2742,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		SetPriorityModeOverride(byte)
 		ClearPriorityModeOverride()
 	})
+	u.dbgRowsPaced, u.dbgRowsHalf, u.dbgBorderRowsEvented = 0, 0, 0
 	prioPushed := false
 	var prioCur byte
 	pushPriority := func(nr15 byte) {
@@ -2821,6 +2829,12 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		// at their half-pixel.
 		hiResRow := u.timexVideoMode&0x04 != 0 && u.mem.ScreenPage != 7
 		rowHalf := (rowPaced || rowStamps || u.ulaFineScrollX || hiResRow) && (liveComp != nil || hiComp != nil)
+		if rowPaced {
+			u.dbgRowsPaced++
+		}
+		if rowHalf {
+			u.dbgRowsHalf++
+		}
 		if rowStamps && !(liveULA && rowHalf) {
 			// No per-half-pixel resolution available for this row: apply
 			// its stamps up front (the row-start convention).
@@ -2997,6 +3011,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			rowEvents := paced != nil && pacedVideo && liveULA && imgRow >= 0 &&
 				(copperPeek == nil || copperPeek.CanRetireOnLine(uint16(v)))
 			if rowEvents {
+				u.dbgBorderRowsEvented++
 				pushSelect(u.ulaVideoLine[imgRow].ulaPalSecond)
 				off := imgRow * u.img.Stride
 				startC := u.nextBorderRGBA(imgRow, resolver)
@@ -3989,3 +4004,12 @@ const (
 	// loading (cmd's tapeLoadReadThreshold); keyboard scanning alone is ~8.
 	tapeAudioMinFEReads = 500
 )
+
+// DebugStrideCounts reports the last compositor walk's stride census
+// (#208 diagnostics): paper rows that took the paced per-half-pixel
+// stride, paper rows half-strided for any reason (paced, palette
+// stamps, fine-scroll-X, Timex hi-res), and border sweep rows resolved
+// per half-pixel (copper-evented).
+func (u *ULA) DebugStrideCounts() (paced, half, borderEvented int) {
+	return u.dbgRowsPaced, u.dbgRowsHalf, u.dbgBorderRowsEvented
+}

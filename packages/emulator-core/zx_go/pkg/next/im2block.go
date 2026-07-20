@@ -1,6 +1,8 @@
 package next
 
 import (
+	"os"
+
 	"github.com/conorarmstrong/zx_go/pkg/next/nextregs"
 	"github.com/conorarmstrong/zx_go/pkg/z80"
 )
@@ -64,6 +66,19 @@ type IM2Block struct {
 	pendReq   [IM2NumPeriph]bool // routed frame/line pulse edges
 	pendUnq   [IM2NumPeriph]bool // NR$20 software-generated requests
 	pendClear [IM2NumPeriph]bool // NR$C8/$C9/$CA write-1-to-clear
+	// pendAny mirrors "any pend* flag set" for the deadline gate: while
+	// true the chain has un-latched inputs, so the CPU must poll at the
+	// next sample point (NextAssertRef8 returns 0).
+	pendAny bool
+	// needFallTick: the previous chain tick fed one-cycle PULSE requests
+	// (CTC ZCs, routed frame/line edges, NR$20 unq) — one more tick with
+	// those inputs low must follow so the per-source edge detector
+	// (intReqD) sees the pulse FALL. On the FPGA the chain clocks every
+	// cycle so this is implicit; here the idle fast path would otherwise
+	// skip the fall tick and the NEXT pulse on the same source would
+	// present no edge — a wedge that silently swallowed a ZC train on a
+	// source whose latching never made the chain active (#208).
+	needFallTick bool
 
 	// chainActive tracks whether any device is out of S_0 or a request
 	// latch is set — lets the idle fast path skip ticking.
@@ -103,6 +118,7 @@ func (b *IM2Block) SetControl(val byte) {
 		// once so no stale in-service/request state survives.
 		b.chain.Tick(IM2Inputs{HWIM2: false})
 		b.chainActive = false
+		b.needFallTick = false
 		b.clearPending()
 	}
 	// The mode switch changes what NextAssertRef8 predicts — force the
@@ -120,6 +136,7 @@ func (b *IM2Block) Reset() {
 	b.vecBase = 0
 	b.chain.Tick(IM2Inputs{HWIM2: false, Reset: true})
 	b.chainActive = false
+	b.needFallTick = false
 	b.clearPending()
 	b.cpu.KickExtIntDeadline()
 }
@@ -128,6 +145,7 @@ func (b *IM2Block) clearPending() {
 	b.pendReq = [IM2NumPeriph]bool{}
 	b.pendUnq = [IM2NumPeriph]bool{}
 	b.pendClear = [IM2NumPeriph]bool{}
+	b.pendAny = false
 }
 
 // RouteInt is the z80.CPU.RouteIntFunc: it receives frame/line pulse
@@ -152,6 +170,10 @@ func (b *IM2Block) RouteInt(source int) bool {
 	default:
 		return false
 	}
+	b.pendAny = true
+	// The gated ExtIntFunc poll may be parked on a CTC deadline — the
+	// pend must be latched at the next sample point (#208).
+	b.cpu.KickExtIntDeadline()
 	return true
 }
 
@@ -173,6 +195,8 @@ func (b *IM2Block) Unq(val byte) {
 			b.pendUnq[3+ch] = true
 		}
 	}
+	b.pendAny = true
+	b.cpu.KickExtIntDeadline() // see RouteInt (#208)
 }
 
 // inputs assembles a chain tick's stimulus from live machine state.
@@ -212,14 +236,33 @@ func (b *IM2Block) inputs() IM2Inputs {
 }
 
 // NextAssertRef8 is the z80.CPU.ExtIntDeadlineFunc. In pulse mode the
-// prediction is the CTC block's; in hw-im2 mode the chain is a
-// stateful machine fed by pend* events (RouteInt/Unq/uart levels), so
-// it declines to predict (0 = poll every sample point — exactly the
-// pre-gate behaviour). Mode flips kick the CPU gate (SetControl), so
-// an armed pulse-mode deadline never outlives the mode it was
-// computed under.
+// prediction is the CTC block's. In hw-im2 mode (#208): while the
+// chain is ACTIVE (a device out of S_0 or holding a latched request —
+// REQ/ACK/ISR transitions are per-sample-point state machinery), a
+// pend* input awaits latching, or an ENABLED UART level source could
+// request (levels have no event edge to kick on), the CPU must poll
+// every sample point (0). Otherwise the chain is provably inert until
+// the next CTC ZC/TO on an int-enabled channel — exactly the deadline
+// the CTC block already tracks (nextZC28; pulseUntil28 stays 0 in hw
+// mode, ConsumeZC never arms it). Every event that could wake the
+// chain earlier kicks the CPU gate: RouteInt/Unq/Clear* (pends), CTC
+// reprogramming (rescheduleNotify), NR$C0 mode flips (SetControl).
+// TX-1696's ~22 kHz CTC sample engine went from ~100k IntLine polls
+// per frame (inputs assembly + CTC catch-up each) to ~440.
 func (b *IM2Block) NextAssertRef8() uint64 {
-	if b.hwMode {
+	if !b.hwMode {
+		return b.ctc.NextAssertRef8()
+	}
+	if im2NoGate {
+		return 0 // #208 A/B: pre-fix always-poll behaviour
+	}
+	if b.chainActive || b.pendAny || b.needFallTick {
+		return 0
+	}
+	// Enabled UART sources (NR$C6): RX is a live level, TX-empty a
+	// constant-true level — with any enabled the chain must keep
+	// sampling (zxnext.vhd:1941-1949).
+	if b.disp.Raw(0xC6)&0x77 != 0 {
 		return 0
 	}
 	return b.ctc.NextAssertRef8()
@@ -265,20 +308,29 @@ func (b *IM2Block) IntLine(t uint64) bool {
 	b.pendReq = [IM2NumPeriph]bool{}
 	b.pendUnq = [IM2NumPeriph]bool{}
 	b.pendClear = [IM2NumPeriph]bool{}
-	if !any && !b.chainActive {
+	b.pendAny = false
+	if !any && !b.chainActive && !b.needFallTick {
 		return false // idle fast path: nothing to latch, nothing in flight
 	}
 	b.chain.Tick(in)
+	b.needFallTick = any
 	b.updateActive()
 	return b.chain.IntAsserted()
 }
 
 // updateActive recomputes the idle fast-path flag: the chain needs
-// ticking while any device is out of S_0 or holds a latched request.
+// per-sample-point ticking while any device holds a latched request or
+// is mid-transition (S_REQ/S_ACK). A device parked in S_ISR with no
+// latched request is tick-STABLE — its only exit is RetiSeen, which
+// arrives via the Reti hook's own tick (which re-runs this) — so a
+// machine spending most of its time inside ISRs (TX-1696's ~22 kHz
+// sample engine) keeps the deadline gate through the ISR body instead
+// of ticking the chain every instruction (#208).
 func (b *IM2Block) updateActive() {
 	active := false
 	for i := range b.chain.per {
-		if b.chain.per[i].state != im2S0 || b.chain.per[i].im2IntReq {
+		st := b.chain.per[i].state
+		if (st != im2S0 && st != im2ISR) || b.chain.per[i].im2IntReq {
 			active = true
 			break
 		}
@@ -298,8 +350,9 @@ func (b *IM2Block) Ack() (byte, bool) {
 	in.M1, in.IORQ = true, true
 	b.chain.Tick(in) // S_REQ -> S_ACK (vector valid)
 	vec := b.chain.VectorByte(b.vecBase)
-	in = b.inputs()  // M1/IORQ released
-	b.chain.Tick(in) // S_ACK -> S_ISR
+	in = b.inputs()        // M1/IORQ released
+	b.chain.Tick(in)       // S_ACK -> S_ISR
+	b.needFallTick = false // pulse-free ticks completed any pending fall
 	b.updateActive()
 	return vec, true
 }
@@ -308,18 +361,34 @@ func (b *IM2Block) Ack() (byte, bool) {
 // releasing the in-service device (im2_control.vhd o_reti_decode +
 // o_reti_seen driving im2_device.vhd:124).
 func (b *IM2Block) Reti() {
-	if !b.hwMode || !b.chainActive {
+	// No chainActive early-out: an ISR-parked device is deliberately
+	// NOT "active" (see updateActive) and this hook is its only exit.
+	if !b.hwMode {
 		return
 	}
 	in := b.inputs()
 	in.RetiDecode, in.RetiSeen = true, true
 	b.chain.Tick(in)
+	b.needFallTick = false // pulse-free tick completed any pending fall
 	b.updateActive()
+}
+
+// syncStatus latches everything the deadline-gated poll may not have
+// fed the chain yet — accumulated CTC ZCs and asserted UART levels —
+// so a sticky-status read observes state through "now" exactly as the
+// per-instruction poll used to guarantee (#208). One ordinary chain
+// tick; the FPGA ticks the chain every CPU cycle, so an extra tick is
+// always hardware-shaped.
+func (b *IM2Block) syncStatus() {
+	if b.hwMode {
+		b.IntLine(0)
+	}
 }
 
 // StatusC8 composes the NR$C8 read: bit 0 = ULA (source 11), bit 1 =
 // line (source 0).
 func (b *IM2Block) StatusC8() byte {
+	b.syncStatus()
 	st := b.chain.Status()
 	var v byte
 	if st[11] {
@@ -333,6 +402,7 @@ func (b *IM2Block) StatusC8() byte {
 
 // StatusC9 composes the NR$C9 read: bit n = CTC channel n (sources 3+n).
 func (b *IM2Block) StatusC9() byte {
+	b.syncStatus()
 	st := b.chain.Status()
 	var v byte
 	for ch := 0; ch < 8 && 3+ch < IM2NumPeriph; ch++ {
@@ -348,6 +418,7 @@ func (b *IM2Block) StatusC9() byte {
 // bit 7 = line INT (source 0), bit 6 = ULA frame (source 11),
 // bits 3:0 = CTC channels 3:0 (sources 6:3).
 func (b *IM2Block) Status20() byte {
+	b.syncStatus()
 	st := b.chain.Status()
 	var v byte
 	if st[0] {
@@ -374,7 +445,9 @@ func (b *IM2Block) ClearC8(val byte) {
 	if val&0x02 != 0 {
 		b.pendClear[0] = true
 	}
+	b.pendAny = true
 	b.IntLine(0)
+	b.cpu.KickExtIntDeadline() // chain state changed under a parked gate (#208)
 }
 
 // ClearC9 applies an NR$C9 write-1-to-clear: bit n clears CTC channel n.
@@ -384,13 +457,16 @@ func (b *IM2Block) ClearC9(val byte) {
 			b.pendClear[3+ch] = true
 		}
 	}
+	b.pendAny = true
 	b.IntLine(0)
+	b.cpu.KickExtIntDeadline() // see ClearC8 (#208)
 }
 
 // StatusCA composes the NR$CA read (zxnext.vhd:6254: '0' & st(13) &
 // st(2) & st(2) & '0' & st(12) & st(1) & st(1)) — the sticky UART
 // source states, each RX bit mirrored into two positions.
 func (b *IM2Block) StatusCA() byte {
+	b.syncStatus()
 	st := b.chain.Status()
 	var v byte
 	if st[13] {
@@ -424,5 +500,12 @@ func (b *IM2Block) ClearCA(val byte) {
 	if val&0x03 != 0 {
 		b.pendClear[1] = true
 	}
+	b.pendAny = true
 	b.IntLine(0)
+	b.cpu.KickExtIntDeadline() // see ClearC8 (#208)
 }
+
+// im2NoGate forces the pre-#208 always-poll deadline in hw-im2 mode —
+// an A/B switch for the performance benchmark (ZX_GO_IM2_NO_GATE=1).
+// Off by default; not consulted on any correctness path.
+var im2NoGate = os.Getenv("ZX_GO_IM2_NO_GATE") != ""

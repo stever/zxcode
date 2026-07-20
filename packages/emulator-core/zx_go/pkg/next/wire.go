@@ -1543,12 +1543,21 @@ func WireIM2(d *nextregs.Dispatcher, cpu *z80.CPU, ctcBlock *CTCBlock) *IM2Block
 	blk := NewIM2Block(cpu, ctcBlock, d)
 
 	cpu.ExtIntFunc = blk.IntLine
-	// Pulse mode inherits the CTC's exact deadline; hw-im2 mode
-	// declines to predict (always polls). See IM2Block.NextAssertRef8.
+	// Pulse mode inherits the CTC's exact deadline; hw-im2 mode gates
+	// on chain activity + the CTC ZC schedule. See NextAssertRef8 (#208).
 	cpu.ExtIntDeadlineFunc = blk.NextAssertRef8
 	cpu.IntAckFunc = blk.Ack
 	cpu.OnRETI = blk.Reti
 	cpu.RouteIntFunc = blk.RouteInt
+	// Eager ZC drain (#208): CTC accesses that bank fresh ZC pulses
+	// hand them to the chain BEFORE mutating channel state, so each
+	// pulse latches under the enables in force when it fired even
+	// though the per-instruction poll is deadline-gated.
+	ctcBlock.SetZCConsumer(func() {
+		if blk.hwMode {
+			blk.IntLine(0)
+		}
+	})
 
 	if prev := d.OnWriteFn(0xC0); prev != nil {
 		d.SetOnWrite(0xC0, func(disp *nextregs.Dispatcher, v byte) {
@@ -1574,6 +1583,15 @@ func WireIM2(d *nextregs.Dispatcher, cpu *z80.CPU, ctcBlock *CTCBlock) *IM2Block
 	d.SetOnWrite(0x20, func(disp *nextregs.Dispatcher, v byte) {
 		blk.Unq(v)
 	})
+	// NR$C6 (UART/ESP int enables) feeds the hw-im2 deadline gate: an
+	// enable turned on under a parked CTC deadline must resume
+	// per-sample-point polling so the newly-enabled level latches (#208).
+	if prev := d.OnWriteFn(0xC6); prev != nil {
+		d.SetOnWrite(0xC6, func(disp *nextregs.Dispatcher, v byte) {
+			prev(disp, v)
+			cpu.KickExtIntDeadline()
+		})
+	}
 	// NR$20 read composes the live interrupt status (zxnext.vhd:5989),
 	// same source bits NR$C8/$C9 expose — NOT the written request byte.
 	d.SetOnRead(0x20, func(*nextregs.Dispatcher) byte { return blk.Status20() })
