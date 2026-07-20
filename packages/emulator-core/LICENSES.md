@@ -38,43 +38,48 @@ These are copyright **Garry Lancaster / SpecNext Ltd**, with portions
 cost-free distribution is permitted (no selling, no duplication fee), copyright
 notices must be retained, and component licenses supersede the umbrella terms.
 
-**POLICY: this project does not distribute the licensed Next content at
-all.** The files stay out of git and out of the published container
-images, and the deployment serves no copy of them as its source — the
-browser gets the content from SpecNext Ltd's own server (route 1 below).
-The deploy repo's legacy `/next/` offline-fallback mounts are slated for
-removal at the supersmall-distro switchover (see that repo's README); the
-staged copy on the deploy host then exists solely for gif-service's
-private renderer. What remains is:
+**POLICY: this project keeps the licensed Next content out of git and out
+of the published container images.** The long-term shape is that the
+deployment serves no copy of it as its source — the browser gets the
+content from SpecNext Ltd's own server (route 1 below). INTERIM (current):
+route 1 is disabled (`SPECNEXT_DISTRO_PATH` = null in `GoEmulator.js`)
+until SpecNext host a small emulator-targeted image, so the deployment
+serves the staged bare-system assets (route 2) as the browser's source —
+cost-free distribution of the trimmed system under the Next License, on
+the "free parts" basis analysed below, with the required license texts
+served alongside at `/next/licenses/`. The routes:
 
-1. **Official distro pass-through (browser primary, r60).** The sites
-   relay the OFFICIAL SpecNext emulator distro zip byte-for-byte through a
-   same-origin proxy route (`/specnext/distro/…` →
-   `www.specnext.com/distro/…`). The route exists only because
-   specnext.com sends no CORS headers and the sites' CSP pins connect-src
-   to 'self'; the content comes from SpecNext Ltd's own server, exactly as
-   they publish it — nothing is hosted, trimmed, added, or modified here.
-   The emulator's boot-time normalisation (deleting the first-boot welcome
-   `autoexec.1st`, seeding `config.ini` — `zxSdPrepDistro`) happens in RAM
-   on the user's machine after download, the same mutations NextZXOS/the
-   firmware perform on a real first-configured card. SWITCHOVER PENDING: a
-   minimal ("supersmall") distro provided by SpecNext (Phoebus Dokos) is
-   expected to replace the full 52 MB zip on this same route — bump
-   `SPECNEXT_DISTRO_PATH` in `GoEmulator.js` and follow the re-verification
-   steps in the emulator-core README ("Next boot modes") when it lands.
-2. **Staged bare system (LOCAL ONLY: offline dev, CI, gif-service's
-   renderer).** `scripts/stage-zxnext-assets.sh` fetches the trimmed
-   assets onto a developer's machine, and the deploy host stages them
-   privately for gif-service's server-side renderer (internal use by the
-   process, not distribution to users). This staged copy is not served to
-   the public. The "free parts" analysis below is retained for anyone who
-   self-hosts and chooses to serve a staged copy — it is not the basis of
-   the official deployment, which distributes nothing.
+1. **Official distro pass-through (browser primary at r60–r96; currently
+   disabled, to be restored).** The sites relay the OFFICIAL SpecNext
+   emulator distro zip byte-for-byte through a same-origin proxy route
+   (`/specnext/distro/…` → `www.specnext.com/distro/…`). The route exists
+   only because specnext.com sends no CORS headers and the sites' CSP pins
+   connect-src to 'self'; the content comes from SpecNext Ltd's own
+   server, exactly as they publish it — nothing is hosted, trimmed, added,
+   or modified here. The emulator's boot-time normalisation (deleting the
+   first-boot welcome `autoexec.1st`, seeding `config.ini` —
+   `zxSdPrepDistro`) happens in RAM on the user's machine after download,
+   the same mutations NextZXOS/the firmware perform on a real
+   first-configured card. SWITCHOVER PENDING: a minimal ("supersmall")
+   distro provided by SpecNext (Phoebus Dokos) is expected on this route —
+   relaying the full 52 MB / 1 GB-card zip in production is not wanted, so
+   the route stays off until it lands; then set `SPECNEXT_DISTRO_PATH` in
+   `GoEmulator.js` to its path and follow the re-verification steps in the
+   emulator-core README ("Next boot modes").
+2. **Staged bare system (browser source during the interim; also offline
+   dev, CI, gif-service's renderer).** `scripts/stage-zxnext-assets.sh`
+   fetches the trimmed assets onto a developer's machine; the deploy host
+   stages them for the sites' `/next/` route (served to users during the
+   interim) and for gif-service's server-side renderer. The "free parts"
+   analysis below is the basis for serving this staged copy — it applies
+   to the official deployment while route 1 is disabled, and to any
+   self-host that chooses to serve a staged copy.
 
 The Next License requires its notice and the constituent-part licenses to travel
 with every copy. Those texts live in `next-licenses/` (freely distributable, so
 committed) and are served at `/next/licenses/` wherever staged assets are
-actually served (a dev checkout, or a self-host that chooses to distribute):
+actually served (the official deployment during the interim above, a dev
+checkout, or a self-host that chooses to distribute):
 committed into `apps/*/public/next/licenses/`, and copied by the deploy repo's
 stage script next to gif-service's private staging. Keep the copies in sync
 with `next-licenses/`.

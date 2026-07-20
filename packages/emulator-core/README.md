@@ -39,27 +39,27 @@ the wasm port is gated behind `//go:build js` / `!js` tags.
 ## Machines
 
 48K and 128K boot from ROMs embedded in the binary. The Spectrum Next boots
-real NextZXOS. The BROWSER's primary source (r60) is the official SpecNext
-distro zip (`sn-emulator-24.11.zip`: both NextZXOS ROMs + the full 1 GB
-card image), fetched through the same-origin `/specnext/` Caddy proxy route
+real NextZXOS. The BROWSER's primary source is currently the staged
+`/next/` assets (ROMs + the small prepared `tbblue.mmc.zip` staged by
+`scripts/`, served by the deployment under the self-hosting conditions in
+`LICENSES.md`): `SPECNEXT_DISTRO_PATH` in `GoEmulator.js` is null while
+SpecNext have no small emulator-targeted image hosted. When one lands,
+point the pin at its path to restore the r60 distro flow — the official
+zip fetched through the same-origin `/specnext/` Caddy proxy route
 (specnext.com sends no CORS headers; the sites' CSP pins connect-src to
-'self') and kept in the browser Cache API. The version is PINNED in
-`GoEmulator.js` (`SPECNEXT_DISTRO_PATH`) because the boot accelerators are
-verified per distro version — see "Next boot modes" below. Before boot the
-pristine card is normalised in-RAM by the `zxSdPrepDistro` export
+'self') and kept in the browser Cache API, with staged assets as the
+fallback. The version is PINNED because the boot accelerators are verified
+per distro version — see "Next boot modes" below. Before boot a pristine
+distro card is normalised in-RAM by the `zxSdPrepDistro` export
 (`cmd/zx_go/distro_prep.go`): the first-boot welcome pager
 (`nextzxos/autoexec.1st`) is deleted and `machines/next/config.ini` seeded
 when absent — the shape a once-configured card has on real hardware.
 
-ROMs + an SD image staged by `scripts/` remain the fallback (offline dev,
-CI, and gif-service's Node harness) — licensed content for LOCAL use only:
-the project does not distribute it at all (the deployment hosts no copy;
-the browser gets the content from SpecNext's own server through the
-pass-through route above). See `LICENSES.md` for the policy, and for the
-conditions that apply to anyone self-hosting a staged copy. A minimal
-("supersmall") distro from SpecNext is expected to replace the full zip on
-the pass-through route — bump `SPECNEXT_DISTRO_PATH` and re-verify per
-"Next boot modes" below when it lands.
+The staged assets are also the only source for offline dev, CI, and
+gif-service's Node harness — licensed content, gitignored, never
+committed. See `LICENSES.md` for the distribution policy and the
+conditions that apply to hosting a staged copy (the deployment serving
+`/next/` must satisfy them).
 
 ## Next boot modes — MAINTENANCE GOTCHA
 

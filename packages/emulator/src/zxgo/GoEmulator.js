@@ -39,16 +39,21 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r95-im2-isr-gate';
+const ENGINE_REV = 'r97-staged-sd-primary';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
-// headers, and the CSP pins connect-src to 'self'). The version is PINNED:
-// the direct-boot NextReg seed table and the menu-navigation cursor index
-// are verified against this distro's exact SD content — bumping it means
-// re-running the "Next boot modes" checks in packages/emulator-core's
-// README against the new image. Staged /next/ assets remain the fallback.
-const SPECNEXT_DISTRO_PATH = '/specnext/distro/24.11/sn-emulator-24.11.zip';
+// headers, and the CSP pins connect-src to 'self'). TEMPORARILY DISABLED
+// (null): SpecNext have not yet hosted the small emulator-targeted image,
+// and relaying the full 1 GB-card distro zip is not wanted in production,
+// so the Next boots from the staged /next/ assets (the small prepared
+// tbblue.mmc.zip) until it lands. When SpecNext host it, point this at
+// its path (e.g. '/specnext/distro/<ver>/<name>.zip') — the version is
+// PINNED then: the direct-boot NextReg seed table and the menu-navigation
+// cursor index are verified against the distro's exact SD content, so
+// re-run the "Next boot modes" checks in packages/emulator-core's README
+// against the new image. Staged /next/ assets remain the fallback.
+const SPECNEXT_DISTRO_PATH = null;
 
 // ---- Go wasm runtime singleton --------------------------------------------
 // wasm_exec.js's Go class runs one program per instantiation and the zx_go
@@ -896,8 +901,9 @@ export class GoEmulator extends EventEmitter {
     }
 
     // Fetch the locally staged NextZXOS assets from /next/ (staged, never
-    // committed; see @zxplay/emulator-core LICENSES.md). The fallback when
-    // the official distro is unreachable — and the only source gif-service's
+    // committed; see @zxplay/emulator-core LICENSES.md). The primary source
+    // while SPECNEXT_DISTRO_PATH is null, otherwise the fallback when the
+    // official distro is unreachable — and the only source gif-service's
     // Node harness uses.
     async fetchStagedNextAssets() {
         this.showLoading('Loading NextZXOS…');
@@ -917,14 +923,15 @@ export class GoEmulator extends EventEmitter {
             [fetchBin('enNextZX.rom'), fetchBin('enNxtmmc.rom'), fetchBin('tbblue.mmc.zip')]);
         const sdRaw = sdZip ? null : await fetchBin('tbblue.mmc');
         if (!zx || !mmc || (!sdZip && !sdRaw)) {
-            throw new Error('Next system assets missing: the official distro fetch failed and nothing is staged in /next/ (packages/emulator-core/scripts/stage-zxnext-assets.sh)');
+            throw new Error('Next system assets missing: nothing staged in /next/ (packages/emulator-core/scripts/stage-zxnext-assets.sh) and no official distro source is available');
         }
         return { zx, mmc, sdZip, sdRaw, distro: false };
     }
 
     // Boot (or reboot) the ZX Spectrum Next: acquire the NextZXOS system
-    // assets once — the official SpecNext distro first (full card: NextZXOS
-    // plus its bundled games/demos/docs), staged /next/ assets as the
+    // assets once — the official SpecNext distro first when
+    // SPECNEXT_DISTRO_PATH is set (full card: NextZXOS plus its bundled
+    // games/demos/docs), staged /next/ assets otherwise or as the
     // fallback — register the ROMs and boot off the SD image. The ZIPPED
     // bytes are kept and re-inflated per boot (each boot gets a fresh card),
     // streamed into the core's SPARSE card so the flat image is never
@@ -968,10 +975,14 @@ export class GoEmulator extends EventEmitter {
 
     async bootNextStages() {
         if (!this.nextAssets) {
-            try {
-                this.nextAssets = await this.fetchSpecnextDistro();
-            } catch (e) {
-                console.warn('zxgo: official distro unavailable (' + (e.message || e) + '), using staged /next/ assets');
+            if (SPECNEXT_DISTRO_PATH) {
+                try {
+                    this.nextAssets = await this.fetchSpecnextDistro();
+                } catch (e) {
+                    console.warn('zxgo: official distro unavailable (' + (e.message || e) + '), using staged /next/ assets');
+                }
+            }
+            if (!this.nextAssets) {
                 this.nextAssets = await this.fetchStagedNextAssets();
             }
         }

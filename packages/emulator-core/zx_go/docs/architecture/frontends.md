@@ -152,13 +152,15 @@ replacement for the JSSpeccy3 Emulator class:
   fault: many titles require selecting the joystick in their own control
   menu (Arkanoid needs `J`) and will ignore a perfectly emulated stick
   until you do.
-- Assets: the PRIMARY source (r60) is the official SpecNext distro zip
-  (`sn-emulator-24.11.zip`: the two NextZXOS ROMs + the full 1 GB
-  `cspect-next-1gb.img`), fetched through the same-origin `/specnext/`
-  Caddy proxy route (specnext.com sends no CORS headers; the CSP pins
-  `connect-src 'self'`) and kept in the browser Cache API so the ~52 MB
-  downloads once. Staged `/next/` assets (ROMs + zipped trimmed image)
-  are the automatic fallback — offline dev, and the only source
+- Assets: the PRIMARY source is currently the staged `/next/` assets
+  (ROMs + zipped trimmed image) — `SPECNEXT_DISTRO_PATH` in
+  `GoEmulator.js` is null until SpecNext host a small emulator-targeted
+  distro (r97). Setting it restores the r60 distro flow as primary: the
+  official SpecNext distro zip (ROMs + full card image) fetched through
+  the same-origin `/specnext/` Caddy proxy route (specnext.com sends no
+  CORS headers; the CSP pins `connect-src 'self'`) and kept in the
+  browser Cache API so it downloads once, with staged assets as the
+  automatic fallback. Staged assets are also the only source
   gif-service's Node harness uses. Either way the image is STREAMED
   into a sparse card (r55): JSZip's `internalStream` feeds chunks to
   `zxSdIngestBegin/Chunk` and `zxBootNext()` mounts the result — the
