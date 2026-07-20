@@ -237,8 +237,9 @@ func (b *IM2Block) inputs() IM2Inputs {
 
 // NextAssertRef8 is the z80.CPU.ExtIntDeadlineFunc. In pulse mode the
 // prediction is the CTC block's. In hw-im2 mode (#208): while the
-// chain is ACTIVE (a device out of S_0 or holding a latched request —
-// REQ/ACK/ISR transitions are per-sample-point state machinery), a
+// chain is ACTIVE (a device in S_REQ/S_ACK mid-transition, or parked
+// in S_0 with a latched request awaiting pickup — see updateActive;
+// S_ISR parking is tick-stable and does NOT hold the gate, #206), a
 // pend* input awaits latching, or an ENABLED UART level source could
 // request (levels have no event edge to kick on), the CPU must poll
 // every sample point (0). Otherwise the chain is provably inert until
@@ -246,7 +247,8 @@ func (b *IM2Block) inputs() IM2Inputs {
 // the CTC block already tracks (nextZC28; pulseUntil28 stays 0 in hw
 // mode, ConsumeZC never arms it). Every event that could wake the
 // chain earlier kicks the CPU gate: RouteInt/Unq/Clear* (pends), CTC
-// reprogramming (rescheduleNotify), NR$C0 mode flips (SetControl).
+// reprogramming (rescheduleNotify), NR$C0 mode flips (SetControl),
+// and RETI itself runs the chain via the Reti hook directly.
 // TX-1696's ~22 kHz CTC sample engine went from ~100k IntLine polls
 // per frame (inputs assembly + CTC catch-up each) to ~440.
 func (b *IM2Block) NextAssertRef8() uint64 {
@@ -319,18 +321,29 @@ func (b *IM2Block) IntLine(t uint64) bool {
 }
 
 // updateActive recomputes the idle fast-path flag: the chain needs
-// per-sample-point ticking while any device holds a latched request or
-// is mid-transition (S_REQ/S_ACK). A device parked in S_ISR with no
-// latched request is tick-STABLE — its only exit is RetiSeen, which
-// arrives via the Reti hook's own tick (which re-runs this) — so a
-// machine spending most of its time inside ISRs (TX-1696's ~22 kHz
-// sample engine) keeps the deadline gate through the ISR body instead
-// of ticking the chain every instruction (#208).
+// per-sample-point ticking while any device is mid-transition
+// (S_REQ/S_ACK) or idles with a latched request awaiting pickup
+// (S_0 + im2IntReq -> S_REQ on the next tick). A device parked in
+// S_ISR is tick-STABLE whether or not its im2IntReq latch is still
+// set: the latch is HELD through the whole in-service window (the
+// im2_int_req sticky clears only on im2_isr_serviced, the S_ISR->S_0
+// RETI transition, im2_peripheral.vhd:167-178) and the FSM's only
+// exit is RetiSeen — both arrive via the Reti hook's own tick (which
+// re-runs this). Counting the in-service latch as "active" (the #208
+// original) reopened the per-instruction poll for the ENTIRE ISR
+// body: TX-1696's few-instruction sample ISR barely noticed, but
+// WOTEF's fat ~23 kHz music ISR spent most of each period in service
+// and the full 14-device chain Tick per instruction was ~30% of exec
+// (#206). Mid-ISR request edges need no polls either: they merge
+// into the held latch on real hardware (set wins over hold, then the
+// RETI-tick clears both), and the CTC ZC deadline reopens the gate at
+// exactly those instants anyway.
 func (b *IM2Block) updateActive() {
 	active := false
 	for i := range b.chain.per {
 		st := b.chain.per[i].state
-		if (st != im2S0 && st != im2ISR) || b.chain.per[i].im2IntReq {
+		if st == im2REQ || st == im2ACK ||
+			(st == im2S0 && b.chain.per[i].im2IntReq) {
 			active = true
 			break
 		}
