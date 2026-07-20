@@ -54,7 +54,13 @@ screenshot oracles and soak tests all run through it.
 Build: `GOOS=js GOARCH=wasm go build ./cmd/zx_go` via
 `scripts/build-wasm.sh` → `dist/zx.wasm` + `wasm_exec.js`. The Go wasm
 module runs on the browser MAIN thread. There is no Go-side loop: the
-CPU advances only inside `zxFrame()` calls from the page.
+CPU advances only inside `zxFrame()` calls from the page. While a tape
+loader is actively edge-reading, one `zxFrame()` call bursts up to
+`tapeTurboFramesPerTick` frames (the desktop tick's fast-tape turbo,
+shared via `tapeTurboFrames`/`tapeFrameHook`, #192) — the page's
+audio-clock pacing is unaffected because the render/audio flush still
+runs once per call, pushing one display frame's worth of (muted)
+samples.
 
 Exports (`wasm_js.go`, all globals; `zxReady` is set last):
 

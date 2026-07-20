@@ -105,7 +105,15 @@ everything later, per-model totals from `pkg/roms`.
 Tape: `.tap`/`.tzx` as a pulse stream (pilot/sync/bit timings, turbo
 blocks), advanced per port read so edge-timed loaders work; a ROM
 LD-BYTES trap provides fast loading; the $FE-read rate detects active
-loading for the tape-turbo mode.
+loading for the tape-turbo mode. Tape time rides the MONOTONIC
+reference clock (`SetTapeRefClock` → `cpu.RefTstates`, not the
+frame-wrapping raw counter), so the lazy per-read catch-up never drops
+the inter-frame gap for sparse-polling loaders; inter-block pause
+chunks consume time WITHOUT toggling EAR (silence has no edges); and
+the loader-activity auto-pause (`tapeFrameHook`, shared by desktop /
+wasm / headless loops) parks an unpolled deck within 1.5 s — wider
+than the 48 ROM's 1 s read-free LD-START settle delay — and resumes it
+losslessly when a loader polls again (#192, Hewson custom loaders).
 
 Contention lives in `pkg/memory` (pattern {6,5,4,3,2,1,0,0}, display
 window only, per-model enables/anchors: 48K 14335 on 224 T lines,

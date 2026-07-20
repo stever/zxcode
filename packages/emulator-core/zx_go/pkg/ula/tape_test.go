@@ -301,3 +301,48 @@ func TestTapePlayerEmptyTAP(t *testing.T) {
 		t.Error("Expected error loading empty TAP file")
 	}
 }
+
+// TestPauseChunksEmitNoEdges locks the #192 silence fix: the trailing
+// inter-block pause is stored as 65535-T "pulse" chunks so it can consume
+// time, but completing those chunks must NOT toggle the EAR level — real
+// inter-block silence has no edges. The previous behaviour (a toggle per
+// chunk, ~54 ghost edges per gap) kept pilot-detecting loaders bouncing in
+// retry loops for the whole pause (Exolon's custom loader).
+func TestPauseChunksEmitNoEdges(t *testing.T) {
+	dir := t.TempDir()
+	path := createTestTAP(t, dir)
+
+	tp := NewTapePlayer()
+	if err := tp.LoadTAP(path); err != nil {
+		t.Fatal(err)
+	}
+	tp.Play()
+
+	// Advance in fine steps through the whole first block, recording the EAR
+	// level at each step; note the step at which the data pulses ended.
+	const step = 200 // T-states — finer than any data pulse (min 667)
+	level := tp.Update(0)
+	pauseToggles := 0
+	inPause := false
+	for i := 0; i < 100000; i++ {
+		next := tp.Update(step)
+		_, pulseIdx, _, dataPulses, _, _ := tp.DebugState()
+		if tp.CurrentBlock() != 0 {
+			break // block 0's pulses (data + pause) fully consumed
+		}
+		if inPause && next != level {
+			pauseToggles++
+		}
+		level = next
+		// The pause begins once every data pulse has completed.
+		if pulseIdx >= dataPulses {
+			inPause = true
+		}
+	}
+	if !inPause {
+		t.Fatal("never reached block 0's trailing pause — test harness broken")
+	}
+	if pauseToggles != 0 {
+		t.Errorf("EAR toggled %d times during the inter-block pause; silence must have no edges", pauseToggles)
+	}
+}

@@ -1118,6 +1118,7 @@ func runOneFrameHeadless(emu *emulator, model roms.SpectrumModel) {
 	}
 	if os.Getenv("ZX_GO_STEP_FRAME") == "" {
 		emu.cpu.ExecuteFrame(emu.frameTStates())
+		emu.tapeFrameHook()
 		return
 	}
 	budget := uint64(emu.frameTStates()) * uint64(emu.cpu.SpeedMultiplier())
@@ -1125,4 +1126,5 @@ func runOneFrameHeadless(emu *emulator, model roms.SpectrumModel) {
 	for emu.cpu.Tstates() < target {
 		emu.cpu.StepInstructionWithIRQ()
 	}
+	emu.tapeFrameHook()
 }

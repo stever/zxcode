@@ -103,6 +103,8 @@ This is a body of work, not a single gap.
 | Browser direct-boot seed table and the nexload menu-index are coupled to the SD distro version; re-verification procedure documented | maintenance coupling | `packages/emulator-core/README.md` |
 | Faithful firmware boot (FPGA bootrom → TBBLUE.FW) of the OFFICIAL distro card geometry (1 GB, 32 KB clusters, partition at LBA 63) lands in the config tool with "Error opening 'menu.ini/.def'" — every firmware file open fails, while NextZXOS itself reads the same card fine. Not the partition offset (rebasing to LBA 2048 reproduces), not firmware content or config.ini (byte-identical to the staged card, which boots). The browser's direct-boot path is unaffected (all boot regression tests pass against the prepped official image), but the "delete the go.env lines" fallback does not currently work on the official card | open (r60) | `cmd/zx_go/distro_prep.go`, `packages/emulator-core/README.md` |
 | Warm-boot path (`--warm-boot`) uses captured reference dumps; non-faithful by design, default off | dev tool | `cmd/zx_go/next.go` |
+| TZX blocks with pause=0 get the legacy ~1 s TAP silence instead of the spec's "no pause" (back-to-back turbo chains could over-wait; harmless now that pause chunks emit no edges, #192) | deferred | `pkg/ula/tape.go` |
+| Custom loaders entering the ROM mid-LD-BYTES (past $0556) or byte-looping over LD-EDGE are not trap-accelerated — by design they real-time load under the fast-tape turbo (shared desktop/wasm/headless, #192) | as designed | `cmd/zx_go/main.go` |
 
 ## How gaps get closed
 

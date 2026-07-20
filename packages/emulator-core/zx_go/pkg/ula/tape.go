@@ -243,6 +243,16 @@ func (tp *TapePlayer) NextBlock() []byte {
 	return out
 }
 
+// DebugState reports the real-time player's internal position for
+// diagnostics: current block, pulse index / total pulses, the pulse count
+// covering pilot+sync+data, the accumulated tape T-state clock, and whether
+// the block's data has been fully played.
+func (tp *TapePlayer) DebugState() (blockIdx, pulseIdx, pulseCount, dataPulses int, tstate uint64, dataConsumed bool) {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+	return tp.blockIdx, tp.pulseIdx, len(tp.pulses), tp.dataPulses, tp.tstate, tp.dataConsumed
+}
+
 // HasMoreBlocks returns true if at least one more block is available.
 func (tp *TapePlayer) HasMoreBlocks() bool {
 	tp.mu.Lock()
@@ -351,11 +361,18 @@ func (tp *TapePlayer) Update(tstates uint64) bool {
 
 	tp.tstate += tstates
 
-	// Process pulses
+	// Process pulses. Completing a pilot/sync/data pulse toggles the EAR
+	// level (completing the LAST data pulse is the block's final edge);
+	// completing a trailing-pause chunk only consumes time — real inter-block
+	// silence has NO edges, and toggling per 65535-T pause chunk fed ghost
+	// edges to pilot-detecting loaders, which kept them bouncing in retry
+	// loops through the whole gap (#192, Exolon).
 	for tp.pulseIdx < len(tp.pulses) {
 		pulseDuration := uint64(tp.pulses[tp.pulseIdx])
 		if tp.tstate-tp.lastToggle >= pulseDuration {
-			tp.earBit = !tp.earBit
+			if tp.pulseIdx < tp.dataPulses {
+				tp.earBit = !tp.earBit
+			}
 			tp.lastToggle += pulseDuration
 			tp.pulseIdx++
 		} else {

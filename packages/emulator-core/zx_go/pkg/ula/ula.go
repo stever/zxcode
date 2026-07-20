@@ -213,6 +213,9 @@ type ULA struct {
 	// level for a whole 69888-T frame, so custom loaders saw no pulses and
 	// never loaded.)
 	lastTapeTstate uint64
+	// tapeRefClock, when wired (SetTapeRefClock), supplies the monotonic
+	// reference clock lastTapeTstate is kept on. See SetTapeRefClock.
+	tapeRefClock func() uint64
 	// Tape-loading sound: EAR-level transitions recorded during the frame so
 	// flushAudioFrame can reconstruct the audible loading tone (the pilot
 	// whistle + data screech) and mix it into the output — as a real 48K does
@@ -3623,7 +3626,30 @@ func (u *ULA) FEReadCount() uint64 {
 // than jumping forward by the whole elapsed run.
 func (u *ULA) SetTapePlayer(tp *TapePlayer) {
 	u.tape = tp
-	u.lastTapeTstate = u.refNow()
+	u.lastTapeTstate = u.tapeRefNow()
+}
+
+// SetTapeRefClock wires a MONOTONIC reference-T-state source for tape timing
+// (z80.CPU.RefTstates). Without it, tape time is read off refNow(), which on
+// classic models is the CPU's RAW counter — and that counter wraps to
+// frame-relative at the end of every ExecuteFrame, so tapeLevel's
+// "now > lastTapeTstate" guard silently discarded all tape time between the
+// last port-$FE read of one frame and the first of the next. A loader that
+// polls the tape continuously loses ~1%; one that polls sparsely (Exolon's
+// custom loader waiting out an inter-block pause, #192) had its tape crawl at
+// ~2% of real speed and never finished loading.
+func (u *ULA) SetTapeRefClock(fn func() uint64) {
+	u.tapeRefClock = fn
+}
+
+// tapeRefNow returns the tape-timing clock: the wired monotonic reference
+// clock when present, else refNow (Next: monotonic mem.RefTstates; classic
+// models: the wrapping raw counter — see SetTapeRefClock).
+func (u *ULA) tapeRefNow() uint64 {
+	if u.tapeRefClock != nil {
+		return u.tapeRefClock()
+	}
+	return u.refNow()
 }
 
 // frameTStates returns the machine's real frame length in 3.5 MHz
@@ -3696,7 +3722,7 @@ func (u *ULA) tapeLevel() bool {
 	if u.tape == nil || u.mem == nil || u.mem.TStates == nil {
 		return u.TapeIn
 	}
-	now := u.refNow()
+	now := u.tapeRefNow()
 	prev := u.TapeIn
 	playing := u.tape.IsPlaying()
 	if now > u.lastTapeTstate && playing {

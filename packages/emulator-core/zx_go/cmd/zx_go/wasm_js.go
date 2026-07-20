@@ -614,20 +614,39 @@ func setupWasmExports() {
 		dbgPaused := wasmDebugPaused(e)
 		if !dbgPaused {
 			t0 := time.Now()
-			e.cpu.ExecuteFrame(e.frameTStates())
-			if e.peripherals != nil {
-				e.peripherals.Frame()
+			// Fast tape loading (#192): while a loader is actively edge-reading
+			// the tape, run a burst of frames per display tick so a real-time
+			// load (custom loaders enter the ROM's edge-timed loops directly and
+			// can't be trap-accelerated) finishes in seconds instead of minutes.
+			// Same shared helpers as the desktop tick: tapeTurboFrames decides
+			// the burst + applies the whole-load audio mute, tapeFrameHook keeps
+			// the loader-activity signal + auto-pause per executed frame.
+			n := e.tapeTurboFrames()
+			for k := 0; k < n; k++ {
+				e.cpu.ExecuteFrame(e.frameTStates())
+				heavy := e.tapeFrameHook()
+				if e.peripherals != nil {
+					e.peripherals.Frame()
+				}
+				if e.kbd != nil {
+					e.kbd.Tick()
+				}
+				if e.nexloadMacro != nil && e.nexloadMacro.tick(e) {
+					e.nexloadMacro = nil
+				}
+				e.noteBootFrame()
+				// A breakpoint / watchpoint / one-shot may have fired mid-frame.
+				dbgPaused = wasmDebugPaused(e)
+				if dbgPaused {
+					break
+				}
+				// Load finished (or the loader went idle) mid-burst: stop
+				// skipping game time at 64x.
+				if n > 1 && !heavy {
+					break
+				}
 			}
-			if e.kbd != nil {
-				e.kbd.Tick()
-			}
-			if e.nexloadMacro != nil && e.nexloadMacro.tick(e) {
-				e.nexloadMacro = nil
-			}
-			e.noteBootFrame()
 			perfExecNs += int64(time.Since(t0))
-			// A breakpoint / watchpoint / one-shot may have fired mid-frame.
-			dbgPaused = wasmDebugPaused(e)
 		}
 		t1 := time.Now()
 		img := e.renderFrame() // *image.RGBA

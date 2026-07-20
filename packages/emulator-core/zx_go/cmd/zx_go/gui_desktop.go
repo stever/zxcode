@@ -505,66 +505,16 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 						// (custom turbo loaders go through the edge-timed loop
 						// and can't be trap-accelerated) finishes in seconds
 						// instead of minutes. Rendering still happens at 50 Hz.
-						n := 1
-						// Turbo only while a loader is actively reading tape
-						// edges (high $FE read rate last tick) — not merely while
-						// the tape has blocks left. Otherwise a multi-load game
-						// keeps running at 64x at its menu (rapid attract cycling)
-						// with audio muted.
-						turbo := e.fastTape.Load() && e.tapeLoadingActive() && e.tapeReadActive
-						if turbo {
-							n = tapeTurboFramesPerTick
-						}
-						// Mute for the whole fast-tape load, not just the turbo
-						// ticks: at every inter-block gap the read rate dips and
-						// turbo would disengage for a tick, leaking one garbled
-						// mid-load frame + re-arming the DC blocker — an audible
-						// blip at each block boundary (the multi-load "stutter").
-						// tapeAudioMuted stays true across those gaps; it clears
-						// only when the tape auto-pauses (so music plays) or when
-						// fast-tape is off (so the real loading sound is audible).
-						if e.ula != nil {
-							e.ula.SetFastLoad(e.tapeAudioMuted())
-						}
-						heavyReads := false
+						// Turbo-count decision, whole-load audio mute, per-frame
+						// loader-activity signal and auto-pause all live in the
+						// shared helpers (tapeTurboFrames / tapeFrameHook), which
+						// the wasm zxFrame path drives identically.
+						n := e.tapeTurboFrames()
 						for k := 0; k < n; k++ {
-							var before uint64
-							if e.ula != nil {
-								before = e.ula.FEReadCount()
-							}
 							e.cpu.ExecuteFrame(e.frameTStates())
-							if e.ula != nil && e.ula.FEReadCount()-before > tapeLoadReadThreshold {
-								heavyReads = true
-							}
+							e.tapeFrameHook()
 							if k+1 < n && e.peripherals != nil {
 								e.peripherals.Frame()
-							}
-						}
-						// Drive next tick's turbo decision from this tick's read
-						// rate. The first loading tick runs at 1x (n=1) and sees
-						// the heavy reads, so turbo engages on the next tick.
-						e.tapeReadActive = heavyReads
-
-						// Loader-activity auto-pause: while the running program is
-						// not reading tape edges (a multi-load game's menu, or
-						// inter-block processing), pause the tape so it doesn't
-						// advance past the next part — which would mis-load it
-						// (garbled audio, no music). Resume the instant the loader
-						// starts reading again. This also stops the residual
-						// loading sound once a part has finished loading.
-						if e.ula != nil && os.Getenv("ZX_GO_NO_TAPE_AUTOPAUSE") == "" {
-							if tp := e.ula.GetTapePlayer(); tp != nil && tp.HasMoreBlocks() {
-								if heavyReads {
-									e.tapeIdleTicks = 0
-									if !tp.IsPlaying() {
-										tp.Resume()
-									}
-								} else if tp.IsPlaying() {
-									e.tapeIdleTicks++
-									if e.tapeIdleTicks > tapeAutoPauseTicks {
-										tp.Stop()
-									}
-								}
 							}
 						}
 					}

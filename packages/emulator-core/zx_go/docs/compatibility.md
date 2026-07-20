@@ -67,6 +67,8 @@ zx_go yet; foundation tests confirm the 48K boot path works.
 | Horace Goes Skiing | Untested | |
 | Jet Pac (Interface 2 cartridge) | Untested | IF2 cartridge slot wired and tested in `if2_test.go` |
 | Pssst (Interface 2 cartridge) | Untested | Same IF2 path as Jet Pac |
+| Exolon | Works | #192. Hewson custom loader: BASIC + $FC00 code trap-load, then real-time edge-timed loading (enters the ROM's LD-EDGE loops directly, so the $0556 trap never sees those blocks). Corpus row locks the title screen. |
+| Firelord | Works | #192. Hewson custom loader: one 49152-byte headerless block over the whole RAM via a RAM byte loop calling ROM LD-EDGE. Corpus row locks the joystick menu. |
 
 ## 128K / +2 titles
 

@@ -59,12 +59,19 @@ const (
 	// (the emulation core sustains well over 64 frames per 20 ms tick).
 	tapeTurboFramesPerTick = 64
 
-	// tapeAutoPauseTicks is how many consecutive ticks the loader can be idle
-	// (no tape-rate $FE reads) before the tape is auto-paused so it doesn't
-	// advance past the next multi-load part. The loader polls continuously
-	// while loading, so this only triggers when the program is actually
-	// running (menu / inter-block processing).
-	tapeAutoPauseTicks = 10
+	// tapeAutoPauseFrames is how many consecutive FRAMES the loader can be
+	// idle (no tape-rate $FE reads) before the tape is auto-paused so it
+	// doesn't advance past content nothing is listening to (boot before the
+	// loader starts, the next multi-load part). MUST exceed the 48 ROM's
+	// LD-START settle delay — after detecting the first edge the ROM burns a
+	// FULL SECOND (50 frames) in a read-free delay loop ($0574 LD-WAIT)
+	// before sampling again; pausing inside that window hands the woken
+	// loader a dead tape and it restarts from LD-START, a thrash that crawls
+	// the load at ~2% (#192). 75 frames = 1.5 s. The window costs nothing:
+	// tape time only advances when the guest actually reads port $FE
+	// (tapeLevel's lazy catch-up), so a playing-but-unpolled deck loses no
+	// content within the window.
+	tapeAutoPauseFrames = 75
 
 	// tapeLoadReadThreshold is the per-frame port-$FE read count above which
 	// the CPU is considered to be in a tape loader's edge-timing loop (which
@@ -152,7 +159,10 @@ type emulator struct {
 	// and the game runs at normal speed with audio — even if the tape still
 	// has blocks queued for a later multi-load stage.
 	tapeReadActive bool
-	tapeIdleTicks  int // consecutive ticks the loader has been idle (auto-pause)
+	tapeIdleTicks  int // consecutive frames the loader has been idle (auto-pause)
+	// lastTapeFEReads snapshots the ULA's port-$FE read counter at the end of
+	// each frame, so tapeFrameHook can compute the per-frame read delta.
+	lastTapeFEReads uint64
 
 	// sdImageSrc is the live card backing store the import/staging
 	// paths write through (.nex/.bas import, zxPutFile): a flat
@@ -507,6 +517,11 @@ func newEmulator(model roms.SpectrumModel) (*emulator, error) {
 	// Arkanoid's bat). The hook self-disables on ModelNext.
 	cpu.ScanlineFunc = ula.CaptureScanlines
 	configureClassicIntTiming(cpu, model)
+	// Tape timing rides the CPU's MONOTONIC reference clock, not the raw
+	// counter (which ExecuteFrame wraps to frame-relative every frame — the
+	// wrap silently dropped the tape time between frames for sparse-polling
+	// loaders, #192). The Next wires mem.RefTstates and needs no hook.
+	ula.SetTapeRefClock(cpu.RefTstates)
 
 	// Classic-Spectrum SpecDrum/Covox DAC (both off until enabled from the
 	// Peripherals menu). Event-timed and mixed into the beeper by the ULA.
@@ -610,6 +625,65 @@ func (e *emulator) tapeLoadingActive() bool {
 // the tape auto-pauses, this returns false and the game's music plays.
 func (e *emulator) tapeAudioMuted() bool {
 	return e.fastTape.Load() && e.tapeLoadingActive()
+}
+
+// tapeFrameHook is the per-frame tape bookkeeping shared by EVERY frame loop
+// (desktop tick, wasm zxFrame, headless). Call it once after each executed
+// frame. It computes that frame's port-$FE read delta, updates the
+// loader-activity signal (tapeReadActive — gates fast-tape turbo), and drives
+// the loader-activity auto-pause: while the running program is not reading
+// tape edges (boot, a multi-load game's menu, inter-block processing) the deck
+// is paused so it doesn't advance past content nothing is listening to, then
+// resumed the instant a loader starts polling again. Pause/resume is lossless
+// (Resume continues from the exact pulse position), which is what makes the
+// aggressive pause safe. This became load-bearing for ALL paths once the tape
+// clock was made monotonic (#192): previously the frame-wrap clock bug meant
+// an unpolled tape barely advanced — an accidental auto-pause that fix
+// removed, so the real one must run everywhere. ZX_GO_NO_TAPE_AUTOPAUSE=1
+// disables the auto-pause (diagnostic).
+// Returns whether the frame saw loader-heavy reads.
+func (e *emulator) tapeFrameHook() bool {
+	if e.ula == nil {
+		return false
+	}
+	reads := e.ula.FEReadCount()
+	delta := reads - e.lastTapeFEReads
+	e.lastTapeFEReads = reads
+	heavy := delta > tapeLoadReadThreshold
+	e.tapeReadActive = heavy
+	if os.Getenv("ZX_GO_NO_TAPE_AUTOPAUSE") != "" {
+		return heavy
+	}
+	tp := e.ula.GetTapePlayer()
+	if tp == nil || !tp.HasMoreBlocks() {
+		return heavy
+	}
+	if heavy {
+		e.tapeIdleTicks = 0
+		if !tp.IsPlaying() {
+			tp.Resume()
+		}
+	} else if tp.IsPlaying() {
+		e.tapeIdleTicks++
+		if e.tapeIdleTicks > tapeAutoPauseFrames {
+			tp.Stop()
+		}
+	}
+	return heavy
+}
+
+// tapeTurboFrames returns how many emulated frames the CURRENT 50 Hz display
+// tick should run: tapeTurboFramesPerTick while a fast-tape load is actively
+// edge-reading, 1 otherwise. Also applies the whole-load audio mute (see
+// tapeAudioMuted). Shared by the desktop tick and the wasm zxFrame path.
+func (e *emulator) tapeTurboFrames() int {
+	if e.ula != nil {
+		e.ula.SetFastLoad(e.tapeAudioMuted())
+	}
+	if e.fastTape.Load() && e.tapeLoadingActive() && e.tapeReadActive {
+		return tapeTurboFramesPerTick
+	}
+	return 1
 }
 
 func (e *emulator) startKeyProcessor() {

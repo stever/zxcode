@@ -62,6 +62,33 @@ var corpusTitles = []corpusTitle{
 		frames:  40050,                              // full real-time load (~37k) + settle to the static menu
 		wantMD5: "9ce6b84c403830fdcaec987ed645b0e4", // RENEGADE 128 options menu
 	},
+	{
+		// #192: Hewson custom loader — BASIC + $FC00 code trap-load, then the
+		// custom loader reads the remaining blocks by entering the ROM's
+		// edge-timing loops directly (never the $0556 trap point). Needs the
+		// monotonic tape clock, edge-free inter-block silence, and the
+		// loader-activity auto-pause (boot must not roll the tape past the
+		// first blocks).
+		name:    "Exolon (Hewson custom loader, tape)",
+		file:    "Exolon (1987).tap",
+		model:   roms.Model128K,
+		load:    "tap",
+		keys:    []corpusKey{enterAt(200)},
+		frames:  17000,                              // real-time custom load (~13.5k) + border FX + title
+		wantMD5: "cf8c80b24e93a9d32335eebd8e184346", // Exolon title screen
+	},
+	{
+		// #192: Hewson custom loader — one 49152-byte headerless block over
+		// the whole RAM, byte loop in RAM calling ROM LD-EDGE. Same real-time
+		// machinery as Exolon.
+		name:    "Firelord (Hewson custom loader, tape)",
+		file:    "Firelord (1986).tap",
+		model:   roms.Model128K,
+		load:    "tap",
+		keys:    []corpusKey{enterAt(200)},
+		frames:  18000,                              // real-time custom load (~13.3k) + decrunch + menu
+		wantMD5: "0adb7100f729090f5a5a9d776100ade4", // Firelord joystick menu (animated; most-frequent settle hash)
+	},
 }
 
 func corpusRoot() string {
