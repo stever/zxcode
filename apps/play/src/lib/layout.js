@@ -1,6 +1,9 @@
 // Pure, viewport-driven layout for the emulator + on-screen keyboard.
 //
-// Screen aspect is 4:3 (the emulator canvas is 320x240). The keyboard's aspect
+// Screen aspect is 5:4 (the zx_go engine composites every machine into a
+// fixed 640x512 display box; UIController sizes the on-screen element from
+// the canvas's real shape, so the layout must assume the same ratio or the
+// landscape screen overflows the height it was given). The keyboard's aspect
 // (height / width) is derived from its key configuration: each comma-separated
 // row contributes 1 / keysInRow to the total height when the keyboard is drawn
 // at a given width, matching renderKeyboard's per-row sizing.
@@ -9,7 +12,7 @@ const MAX_SCREEN_W = 640; // cap so the screen isn't huge on wide desktops
 const MIN_KB_W = 160; // keep the keyboard usable in side-by-side mode
 const NAV_ESTIMATE = 48; // nominal nav height used only for the mode decision
 
-const SCREEN_ASPECT = 3 / 4; // height / width
+const SCREEN_ASPECT = 512 / 640; // height / width
 
 /**
  * Parse a keyboard key string (e.g. "1234567890,QWERTYUIOP,...") into the shape
