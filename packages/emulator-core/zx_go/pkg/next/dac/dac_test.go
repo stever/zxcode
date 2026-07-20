@@ -19,10 +19,12 @@ func TestWritePortRoutesPerChannel(t *testing.T) {
 	}{
 		{"A 0x1F", 0x1F, ChannelA},
 		{"A 0xF1", 0xF1, ChannelA},
+		{"A 0x3F", 0x3F, ChannelA},
 		{"B 0x0F", 0x0F, ChannelB},
 		{"B 0xF3", 0xF3, ChannelB},
 		{"C 0x4F", 0x4F, ChannelC},
 		{"C 0xF9", 0xF9, ChannelC},
+		{"D 0x5F", 0x5F, ChannelD},
 		{"D 0xFB", 0xFB, ChannelD},
 	}
 	for _, c := range cases {
@@ -41,6 +43,40 @@ func TestWritePortRoutesPerChannel(t *testing.T) {
 				}
 				if got := b.Level(ch); got != 0 {
 					t.Errorf("channel %d disturbed by write to %#x: %#x", ch, c.port, got)
+				}
+			}
+		})
+	}
+}
+
+// TestMonoPortsDriveTwoChannels pins the FPGA's mono DAC decodes
+// (zxnext.vhd:2658-2664 with power-on port enables): SpecDrum $DF
+// writes channels A AND D, GS Covox $B3 writes B AND C. Atic Atac's
+// jingle voice (death/reincarnation sounds, #207) streams through $DF —
+// a bank that drops it silences exactly those jingles while the
+// stereo music on $0F/$4F keeps playing.
+func TestMonoPortsDriveTwoChannels(t *testing.T) {
+	cases := []struct {
+		name string
+		port uint16
+		want [2]Channel
+	}{
+		{"AD 0xDF", 0xDF, [2]Channel{ChannelA, ChannelD}},
+		{"BC 0xB3", 0xB3, [2]Channel{ChannelB, ChannelC}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			b := New()
+			if !b.WritePort(c.port, 0x77) {
+				t.Fatalf("WritePort(%#x) returned false, want true (port is DAC)", c.port)
+			}
+			for ch := ChannelA; ch <= ChannelD; ch++ {
+				want := byte(0)
+				if ch == c.want[0] || ch == c.want[1] {
+					want = 0x77
+				}
+				if got := b.Level(ch); got != want {
+					t.Errorf("after write to %#x: Level(%d) = %#x, want %#x", c.port, ch, got, want)
 				}
 			}
 		})

@@ -110,16 +110,32 @@ func (b *Bank) Level(c Channel) byte {
 // ports. Returns true if the port was a DAC port (and was
 // handled), false otherwise — the caller (ULA's port dispatcher)
 // uses this as a fall-through signal.
+//
+// The decode follows zxnext.vhd's port_dac_A/B/C/D terms (:2658-2664)
+// with the power-on internal port enables: the mono ports drive TWO
+// channels at once — $DF (SpecDrum) writes A and D, $B3 (GS Covox)
+// writes B and C. $FB stays D-only because the soundrive-2 decode has
+// precedence over the Pentagon/ATM mono-AD mapping when both port
+// enables are on (port_dac_mono_AD_fb_io_en <= enable and NOT sd2).
+// Atic Atac's sample engine leans on the mono ports: music is streamed
+// stereo through $0F/$4F while the jingle voice (death/reincarnation)
+// goes to $DF — dropping $DF silences exactly those jingles (#207).
 func (b *Bank) WritePort(port uint16, val byte) bool {
 	switch port & 0xFF {
-	case 0x1F, 0xF1:
+	case 0x1F, 0xF1, 0x3F:
 		b.levels[ChannelA] = val
 	case 0x0F, 0xF3:
 		b.levels[ChannelB] = val
 	case 0x4F, 0xF9:
 		b.levels[ChannelC] = val
-	case 0xFB:
+	case 0x5F, 0xFB:
 		b.levels[ChannelD] = val
+	case 0xDF:
+		b.levels[ChannelA] = val
+		b.levels[ChannelD] = val
+	case 0xB3:
+		b.levels[ChannelB] = val
+		b.levels[ChannelC] = val
 	default:
 		return false
 	}

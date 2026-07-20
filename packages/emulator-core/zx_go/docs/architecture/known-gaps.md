@@ -65,6 +65,7 @@ Status vocabulary:
 | .NEX loader: `Copper` field exists but is never populated (code states standard V1.2 carries no copper section, package doc says otherwise) — doc/implementation inconsistency to resolve | needs resolution | `pkg/next/nex/nex.go` vs `doc.go` |
 | ROM SHA-256 digests reported but not enforced as a boot gate | planned | `pkg/next/install/install.go` |
 | Audio event placement above 3.5 MHz is approximate (sample-exact placement is a known limit); Next DAC granularity notes in docs/spectrum-next.md | deferred | docs/spectrum-next.md |
+| Next DAC port decode is complete per zxnext.vhd:2658-2664 with power-on port enables (r87, #207: mono $DF→A+D and $B3→B+C, stereo aliases $3F→A and $5F→D added; $FB stays D-only — soundrive-2 precedence over the Pentagon mono-AD map). Residues: the internal-port-enable personality bits (NR$82-$85) are not consulted (all DAC decodes always on), the NR$08 bit 3 DAC-enable gate is not modelled (DACs always live), and the NR$2C/$2D/$2E SounDrive NextReg mirrors are unwired (`pkg/next/dac/soundrive.go` exists but nothing calls WriteNRMono/Left/Right) | partial (decode CLOSED; enables + NR mirrors deferred) | `pkg/next/dac/dac.go`, `pkg/next/dac/soundrive.go` |
 
 ### Compatibility
 
