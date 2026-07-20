@@ -61,6 +61,21 @@ committed. See `LICENSES.md` for the distribution policy and the
 conditions that apply to hosting a staged copy (the deployment serving
 `/next/` must satisfy them).
 
+The staged card is BUILT FROM the official distro card by
+`scripts/trim-distro-card.sh`: the distro's full capacity (1 GB for
+24.11 — big self-streaming games like Atic Atac and TX-1696 need it)
+and its prepped system tree, with the per-title-licensed payload
+removed and the filesystem REBUILT fresh (~2.6 MB zipped, ~8 MB
+resident in the sparse card). The rebuild matters twice over: freed
+clusters would otherwise keep the payload bytes (zip bloat) and leave
+free space fragmented — self-streaming games raw-stream their own .nex
+and die with "FILE FRAGMENTATION ERROR" unless the card's free space
+is one contiguous run. The rebuilt card uses the STAGED geometry
+(partition at LBA 2048, 4 KB clusters), not the official one: the
+official 32 KB-cluster layout hits the faithful-firmware-boot gap in
+`docs/architecture/known-gaps.md`, while the staged layout boots both
+paths.
+
 ## Next boot modes — MAINTENANCE GOTCHA
 
 The core's default Next boot is the hardware-faithful path: FPGA bootrom →

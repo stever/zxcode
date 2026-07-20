@@ -68,9 +68,12 @@ served alongside at `/next/licenses/`. The routes:
    emulator-core README ("Next boot modes").
 2. **Staged bare system (browser source during the interim; also offline
    dev, CI, gif-service's renderer).** `scripts/stage-zxnext-assets.sh`
-   fetches the trimmed assets onto a developer's machine; the deploy host
-   stages them for the sites' `/next/` route (served to users during the
-   interim) and for gif-service's server-side renderer. The "free parts"
+   fetches the trimmed assets onto a developer's machine, and
+   `scripts/trim-distro-card.sh` builds the staged card from an official
+   distro image (full capacity, system tree only — every per-title item
+   removed); the deploy host stages them for the sites' `/next/` route
+   (served to users during the interim) and for gif-service's
+   server-side renderer. The "free parts"
    analysis below is the basis for serving this staged copy — it applies
    to the official deployment while route 1 is disabled, and to any
    self-host that chooses to serve a staged copy.

@@ -174,7 +174,7 @@ replacement for the JSSpeccy3 Emulator class:
   into a sparse card (r55): JSZip's `internalStream` feeds chunks to
   `zxSdIngestBegin/Chunk` and `zxBootNext()` mounts the result — the
   flat image is never materialised; only its real content is resident
-  (~136 MB for the full official card, ~5 MB for the staged trimmed
+  (~136 MB for the full official card, ~8 MB for the staged trimmed
   one). On the distro path `zxSdPrepDistro()` runs between ingest and
   boot: it deletes the pristine card's `/nextzxos/autoexec.1st`
   (first-boot welcome pager, re-shown every boot until disabled — it
