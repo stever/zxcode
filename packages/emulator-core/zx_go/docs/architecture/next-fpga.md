@@ -111,6 +111,22 @@ drift. Highlights:
   `pkg/ula` (`nextJoyPortByte`): low-address-byte decode, idle $00
   (never floating bus), NR$05 routing incl. the MD-mode START/A bits
   (zxnext.vhd:2546-2547, :3472-3507).
+- Membrane key-joystick injection (r98, #202): pads NR$05 routes to a
+  keyboard mode press membrane keys, per the FPGA's membrane_stick
+  module (input/membrane/membrane_stick.vhd, keymap ROM
+  ram/init/keyjoy_64_6.coe; keyb_col is ANDed with the joystick
+  columns, zxnext_top_issue4.vhd:1843). `pkg/ula` joymembrane.go
+  composes the injected active-low column bits into every Next port
+  $FE read: Sinclair 1 (mode 011) = keys 67890, Sinclair 2 (000) =
+  12345, Cursor (010) = 5678+0, User Defined (111) + the Kempston/MD
+  excess-button slots from the NR$28/$29/$2B joymap RAM
+  (`Wire` passes `Keymap.JoyMap` to `ULA.SetJoyKeymap`); parked in
+  NR$0B I/O mode. Official naming per nextreg.txt — Sinclair 1 IS
+  67890 (the zxnext.vhd mode comment has the parentheticals swapped).
+  The frontend joystick selection on the Next writes NR$05 joy0
+  (`applyNextJoystickMode`; Kempston→MD-1 "101" superset) rather than
+  injecting keys, so guest-visible state and routing live in the
+  machine, exactly like hardware.
 - Deliberately not wired here: the zxnDMA (ports $6B/$0B, wired via
   `ULA.SetNextDMA`) and the Pi accelerator registers (default storage).
 

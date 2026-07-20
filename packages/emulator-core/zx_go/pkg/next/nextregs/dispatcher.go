@@ -134,7 +134,13 @@ func applyResetDefaults(regs *[256]byte) {
 	regs[0x02] = 0x01
 	regs[0x0E] = defaultCoreSubMinor // NR$0E = core version sub-minor
 	regs[0x0F] = defaultBoardID      // NR$0F = board ID
-	regs[0x05] = 0x01                // Peripheral 1: bit 0 = 50 Hz
+	// Peripheral 1: bit 0 = scandoubler enable (FPGA reset value 1),
+	// bits 7:6/3 = joystick 1 mode. The FPGA resets joy0 to "001" (Kempston 1)
+	// and joy1 to "000" (zxnext.vhd:1105-1106) — with the membrane
+	// key-joystick injection modelled (pkg/ula joymembrane.go) a $00
+	// joy0 field would read as Sinclair 2 and press keys 1-5 for any
+	// held pad direction until boot defaults land.
+	regs[0x05] = 0x41
 	// Peripheral 2: bit 7 = CPU-speed hotkey enable, bit 5 = 50/60 Hz hotkey
 	// enable. zxnext.vhd:5161-5165 resets both to 1 → read-back $A0 (the rest
 	// of NR$06's read mux composes from bits that reset to 0). The

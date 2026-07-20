@@ -39,7 +39,7 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r97-staged-sd-primary';
+const ENGINE_REV = 'r98-joy-membrane';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
@@ -649,9 +649,14 @@ export class GoEmulator extends EventEmitter {
     }
 
     // setJoystick selects which interface the pad drives: 'None',
-    // 'Kempston', 'Sinclair1', 'Sinclair2' or 'Cursor'. Remembered
-    // locally so it can be re-applied after a machine boot, which
-    // rebuilds the core's emulator and takes its joystick state with it.
+    // 'Kempston', 'Sinclair1' (keys 6-0), 'Sinclair2' (keys 1-5) or
+    // 'Cursor'. Remembered locally so it can be re-applied after a
+    // machine boot, which rebuilds the core's emulator and takes its
+    // joystick state with it. On the Next the selection is written to
+    // the machine's own NR$05 joystick-1 mode (r98, #202) and the
+    // FPGA-modelled routing — Kempston/MD ports or Sinclair/Cursor
+    // membrane keypresses — does the rest, exactly like hardware; on
+    // classic machines the Sinclair/Cursor schemes inject matrix keys.
     setJoystick(type) {
         this.joystickType = type;
         this.applyJoystickType();

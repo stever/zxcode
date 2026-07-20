@@ -2123,8 +2123,8 @@ func desktopMain() {
 			if1Item := fyne.NewMenuItem("Enable Interface 1", nil)
 			joyNoneItem := fyne.NewMenuItem("Joystick: None", nil)
 			joyKempstonItem := fyne.NewMenuItem("Joystick: Kempston", nil)
-			joySinclair1Item := fyne.NewMenuItem("Joystick: Sinclair (left, 1-5)", nil)
-			joySinclair2Item := fyne.NewMenuItem("Joystick: Sinclair (right, 6-0)", nil)
+			joySinclair1Item := fyne.NewMenuItem("Joystick: Sinclair 1 (6-0)", nil)
+			joySinclair2Item := fyne.NewMenuItem("Joystick: Sinclair 2 (1-5)", nil)
 			joyCursorItem := fyne.NewMenuItem("Joystick: Cursor / Protek", nil)
 			kempMouseItem := fyne.NewMenuItem("Enable Kempston Mouse", nil)
 			zxPrinterItem := fyne.NewMenuItem("Enable ZX Printer", nil)
@@ -2164,8 +2164,8 @@ func desktopMain() {
 				}
 				joyNoneItem.Label = marker(JoystickNone, "Joystick: None")
 				joyKempstonItem.Label = marker(JoystickKempston, "Joystick: Kempston")
-				joySinclair1Item.Label = marker(JoystickSinclair1, "Joystick: Sinclair (left, 1-5)")
-				joySinclair2Item.Label = marker(JoystickSinclair2, "Joystick: Sinclair (right, 6-0)")
+				joySinclair1Item.Label = marker(JoystickSinclair1, "Joystick: Sinclair 1 (6-0)")
+				joySinclair2Item.Label = marker(JoystickSinclair2, "Joystick: Sinclair 2 (1-5)")
 				joyCursorItem.Label = marker(JoystickCursor, "Joystick: Cursor / Protek")
 				if emu.peripherals.IsKempstonMouseEnabled() {
 					kempMouseItem.Label = "Disable Kempston Mouse"

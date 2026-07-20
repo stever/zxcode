@@ -151,8 +151,8 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
         icon: 'pi pi-fw pi-directions',
         items: [
             ['Kempston', t('nav.joystickKempston', 'Kempston')],
-            ['Sinclair1', t('nav.joystickSinclair1', 'Sinclair 1 (keys 1-5)')],
-            ['Sinclair2', t('nav.joystickSinclair2', 'Sinclair 2 (keys 6-0)')],
+            ['Sinclair1', t('nav.joystickSinclair1', 'Sinclair 1 (keys 6-0)')],
+            ['Sinclair2', t('nav.joystickSinclair2', 'Sinclair 2 (keys 1-5)')],
             ['Cursor', t('nav.joystickCursor', 'Cursor / Protek')],
         ].map(([value, label]) => ({
             label,

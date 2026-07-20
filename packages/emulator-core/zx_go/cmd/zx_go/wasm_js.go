@@ -475,6 +475,11 @@ func setupWasmExports() {
 		if e.ula != nil {
 			out["kempstonStateSeen"] = int(e.joyBitsSeen & 0x1F)
 		}
+		if e.nextRegs != nil {
+			// NR$05 is what actually routes the pad on the Next (#202):
+			// joy0 mode 011=Sinclair 1 keyrows, 001/101=port $1F, etc.
+			out["nr05"] = int(e.nextRegs.ReadReg(0x05))
+		}
 		if e.ula != nil {
 			out["kempstonEnabled"] = e.ula.KempstonEnabled
 			out["kempstonState"] = int(e.ula.KempstonState)

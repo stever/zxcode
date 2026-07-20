@@ -1,5 +1,7 @@
 package main
 
+import "github.com/conorarmstrong/zx_go/pkg/roms"
+
 // Host joystick input arrives as a whole state vector rather than as
 // press/release events, because that is the shape every host API
 // actually offers: the browser Gamepad API and GLFW are both poll-only
@@ -84,6 +86,51 @@ func (e *emulator) setJoystickType(t JoystickType) {
 	// un-fitting it mid-run would change what port $1F reads underneath a
 	// game that has already probed it, and on real hardware choosing to
 	// play with Sinclair keys does not unplug the Kempston card.
+	e.applyNextJoystickMode()
+}
+
+// nextJoyModeFor maps a frontend joystick selection to the NR$05
+// 3-bit mode the Next routes the LEFT pad by (nextreg.txt NR$05).
+// Kempston maps to MD 1 rather than plain Kempston 1: port bits 5:0
+// are identical in both modes and MD 1 additionally exposes START/A
+// in bits 7:6 plus NR$B2 — the superset the boot seed ships, so
+// re-selecting Kempston never narrows what a pad-aware game can see.
+// None means "leave the machine's own configuration alone".
+func nextJoyModeFor(t JoystickType) (byte, bool) {
+	switch t {
+	case JoystickKempston:
+		return 0b101, true
+	case JoystickSinclair1:
+		return 0b011, true
+	case JoystickSinclair2:
+		return 0b000, true
+	case JoystickCursor:
+		return 0b010, true
+	}
+	return 0, false
+}
+
+// applyNextJoystickMode expresses the frontend joystick selection as
+// the machine's own NR$05 joystick-1 mode when running a Next — the
+// emulator equivalent of setting the joystick type in the NextZXOS
+// config. The FPGA model then does all routing itself: ports $1F/$37
+// (pkg/ula nextJoyPortByte) and the membrane keyrow injection
+// (joymembrane.go). Read-modify-write on the read-back layout
+// ([7:6]=joy0[1:0], [3]=joy0[2] — WireJoystickMode) so the 50/60 Hz
+// and scandoubler bits, and joystick 2's routing, are untouched.
+// Boots rebuild the machine and reseed NR$05, so frontends re-apply
+// the selection after every boot (GoEmulator.applyJoystickType).
+func (e *emulator) applyNextJoystickMode() {
+	if e.nextRegs == nil || e.mem == nil || e.mem.GetCurrentModel() != roms.ModelNext {
+		return
+	}
+	mode, ok := nextJoyModeFor(e.joystickType)
+	if !ok {
+		return
+	}
+	v := e.nextRegs.ReadReg(0x05)
+	v = v&^0xC8 | (mode&0x03)<<6 | (mode>>2)<<3
+	e.nextRegs.WriteReg(0x05, v)
 }
 
 // joystickTypeFromName parses the frontend-facing joystick names. The

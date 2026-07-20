@@ -1467,6 +1467,12 @@ func Wire(opts WireOpts) {
 	WireESPGPIO(opts.Dispatcher)
 	if opts.Keymap != nil {
 		WireKeymap(opts.Dispatcher, opts.Keymap)
+		// The joymap half also feeds the membrane key-joystick
+		// injector (pkg/ula joymembrane.go): user-defined mode and
+		// the Kempston/MD excess-button entries resolve from it.
+		if js, ok := opts.ULANext.(interface{ SetJoyKeymap(func(uint16) byte) }); ok {
+			js.SetJoyKeymap(opts.Keymap.JoyMap)
+		}
 	}
 	if opts.Tilemap != nil {
 		WireTilemap(opts.Dispatcher, opts.Tilemap, opts.Palette, opts.ULANext)

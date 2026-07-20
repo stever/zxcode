@@ -238,6 +238,11 @@ type ULA struct {
 	// Next's NR $B2 and by the MD modes of ports $1F/$37.
 	MDExtraState uint16
 
+	// joyKeymapUser reads the NR$28/$29/$2B joymap RAM's user
+	// key-joystick entries (idx = pad<<4 | button) for the membrane
+	// keyrow injection — see joymembrane.go. Nil until wired.
+	joyKeymapUser func(idx uint16) byte
+
 	// Count of guest reads decoding as the Kempston port, incremented
 	// even when no Kempston interface is attached, and of the subset of
 	// those made while a button was actually held. Diagnostic only —
@@ -1930,6 +1935,14 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 			val |= 0x40
 		}
 		val &= u.kbd.Scan(addr) | 0xE0
+		// Spectrum Next key-joystick injection: the FPGA's
+		// membrane_stick module presses membrane keys for pads routed
+		// to a keyboard mode by NR$05 (Sinclair 1/2, Cursor, User) —
+		// keyb_col is the AND of the real membrane and the joystick
+		// columns (zxnext_top_issue4.vhd:1843). See joymembrane.go.
+		if u.nextRegs != nil && u.mem != nil && u.mem.GetCurrentModel() == roms.ModelNext {
+			val &= u.joyMembraneScan(addr) | 0xE0
+		}
 		return val, true
 	}
 

@@ -114,8 +114,8 @@ type JoystickType int
 const (
 	JoystickNone      JoystickType = iota
 	JoystickKempston               // Hardware port 0x1F (handled by ULA)
-	JoystickSinclair1              // Sinclair Interface 2 left joystick (keys 1..5)
-	JoystickSinclair2              // Sinclair Interface 2 right joystick (keys 6..0)
+	JoystickSinclair1              // Sinclair Interface 2 joystick 1 (keys 6..0; Next NR$05 mode 011)
+	JoystickSinclair2              // Sinclair Interface 2 joystick 2 (keys 1..5; Next NR$05 mode 000)
 	JoystickCursor                 // Protek/Cursor joystick (keys 5/6/7/8/0)
 )
 
@@ -332,11 +332,18 @@ func (e *emulator) sharedRegWatches() *debugger.RegWatchSet {
 func joystickKeySymbols(t JoystickType) [5]fyne.KeyName {
 	switch t {
 	case JoystickSinclair1:
-		// Left joystick: 1=left 2=right 3=down 4=up 5=fire
-		return [5]fyne.KeyName{fyne.Key4, fyne.Key3, fyne.Key1, fyne.Key2, fyne.Key5}
-	case JoystickSinclair2:
-		// Right joystick: 6=left 7=right 8=down 9=up 0=fire
+		// Sinclair/Interface 2 joystick 1: 6=left 7=right 8=down 9=up
+		// 0=fire — the layout games' "Sinclair" option reads, and the
+		// Next's NR$05 mode 011 (nextreg.txt; keyjoy_64_6.coe entries
+		// 0-4). These were swapped with Sinclair 2 until #202 — the
+		// same swap the FPGA itself once shipped ("Sinclair 1 and
+		// Sinclair 2 joystick types were reversed in the hardware",
+		// core changelog 3.01.01).
 		return [5]fyne.KeyName{fyne.Key9, fyne.Key8, fyne.Key6, fyne.Key7, fyne.Key0}
+	case JoystickSinclair2:
+		// Sinclair/Interface 2 joystick 2: 1=left 2=right 3=down 4=up
+		// 5=fire — Next NR$05 mode 000.
+		return [5]fyne.KeyName{fyne.Key4, fyne.Key3, fyne.Key1, fyne.Key2, fyne.Key5}
 	case JoystickCursor:
 		// Cursor joystick: 5=left 6=down 7=up 8=right 0=fire
 		// Index order: up, down, left, right, fire
@@ -847,8 +854,20 @@ func cpuSpeedMenuItem(emu *emulator) *fyne.MenuItem {
 // appropriate hardware action for the active joystick interface. For
 // Kempston this sets/clears a port bit; for Sinclair/Cursor it injects a
 // Spectrum key press into the keyboard matrix.
+//
+// On the Next every scheme rides the pad VECTOR instead: the ULA's
+// KempstonState bits ARE i_JOY(4:0), and NR$05 routing decides whether
+// the FPGA model presents them on ports $1F/$37 or as membrane
+// keypresses (Sinclair/Cursor/User — pkg/ula joymembrane.go), exactly
+// like hardware. Frontend key injection would double up on that (and
+// bypass the guest-visible NR$05 state), so it is classic-models-only;
+// setJoystickType expresses the Next selection as an NR$05 write.
 func (e *emulator) dispatchJoystick(direction int, pressed bool) {
-	switch e.effectiveJoystick() {
+	scheme := e.effectiveJoystick()
+	if e.mem != nil && e.mem.GetCurrentModel() == roms.ModelNext {
+		scheme = JoystickKempston
+	}
+	switch scheme {
 	case JoystickKempston:
 		var mask byte
 		switch direction {
@@ -867,7 +886,7 @@ func (e *emulator) dispatchJoystick(direction int, pressed bool) {
 			e.ula.SetKempstonButton(mask, pressed)
 		}
 	case JoystickSinclair1, JoystickSinclair2, JoystickCursor:
-		keys := joystickKeySymbols(e.joystickType)
+		keys := joystickKeySymbols(scheme)
 		key := keys[direction]
 		if key == "" {
 			return

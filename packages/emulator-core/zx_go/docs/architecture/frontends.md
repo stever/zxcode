@@ -120,6 +120,15 @@ replacement for the JSSpeccy3 Emulator class:
   means "decide for me" and resolves to Kempston on EVERY model, because
   a Kempston interface is fitted at construction on classic machines too
   (`newEmulator`) and the Next FPGA always decodes port $1F.
+  What a selection DOES differs by model (r98, #202): on classic
+  machines Sinclair 1 (keys 6-0) / Sinclair 2 (keys 1-5) / Cursor
+  inject matrix keys frontend-side, while on the Next every scheme
+  rides the vector and the selection is written to the machine's own
+  NR$05 joystick-1 mode (`applyNextJoystickMode`; Kempston maps to the
+  MD-1 superset) — the FPGA model routes it from there, to the ports or
+  to membrane keypresses (pkg/ula joymembrane.go). 'None' leaves NR$05
+  alone. Boots reseed NR$05, so `GoEmulator.applyJoystickType` re-runs
+  after every boot path.
   That timing is load-bearing, not incidental: games probe for a Kempston
   by polling $1F in a tight loop and judging whether it reads consistently
   (Manic Miner does exactly 256 reads at startup), so the interface must

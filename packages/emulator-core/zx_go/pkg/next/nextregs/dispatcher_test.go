@@ -18,7 +18,7 @@ func TestNewDispatcherDefaults(t *testing.T) {
 		// soft reset to the bootrom, which reads A=$01 here at $0171.
 		// WireReset's OnWrite must NOT use edge-detection on this bit
 		// — see wire.go for details.
-		0x05: 0x01,
+		0x05: 0x41, // bit 0 scandoubler + joy0 reset "001" Kempston (zxnext.vhd:1105)
 		0x06: 0xA0, // hotkey enables: bit7 cpu-speed + bit5 50/60 (zxnext.vhd:5161-5165)
 		0x08: 0x10,
 		0x0E: defaultCoreSubMinor, // NR$0E = core version sub-minor
@@ -294,7 +294,7 @@ func TestResetRestoresDefaults(t *testing.T) {
 		// soft reset to the bootrom, which reads A=$01 here at $0171.
 		// WireReset's OnWrite must NOT use edge-detection on this bit
 		// — see wire.go for details.
-		0x05: 0x01,
+		0x05: 0x41, // bit 0 scandoubler + joy0 reset "001" Kempston (zxnext.vhd:1105)
 		0x06: 0xA0, // hotkey enables: bit7 cpu-speed + bit5 50/60 (zxnext.vhd:5161-5165)
 		0x08: 0x10,
 		0x0E: defaultCoreSubMinor, // NR$0E = core version sub-minor
