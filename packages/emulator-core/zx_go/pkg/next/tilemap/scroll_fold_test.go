@@ -211,3 +211,42 @@ func TestScrollFoldMapContentSnapshot(t *testing.T) {
 		t.Errorf("stamp-free frame: pixel = %02X, want 02 (live map everywhere)", got)
 	}
 }
+
+// TestScrollFoldCarryBaselineUnderCopperWrites pins the #205 carry: when
+// the COPPER also writes the scroll register at render time (inside the
+// capture bracket), the next frame's CPU stamp records the copper's
+// value as its oldVal — which is NOT the raster frame-top state. The
+// fold must base rows above the stamp on the previous fresh fold's
+// post-stamp final value (the previous frame's CPU write, which is what
+// survives across the VBL on the FPGA), not the contaminated oldVal.
+// TX-1696's score strip renders above its ~line 257 CPU scroll write;
+// with the oldVal baseline it rendered at the last band's scroll — a
+// blank/mangled map region.
+func TestScrollFoldCarryBaselineUnderCopperWrites(t *testing.T) {
+	tm, _ := scrollFoldTilemap()
+	line := 0
+	tm.SetRasterLineSource(func() int { return line })
+
+	// Frame 1: CPU writes X=8 at raster line 250 (bottom border).
+	line = 250
+	tm.SetScrollX(8)
+	tm.FoldScrollStamps(false)
+	// Render-time copper band write inside the capture bracket: X=4.
+	tm.SetScrollX(4)
+	tm.EndScrollCapture()
+
+	// Frame 2: CPU writes X=8 again at line 250; its stamped oldVal is
+	// the copper's 4.
+	line = 250
+	tm.SetScrollX(8)
+	tm.FoldScrollStamps(false)
+	defer tm.EndScrollCapture()
+
+	// Rows above the stamp render at the carry (8 → tile 2 at x=0),
+	// not the copper's contaminated oldVal (4 → tile 1).
+	var dst [Width40]byte
+	tm.RenderScanline(50, dst[:])
+	if dst[0] != 0x02 {
+		t.Errorf("row above stamp = %02X, want 02 (carry baseline 8, not copper oldVal 4)", dst[0])
+	}
+}

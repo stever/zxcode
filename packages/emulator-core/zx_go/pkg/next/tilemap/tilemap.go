@@ -82,6 +82,18 @@ type Tilemap struct {
 	// none of this (no snapshot, no cost); a game that rewrites the map
 	// WITHOUT a scroll write keeps today's end-of-frame content (no
 	// coherence signal to split on — documented residue).
+	// carryX/Y: the previous fresh fold's post-stamp final scroll — the
+	// raster frame-top baseline for the next fold (see FoldScrollStamps).
+	carryX     int
+	carryY     int
+	carryValid bool
+	// baseX/Y: the baseline the current fold actually used — a stale
+	// replay (same frame re-rendered) must reuse it, not the carry.
+	baseX     int
+	baseY     int
+	baseValid bool
+	// foldDisabled: diagnostic bypass (SetFoldDisabled, #205).
+	foldDisabled bool
 	mapSnap       []byte
 	mapSnapBank   int
 	mapSnapValid  bool
@@ -263,6 +275,11 @@ func (t *Tilemap) snapshotMapBank() {
 	t.mapSnapValid = true
 }
 
+// SetFoldDisabled is a diagnostic switch (#205): when set, folds
+// behave as if no CPU stamps existed — live registers everywhere, no
+// map snapshot — isolating the fold machinery in A/B renders.
+func (t *Tilemap) SetFoldDisabled(b bool) { t.foldDisabled = b; t.gen++ }
+
 // FoldScrollStamps builds the per-raster-line scroll table from the
 // frame's stamped writes, activating per-row scroll for the render
 // passes. With no stamps (the common case) the fold deactivates and
@@ -286,10 +303,16 @@ func (t *Tilemap) FoldScrollStamps(stale bool) {
 		t.scrollConsumed = false
 		t.scrollOverflow = false
 	}
-	if t.scrollOverflow || len(t.scrollStamps) == 0 {
+	if t.foldDisabled || t.scrollOverflow || len(t.scrollStamps) == 0 {
 		t.scrollStamps = t.scrollStamps[:0]
 		t.scrollOverflow = false
 		t.mapSnapActive = false
+		// No CPU stamps this frame: the live registers are the frame
+		// value and the carry would go stale — drop it so the next
+		// stamped frame falls back to the oldVal derivation.
+		if !stale {
+			t.carryValid = false
+		}
 		// No CPU stamps: prefill the table with the live scroll so
 		// per-row copper captures overlay a correct baseline (rows
 		// before the copper's first write keep the frame value).
@@ -312,8 +335,18 @@ func (t *Tilemap) FoldScrollStamps(stale bool) {
 			t.mapSnapActive = t.mapSnapRow > 0
 		}
 	}
-	// Frame-start values: each stamp records the value it replaced, so
-	// the first stamp per axis carries the frame-start state.
+	// Frame-start values. For a CPU-only writer the first stamp per axis
+	// carries the frame-start state in its replaced value. But when the
+	// COPPER also writes the register at render time (TX-1696's per-band
+	// engine), the CPU stamp's oldVal is the copper's LAST band value —
+	// not the raster frame-top state, which on the FPGA is the previous
+	// frame's final CPU write surviving across the VBL. So the fold
+	// carries its own post-stamp final value into the next frame's
+	// baseline (identical to the oldVal derivation when nothing else
+	// writes the register, since prev-frame-final == this-frame-old):
+	// without the carry, TX-1696's score-strip rows (above its ~line 257
+	// CPU scroll write) rendered at the last band's scroll — a blank
+	// map region — instead of the strip (#205).
 	x, y := t.scrollX, t.scrollY
 	seenX, seenY := false, false
 	for _, s := range t.scrollStamps {
@@ -324,6 +357,14 @@ func (t *Tilemap) FoldScrollStamps(stale bool) {
 			x, seenX = s.oldVal, true
 		}
 	}
+	if stale && t.baseValid {
+		// A stale replay re-renders the SAME frame: reuse the baseline
+		// the fresh fold used (the carry has already advanced past it).
+		x, y = t.baseX, t.baseY
+	} else if t.carryValid {
+		x, y = t.carryX, t.carryY
+	}
+	t.baseX, t.baseY, t.baseValid = x, y, true
 	idx := 0
 	for line := 0; line < frameRasterLines; line++ {
 		for idx < len(t.scrollStamps) && t.scrollStamps[idx].line <= line {
@@ -335,6 +376,14 @@ func (t *Tilemap) FoldScrollStamps(stale bool) {
 			idx++
 		}
 		t.scrollXLine[line], t.scrollYLine[line] = x, y
+	}
+	// Bank the post-stamp final value as the NEXT frame's raster
+	// frame-top baseline (see the frame-start comment above). Only a
+	// fresh (non-stale) fold advances it — a stale replay re-renders
+	// the same frame.
+	if !stale {
+		t.carryX, t.carryY = x, y
+		t.carryValid = true
 	}
 	t.scrollConsumed = true
 	t.foldActive = true

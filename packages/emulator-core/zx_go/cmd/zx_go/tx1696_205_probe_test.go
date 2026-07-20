@@ -324,7 +324,7 @@ func TestTX205Probe(t *testing.T) {
 						return
 					}
 					switch reg {
-					case 0x1B, 0x1C, 0x61, 0x62:
+					case 0x1B, 0x1C, 0x32, 0x33, 0x4C, 0x61, 0x62:
 						t.Logf("frame %6d [%s]: NR $%02X <- $%02X (pc=$%04X)",
 							frameNow, passTag, reg, val, emu.cpu.PC)
 					case 0x60:
@@ -345,6 +345,18 @@ func TestTX205Probe(t *testing.T) {
 				st, pr, sa := emu.nextCopper.DebugArms()
 				t.Logf("frame %6d: PRE-RENDER copper pair pause=%d resume=%d stops=%d pairs=%d starts=%d",
 					frame, p, r, st, pr, sa)
+			}
+			if frame == 10000 && emu.nextRegs != nil {
+				cur := emu.nextRegs.Raw(0x15)
+				emu.nextRegs.WriteReg(0x15, cur&0x7F)
+				shotImg(frame, "nolores", emu.renderFrame())
+				emu.nextRegs.WriteReg(0x15, cur)
+				emu.nextTilemap.SetEnabled(false)
+				shotImg(frame, "notm", emu.renderFrame())
+				emu.nextTilemap.SetEnabled(true)
+				emu.nextTilemap.SetFoldDisabled(true)
+				shotImg(frame, "nofold", emu.renderFrame())
+				emu.nextTilemap.SetFoldDisabled(false)
 			}
 			liveImg := emu.renderFrame()
 			if frame >= launchFrame && frame%shotEvery == 0 {
