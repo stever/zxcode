@@ -11,7 +11,7 @@
 // - NextZXOS ROMs + SD image (licensed, never committed): ./next-assets/,
 //   or apps/play/public/next in the repo, or $NEXT_ASSETS_DIR.
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, openSync, readSync, closeSync, statSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { tapToNext } from './tap-to-next.mjs';
@@ -115,7 +115,37 @@ export class ZxGoEmulator {
         ]);
         g.zxRegisterROM('enNextZX.rom', new Uint8Array(readFileSync(join(assets, 'enNextZX.rom'))));
         g.zxRegisterROM('enNxtmmc.rom', new Uint8Array(readFileSync(join(assets, 'enNxtmmc.rom'))));
-        g.zxBootNext(new Uint8Array(readFileSync(join(assets, 'tbblue.mmc'))));
+        const sdPath = join(assets, 'tbblue.mmc');
+        if (g.zxSdIngestBegin) {
+            // Stream the image into the core's SPARSE card in disk-sized
+            // chunks — the browser's ingest path minus the zip. The staged
+            // card is distro-capacity (1 GB since the trim-distro-card.sh
+            // rebuild) with only a few MB of real content; a flat
+            // readFileSync + zxBootNext(bytes) holds the WHOLE image in the
+            // Node heap and again in the wasm heap, which breaks the
+            // container's 2 GB cap. Sparse ingest keeps residency at the
+            // card's real content.
+            const size = statSync(sdPath).size;
+            const beginErr = g.zxSdIngestBegin(size);
+            if (beginErr) throw new Error(`zxSdIngestBegin: ${beginErr}`);
+            const fd = openSync(sdPath, 'r');
+            try {
+                const buf = new Uint8Array(4 * 1024 * 1024);
+                for (;;) {
+                    const n = readSync(fd, buf, 0, buf.length, null);
+                    if (n <= 0) break;
+                    const chunkErr = g.zxSdIngestChunk(n === buf.length ? buf : buf.subarray(0, n));
+                    if (chunkErr) throw new Error(`zxSdIngestChunk: ${chunkErr}`);
+                }
+            } finally {
+                closeSync(fd);
+            }
+            const bootErr = g.zxBootNext();
+            if (bootErr) throw new Error(`zxBootNext: ${bootErr}`);
+        } else {
+            // Old core without the sparse exports: flat mount.
+            g.zxBootNext(new Uint8Array(readFileSync(sdPath)));
+        }
         await new Promise<void>((resolve, reject) => {
             const t0 = Date.now();
             const t = setInterval(() => {
