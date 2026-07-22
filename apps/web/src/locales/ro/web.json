@@ -41,7 +41,7 @@
     "tabBasic": "BASIC",
     "tabZ80Assembly": "Asamblare Z80",
     "projectLabel": "Proiect: {{title}}",
-    "demoNotice": "Aceste două limbaje sunt o demonstrație. <signInLink>Autentificați-vă</signInLink> pentru mai multe limbaje, proiecte multi-fișier și un depanator. Înregistrarea este gratuită."
+    "demoNotice": "Aceste două limbaje sunt un demo. <signInLink>Autentificați-vă</signInLink> pentru mai multe limbaje, proiecte multi-fișier și un depanator. Gratuit: fără parolă, doar adresa de email."
   },
   "profiles": {
     "title": "Profiluri publice",

@@ -53,7 +53,7 @@
     "tabBasic": "BASIC",
     "tabZ80Assembly": "Z80 Assembly",
     "projectLabel": "Project: {{title}}",
-    "demoNotice": "These two languages are a demo. <signInLink>Log in</signInLink> for more languages, multi-file projects and a debugger. Registration is free."
+    "demoNotice": "These two languages are a demo. <signInLink>Log in</signInLink> for more languages, multi-file projects and a debugger. Free: no password or sign-up form, just your email address."
   },
   "profiles": {
     "title": "Public Profiles",

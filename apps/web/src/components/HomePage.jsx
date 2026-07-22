@@ -39,10 +39,11 @@ export default function HomePage() {
     // who are about to be recognised as logged in.
     const showDemoNotice = userId === null;
     // Tab mode shows the demo notice above the tabs, so its height (banner plus
-    // margins; the text wraps to a third line on narrow screens) comes out of
-    // the emulator's box. An estimate is enough — see TAB_CHROME in layout.js.
+    // margins; three lines at tab widths, up to five in the wordiest locales on
+    // narrow screens) comes out of the emulator's box. An estimate is enough —
+    // see TAB_CHROME in layout.js.
     const noticeChrome = showDemoNotice && mode === 'tab'
-        ? (windowWidth >= 520 ? 68 : 88)
+        ? (windowWidth >= 520 ? 84 : 116)
         : 0;
     // Tab mode sizes the emulator to its box (fixing portrait clipping and
     // landscape overflow); split keeps the original 640px (2x) size.
@@ -128,11 +129,12 @@ export default function HomePage() {
                         </div>
                         <div className="col-fixed p-0 pt-1" style={{width: `${emuW}px`}}>
                             {/* Header slot above the emulator; the project page
-                                shows the project title here. The slot height
-                                keeps the emulator aligned with the editor pane,
-                                so the banner is compact enough to leave its
-                                breathing room at the bottom of the slot. */}
-                            <div className="height-53">
+                                shows the project title here. The min-height
+                                keeps the emulator aligned with the editor pane
+                                when the banner fits in two lines; translations
+                                that wrap to three grow the slot rather than
+                                overlap the emulator. */}
+                            <div className="min-height-53">
                                 {demoNotice && (
                                     <div className="demo-notice">
                                         {demoNotice}

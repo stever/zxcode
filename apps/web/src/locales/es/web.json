@@ -41,7 +41,7 @@
     "tabBasic": "BASIC",
     "tabZ80Assembly": "Ensamblador Z80",
     "projectLabel": "Proyecto: {{title}}",
-    "demoNotice": "Estos dos lenguajes son una demostración. <signInLink>Inicia sesión</signInLink> para más lenguajes, proyectos multiarchivo y un depurador. El registro es gratuito."
+    "demoNotice": "Estos dos lenguajes son una demostración. <signInLink>Inicia sesión</signInLink> para más lenguajes, proyectos multiarchivo y un depurador. Gratis: sin contraseña, solo tu email."
   },
   "profiles": {
     "title": "Perfiles públicos",

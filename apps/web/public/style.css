@@ -210,6 +210,10 @@ code {
     height: 53px !important;
 }
 
+.min-height-53 {
+    min-height: 53px !important;
+}
+
 .max-width-1024 {
     max-width: 1024px !important;
     margin: auto !important;

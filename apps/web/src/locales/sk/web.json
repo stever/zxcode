@@ -41,7 +41,7 @@
     "tabBasic": "BASIC",
     "tabZ80Assembly": "Assembler Z80",
     "projectLabel": "Projekt: {{title}}",
-    "demoNotice": "Tieto dva jazyky sú ukážka. <signInLink>Prihláste sa</signInLink> a získate ďalšie jazyky, viacsúborové projekty a debugger. Registrácia je zdarma."
+    "demoNotice": "Tieto dva jazyky sú ukážka. <signInLink>Prihláste sa</signInLink> a získate ďalšie jazyky, viacsúborové projekty a debugger. Zadarmo: bez hesla, stačí vaša e-mailová adresa."
   },
   "profiles": {
     "title": "Verejné profily",
