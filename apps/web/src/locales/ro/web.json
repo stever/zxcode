@@ -89,13 +89,14 @@
   "about": {
     "createProjects": "Creează proiecte",
     "registeredUsers": "Utilizatorii înregistrați pot salva proiecte.",
-    "createAccount": "Folosește butonul Autentificare de mai sus și caută linkul \"Sign Up\" pe pagina următoare pentru a crea un cont.",
+    "createAccount": "Nu există o înregistrare separată. Apăsați butonul „Autentificare” de mai sus și introduceți adresa dvs. de email. Veți primi prin email un link de autentificare de unică folosință, deci nu este nevoie de parolă. Prima autentificare vă creează contul.",
     "acknowledgementsIntro": "Acest software folosește cod din următoarele proiecte open source sau se bazează pe munca lor:",
     "sinclairRomHeading": "Permisiune privind drepturile de autor pentru ROM-ul Sinclair",
     "sinclairRomText": "Amstrad a acordat cu amabilitate permisiunea de a redistribui materialul lor protejat prin drepturi de autor, dar își păstrează aceste drepturi.",
     "intro1": "Un emulator ZX Spectrum și mediu de programare pentru browser. Codul sursă este disponibil <srcLink>aici</srcLink>.",
     "intro2": "Un site înrudit este disponibil la <zxplayLink>zxplay.org</zxplayLink>. ZX Play este un emulator ZX Spectrum optimizat pentru mobil, pentru jocuri.",
-    "legal": "Te rugăm să citești <privacyLink>politica de confidențialitate</privacyLink> și <termsLink>termenii de utilizare</termsLink> pentru acest site."
+    "legal": "Te rugăm să citești <privacyLink>politica de confidențialitate</privacyLink> și <termsLink>termenii de utilizare</termsLink> pentru acest site.",
+    "twoFactor": "Pentru securitate suplimentară puteți adăuga autentificare cu doi factori cu parole de unică folosință. După autentificare, alegeți „Autentificare cu doi factori” din meniul „Vizualizare” pentru a o configura cu o aplicație de autentificare."
   },
   "bot": {
     "intro": "Menționați <botLink>@bot@zxplay.org</botLink> de pe Mastodon sau de oriunde din Fedivers cu un program ZX Spectrum, iar botul răspunde cu un videoclip al programului în execuție.",

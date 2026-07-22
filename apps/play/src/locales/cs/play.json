@@ -16,7 +16,10 @@
     "intro2": "Související web je dostupný na <coderLink>code.zxplay.org</coderLink>. ZX Coder podporuje spouštění programů zadaných přes webové stránky.",
     "acknowledgementsIntro": "Tento software využívá kód z následujících open source projektů:",
     "sinclairRomHeading": "Povolení k autorským právům ROM Sinclair",
-    "sinclairRomText": "Společnost Amstrad laskavě udělila svolení k šíření svého materiálu chráněného autorskými právy, tato práva si však ponechává."
+    "sinclairRomText": "Společnost Amstrad laskavě udělila svolení k šíření svého materiálu chráněného autorskými právy, tato práva si však ponechává.",
+    "accountsHeading": "Účty",
+    "accountsIntro": "K používání tohoto webu není potřeba účet.",
+    "accountsCoder": "Na <coderLink>code.zxplay.org</coderLink> mohou registrovaní uživatelé ukládat programátorské projekty. Přihlášení je tam bez hesla a žádná samostatná registrace neexistuje: přihlaste se svou e-mailovou adresou a klikněte na jednorázový odkaz zaslaný e-mailem. Prvním přihlášením se vytvoří váš účet a poté lze volitelně přidat dvoufázové ověření s jednorázovými hesly."
   },
   "linking": {
     "intro": "Na ZX Play můžete odkazovat přímo pomocí parametrů URL pro načtení programu nebo obrazu herní kazety z jiné URL.",

@@ -16,7 +16,10 @@
     "intro2": "Um website relacionado está disponível em <coderLink>code.zxplay.org</coderLink>. O ZX Coder permite executar programas introduzidos através de páginas web.",
     "acknowledgementsIntro": "Este software usa código dos seguintes projetos de código aberto:",
     "sinclairRomHeading": "Permissão de direitos de autor da ROM Sinclair",
-    "sinclairRomText": "A Amstrad teve a amabilidade de dar a sua permissão para a redistribuição do seu material protegido por direitos de autor, mas mantém esses direitos."
+    "sinclairRomText": "A Amstrad teve a amabilidade de dar a sua permissão para a redistribuição do seu material protegido por direitos de autor, mas mantém esses direitos.",
+    "accountsHeading": "Contas",
+    "accountsIntro": "Não é necessária uma conta para usar este site.",
+    "accountsCoder": "Em <coderLink>code.zxplay.org</coderLink>, os utilizadores registados podem guardar projetos de programação. O início de sessão aí é sem palavra-passe e não existe um registo separado: inicie sessão com o seu endereço de email e siga a ligação de utilização única que receberá. Ao iniciar sessão pela primeira vez, a sua conta é criada e, depois, pode ser adicionada opcionalmente autenticação de dois fatores com palavras-passe de utilização única."
   },
   "linking": {
     "intro": "Pode ligar diretamente ao ZX Play usando parâmetros de URL para carregar um programa ou imagem de cassete de jogo a partir de outro URL.",

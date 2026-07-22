@@ -89,13 +89,14 @@
   "about": {
     "createProjects": "Twórz projekty",
     "registeredUsers": "Zarejestrowani użytkownicy mogą zapisywać projekty.",
-    "createAccount": "Użyj przycisku logowania powyżej i poszukaj odnośnika „Sign Up” na kolejnej stronie, aby założyć konto.",
+    "createAccount": "Nie ma osobnej rejestracji. Kliknij przycisk „Zaloguj się” powyżej i podaj swój adres e-mail. Otrzymasz e-mailem jednorazowy odnośnik logowania, więc hasło nie jest potrzebne. Pierwsze logowanie tworzy Twoje konto.",
     "acknowledgementsIntro": "To oprogramowanie korzysta z kodu następujących projektów open source lub opiera się na ich pracy:",
     "sinclairRomHeading": "Zgoda na prawa autorskie do ROM-u Sinclair",
     "sinclairRomText": "Amstrad uprzejmie wyraził zgodę na redystrybucję swoich materiałów objętych prawem autorskim, zachowując jednak to prawo autorskie.",
     "intro1": "Emulator ZX Spectrum i środowisko programistyczne dla przeglądarki. Kod źródłowy dostępny <srcLink>tutaj</srcLink>.",
     "intro2": "Powiązana strona jest dostępna pod adresem <zxplayLink>zxplay.org</zxplayLink>. ZX Play to przyjazny dla urządzeń mobilnych emulator ZX Spectrum, przeznaczony do gier.",
-    "legal": "Zapoznaj się z <privacyLink>polityką prywatności</privacyLink> oraz <termsLink>warunkami użytkowania</termsLink> tej strony."
+    "legal": "Zapoznaj się z <privacyLink>polityką prywatności</privacyLink> oraz <termsLink>warunkami użytkowania</termsLink> tej strony.",
+    "twoFactor": "Dla dodatkowego bezpieczeństwa możesz włączyć uwierzytelnianie dwuskładnikowe z hasłami jednorazowymi. Po zalogowaniu wybierz „Uwierzytelnianie dwuskładnikowe” z menu „Widok”, aby skonfigurować je w aplikacji uwierzytelniającej."
   },
   "bot": {
     "intro": "Wspomnij <botLink>@bot@zxplay.org</botLink> z Mastodona lub dowolnego miejsca w Fediwersum z programem na ZX Spectrum, a bot odpowie filmem z działającym programem.",

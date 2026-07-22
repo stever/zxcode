@@ -39,6 +39,9 @@ export default function AboutPage() {
                 <p>
                     {t("about.createAccount")}
                 </p>
+                <p>
+                    {t("about.twoFactor")}
+                </p>
                 <h2>{t("acknowledgements")}</h2>
                 <p>
                     {t("about.acknowledgementsIntro")}

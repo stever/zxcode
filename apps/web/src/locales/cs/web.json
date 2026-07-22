@@ -89,13 +89,14 @@
   "about": {
     "createProjects": "Vytváření projektů",
     "registeredUsers": "Registrovaní uživatelé mohou ukládat projekty.",
-    "createAccount": "Použijte tlačítko Přihlásit se výše a na následující stránce vyhledejte odkaz „Sign Up“ pro vytvoření účtu.",
+    "createAccount": "Žádná samostatná registrace neexistuje. Klikněte na tlačítko „Přihlásit se“ výše a zadejte svou e-mailovou adresu. E-mailem obdržíte jednorázový přihlašovací odkaz, takže heslo není potřeba. Prvním přihlášením se vytvoří váš účet.",
     "acknowledgementsIntro": "Tento software využívá kód z následujících open source projektů, nebo z jejich práce vychází:",
     "sinclairRomHeading": "Povolení k autorským právům ROM Sinclair",
     "sinclairRomText": "Společnost Amstrad laskavě udělila svolení k šíření svého materiálu chráněného autorskými právy, tato práva si však ponechává.",
     "intro1": "Emulátor ZX Spectrum a programovací prostředí pro prohlížeč. Zdrojový kód je dostupný <srcLink>zde</srcLink>.",
     "intro2": "Související web je dostupný na <zxplayLink>zxplay.org</zxplayLink>. ZX Play je emulátor ZX Spectrum vhodný pro mobily, určený pro hry.",
-    "legal": "Přečtěte si prosím <privacyLink>zásady ochrany soukromí</privacyLink> a <termsLink>podmínky použití</termsLink> tohoto webu."
+    "legal": "Přečtěte si prosím <privacyLink>zásady ochrany soukromí</privacyLink> a <termsLink>podmínky použití</termsLink> tohoto webu.",
+    "twoFactor": "Pro vyšší zabezpečení můžete přidat dvoufázové ověření s jednorázovými hesly. Po přihlášení zvolte „Dvoufázové ověření“ v nabídce „Zobrazit“ a nastavte je pomocí ověřovací aplikace."
   },
   "bot": {
     "intro": "Zmiňte <botLink>@bot@zxplay.org</botLink> z Mastodonu nebo odkudkoli z Fediversu s programem pro ZX Spectrum a bot odpoví videem běžícího programu.",

@@ -22,6 +22,16 @@ export default function AboutPage() {
                         components={{coderLink: <a href="https://code.zxplay.org/" target="_blank" rel="noreferrer"/>}}
                     />
                 </p>
+                <h2>{t("about.accountsHeading")}</h2>
+                <p>
+                    {t("about.accountsIntro")}
+                </p>
+                <p>
+                    <Trans
+                        i18nKey="about.accountsCoder"
+                        components={{coderLink: <a href="https://code.zxplay.org/" target="_blank" rel="noreferrer"/>}}
+                    />
+                </p>
                 <h2>{t("acknowledgements")}</h2>
                 <p>
                     {t("about.acknowledgementsIntro")}
