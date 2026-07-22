@@ -39,7 +39,7 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r98-joy-membrane';
+const ENGINE_REV = 'r99-url-no-cache';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
@@ -1385,7 +1385,15 @@ export class GoEmulator extends EventEmitter {
         if (opener) {
             this.showLoading('Downloading…');
             try {
-                const response = await fetch(url);
+                // no-cache: always revalidate with the host so an updated
+                // game at the same URL is picked up (unchanged files still
+                // answer 304 from the HTTP cache when the host sends
+                // validators).
+                const response = await fetch(url, { cache: 'no-cache' });
+                if (!response.ok) {
+                    throw `Download failed (HTTP ${response.status}): ` +
+                        url.toString();
+                }
                 const buf = await response.arrayBuffer();
                 return await opener(buf);
             } finally {
