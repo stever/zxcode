@@ -46,22 +46,24 @@ const (
 	// between the 50Hz producer and the ~43Hz consumer.
 	queueCapacity = SamplesPerFrame * 12
 
-	// queuePrefill is how many silence samples we seed the queue
-	// with at startup so the consumer's first pull doesn't drain
-	// the queue to zero. Without this cushion, the producer is
-	// always exactly one push behind the consumer (they have equal
-	// average rates but different periods), and every pull cycle
-	// returns a partial buffer plus DC silence — audible as
-	// stutter at the consumer's pull rate. Four frames give the
-	// queue enough headroom that the discrete-event oscillation
-	// never reaches the bottom.
-	queuePrefill = SamplesPerFrame * 4
+	// underrunCushion is the watermark the ring must refill to after a
+	// TRUE underrun before real samples flow again (popBeeperSamples'
+	// hysteresis). Without it the ring's steady-state depth is wherever
+	// the startup transient leaves it — in practice ~0, where every
+	// scheduling wobble between the 20 ms producer tick and the device
+	// pull dips empty and interleaves a filler sliver ~40×/s: audible
+	// stutter that no downstream (device-side) buffer can fix, because
+	// the gaps are already IN the stream by then. With the hysteresis
+	// the steady state sits AT the cushion instead, and a genuine
+	// starvation costs one ~60 ms rebuild rather than continuous
+	// crackle. The cushion is also the ring's contribution to end-to-end
+	// latency — three frames balances stutter immunity against lag.
+	underrunCushion = SamplesPerFrame * 3
 )
 
-// prefillSilence indexes queue (a [queueCapacity]int16 array) directly over
-// [0, queuePrefill); this compile-time check keeps that in bounds if either
-// constant's multiplier above is ever changed on its own.
-var _ [queueCapacity - queuePrefill]struct{}
+// The cushion must fit in the ring with room to spare; this compile-time
+// check trips if either constant's multiplier is changed on its own.
+var _ [queueCapacity - underrunCushion]struct{}
 
 // AudioSystem handles audio output for the ZX Spectrum beeper and (on 128K+
 // machines) the AY-3-8912 sound chip.
@@ -88,6 +90,12 @@ type AudioSystem struct {
 	queueTail  int   // next read position
 	queueSize  int   // number of samples currently in the buffer
 	lastSample int16 // value to hold during underflow (DC, no clicks)
+	// cushioning is the underrun-hysteresis state (guarded by queueMu):
+	// armed when the ring runs dry, released once queueSize reaches
+	// underrunCushion. While armed, popBeeperSamples delivers only the
+	// decaying held level. Only the oto path consults it — the browser's
+	// PullMono/AudioWorklet owns its own cushion policy.
+	cushioning bool
 
 	// Optional AY-3-8912 source.
 	ayMu sync.RWMutex
@@ -176,7 +184,7 @@ func New() (*AudioSystem, error) {
 		mixBuffer: make([]int16, BufferSize),
 		ditherRNG: 0x9E3779B9, // any non-zero seed
 	}
-	as.prefillSilence()
+	as.resetQueueCushioned()
 	// On js the page owns playback: an AudioWorklet drains the ring via
 	// PullMono after each emulated frame (see cmd/zx_go's zxPullAudio).
 	// oto's browser backend — a deprecated main-thread ScriptProcessor
@@ -196,36 +204,30 @@ func New() (*AudioSystem, error) {
 	// Bound the player's pre-read. oto's default player buffer is 0.5 s,
 	// and audioReader.Read never blocks (underrun returns held-DC filler),
 	// so an unbounded buffer sits PERMANENTLY full — heard as half a
-	// second of constant audio lag behind the picture. Three read-chunks
-	// (~70 ms) keeps the pipeline feeling immediate while still absorbing
-	// mux-goroutine scheduling jitter; genuine producer starvation is
-	// handled by the reader's DC filler, not by depth here.
-	as.player.SetBufferSize(BufferSize * ChannelCount * 2 * 3)
+	// second of constant audio lag behind the picture. Two read-chunks
+	// (~46 ms) covers mux-goroutine wakeup jitter; stutter immunity lives
+	// in the ring's underrunCushion hysteresis, and genuine starvation is
+	// handled by the reader's DC filler — depth here buys only lag.
+	as.player.SetBufferSize(BufferSize * ChannelCount * 2 * 2)
 	return as, nil
 }
 
-// prefillSilence seeds the ring buffer with queuePrefill silent
-// samples so the consumer's first few pulls are satisfied without
-// draining the queue. See the queuePrefill doc comment for the rate-
-// matching reasoning.
-func (as *AudioSystem) prefillSilence() {
+// resetQueueCushioned empties the ring and arms the underrun hysteresis,
+// so the next oto pulls deliver silence until a fresh underrunCushion of
+// real samples has accumulated. Startup and machine reset both come
+// through here: seeding actual silence samples (the old approach) added
+// their whole duration to steady-state latency, whereas the armed
+// cushion costs nothing once playback is flowing. The js pull path
+// ignores cushioning (PullMono drains whatever is queued; the
+// AudioWorklet keeps its own startup cushion).
+func (as *AudioSystem) resetQueueCushioned() {
 	as.queueMu.Lock()
 	defer as.queueMu.Unlock()
-	prefill := queuePrefill
-	if runtime.GOOS == "js" {
-		// The js pull path (PullMono → AudioWorklet) drains whatever is
-		// queued, so seeded silence would just play first and delay every
-		// real sample behind it by the prefill. The worklet keeps its own
-		// startup cushion instead.
-		prefill = 0
-	}
-	as.queueHead = prefill % queueCapacity
+	as.queueHead = 0
 	as.queueTail = 0
-	as.queueSize = prefill
-	for i := 0; i < prefill; i++ {
-		as.queue[i] = 0
-	}
+	as.queueSize = 0
 	as.lastSample = 0
+	as.cushioning = true
 }
 
 // PushBeeperSamples enqueues a batch of mono beeper samples generated
@@ -275,19 +277,35 @@ const (
 // popBeeperSamples drains up to len(out) samples from the ring buffer into
 // out. Any unfilled slots continue from the last delivered sample and then
 // decay toward 0, so underruns fade to silence smoothly instead of clicking.
-// Returns the slice unchanged.
+//
+// Underrun hysteresis: running dry arms `cushioning`, and while armed only
+// the decaying held level is delivered — real samples resume once the
+// producer has rebuilt underrunCushion of them. This pins the ring's
+// steady-state depth at the cushion instead of ~0, where every
+// producer/consumer phase wobble would otherwise interleave filler
+// slivers as continuous stutter (see the underrunCushion doc comment).
 func (as *AudioSystem) popBeeperSamples(out []int16) {
 	as.queueMu.Lock()
 	defer as.queueMu.Unlock()
-	n := 0
-	for n < len(out) && as.queueSize > 0 {
-		out[n] = as.queue[as.queueTail]
-		as.queueTail = (as.queueTail + 1) % queueCapacity
-		as.queueSize--
-		n++
+	if as.cushioning && as.queueSize >= underrunCushion {
+		as.cushioning = false
 	}
-	if n > 0 {
-		as.lastSample = out[n-1]
+	n := 0
+	if !as.cushioning {
+		for n < len(out) && as.queueSize > 0 {
+			out[n] = as.queue[as.queueTail]
+			as.queueTail = (as.queueTail + 1) % queueCapacity
+			as.queueSize--
+			n++
+		}
+		if n > 0 {
+			as.lastSample = out[n-1]
+		}
+		if n < len(out) {
+			// Ran dry mid-read: a true underrun. Rebuild the cushion
+			// before delivering real samples again.
+			as.cushioning = true
+		}
 	}
 	for ; n < len(out); n++ {
 		out[n] = as.lastSample
@@ -451,7 +469,7 @@ func (as *AudioSystem) Close() error {
 // doesn't start with stale audio in the buffer AND immediately
 // benefits from the same cushion that startup gets.
 func (as *AudioSystem) Reset() {
-	as.prefillSilence()
+	as.resetQueueCushioned()
 }
 
 // StartRecording opens path for writing and begins capturing the mixed

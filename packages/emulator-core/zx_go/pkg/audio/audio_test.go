@@ -522,26 +522,48 @@ func TestWriteRecordingNoOpWhenStopped(t *testing.T) {
 	}
 }
 
-// TestPrefillSilenceProvidesCushion verifies that a fresh AudioSystem
-// already has queuePrefill silent samples queued up, so the first few
-// consumer pulls don't drain the queue and trigger DC underflow (without the
-// cushion, the producer's 50Hz/882-sample pushes lag the consumer's ~43Hz
-// pulls, so every pull is a partial buffer padded with underrun silence).
-func TestPrefillSilenceProvidesCushion(t *testing.T) {
+// TestUnderrunCushionHysteresis verifies the ring's watermark behaviour:
+// after a true underrun, real samples are withheld (silence delivered)
+// until the producer has rebuilt underrunCushion samples — then flow
+// resumes with the buffered data intact. This pins the steady-state ring
+// depth at the cushion instead of ~0, where producer/consumer phase
+// wobble would otherwise interleave filler slivers as continuous stutter.
+func TestUnderrunCushionHysteresis(t *testing.T) {
 	as := fakeSystem()
-	as.prefillSilence()
+	as.resetQueueCushioned()
 
-	if as.queueSize != queuePrefill {
-		t.Fatalf("after prefillSilence: queueSize = %d, want %d", as.queueSize, queuePrefill)
+	// Armed: a push below the watermark must still yield silence…
+	as.PushBeeperSamples(make([]int16, underrunCushion/2))
+	out := make([]int16, 4)
+	for i := range out {
+		out[i] = 0x7FFF // poison
 	}
-
-	out := make([]int16, queuePrefill)
 	as.popBeeperSamples(out)
 	for i, v := range out {
 		if v != 0 {
-			t.Errorf("prefill sample %d = %d, want 0 (silence)", i, v)
-			break
+			t.Fatalf("below watermark: sample %d = %d, want 0 (cushion still building)", i, v)
 		}
+	}
+
+	// …and crossing the watermark releases the REAL buffered samples.
+	fill := make([]int16, underrunCushion) // together with the half above: over watermark
+	for i := range fill {
+		fill[i] = 123
+	}
+	as.PushBeeperSamples(fill)
+	as.popBeeperSamples(out)
+	if out[0] != 0 {
+		// The first samples out are the zeros pushed while armed.
+		t.Fatalf("after watermark: out[0] = %d, want 0 (the earlier queued silence)", out[0])
+	}
+
+	// A fresh (never-underrun) system delivers pushes immediately.
+	as2 := fakeSystem()
+	as2.PushBeeperSamples([]int16{7, 8})
+	got := make([]int16, 2)
+	as2.popBeeperSamples(got)
+	if got[0] != 7 || got[1] != 8 {
+		t.Errorf("fresh system: got %v, want [7 8]", got)
 	}
 }
 
