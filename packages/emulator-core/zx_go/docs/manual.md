@@ -332,6 +332,11 @@ on `P` on the ZX81. Details and the per-machine keymap:
   `--record-audio out.wav` captures the exact stream we hand the device —
   if the WAV plays clean, the emulator's synthesis is fine and the buffer
   size / host audio stack is the knob to turn.
+- **Sound lags the picture** — total audio latency is designed to be
+  ~0.1 s (the playback pre-read is bounded; the underrun filler keeps the
+  device from ever starving). If you hear a noticeably longer lag, make
+  sure you haven't raised `--audio-buffer-ms` further than the crackle
+  actually requires — it adds directly to the delay.
 - **The Next won't boot / black screen** — you almost certainly need to install
   the Next ROMs and set an SD card first ([§8](#8-spectrum-next)).
 - **Wrong keys / can't find a symbol** — see

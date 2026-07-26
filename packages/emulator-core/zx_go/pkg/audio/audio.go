@@ -193,6 +193,14 @@ func New() (*AudioSystem, error) {
 	}
 	as.context = ctx
 	as.player = ctx.NewPlayer(as.reader)
+	// Bound the player's pre-read. oto's default player buffer is 0.5 s,
+	// and audioReader.Read never blocks (underrun returns held-DC filler),
+	// so an unbounded buffer sits PERMANENTLY full — heard as half a
+	// second of constant audio lag behind the picture. Three read-chunks
+	// (~70 ms) keeps the pipeline feeling immediate while still absorbing
+	// mux-goroutine scheduling jitter; genuine producer starvation is
+	// handled by the reader's DC filler, not by depth here.
+	as.player.SetBufferSize(BufferSize * ChannelCount * 2 * 3)
 	return as, nil
 }
 
