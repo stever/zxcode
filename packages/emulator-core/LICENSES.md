@@ -23,9 +23,10 @@ yourself; source is available).
 
 ## Bundled libraries
 
-- `web/vendor/txt2bas.bundle.mjs` — bundled from **txt2bas** by Remy Sharp, **MIT**.
-- `web/res/zxnext/wasm_exec.js` — the Go WebAssembly runtime shim, **BSD-3-Clause**
-  (The Go Authors).
+- **txt2bas** by Remy Sharp, **MIT** — the NextBASIC tokeniser, an npm
+  dependency of the web app.
+- `dist/wasm_exec.js` — the Go WebAssembly runtime shim, **BSD-3-Clause**
+  (The Go Authors), copied from the Go toolchain by `scripts/build-wasm.sh`.
 
 ## Runtime ROMs & SD image — The Next License (cost-free distribution only)
 
@@ -67,11 +68,12 @@ served alongside at `/next/licenses/`. The routes:
    `GoEmulator.js` to its path and follow the re-verification steps in the
    emulator-core README ("Next boot modes").
 2. **Staged bare system (browser source during the interim; also offline
-   dev, CI, gif-service's renderer).** `scripts/stage-zxnext-assets.sh`
-   fetches the trimmed assets onto a developer's machine, and
-   `scripts/trim-distro-card.sh` builds the staged card from an official
-   distro image (full capacity, system tree only — every per-title item
-   removed); the deploy host stages them for the sites' `/next/` route
+   dev, CI, gif-service's renderer).** `scripts/trim-distro-card.sh`
+   builds the staged card from an official distro image (full capacity,
+   system tree only — every per-title item and the separately-licensed QL
+   core removed), and `scripts/stage-zxnext-assets.sh` wraps it, extracting
+   the boot ROMs from the built card and staging everything into the apps'
+   `/next/`; the deploy host stages them for the sites' `/next/` route
    (served to users during the interim) and for gif-service's
    server-side renderer. The "free parts"
    analysis below is the basis for serving this staged copy — it applies
@@ -124,10 +126,11 @@ Rules for any deployment that serves a staged copy (self-hosting):
 
 - Keep the app free to access. No paywall, no fee — that is the condition the
   Next License hangs on.
-- Ship the bare bootable system only. `scripts/bare-sd-image.sh` (run by
-  the stage script) trims the SD image to the NextZXOS system files. Never add
-  the distribution's bundled games, demos or third-party tools: each is
-  licensed per-title by its own author.
+- Ship the bare bootable system only. `scripts/trim-distro-card.sh` (run by
+  the stage script) rebuilds the SD image with the NextZXOS system files only
+  (per-title extras and the QL core removed). Never add the distribution's
+  bundled games, demos or third-party tools: each is licensed per-title by its
+  own author.
 - Retain attribution: NextZXOS (c) Garry Lancaster / SpecNext Ltd; Spectrum
   ROMs (c) Amstrad plc. (NextZXOS itself displays this on boot.)
 - "ZX Spectrum Next" is a trademark of others. Name any public deployment

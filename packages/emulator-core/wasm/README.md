@@ -9,17 +9,14 @@ changes that add a browser entry point and make it compile for `js/wasm`.
 The zx_go source is vendored at [`../zx_go`](../zx_go) with the wasm-port
 changes already applied in-tree, so building is just:
 
-1. Build for WebAssembly, output straight into the web host:
+    npm run build
 
-       cd zx_go
-       GOOS=js GOARCH=wasm go build -o ../web/res/zxnext/zx.wasm ./cmd/zx_go
-       cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ../web/res/zxnext/wasm_exec.js
+(`../scripts/build-wasm.sh`: `GOOS=js GOARCH=wasm go build -o dist/zx.wasm
+./cmd/zx_go`, plus the Go toolchain's `wasm_exec.js` copied into `dist/`,
+where the apps' builds pick both up.)
 
-   The desktop build (`go build ./cmd/zx_go`) still works — the changes are
-   guarded by `//go:build js` / `!js` tags.
-
-2. Bump `web/res/zxnext/assets.ver` so the browser Cache API fetches the new
-   binary instead of a stale one.
+The desktop build (`go build ./cmd/zx_go`) still works — the changes are
+guarded by `//go:build js` / `!js` tags.
 
 Pull upstream zx_go later with:
 

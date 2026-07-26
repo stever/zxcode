@@ -1,48 +1,54 @@
 #!/usr/bin/env bash
-# Stage the ZX Spectrum Next runtime assets into res/zxnext/.
+# Stage the ZX Spectrum Next runtime assets into apps/*/public/next/, built
+# entirely from an OFFICIAL SpecNext distro card image (specnext.com) — the
+# project's only asset source; nothing is fetched from anywhere else.
 #
-# These three files are NextZXOS system content, copyright Garry Lancaster /
-# SpecNext Ltd (portions (c) Amstrad plc). They are distributed under The Next
+#   stage-zxnext-assets.sh <pristine-distro.img>
+#
+# Steps:
+#   1. trim-distro-card.sh builds tbblue.mmc (+ tbblue.mmc.zip): the
+#      distro's full capacity with only the freely-redistributable system
+#      tree, rebuilt contiguous at the staged geometry (see that script's
+#      header for the rationale).
+#   2. enNextZX.rom + enNxtmmc.rom — the two ROMs GoEmulator.js registers
+#      before boot — are extracted from the built card's machines/next/
+#      (byte-identical to the distro's loose copies).
+#   3. All four files are staged into apps/web/public/next/ and
+#      apps/play/public/next/ (gif-service's dev fallback reads the play
+#      copy; its container is staged by the deploy repo).
+#
+# These files are NextZXOS system content, copyright Garry Lancaster /
+# SpecNext Ltd (portions (c) Amstrad plc), distributed under The Next
 # License — cost-free distribution permitted, no selling — not GPL, so they
-# stay out of git and are staged locally. See ../../LICENSES.md for the
-# deployment rules (free access, bare bootable system, attribution). This
-# script pulls them from a running retrogamecoders IDE deploy as a
-# convenience; the canonical source is the official distribution
-# (https://www.specnext.com/).
+# stay out of git and are staged locally. See ../LICENSES.md for the
+# deployment rules (free access, bare bootable system, attribution).
 #
-# It does NOT fetch zx.wasm — that is built from zx_go (see ../../wasm/), and
-# wasm_exec.js is committed (BSD, from the Go toolchain).
+# It does NOT build zx.wasm — that comes from zx_go via build-wasm.sh.
+# After staging, re-verify per "Next boot modes" in ../README.md.
+# Needs: GNU mtools, python3, a Go toolchain (for trim's prep step).
 set -euo pipefail
 
-BASE="${ZXNEXT_ASSET_BASE:-https://ide.retrogamecoders.com/res/zxnext}"
+SRC="${1:?usage: stage-zxnext-assets.sh <pristine-distro.img>}"
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
-DIR="$(cd "$SCRIPTS/.." && pwd)/res/zxnext"
-mkdir -p "$DIR"
-echo "Staging Next system assets into $DIR"
+REPO="$(cd "$SCRIPTS/../../.." && pwd)"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 
-# Fetch, transparently using the server's gzip variant when present.
-fetch() {
-  local name="$1" out="$DIR/$1"
-  if curl -fsS -o "$out.gz" "$BASE/$name.gz" 2>/dev/null && gzip -t "$out.gz" 2>/dev/null; then
-    gunzip -f "$out.gz"; echo "  $name (from .gz)"
-  else
-    rm -f "$out.gz"
-    curl -fsS -o "$out" "$BASE/$name"; echo "  $name"
-  fi
-}
+"$SCRIPTS/trim-distro-card.sh" "$SRC" "$TMP/tbblue.mmc"
 
-fetch enNextZX.rom   # NextZXOS boot ROM (64K)
-fetch enNxtmmc.rom   # divMMC / esxDOS ROM (8K)
-fetch tbblue.mmc     # FAT32 SD image with NextZXOS (64M)
+# Pull the boot ROMs out of the built card. Its partition sits at LBA 2048 —
+# trim-distro-card.sh authored that MBR, so the offset is fixed.
+OFF=$((2048 * 512))
+mcopy -i "$TMP/tbblue.mmc@@$OFF" -p ::/machines/next/enNextZX.rom "$TMP/enNextZX.rom"
+mcopy -i "$TMP/tbblue.mmc@@$OFF" -p ::/machines/next/enNxtmmc.rom "$TMP/enNxtmmc.rom"
+[ "$(wc -c < "$TMP/enNextZX.rom")" -eq $((64 * 1024)) ] || { echo "enNextZX.rom: unexpected size" >&2; exit 1; }
+[ "$(wc -c < "$TMP/enNxtmmc.rom")" -eq $((8 * 1024)) ] || { echo "enNxtmmc.rom: unexpected size" >&2; exit 1; }
 
-# Trim the image to the bare bootable system (no-op without mtools).
-"$SCRIPTS/bare-sd-image.sh" "$DIR/tbblue.mmc"
+for app in web play; do
+  DEST="$REPO/apps/$app/public/next"
+  mkdir -p "$DEST"
+  cp "$TMP/tbblue.mmc" "$TMP/tbblue.mmc.zip" "$TMP/enNextZX.rom" "$TMP/enNxtmmc.rom" "$DEST/"
+  echo "staged: $DEST"
+done
 
-# Zip the trimmed image next to it: the browser fetches tbblue.mmc.zip (a few
-# MB — the 64MB image is mostly empty space) and inflates it client-side,
-# falling back to the raw image only on deployments staged before the zip
-# existed. Keep the raw image too: desktop/Go tests point ZX_GO_NEXT_SD_IMG
-# at it, and previously-deployed bundles still fetch it.
-"$SCRIPTS/zip-sd-image.sh" "$DIR/tbblue.mmc"
-
-echo "Done. Build zx.wasm (see ../../wasm/), then: python3 -m http.server 8080"
+echo "Done. Re-verify per 'Next boot modes' in ../README.md."

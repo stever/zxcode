@@ -66,6 +66,14 @@ for e in "${KEEP[@]}"; do
   mcopy -i "$TMP/prepped.img@@$((SRC_START * 512))" -s -p -m "::/$e" "$TMP/tree/"
 done
 
+# machines/ stays for the Next system files, but the Sinclair QL core + ROMs
+# (machines/ql, ~2.8 MB) are a different machine, separately licensed and
+# never used by this emulator — excluded content per ../LICENSES.md.
+if [ -d "$TMP/tree/machines/ql" ]; then
+  rm -rf "$TMP/tree/machines/ql"
+  echo "  removed machines/ql (separately licensed, unused)"
+fi
+
 echo "3/4 rebuild at staged geometry (LBA 2048, 4 KB clusters) ..."
 P_START=2048
 P_SIZE=$((TOT_SEC - P_START))
@@ -92,4 +100,4 @@ mdir -i "$TMP/out.img@@$((P_START * 512))" :: | tail -2
 echo "4/4 zip ..."
 mv "$TMP/out.img" "$OUT"
 "$SCRIPTS/zip-sd-image.sh" "$OUT"
-echo "done: $OUT (+ .zip) — re-verify per README 'Next boot modes', then stage into apps/*/public/next/"
+echo "done: $OUT (+ .zip) — re-verify per README 'Next boot modes', then stage into apps/*/public/next/ (stage-zxnext-assets.sh does build + staging in one step)"

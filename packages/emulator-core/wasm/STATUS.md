@@ -2,8 +2,8 @@
 
 A `zx.wasm` built from your zx_go source that boots the ZX Spectrum Next in the
 browser, renders at 60 fps, runs `.nex` builds, AND produces real emulator audio
-through oto's Web Audio backend. Deployed into the web host in `../web/`
-(serve on :8080).
+through oto's Web Audio backend. Built into `../dist/` by
+`../scripts/build-wasm.sh`, where the monorepo apps pick it up.
 
 ## Verified
 
@@ -18,9 +18,7 @@ through oto's Web Audio backend. Deployed into the web host in `../web/`
 
 ## Build + deploy
 
-    cd zx_go
-    GOOS=js GOARCH=wasm go build -o ../web/res/zxnext/zx.wasm ./cmd/zx_go
-    cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ../web/res/zxnext/wasm_exec.js
+    npm run build     # ../scripts/build-wasm.sh -> ../dist/zx.wasm + wasm_exec.js
 
 ## Source
 

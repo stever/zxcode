@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Zip a staged tbblue.mmc as tbblue.mmc.zip alongside it, entry name
 # "tbblue.mmc". The browser (GoEmulator.bootNext) fetches the zip and inflates
-# it with JSZip — the 64MB image is mostly empty space and deflates to a few
+# it with JSZip — the image is mostly empty space and deflates to a few
 # MB — falling back to the raw image when the zip is absent. A plain zip (not
 # .gz) keeps the download transport-agnostic: it needs no server encoding
 # support and the browser caches the small file.
-# Called by stage-zxnext-assets.sh; uses the zip CLI or python3, whichever is
+# Called by trim-distro-card.sh; uses the zip CLI or python3, whichever is
 # present.
 set -euo pipefail
 
-IMG="${1:-$(cd "$(dirname "$0")/.." && pwd)/res/zxnext/tbblue.mmc}"
+IMG="${1:?usage: zip-sd-image.sh <tbblue.mmc>}"
 [ -f "$IMG" ] || { echo "zip-sd-image: $IMG not found" >&2; exit 1; }
 OUT="$IMG.zip"
 
