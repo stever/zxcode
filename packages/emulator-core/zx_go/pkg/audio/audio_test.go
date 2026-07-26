@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // fakeSystem produces an AudioSystem instance that's safe to use
@@ -612,5 +613,97 @@ func TestWriteRecording_MaxSamplesCap(t *testing.T) {
 	}
 	if err := as.StopRecording(); err != nil {
 		t.Fatalf("StopRecording: %v", err)
+	}
+}
+
+// TestRateServoAbsorbsSustainedDeficit drives the oto pull path with a
+// producer running at only 80% of real time (the sustained-overload
+// case: a heavy 28 MHz scene the host can't emulate at 50 fps). The
+// depth servo must glide the resample ratio down until consumption
+// matches production — audio slows instead of stuttering — and the
+// underrun counter must stop climbing once the servo has settled.
+func TestRateServoAbsorbsSustainedDeficit(t *testing.T) {
+	as := fakeSystem()
+	as.resetQueueCushioned()
+	r := fakeReader(as, 441)
+	clock := time.Unix(1000, 0)
+	r.nowFn = func() time.Time { return clock }
+
+	push := make([]int16, 706) // 80% of the 882 a real-time epoch makes
+	for i := range push {
+		push[i] = int16(i)
+	}
+	out := make([]byte, 441*ChannelCount*2)
+
+	var settledUnderruns uint64
+	const epochs = 3000
+	for k := 0; k < epochs; k++ {
+		as.PushBeeperSamples(push)
+		// One epoch of consumption: 882 output samples in two pulls,
+		// the virtual clock advancing 10 ms per pull (real cadence).
+		for p := 0; p < 2; p++ {
+			clock = clock.Add(10 * time.Millisecond)
+			if _, err := r.Read(out); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if k == epochs*2/3 {
+			as.queueMu.Lock()
+			settledUnderruns = as.statUnderruns
+			as.queueMu.Unlock()
+		}
+	}
+	as.queueMu.Lock()
+	finalUnderruns := as.statUnderruns
+	as.queueMu.Unlock()
+
+	if r.ratio < 0.75 || r.ratio > 0.87 {
+		t.Errorf("ratio = %.3f, want ~0.80 (servo matching an 80%% producer)", r.ratio)
+	}
+	if finalUnderruns != settledUnderruns {
+		t.Errorf("underruns still climbing after settle: %d -> %d (audio would stutter)",
+			settledUnderruns, finalUnderruns)
+	}
+}
+
+// TestRateServoAbsorbsDriftSurplus is the other direction: a producer
+// 2% fast (clock drift). The servo must trim above 1.0 so the ring
+// stops overflowing — the drop-oldest counter settles.
+func TestRateServoAbsorbsDriftSurplus(t *testing.T) {
+	as := fakeSystem()
+	as.resetQueueCushioned()
+	r := fakeReader(as, 441)
+	clock := time.Unix(1000, 0)
+	r.nowFn = func() time.Time { return clock }
+
+	push := make([]int16, 900) // ~2% surplus over 882
+	out := make([]byte, 441*ChannelCount*2)
+
+	var settledDrops uint64
+	const epochs = 3000
+	for k := 0; k < epochs; k++ {
+		as.PushBeeperSamples(push)
+		for p := 0; p < 2; p++ {
+			clock = clock.Add(10 * time.Millisecond)
+			if _, err := r.Read(out); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if k == epochs*2/3 {
+			as.queueMu.Lock()
+			settledDrops = as.statDropped
+			as.queueMu.Unlock()
+		}
+	}
+	as.queueMu.Lock()
+	finalDrops := as.statDropped
+	as.queueMu.Unlock()
+
+	if r.ratio < 1.01 || r.ratio > 1.05 {
+		t.Errorf("ratio = %.3f, want ~1.02 (servo matching a 2%% surplus)", r.ratio)
+	}
+	if finalDrops != settledDrops {
+		t.Errorf("drop-oldest still climbing after settle: %d -> %d (audio would skip)",
+			settledDrops, finalDrops)
 	}
 }

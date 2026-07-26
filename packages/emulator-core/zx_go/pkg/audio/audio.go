@@ -3,6 +3,7 @@ package audio
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 	"runtime"
 	"sync"
@@ -96,6 +97,15 @@ type AudioSystem struct {
 	// decaying held level. Only the oto path consults it — the browser's
 	// PullMono/AudioWorklet owns its own cushion policy.
 	cushioning bool
+	// Diagnostic counters (guarded by queueMu): how often the hysteresis
+	// re-armed (true underruns) and how many samples the overflow path
+	// discarded (drop-oldest). Producer/consumer clock drift shows up as
+	// one of these climbing steadily — see the drift probe test.
+	statUnderruns uint64
+	statDropped   uint64
+	// statPushed counts every sample ever pushed (guarded by queueMu) —
+	// the rate servo's production-rate measurement input.
+	statPushed uint64
 
 	// Optional AY-3-8912 source.
 	ayMu sync.RWMutex
@@ -125,6 +135,41 @@ type audioReader struct {
 	buffer    []byte
 	mixBuffer []int16
 	ditherRNG uint32 // xorshift32 state for the keep-alive dither
+
+	// Dynamic rate control (the oto path's clock servo). The producer
+	// paces by executed emulation frames, the consumer by the audio
+	// device's clock; those rates NEVER match exactly (clock drift) and
+	// under sustained overload the producer falls far behind. The servo
+	// watches ring depth each pull and resamples the popped chunk by
+	// `ratio` (source samples per output sample): depth below target →
+	// ratio sinks → the ring drains slower — micro-drift becomes an
+	// inaudible pitch trim, and sustained overload becomes continuously
+	// slowed audio (real-hardware-style slowdown) instead of
+	// machine-gun filler gaps.
+	//
+	// Control shape: integrating controllers on an integrating plant
+	// (ring depth) double-integrate and hunt audibly, so the servo is
+	// FEED-FORWARD + weak proportional instead — nothing to oscillate.
+	// rateEMA measures the producer's actual samples/second from
+	// statPushed deltas over wall time; ratio tracks rateEMA/SampleRate
+	// directly (a producer at 80% speed is consumed at 80% rate by
+	// construction), and a small depth-centering term nudges the ring
+	// back toward target so estimate error can't slowly walk it away.
+	// The estimate freezes while the underrun cushion is rebuilding
+	// (production is briefly unrepresentative) — which also keeps a
+	// pause from dragging the estimate to zero.
+	//
+	// srcBuf is the pre-resample scratch; srcFrac carries the
+	// fractional source position across pulls so the average rate is
+	// exact. nowFn is the clock (injectable for tests).
+	ratio      float64 // applied resample ratio (source per output sample)
+	rateEMA    float64 // measured production rate, samples/s
+	errEMA     float64 // smoothed depth error (samples), centering input
+	lastPushed uint64
+	lastPull   time.Time
+	nowFn      func() time.Time
+	srcFrac    float64
+	srcBuf     []int16
 }
 
 // oto permits exactly ONE audio context per process — a second
@@ -183,6 +228,8 @@ func New() (*AudioSystem, error) {
 		buffer:    make([]byte, BufferSize*ChannelCount*2),
 		mixBuffer: make([]int16, BufferSize),
 		ditherRNG: 0x9E3779B9, // any non-zero seed
+		ratio:     1.0,
+		srcBuf:    make([]int16, BufferSize*2), // room for ratio up to 2.0
 	}
 	as.resetQueueCushioned()
 	// On js the page owns playback: an AudioWorklet drains the ring via
@@ -250,12 +297,14 @@ func (as *AudioSystem) PushBeeperSamples(samples []int16) {
 	}
 	as.queueMu.Lock()
 	defer as.queueMu.Unlock()
+	as.statPushed += uint64(len(samples))
 	for _, s := range samples {
 		as.queue[as.queueHead] = s
 		as.queueHead = (as.queueHead + 1) % queueCapacity
 		if as.queueSize == queueCapacity {
 			// Buffer is full; advance tail to drop the oldest sample.
 			as.queueTail = (as.queueTail + 1) % queueCapacity
+			as.statDropped++
 		} else {
 			as.queueSize++
 		}
@@ -305,6 +354,7 @@ func (as *AudioSystem) popBeeperSamples(out []int16) {
 			// Ran dry mid-read: a true underrun. Rebuild the cushion
 			// before delivering real samples again.
 			as.cushioning = true
+			as.statUnderruns++
 		}
 	}
 	for ; n < len(out); n++ {
@@ -372,8 +422,86 @@ func (ar *audioReader) Read(p []byte) (n int, err error) {
 	}
 	mixBuf := ar.mixBuffer[:samples]
 
-	// Step 1: pull beeper samples from the ULA's ring buffer.
-	ar.audioSys.popBeeperSamples(mixBuf)
+	// Step 1: pull beeper samples through the rate-control servo (see the
+	// audioReader field docs). Sample the ring depth, trim `ratio` toward
+	// rate balance (frozen while the underrun cushion is rebuilding — the
+	// ring holds only filler then), pop a ratio-scaled chunk, and
+	// linearly resample it onto mixBuf.
+	ar.audioSys.queueMu.Lock()
+	depth := ar.audioSys.queueSize
+	rebuilding := ar.audioSys.cushioning
+	pushed := ar.audioSys.statPushed
+	ar.audioSys.queueMu.Unlock()
+	const (
+		depthTarget = underrunCushion + SamplesPerFrame // ~80 ms — comfortably above the hysteresis watermark
+		rateAlpha   = 0.2                               // production-rate EMA per 100 ms window: ~63% in ~0.5 s
+		errAlpha    = 0.05                              // depth-error EMA: kills the ~7 Hz push/pull beat
+		centerGain  = 2e-6                              // depth centering: ±900-sample wobble → ±0.18% trim
+		centerClamp = 0.01                              // centering may never exceed ±1%
+		ratioMin    = 0.55                              // sustained-overload floor (45% slowdown)
+		ratioMax    = 1.06                              // surplus drain ceiling
+	)
+	if need := int(float64(samples)*ratioMax) + 2; len(ar.srcBuf) < need {
+		ar.srcBuf = make([]int16, need)
+	}
+	now := time.Now
+	if ar.nowFn != nil {
+		now = ar.nowFn
+	}
+	t := now()
+	if ar.lastPull.IsZero() || ar.rateEMA == 0 {
+		// First pull (or zero-value test reader): assume nominal rate.
+		ar.rateEMA = SampleRate
+		ar.lastPull = t
+		ar.lastPushed = pushed
+	} else if dt := t.Sub(ar.lastPull).Seconds(); dt >= 0.1 {
+		// Rate is measured over ≥100 ms windows — several pushes per
+		// sample, so the frame-burst cadence can't alias the estimate
+		// (a per-pull instant rate alternates push-heavy/push-empty and
+		// biases the EMA). Windows during cushion rebuilds or stalls
+		// (suspend, debugger pause) are unrepresentative: re-anchor
+		// without updating.
+		if dt < 0.5 && !rebuilding {
+			inst := float64(pushed-ar.lastPushed) / dt
+			ar.rateEMA += rateAlpha * (inst - ar.rateEMA)
+		}
+		ar.lastPull = t
+		ar.lastPushed = pushed
+	}
+	if samples > 0 {
+		ar.errEMA += errAlpha * (float64(depth-depthTarget) - ar.errEMA)
+	}
+	centering := ar.errEMA * centerGain
+	centering = math.Max(-centerClamp, math.Min(centerClamp, centering))
+	ar.ratio = math.Max(ratioMin, math.Min(ratioMax, ar.rateEMA/SampleRate+centering))
+	srcF := float64(samples)*ar.ratio + ar.srcFrac
+	srcN := int(srcF)
+	ar.srcFrac = srcF - float64(srcN)
+	if srcN < 2 {
+		srcN = 2
+	}
+	if srcN > len(ar.srcBuf) {
+		srcN = len(ar.srcBuf)
+		ar.srcFrac = 0
+	}
+	ar.audioSys.popBeeperSamples(ar.srcBuf[:srcN])
+	if srcN == samples || samples < 2 {
+		copy(mixBuf, ar.srcBuf[:min(srcN, samples)])
+	} else {
+		step := float64(srcN-1) / float64(samples-1)
+		pos := 0.0
+		for i := 0; i < samples; i++ {
+			ip := int(pos)
+			f := pos - float64(ip)
+			a := ar.srcBuf[ip]
+			b := a
+			if ip+1 < srcN {
+				b = ar.srcBuf[ip+1]
+			}
+			mixBuf[i] = int16(float64(a) + f*float64(b-a))
+			pos += step
+		}
+	}
 
 	// Step 2: mix in the AY chip's output (it generates samples
 	// from its own internal counters at audio rate).

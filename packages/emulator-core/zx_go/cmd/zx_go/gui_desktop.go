@@ -429,23 +429,43 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 
 	// Main emulation loop - completely independent of UI events
 	go func() {
-		ticker := time.NewTicker(20 * time.Millisecond) // 50Hz
+		const frameDur = 20 * time.Millisecond // 50Hz
+		// A heavy frame (28 MHz turbo scene, image decompression, GC
+		// pause) can overrun the tick, and Go tickers DROP missed
+		// firings — every dropped tick used to be an emulation frame
+		// that never ran and 882 audio samples never produced, heard
+		// as whole-frame stutter no buffer could absorb (measured:
+		// 500-700 ms/s of ring filler in 20 ms quanta during heavy
+		// scenes). `schedule` keeps an absolute due-time per frame, and
+		// each wakeup runs every frame that has come due (capped), so
+		// transient overruns are repaid on the next wakeup instead of
+		// silently skipped. Sustained overload beyond the cap resyncs
+		// (the machine genuinely can't hold 50 fps then — visible on
+		// the FPS overlay).
+		const maxFramesPerWake = 4
+		ticker := time.NewTicker(frameDur)
 		defer ticker.Stop()
 
 		frameCount := 0
 		lastRender := time.Now()
 		lastFPS := time.Now()
+		schedule := time.Now()
 
 		for {
 			select {
 			case <-ticker.C:
-				framesThisTick := 1
-				if !e.paused.Load() {
+				ranThisWake := 0
+				if e.paused.Load() {
+					// No frame debt accrues while paused.
+					schedule = time.Now()
+				}
+				for !e.paused.Load() && ranThisWake < maxFramesPerWake && !schedule.After(time.Now()) {
 					// Honour the remote debugger's pause state.
 					// WaitIfPaused is nil-safe and a no-op when
 					// not paused, so the GUI hot path is unaffected
 					// when --debugger-port wasn't supplied.
 					e.rdbg.WaitIfPaused()
+					framesThisIter := 1
 					// Execution paths: ZX80/ZX81 (CPU-generated video),
 					// RZX playback, RZX recording, or normal frame.
 					switch {
@@ -520,11 +540,11 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 								e.peripherals.Frame()
 							}
 						}
-						framesThisTick = n
+						framesThisIter = n
 					}
 
 					frameCount++
-					e.fpsFrames.Add(int64(framesThisTick))
+					e.fpsFrames.Add(int64(framesThisIter))
 					atomic.AddInt32(&e.frameCounter, 1)
 					// Advance the typed-character symbol pulse (no-op when idle).
 					if e.kbd != nil {
@@ -547,7 +567,21 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 					// still loading) — see applyForcedCPUSpeed.
 					e.applyForcedCPUSpeed()
 
-					// Render at 50Hz
+					schedule = schedule.Add(frameDur)
+					ranThisWake++
+				}
+				if ranThisWake == maxFramesPerWake && !schedule.After(time.Now()) {
+					// Still behind after the cap: sustained overload —
+					// the machine can't hold 50 fps. Resync so the debt
+					// doesn't grow unboundedly (audio will starve; the
+					// FPS overlay shows the achievable rate).
+					schedule = time.Now()
+				}
+
+				// Render once per wakeup, ~50 Hz — during catch-up bursts
+				// the intermediate frames are skipped, spending the wall
+				// budget on emulation (audio) rather than pixels.
+				if ranThisWake > 0 {
 					now := time.Now()
 					if now.Sub(lastRender) >= 20*time.Millisecond {
 						newImage := e.renderFrame()

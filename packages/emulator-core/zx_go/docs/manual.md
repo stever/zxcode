@@ -325,19 +325,23 @@ on `P` on the ZX81. Details and the per-machine keymap:
   Protected titles may need the Speedlock Workaround.
 - **No sound** — check you didn't launch with `--no-sound`; for SpecDrum/Covox
   titles, enable the matching peripheral.
-- **Crackly / stuttering sound** — first check View → Show FPS: if it reads
-  below 50 the machine is struggling and audio is only the symptom. At a
-  steady 50 the problem is on the device side: relaunch with
-  `--audio-buffer-ms=100` (bigger device buffer, slightly more latency).
-  `--record-audio out.wav` captures the exact stream we hand the device —
-  if the WAV plays clean, the emulator's synthesis is fine and the buffer
-  size / host audio stack is the knob to turn.
+- **Crackly / stuttering sound** — should not happen by design: audio
+  output is rate-servoed to actual emulation speed (clock drift becomes a
+  sub-1% inaudible pitch trim; heavy scenes the host can't emulate at
+  50 fps slow the audio *continuously*, like real hardware slowdown,
+  instead of tearing holes in it). If you still hear gaps, capture
+  `--record-audio out.wav`: a clean WAV means the emulator's stream is
+  fine and the fault is in the host audio stack — try
+  `--audio-buffer-ms=100` (bigger device buffer, adds that much lag).
+- **Sound pitch drops / audio slows down** — that's the rate servo
+  matching a machine that isn't hitting 50 fps (check View → Show FPS,
+  and remember a 28 MHz turbo title costs 8× the emulation work). The
+  cure is a faster host or a lighter scene, not an audio setting.
 - **Sound lags the picture** — total audio latency is designed to be
-  ~0.15 s: a 60 ms ring cushion (the anti-stutter watermark), a bounded
-  ~46 ms playback pre-read, and the device buffer. If you hear a
-  noticeably longer lag, make sure you haven't raised `--audio-buffer-ms`
-  further than the crackle actually requires — it adds directly to the
-  delay.
+  ~0.15 s: an ~80 ms ring operating depth (anti-stutter cushion + servo
+  target), a bounded ~46 ms playback pre-read, and the device buffer.
+  If you hear a noticeably longer lag, make sure you haven't raised
+  `--audio-buffer-ms` more than needed — it adds directly to the delay.
 - **The Next won't boot / black screen** — you almost certainly need to install
   the Next ROMs and set an SD card first ([§8](#8-spectrum-next)).
 - **Wrong keys / can't find a symbol** — see
