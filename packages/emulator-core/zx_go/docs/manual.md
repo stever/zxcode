@@ -325,6 +325,13 @@ on `P` on the ZX81. Details and the per-machine keymap:
   Protected titles may need the Speedlock Workaround.
 - **No sound** — check you didn't launch with `--no-sound`; for SpecDrum/Covox
   titles, enable the matching peripheral.
+- **Crackly / stuttering sound** — first check View → Show FPS: if it reads
+  below 50 the machine is struggling and audio is only the symptom. At a
+  steady 50 the problem is on the device side: relaunch with
+  `--audio-buffer-ms=100` (bigger device buffer, slightly more latency).
+  `--record-audio out.wav` captures the exact stream we hand the device —
+  if the WAV plays clean, the emulator's synthesis is fine and the buffer
+  size / host audio stack is the knob to turn.
 - **The Next won't boot / black screen** — you almost certainly need to install
   the Next ROMs and set an SD card first ([§8](#8-spectrum-next)).
 - **Wrong keys / can't find a symbol** — see

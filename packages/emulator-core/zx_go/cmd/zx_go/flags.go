@@ -7,7 +7,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/conorarmstrong/zx_go/pkg/audio"
 	"github.com/conorarmstrong/zx_go/pkg/trace"
 	"github.com/conorarmstrong/zx_go/pkg/version"
 	"github.com/conorarmstrong/zx_go/pkg/zxlog"
@@ -322,6 +324,7 @@ func parseCLI() *cliFlags {
 		captureNextSnapshot = flag.String("capture-next-snapshot", "", "Capture warm-boot snapshot from a running reference Next emulator. Argument is HOST:PORT (e.g. localhost:10000) — connect to its ZRCP. Captures the full Machine RAM (2 MB) + all 256 NextRegs + CPU registers; writes them into the install dir for zx_go to use on subsequent boots. Exits when done. See docs/spectrum-next.md for the procedure.")
 		noSound             = flag.Bool("no-sound", false, "Mute audio output (no oto context, no beeper / AY / DAC mix). Useful during long debugger sessions where the beeper sings under step traces, and for headless runs that don't need audio.")
 		recordAudio         = flag.String("record-audio", "", "Capture the mixed audio output to this WAV path from startup (the exact stream sent to the device). Diagnostic for clicks/pops that only appear live — the file is ground truth for what we emit.")
+		audioBufferMS       = flag.Int("audio-buffer-ms", 0, "Audio device buffer in milliseconds (0 = platform default). Raise (e.g. 100) if live audio crackles while the FPS overlay holds 50 — trades latency for underrun immunity.")
 		audioKeepAlive      = flag.Int("audio-keepalive-level", -1, "Peak amplitude (16-bit units, out of 32767) of the keep-alive dither that stops the macOS speaker amp powering down during silence and popping on the next sound. -1 = built-in default (off); set e.g. 16/24 to enable if the startup/load pop bothers you (trades a faint noise floor).")
 		audioDCBlock        = flag.Bool("audio-dc-block", true, "Apply the DC-blocking high-pass to audio output (removes the idle DC rail / 'battery click'). Use --audio-dc-block=false to emit raw beeper levels — an A/B diagnostic for beeper-audio fidelity.")
 		sdWriteback         = flag.Bool("sd-writeback", false, "Persist guest writes on the mounted SD image back to the image file at exit (previous file kept as .bak). Default: writes live in RAM only.")
@@ -459,6 +462,12 @@ func parseCLI() *cliFlags {
 	f.captureNextSnapshot = *captureNextSnapshot
 	f.noSound = *noSound
 	f.recordAudio = *recordAudio
+	// Applied here (not at emulator construction) because the oto context
+	// is a process singleton created by the FIRST AudioSystem — the buffer
+	// must be configured before that.
+	if *audioBufferMS > 0 {
+		audio.SetDeviceBufferDuration(time.Duration(*audioBufferMS) * time.Millisecond)
+	}
 	f.audioKeepAlive = *audioKeepAlive
 	f.audioDCBlock = *audioDCBlock
 	f.warmBoot = *warmBoot

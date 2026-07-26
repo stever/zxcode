@@ -6,8 +6,9 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"time"
 
-	"github.com/hajimehoshi/oto/v2"
+	"github.com/ebitengine/oto/v3"
 )
 
 // AYSource is the minimal interface that the audio system needs from an AY
@@ -77,7 +78,7 @@ var _ [queueCapacity - queuePrefill]struct{}
 // chip's own internal counters and don't need event-time alignment.
 type AudioSystem struct {
 	context *oto.Context
-	player  oto.Player
+	player  *oto.Player
 	reader  *audioReader
 
 	// Beeper sample ring buffer.
@@ -129,11 +130,33 @@ var (
 	sharedCtxOnce sync.Once
 	sharedCtx     *oto.Context
 	sharedCtxErr  error
+
+	// deviceBufferSize is the oto device buffer duration handed to
+	// NewContext. Zero picks oto's platform default. Larger absorbs
+	// host-scheduler jitter (fewer crackles) at the cost of latency;
+	// set via SetDeviceBufferDuration BEFORE the first AudioSystem is
+	// created (the context is a process singleton — later calls are
+	// ineffective and log nothing).
+	deviceBufferSize time.Duration
 )
+
+// SetDeviceBufferDuration configures the audio device buffer used when
+// the shared oto context is first created (`--audio-buffer-ms`). Must be
+// called before the first AudioSystem construction to have any effect.
+func SetDeviceBufferDuration(d time.Duration) {
+	if d > 0 {
+		deviceBufferSize = d
+	}
+}
 
 func sharedAudioContext() (*oto.Context, error) {
 	sharedCtxOnce.Do(func() {
-		ctx, ready, err := oto.NewContext(SampleRate, ChannelCount, oto.FormatSignedInt16LE)
+		ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
+			SampleRate:   SampleRate,
+			ChannelCount: ChannelCount,
+			Format:       oto.FormatSignedInt16LE,
+			BufferSize:   deviceBufferSize, // 0 = oto's platform default
+		})
 		if err != nil {
 			sharedCtxErr = err
 			return

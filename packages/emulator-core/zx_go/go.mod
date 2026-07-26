@@ -4,7 +4,7 @@ go 1.25.1
 
 require (
 	fyne.io/fyne/v2 v2.6.3
-	github.com/hajimehoshi/oto/v2 v2.4.2
+	github.com/ebitengine/oto/v3 v3.4.0
 	golang.org/x/term v0.43.0
 	modernc.org/sqlite v1.51.0
 )
@@ -14,7 +14,7 @@ require (
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ebitengine/purego v0.4.1 // indirect
+	github.com/ebitengine/purego v0.9.0 // indirect
 	github.com/fredbi/uri v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fyne-io/gl-js v0.2.0 // indirect
