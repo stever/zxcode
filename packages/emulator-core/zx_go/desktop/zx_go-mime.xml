@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MIME types NOT already in shared-mime-info. The classic Spectrum
+     formats (tap/tzx/z80/sna/szx/rzx/trd) are application/x-spectrum-*
+     in the standard database, so zx_go.desktop binds those directly and
+     only these are defined here. .p/.o are deliberately absent: the
+     system claims them (text/x-pascal, application/x-object) and a
+     glob fight over every object file is not worth a double-click. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-spectrum-next-nex">
+    <comment>ZX Spectrum Next program</comment>
+    <magic priority="80">
+      <match type="string" value="Next" offset="0"/>
+    </magic>
+    <glob pattern="*.nex"/>
+  </mime-type>
+  <mime-type type="application/x-zx81-p">
+    <comment>Sinclair ZX81 program</comment>
+    <glob pattern="*.81"/>
+  </mime-type>
+  <mime-type type="application/x-zx80-o">
+    <comment>Sinclair ZX80 program</comment>
+    <glob pattern="*.80"/>
+  </mime-type>
+</mime-info>

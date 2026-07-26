@@ -229,6 +229,16 @@ zx_go ships **three** ways to inspect a running machine, all sharing **one live 
 A few examples:
 
 ```bash
+# Boot straight into a file — the extension picks the machine:
+# .tap/.tzx auto-type LOAD, .nex boots the Next, .trd the Pentagon,
+# snapshots restore their own model. Works headless too. An explicit
+# model flag (--pentagon game.tap) beats the extension.
+./bin/zx_go game.tap
+./bin/zx_go --headless --frames=2500 --save-screen=/tmp/run.png game.nex
+
+# File-manager double-click integration (per-user, Linux/XDG):
+./desktop/install-desktop.sh   # see desktop/README.md
+
 # Boot the Next headless and capture the framebuffer
 ./bin/zx_go --next --headless --frames=3000 --save-screen=/tmp/boot.png
 

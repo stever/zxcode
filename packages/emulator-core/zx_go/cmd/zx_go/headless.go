@@ -36,6 +36,14 @@ func runHeadless(f *cliFlags) {
 		model = roms.ModelZX80
 	case f.startInPentagon:
 		model = roms.ModelPentagon
+	default:
+		// A positional snapshot picks its own model (48K vs 128K) — the
+		// GUI switches dynamically at load; headless must construct right.
+		if f.launchFile != "" {
+			if m, ok := launchSnapshotModel(f.launchFile); ok {
+				model = m
+			}
+		}
 	}
 
 	emu, err := newEmulator(model)
@@ -59,6 +67,15 @@ func runHeadless(f *cliFlags) {
 		// GUI installs it once at startup, so headless must install it here.
 		installTapeTrap(emu)
 		slog.Info("headless: tape ready — read it with LOAD\"\" (48K) or the 128 Tape Loader", "path", f.tape)
+	}
+	// Positional launch file: the tape/TR-DOS cases rode the --tape/--trd
+	// paths above; dispatch the remaining formats. Same loaders as the GUI
+	// dispatcher, minus the dialogs (see gui_desktop.go).
+	if f.launchFile != "" {
+		if err := dispatchLaunchFileHeadless(emu, f.launchFile); err != nil {
+			slog.Error("headless: launch file failed", "path", f.launchFile, "err", err)
+			os.Exit(1)
+		}
 	}
 
 	_, closeFn := installTraceHooks(emu, f)

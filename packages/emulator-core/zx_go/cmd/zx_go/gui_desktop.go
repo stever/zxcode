@@ -1375,6 +1375,55 @@ func desktopMain() {
 		fyne.Do(func() { w.MainMenu().Refresh() })
 	})
 
+	// Positional launch file (`zx_go game.tap`, file-manager double-click):
+	// dispatch through the same loaders the Open menu uses, with two
+	// double-click adaptations — tapes get the auto-typed LOAD macro
+	// (loadAndRunTape) instead of the mount-and-wait deck, and .nex skips
+	// the copy-confirmation dialog (launching the file is the consent).
+	// parseCLI already picked the matching start model from the extension.
+	if flags.launchFile != "" {
+		path := flags.launchFile
+		launchErr := func() error {
+			switch strings.ToLower(filepath.Ext(path)) {
+			case ".trd":
+				return nil // mounted at startup via the --trd path above
+			case ".tap", ".tzx":
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				return emu.loadAndRunTape(data)
+			case ".nex":
+				if currentModel != roms.ModelNext {
+					return fmt.Errorf(".nex needs Spectrum Next mode (drop the conflicting model flag)")
+				}
+				if emu.sdImageSrc == nil {
+					return fmt.Errorf(".nex loading needs a Spectrum Next SD card (none is configured)")
+				}
+				if _, err := nex.ParseFile(path); err != nil {
+					return fmt.Errorf("parse NEX: %w", err)
+				}
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				go emu.importAndRunNex(filepath.Base(path), data)
+				return nil
+			default:
+				_, err := loadFileByPath(path)
+				return err
+			}
+		}()
+		if launchErr != nil {
+			slog.Error("launch file failed", "path", path, "err", launchErr)
+			dialog.ShowError(fmt.Errorf("open %s: %w", filepath.Base(path), launchErr), w)
+		} else {
+			cfg.AddRecent(path)
+			saveConfig()
+			refreshRecentMenu()
+		}
+	}
+
 	mainMenu := fyne.NewMainMenu(
 		fyne.NewMenu("File",
 			fyne.NewMenuItem("Quick Save State (F2)", func() {

@@ -34,6 +34,10 @@ You can also pick a machine straight from the command line:
 
 To run without a window (for scripting/CI), add `--headless --frames N`.
 
+Or skip the flags and hand it a file — `zx_go game.tap` picks the machine
+from the extension and starts the program (see
+[Launching a file directly](#launching-a-file-directly-command-line--double-click)).
+
 ---
 
 ## 2. Choosing a machine
@@ -60,8 +64,11 @@ are remembered where they still apply.
 
 ## 3. Loading software
 
-Everything loads from the **File** menu, or by **dragging a file onto the
-window** — zx_go picks the right loader from the extension.
+Everything loads from the **File** menu, by **dragging a file onto the
+window**, or by handing the file to zx_go at launch (`zx_go game.tap`, or a
+file-manager double-click — see
+[Launching a file directly](#launching-a-file-directly-command-line--double-click)).
+zx_go picks the right loader from the extension.
 
 | You have | Use | Notes |
 |----------|-----|-------|
@@ -113,6 +120,46 @@ zx_go --headless --pentagon --tape game.tzx --frames 5000
 On the 48K the guest still has to read the tape — type `LOAD ""` (or schedule it
 with `--press-key`); on the 128 choose *Tape Loader* from the boot menu. The
 fast-load trap is installed automatically so the load is near-instant.
+
+### Launching a file directly (command line / double-click)
+
+`zx_go FILE` boots straight into a program: the extension picks the machine
+and the file is loaded and started without touching a menu. This is also what
+a file-manager double-click runs once the desktop integration is installed.
+
+| Extension | Machine | What happens |
+|-----------|---------|--------------|
+| `.tap` / `.tzx` | 48K (default) | Tape mounted; in the GUI the `LOAD ""` command is typed for you (the 128 clones use their boot menu's Tape Loader) |
+| `.z80` / `.sna` / `.szx` | From the snapshot | State restored instantly (48K/128K picked by the file) |
+| `.rzx` | From the recording | Playback starts |
+| `.nex` | Spectrum Next | Boots NextZXOS and launches through its own `.nexload`, no confirmation dialog |
+| `.trd` | Pentagon 128 | Disk mounted in Beta drive A (enter TR-DOS as usual) |
+| `.p` / `.81` | ZX81 | Program injected and running |
+| `.o` / `.80` | ZX80 | Program injected and running |
+
+Rules:
+
+- **An explicit model flag beats the extension** — `zx_go --pentagon game.tap`
+  boots the Pentagon with the tape mounted.
+- **Flags come before the file**: `zx_go --headless --frames=2500 game.nex`,
+  not the other way round.
+- The positional file works **headless** too. Tapes there behave like
+  `--tape` (mounted + fast-load trap; drive `LOAD ""` with `--press-key`),
+  everything else runs exactly as in the GUI:
+
+```bash
+# Compile-run loop: boot the Next, run the build, screenshot the result
+zx_go --headless --frames=2500 --save-screen=out.png build.nex
+
+# Check a snapshot renders correctly
+zx_go --headless --frames=100 --save-screen=snap.png game.z80
+```
+
+**File-manager integration (Linux/XDG):** `desktop/install-desktop.sh`
+installs a per-user launcher entry, icon, and the file associations for every
+type above, so double-clicking a Spectrum file opens it in zx_go. No root
+needed; `--uninstall` removes it. Details and the MIME specifics (including
+why `.p`/`.o` are CLI-only) are in [desktop/README.md](../desktop/README.md).
 
 ---
 

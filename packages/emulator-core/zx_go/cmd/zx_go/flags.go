@@ -47,6 +47,14 @@ type cliFlags struct {
 	// startup (classic models only).
 	trdPath string
 
+	// launchFile is the optional positional argument: a Spectrum file to
+	// boot straight into (`zx_go game.tap`). applyLaunchFile derives the
+	// start model from the extension (unless an explicit model flag was
+	// given) and routes tape/disk files onto the existing startup flags;
+	// the remaining formats are dispatched after boot (see
+	// dispatchLaunchFile in gui_desktop.go / runHeadless).
+	launchFile string
+
 	// Periodic state-snapshot interval. When non-zero, the
 	// headless loop dumps registers, sysvars, paging state, and
 	// optionally a screenshot every snapshotEvery frames.
@@ -350,7 +358,11 @@ func parseCLI() *cliFlags {
 			zxlog.Version)
 		_, _ = fmt.Fprintf(out, "Copyright (C) 2026 Conor Armstrong.\n")
 		_, _ = fmt.Fprintf(out, "Source: https://github.com/conorarmstrong/zx_go\n")
-		_, _ = fmt.Fprintf(out, "\nUsage: %s [flags]\n", os.Args[0])
+		_, _ = fmt.Fprintf(out, "\nUsage: %s [flags] [FILE]\n", os.Args[0])
+		_, _ = fmt.Fprintf(out, "\nFILE is a Spectrum program to boot straight into: .tap/.tzx\n")
+		_, _ = fmt.Fprintf(out, "(auto-typed LOAD), .z80/.sna/.szx snapshots, .nex (boots the\n")
+		_, _ = fmt.Fprintf(out, "Next), .trd (boots the Pentagon), .rzx, ZX81 .p/.81, ZX80 .o/.80.\n")
+		_, _ = fmt.Fprintf(out, "The extension picks the machine unless a model flag is given.\n")
 		_, _ = fmt.Fprintf(out, "\nWith no flags, launches the Fyne GUI. Use --headless for\n")
 		_, _ = fmt.Fprintf(out, "scripted / batch / CI use; --debugger-port for interactive\n")
 		_, _ = fmt.Fprintf(out, "live debugging over telnet; --trace=... for high-throughput\n")
@@ -363,9 +375,17 @@ func parseCLI() *cliFlags {
 	// Provide --version explicitly so it prints just the version and exits,
 	// independent of the help flow.
 	versionFlag := flag.Bool("version", false, "Print version and exit")
+	exportIcon := flag.String("export-icon", "", "Write the app icon as a PNG to this path and exit (used by desktop/install-desktop.sh)")
 	flag.Parse()
 	if *versionFlag {
 		fmt.Printf("zx_go %s (built %s)\n", zxlog.Version, version.Date())
+		os.Exit(0)
+	}
+	if *exportIcon != "" {
+		if err := os.WriteFile(*exportIcon, spectrumIcon().Content(), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "export-icon: %v\n", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
@@ -525,6 +545,21 @@ func parseCLI() *cliFlags {
 		f.readTape != ""
 	if wantsDebug && !logLevelExplicit {
 		f.logLevel = slog.LevelDebug
+	}
+
+	// Positional argument: a Spectrum file to boot straight into
+	// (`zx_go game.tap`) — the file-manager / double-click contract.
+	// Exactly one file; the extension picks the start model unless an
+	// explicit model flag was given (see launchfile.go).
+	if flag.NArg() > 1 {
+		fmt.Fprintf(os.Stderr, "expected at most one file argument, got %d: %v\n", flag.NArg(), flag.Args())
+		os.Exit(2)
+	}
+	if flag.NArg() == 1 {
+		if err := applyLaunchFile(f, flag.Arg(0)); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
 	}
 
 	cliFlagsActive = f
