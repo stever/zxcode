@@ -23,6 +23,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -433,10 +434,12 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 
 		frameCount := 0
 		lastRender := time.Now()
+		lastFPS := time.Now()
 
 		for {
 			select {
 			case <-ticker.C:
+				framesThisTick := 1
 				if !e.paused.Load() {
 					// Honour the remote debugger's pause state.
 					// WaitIfPaused is nil-safe and a no-op when
@@ -517,9 +520,11 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 								e.peripherals.Frame()
 							}
 						}
+						framesThisTick = n
 					}
 
 					frameCount++
+					e.fpsFrames.Add(int64(framesThisTick))
 					atomic.AddInt32(&e.frameCounter, 1)
 					// Advance the typed-character symbol pulse (no-op when idle).
 					if e.kbd != nil {
@@ -574,6 +579,22 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 						lastRender = now
 					}
 
+				}
+
+				// FPS overlay: once a second publish executed frames per
+				// wall second (50 when healthy, hundreds during fast-tape
+				// turbo, ~0 while paused). The window keeps rolling even
+				// when hidden so toggling the overlay on shows a fresh
+				// figure within a second.
+				if now := time.Now(); now.Sub(lastFPS) >= time.Second {
+					fps := float64(e.fpsFrames.Swap(0)) / now.Sub(lastFPS).Seconds()
+					lastFPS = now
+					if e.fpsShow.Load() && e.fpsText != nil {
+						fyne.Do(func() {
+							e.fpsText.Text = fmt.Sprintf("%.1f fps", fps)
+							e.fpsText.Refresh()
+						})
+					}
 				}
 			case <-e.stopChan:
 				return
@@ -868,6 +889,17 @@ func desktopMain() {
 	if cfg.CRTFilter {
 		emu.crtFilter.Store(true)
 	}
+	// FPS overlay label (bottom-right of the screen stack, assembled
+	// later). Created here so the View menu closure and the run loop
+	// can both reference it; hidden unless View → Show FPS is on.
+	emu.fpsText = canvas.NewText("", color.NRGBA{R: 0, G: 230, B: 118, A: 255})
+	emu.fpsText.TextSize = 13
+	emu.fpsText.TextStyle = fyne.TextStyle{Monospace: true}
+	emu.fpsText.Hide()
+	if cfg.ShowFPS {
+		emu.fpsShow.Store(true)
+		emu.fpsText.Show()
+	}
 	emu.joystickType = configStringToJoystick(cfg.Joystick)
 	if emu.joystickType == JoystickKempston && emu.ula != nil {
 		emu.ula.KempstonEnabled = true
@@ -897,6 +929,7 @@ func desktopMain() {
 		cfg.Scale = currentScale
 		cfg.Joystick = joystickToConfigString(emu.joystickType)
 		cfg.CRTFilter = emu.crtFilter.Load()
+		cfg.ShowFPS = emu.fpsShow.Load()
 		cfg.Disciple = emu.peripherals.IsDiscipleEnabled()
 		cfg.Interface1 = emu.peripherals.IsInterface1Enabled()
 		cfg.KempstonMouse = emu.peripherals.IsKempstonMouseEnabled()
@@ -2163,6 +2196,26 @@ func desktopMain() {
 				}
 				return item
 			}(),
+			func() *fyne.MenuItem {
+				item := fyne.NewMenuItem("Show FPS", nil)
+				item.Checked = emu.fpsShow.Load()
+				item.Action = func() {
+					on := !emu.fpsShow.Load()
+					emu.fpsShow.Store(on)
+					item.Checked = on
+					saveConfig()
+					fyne.Do(func() {
+						if on {
+							emu.fpsText.Text = ""
+							emu.fpsText.Show()
+						} else {
+							emu.fpsText.Hide()
+						}
+						w.MainMenu().Refresh()
+					})
+				}
+				return item
+			}(),
 		),
 		func() *fyne.Menu {
 			discipleItem := fyne.NewMenuItem("Enable Disciple", nil)
@@ -2632,7 +2685,11 @@ func desktopMain() {
 	// 4:3 aspect ratio container with black letterbox/pillarbox bars
 	blackBG := canvas.NewRectangle(color.Black)
 	aspectScreen := container.New(&aspectRatioLayout{ratio: 4.0 / 3.0}, screen)
-	content := container.NewStack(blackBG, aspectScreen, keyboardWidget)
+	// FPS overlay pinned bottom-right via spacers; canvas.Text is not
+	// interactive, so keyboard/mouse events still reach keyboardWidget.
+	fpsOverlay := container.NewVBox(layout.NewSpacer(),
+		container.NewHBox(layout.NewSpacer(), emu.fpsText))
+	content := container.NewStack(blackBG, aspectScreen, keyboardWidget, fpsOverlay)
 
 	// Show the splash artwork briefly, then swap to the real
 	// content and grab keyboard focus. The emulation goroutine

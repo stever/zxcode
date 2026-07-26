@@ -23,6 +23,7 @@ type Config struct {
 	Scale       int      `json:"scale,omitempty"`        // 100, 125, 150, 200, 300 (percent)
 	Joystick    string   `json:"joystick,omitempty"`     // "None" / "Kempston" / "Sinclair1" / "Sinclair2" / "Cursor"
 	CRTFilter   bool     `json:"crt_filter,omitempty"`   // CRT scanline post-process
+	ShowFPS     bool     `json:"show_fps,omitempty"`     // bottom-right executed-frames/sec overlay
 	RecentFiles []string `json:"recent_files,omitempty"` // absolute paths, most-recent first
 
 	// Peripheral enable states. Restored at startup, saved on each toggle.

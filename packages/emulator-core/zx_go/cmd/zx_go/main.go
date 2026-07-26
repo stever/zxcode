@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/driver/desktop"
 
 	"github.com/conorarmstrong/zx_go/pkg/audio"
@@ -193,6 +194,15 @@ type emulator struct {
 
 	// Frame counter
 	frameCounter int32
+
+	// FPS overlay (View → Show FPS, desktop GUI only). fpsFrames counts
+	// EXECUTED frames per wall second — during fast-tape turbo that is
+	// several per tick, so the readout doubles as a turbo indicator.
+	// fpsText is the bottom-right canvas label, set up in desktopMain;
+	// nil in headless/wasm where the run loop never touches it.
+	fpsShow   atomic.Bool
+	fpsFrames atomic.Int64
+	fpsText   *canvas.Text
 
 	// Window reference for fullscreen toggle
 	window fyne.Window

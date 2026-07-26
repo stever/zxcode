@@ -282,6 +282,10 @@ on `P` on the ZX81. Details and the per-machine keymap:
 
 - **Zoom** — 100% / 125% / 150% / 200% / 300%, or **Full Screen** (Esc exits).
 - **CRT scanline filter** — a subtle scanline/upscale effect for the retro look.
+- **Show FPS** — a bottom-right counter of *executed emulation frames per
+  second*: 50 when running at full speed, hundreds while fast-tape turbo is
+  active, ~0 while paused. If it reads below 50, the machine (not the audio
+  path) can't keep up. Persists across restarts.
 
 **Save Screenshot…** (File) writes the current frame to a PNG.
 
