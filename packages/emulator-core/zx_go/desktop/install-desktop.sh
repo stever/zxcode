@@ -58,10 +58,15 @@ install -m 755 "$SRC_BIN" "$BIN_DIR/zx_go"
 "$BIN_DIR/zx_go" --export-icon "$ICON_DIR/zx_go.png"
 
 # Desktop entry with an absolute Exec so it works even when
-# ~/.local/bin is not on the session PATH.
-sed -e "s|^Exec=zx_go|Exec=$BIN_DIR/zx_go|" \
-    -e "s|^TryExec=zx_go|TryExec=$BIN_DIR/zx_go|" \
-    "$HERE/zx_go.desktop" > "$APP_DIR/zx_go.desktop"
+# ~/.local/bin is not on the session PATH, and Path=$HOME so the
+# cwd-relative Next ROM resolution (install.Path -> ./roms/next)
+# lands on ~/roms/next no matter how the file manager spawns it.
+{
+  sed -e "s|^Exec=zx_go|Exec=$BIN_DIR/zx_go|" \
+      -e "s|^TryExec=zx_go|TryExec=$BIN_DIR/zx_go|" \
+      "$HERE/zx_go.desktop"
+  echo "Path=$HOME"
+} > "$APP_DIR/zx_go.desktop"
 
 install -m 644 "$HERE/zx_go-mime.xml" "$MIME_DIR/packages/zx_go-mime.xml"
 refresh_databases
