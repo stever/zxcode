@@ -27,6 +27,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/conorarmstrong/zx_go/pkg/audio"
 	"github.com/conorarmstrong/zx_go/pkg/config"
 	"github.com/conorarmstrong/zx_go/pkg/debugger"
 	"github.com/conorarmstrong/zx_go/pkg/keyboard"
@@ -623,6 +624,21 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 				if now := time.Now(); now.Sub(lastFPS) >= time.Second {
 					fps := float64(e.fpsFrames.Swap(0)) / now.Sub(lastFPS).Seconds()
 					lastFPS = now
+					// Report the measured production rate to the audio
+					// rate servo — executed frames × samples-per-frame IS
+					// the sample production rate, and this loop knows the
+					// difference between "slow" and "paused" (no report
+					// while paused, so the servo holds its last rate).
+					if !e.paused.Load() && fps > 1 {
+						if e.ula != nil {
+							if as := e.ula.Audio(); as != nil {
+								as.SetMeasuredProductionRate(fps * float64(audio.SamplesPerFrame))
+							}
+						}
+						if e.samAudio != nil {
+							e.samAudio.SetMeasuredProductionRate(fps * float64(audio.SamplesPerFrame))
+						}
+					}
 					if e.fpsShow.Load() && e.fpsText != nil {
 						fyne.Do(func() {
 							e.fpsText.Text = fmt.Sprintf("%.1f fps", fps)

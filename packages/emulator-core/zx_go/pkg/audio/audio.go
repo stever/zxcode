@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ebitengine/oto/v3"
@@ -104,8 +105,23 @@ type AudioSystem struct {
 	statUnderruns uint64
 	statDropped   uint64
 	// statPushed counts every sample ever pushed (guarded by queueMu) —
-	// the rate servo's production-rate measurement input.
+	// diagnostic, see the drift probe test.
 	statPushed uint64
+
+	// prodRateBits (math.Float64bits) is the AUTHORITATIVE production
+	// rate in samples/second, reported by the frontend's frame loop
+	// (executed frames × SamplesPerFrame per wall second — the FPS
+	// measurement). The rate servo consumes this instead of inferring a
+	// rate from push timestamps: a wall-clock estimator cannot tell "the
+	// emulator is overloaded" from "production intentionally stopped"
+	// (pause, .nex import, screen transition), and a single stopped
+	// window poisons the estimate — the ratio then pins low while
+	// production resumes at full rate, the ring overflows, and
+	// drop-oldest shreds the stream (heard as garbled jingles and
+	// swallowed keyclicks). The frame loop KNOWS the difference and
+	// simply doesn't report while paused. Zero means "not reported yet"
+	// → nominal SampleRate.
+	prodRateBits atomic.Uint64
 
 	// Optional AY-3-8912 source.
 	ayMu sync.RWMutex
@@ -150,26 +166,20 @@ type audioReader struct {
 	// Control shape: integrating controllers on an integrating plant
 	// (ring depth) double-integrate and hunt audibly, so the servo is
 	// FEED-FORWARD + weak proportional instead — nothing to oscillate.
-	// rateEMA measures the producer's actual samples/second from
-	// statPushed deltas over wall time; ratio tracks rateEMA/SampleRate
-	// directly (a producer at 80% speed is consumed at 80% rate by
-	// construction), and a small depth-centering term nudges the ring
-	// back toward target so estimate error can't slowly walk it away.
-	// The estimate freezes while the underrun cushion is rebuilding
-	// (production is briefly unrepresentative) — which also keeps a
-	// pause from dragging the estimate to zero.
+	// The feed-forward term is the frontend-reported production rate
+	// (see AudioSystem.prodRateBits): ratio glides toward
+	// reportedRate/SampleRate, so a machine emulating at 80% speed is
+	// consumed at 80% rate by construction, and a small depth-centering
+	// term nudges the ring back toward target so reporting error can't
+	// slowly walk it away.
 	//
 	// srcBuf is the pre-resample scratch; srcFrac carries the
 	// fractional source position across pulls so the average rate is
-	// exact. nowFn is the clock (injectable for tests).
-	ratio      float64 // applied resample ratio (source per output sample)
-	rateEMA    float64 // measured production rate, samples/s
-	errEMA     float64 // smoothed depth error (samples), centering input
-	lastPushed uint64
-	lastPull   time.Time
-	nowFn      func() time.Time
-	srcFrac    float64
-	srcBuf     []int16
+	// exact.
+	ratio   float64 // applied resample ratio (source per output sample)
+	errEMA  float64 // smoothed depth error (samples), centering input
+	srcFrac float64
+	srcBuf  []int16
 }
 
 // oto permits exactly ONE audio context per process — a second
@@ -192,6 +202,19 @@ var (
 	// ineffective and log nothing).
 	deviceBufferSize time.Duration
 )
+
+// SetMeasuredProductionRate reports the frontend's actual sample
+// production rate (executed emulation frames × SamplesPerFrame per wall
+// second — the frame loop's FPS measurement). The rate servo in the oto
+// pull path consumes it; see prodRateBits for why the frontend reports
+// this rather than the audio system inferring it. Call it periodically
+// while RUNNING; do not call while paused (the last reported rate
+// simply stays in effect for the cushion to bridge).
+func (as *AudioSystem) SetMeasuredProductionRate(samplesPerSecond float64) {
+	if samplesPerSecond > 0 {
+		as.prodRateBits.Store(math.Float64bits(samplesPerSecond))
+	}
+}
 
 // SetDeviceBufferDuration configures the audio device buffer used when
 // the shared oto context is first created (`--audio-buffer-ms`). Must be
@@ -429,51 +452,33 @@ func (ar *audioReader) Read(p []byte) (n int, err error) {
 	// linearly resample it onto mixBuf.
 	ar.audioSys.queueMu.Lock()
 	depth := ar.audioSys.queueSize
-	rebuilding := ar.audioSys.cushioning
-	pushed := ar.audioSys.statPushed
 	ar.audioSys.queueMu.Unlock()
 	const (
 		depthTarget = underrunCushion + SamplesPerFrame // ~80 ms — comfortably above the hysteresis watermark
-		rateAlpha   = 0.2                               // production-rate EMA per 100 ms window: ~63% in ~0.5 s
 		errAlpha    = 0.05                              // depth-error EMA: kills the ~7 Hz push/pull beat
 		centerGain  = 2e-6                              // depth centering: ±900-sample wobble → ±0.18% trim
 		centerClamp = 0.01                              // centering may never exceed ±1%
+		ratioGlide  = 0.1                               // per-pull first-order glide toward the target ratio
 		ratioMin    = 0.55                              // sustained-overload floor (45% slowdown)
 		ratioMax    = 1.06                              // surplus drain ceiling
 	)
 	if need := int(float64(samples)*ratioMax) + 2; len(ar.srcBuf) < need {
 		ar.srcBuf = make([]int16, need)
 	}
-	now := time.Now
-	if ar.nowFn != nil {
-		now = ar.nowFn
-	}
-	t := now()
-	if ar.lastPull.IsZero() || ar.rateEMA == 0 {
-		// First pull (or zero-value test reader): assume nominal rate.
-		ar.rateEMA = SampleRate
-		ar.lastPull = t
-		ar.lastPushed = pushed
-	} else if dt := t.Sub(ar.lastPull).Seconds(); dt >= 0.1 {
-		// Rate is measured over ≥100 ms windows — several pushes per
-		// sample, so the frame-burst cadence can't alias the estimate
-		// (a per-pull instant rate alternates push-heavy/push-empty and
-		// biases the EMA). Windows during cushion rebuilds or stalls
-		// (suspend, debugger pause) are unrepresentative: re-anchor
-		// without updating.
-		if dt < 0.5 && !rebuilding {
-			inst := float64(pushed-ar.lastPushed) / dt
-			ar.rateEMA += rateAlpha * (inst - ar.rateEMA)
-		}
-		ar.lastPull = t
-		ar.lastPushed = pushed
+	rate := math.Float64frombits(ar.audioSys.prodRateBits.Load())
+	if rate <= 0 {
+		rate = SampleRate // no frontend report yet (or non-GUI use): nominal
 	}
 	if samples > 0 {
 		ar.errEMA += errAlpha * (float64(depth-depthTarget) - ar.errEMA)
 	}
 	centering := ar.errEMA * centerGain
 	centering = math.Max(-centerClamp, math.Min(centerClamp, centering))
-	ar.ratio = math.Max(ratioMin, math.Min(ratioMax, ar.rateEMA/SampleRate+centering))
+	target := math.Max(ratioMin, math.Min(ratioMax, rate/SampleRate+centering))
+	if ar.ratio == 0 {
+		ar.ratio = 1 // zero-value reader (tests construct the struct directly)
+	}
+	ar.ratio += ratioGlide * (target - ar.ratio)
 	srcF := float64(samples)*ar.ratio + ar.srcFrac
 	srcN := int(srcF)
 	ar.srcFrac = srcF - float64(srcN)
