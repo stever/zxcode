@@ -173,12 +173,15 @@ type audioReader struct {
 	// term nudges the ring back toward target so reporting error can't
 	// slowly walk it away.
 	//
-	// srcBuf is the pre-resample scratch; srcFrac carries the
-	// fractional source position across pulls so the average rate is
-	// exact.
+	// srcBuf is the pre-resample scratch; phase is the fractional
+	// source position carried across pulls (continuous-phase streaming
+	// resample — no per-chunk splices); prevSrc is the final source
+	// sample of the previous chunk, the interpolation anchor for the
+	// next chunk's first outputs.
 	ratio   float64 // applied resample ratio (source per output sample)
 	errEMA  float64 // smoothed depth error (samples), centering input
-	srcFrac float64
+	phase   float64
+	prevSrc int16
 	srcBuf  []int16
 }
 
@@ -478,33 +481,64 @@ func (ar *audioReader) Read(p []byte) (n int, err error) {
 	if ar.ratio == 0 {
 		ar.ratio = 1 // zero-value reader (tests construct the struct directly)
 	}
+	// Snap-to-unity: within snapBand of nominal the ratio pins to
+	// EXACTLY 1.0 with zero phase, and audio takes the bit-exact copy
+	// path below — the resampler engages only for genuine slowdown or a
+	// depth-recentering excursion. This matters more than resampler
+	// quality: fps-report noise (±0.2%) and the ever-present centering
+	// trim would otherwise keep the resampler engaged 100% of the time
+	// for no audible benefit.
+	const snapBand = 0.002
+	if math.Abs(target-1) < snapBand {
+		target = 1
+		if math.Abs(ar.ratio-1) < 5e-4 {
+			ar.ratio = 1
+			ar.phase = 0
+		}
+	}
 	ar.ratio += ratioGlide * (target - ar.ratio)
-	srcF := float64(samples)*ar.ratio + ar.srcFrac
-	srcN := int(srcF)
-	ar.srcFrac = srcF - float64(srcN)
-	if srcN < 2 {
-		srcN = 2
-	}
-	if srcN > len(ar.srcBuf) {
-		srcN = len(ar.srcBuf)
-		ar.srcFrac = 0
-	}
-	ar.audioSys.popBeeperSamples(ar.srcBuf[:srcN])
-	if srcN == samples || samples < 2 {
-		copy(mixBuf, ar.srcBuf[:min(srcN, samples)])
-	} else {
-		step := float64(srcN-1) / float64(samples-1)
-		pos := 0.0
-		for i := 0; i < samples; i++ {
-			ip := int(pos)
-			f := pos - float64(ip)
-			a := ar.srcBuf[ip]
-			b := a
-			if ip+1 < srcN {
-				b = ar.srcBuf[ip+1]
+
+	if ar.ratio == 1 && ar.phase == 0 {
+		// Bit-exact path — identical to what the clean-sounding probe
+		// exercises. This is the steady state on a healthy machine.
+		ar.audioSys.popBeeperSamples(mixBuf)
+		if samples > 0 {
+			ar.prevSrc = mixBuf[samples-1]
+		}
+	} else if samples > 0 {
+		// Streaming linear resampler with CONTINUOUS phase: output i
+		// samples the source timeline at prev + phase + i*ratio, where
+		// prev is the last source sample of the previous chunk. No
+		// per-chunk endpoint splices — a splice per chunk on square
+		// waves is an audible ~43 Hz click-buzz (the "complete shit"
+		// regression this replaces).
+		adv := ar.phase + float64(samples)*ar.ratio
+		k := int(adv)
+		if k > len(ar.srcBuf) { // safety; unreachable within ratio clamps
+			k = len(ar.srcBuf)
+			adv = float64(k)
+		}
+		ar.audioSys.popBeeperSamples(ar.srcBuf[:k])
+		sample := func(idx int) int16 { // idx 0 = prev, idx j>0 = srcBuf[j-1]
+			if idx <= 0 {
+				return ar.prevSrc
 			}
-			mixBuf[i] = int16(float64(a) + f*float64(b-a))
-			pos += step
+			if idx > k {
+				idx = k // ≤1-sample tail clamp; next chunk continues smoothly
+			}
+			return ar.srcBuf[idx-1]
+		}
+		for i := 0; i < samples; i++ {
+			q := ar.phase + float64(i)*ar.ratio
+			lo := int(q)
+			f := q - float64(lo)
+			a := float64(sample(lo))
+			b := float64(sample(lo + 1))
+			mixBuf[i] = int16(a + f*(b-a))
+		}
+		ar.phase = adv - float64(k)
+		if k > 0 {
+			ar.prevSrc = ar.srcBuf[k-1]
 		}
 	}
 

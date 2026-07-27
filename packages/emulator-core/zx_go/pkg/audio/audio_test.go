@@ -701,3 +701,111 @@ func TestRateServoAbsorbsDriftSurplus(t *testing.T) {
 			settledDrops, finalDrops)
 	}
 }
+
+// TestServoBitExactAtNominal verifies the snap-to-unity fast path: with
+// the reported rate nominal and the ring at a healthy depth, the pull
+// path must return the pushed samples BIT-EXACTLY — no resampler in the
+// signal path (fps-report noise must not smear square waves through
+// interpolation; this is the clean path the probe tone exercises).
+func TestServoBitExactAtNominal(t *testing.T) {
+	as := fakeSystem()
+	as.resetQueueCushioned()
+	r := fakeReader(as, 441)
+
+	// Prime to the servo's target depth so centering is ~0 and the
+	// cushion is released.
+	prime := make([]int16, underrunCushion+SamplesPerFrame)
+	as.PushBeeperSamples(prime)
+
+	src := make([]int16, 441)
+	for i := range src {
+		src[i] = int16(1000 + i*7) // distinctive, non-repeating
+	}
+	out := make([]byte, 441*ChannelCount*2)
+	// A few pulls to let ratio settle onto the snap.
+	for k := 0; k < 8; k++ {
+		as.PushBeeperSamples(src)
+		if _, err := r.Read(out); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if r.ratio != 1 || r.phase != 0 {
+		t.Fatalf("ratio=%v phase=%v, want exactly 1/0 (snap-to-unity)", r.ratio, r.phase)
+	}
+	// Now the stream must come through untouched: push a marker frame
+	// and pull until it appears; every marker sample must be exact.
+	marker := make([]int16, 441)
+	for i := range marker {
+		marker[i] = int16(-7000 - i)
+	}
+	as.PushBeeperSamples(marker)
+	found := false
+	for k := 0; k < 16 && !found; k++ {
+		if _, err := r.Read(out); err != nil {
+			t.Fatal(err)
+		}
+		// Decode chunk (mono from stereo LE) and scan for the marker.
+		mono := make([]int16, 441)
+		for i := 0; i < 441; i++ {
+			mono[i] = int16(uint16(out[i*4]) | uint16(out[i*4+1])<<8)
+		}
+		for i := 0; i < 441; i++ {
+			if mono[i] == -7000 {
+				found = true
+				for j := 0; i+j < 441 && j < 441; j++ {
+					if mono[i+j] != int16(-7000-j) {
+						t.Fatalf("marker corrupted at +%d: got %d want %d", j, mono[i+j], -7000-j)
+					}
+				}
+			}
+		}
+		as.PushBeeperSamples(make([]int16, 441)) // keep depth healthy
+	}
+	if !found {
+		t.Fatal("marker never surfaced through the pull path")
+	}
+}
+
+// TestResamplerContinuousAcrossChunks engages the resampler (ratio well
+// below 1) on a linear ramp and verifies the output has NO chunk-boundary
+// splices: a linearly resampled ramp is still a ramp, so consecutive
+// output samples must differ by a near-constant step everywhere,
+// including across Read() boundaries. The per-chunk endpoint-mapped
+// resampler this guards against produced a discontinuity at every chunk
+// boundary — a 43 Hz click-buzz on real content.
+func TestResamplerContinuousAcrossChunks(t *testing.T) {
+	as := fakeSystem()
+	as.resetQueueCushioned()
+	as.SetMeasuredProductionRate(0.8 * SampleRate)
+	r := fakeReader(as, 441)
+
+	// Long ramp with step 4 per source sample: resampled at ~0.8 the
+	// output step is ~3.2, so any splice (jump of ~4+ extra) stands out.
+	ramp := make([]int16, 20000)
+	for i := range ramp {
+		ramp[i] = int16(i * 4)
+	}
+	as.PushBeeperSamples(ramp)
+
+	out := make([]byte, 441*ChannelCount*2)
+	var mono []int16
+	for k := 0; k < 20; k++ {
+		if _, err := r.Read(out); err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 441; i++ {
+			mono = append(mono, int16(uint16(out[i*4])|uint16(out[i*4+1])<<8))
+		}
+	}
+	// Skip the leading cushion/settle region: find the first index where
+	// the ramp is clearly flowing, then check step regularity after the
+	// ratio has settled (last half).
+	start := len(mono) / 2
+	for i := start + 1; i < len(mono); i++ {
+		d := int(mono[i]) - int(mono[i-1])
+		if d < 2 || d > 5 {
+			t.Fatalf("splice at %d (chunk boundary %v): step %d, want ~3.2",
+				i, i%441 == 0, d)
+		}
+	}
+}
