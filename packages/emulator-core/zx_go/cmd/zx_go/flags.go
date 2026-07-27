@@ -163,7 +163,8 @@ type cliFlags struct {
 	// A diagnostic for audio artefacts (clicks/pops) that only appear
 	// in the live GUI: the captured file is ground truth for what we
 	// emit, independent of the host's Core Audio / speaker behaviour.
-	recordAudio string
+	recordAudio   string
+	capturePushed string
 
 	// audioKeepAlive overrides the sub-audible keep-alive dither level
 	// (peak amplitude in 16-bit units) that stops the host audio amp
@@ -325,6 +326,7 @@ func parseCLI() *cliFlags {
 		noSound             = flag.Bool("no-sound", false, "Mute audio output (no oto context, no beeper / AY / DAC mix). Useful during long debugger sessions where the beeper sings under step traces, and for headless runs that don't need audio.")
 		recordAudio         = flag.String("record-audio", "", "Capture the mixed audio output to this WAV path from startup (the exact stream sent to the device). Diagnostic for clicks/pops that only appear live — the file is ground truth for what we emit.")
 		audioBufferMS       = flag.Int("audio-buffer-ms", 0, "Audio device buffer in milliseconds (0 = platform default). Raise (e.g. 100) if live audio crackles while the FPS overlay holds 50 — trades latency for underrun immunity.")
+		capturePushed       = flag.String("capture-pushed-audio", "", "DIAG (headless): write the per-frame GENERATED audio to this WAV — drained straight from the ring as the browser's PullMono path consumes it, no realtime pull/servo/device involved. Splits generation bugs from playback bugs.")
 		audioKeepAlive      = flag.Int("audio-keepalive-level", -1, "Peak amplitude (16-bit units, out of 32767) of the keep-alive dither that stops the macOS speaker amp powering down during silence and popping on the next sound. -1 = built-in default (off); set e.g. 16/24 to enable if the startup/load pop bothers you (trades a faint noise floor).")
 		audioDCBlock        = flag.Bool("audio-dc-block", true, "Apply the DC-blocking high-pass to audio output (removes the idle DC rail / 'battery click'). Use --audio-dc-block=false to emit raw beeper levels — an A/B diagnostic for beeper-audio fidelity.")
 		sdWriteback         = flag.Bool("sd-writeback", false, "Persist guest writes on the mounted SD image back to the image file at exit (previous file kept as .bak). Default: writes live in RAM only.")
@@ -462,6 +464,7 @@ func parseCLI() *cliFlags {
 	f.captureNextSnapshot = *captureNextSnapshot
 	f.noSound = *noSound
 	f.recordAudio = *recordAudio
+	f.capturePushed = *capturePushed
 	// Applied here (not at emulator construction) because the oto context
 	// is a process singleton created by the FIRST AudioSystem — the buffer
 	// must be configured before that.

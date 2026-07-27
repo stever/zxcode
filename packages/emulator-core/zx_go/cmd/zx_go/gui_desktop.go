@@ -544,6 +544,15 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 						framesThisIter = n
 					}
 
+					// Generate this frame's audio NOW, decoupled from
+					// rendering (Render()'s own flush is idempotent and
+					// becomes a no-op). Rendering may skip frames — render
+					// gate races, catch-up bursts — but audio must not:
+					// every executed frame owes the ring its samples.
+					if e.ula != nil {
+						e.ula.FlushAudioFrame()
+					}
+
 					frameCount++
 					e.fpsFrames.Add(int64(framesThisIter))
 					atomic.AddInt32(&e.frameCounter, 1)

@@ -1,8 +1,8 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
-	"github.com/conorarmstrong/zx_go/pkg/next/divmmc"
 	"image/png"
 	"log/slog"
 	"os"
@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/conorarmstrong/zx_go/pkg/audio"
+	"github.com/conorarmstrong/zx_go/pkg/next/divmmc"
 	"github.com/conorarmstrong/zx_go/pkg/roms"
 	"github.com/conorarmstrong/zx_go/pkg/z80"
 )
@@ -573,6 +575,17 @@ func runHeadless(f *cliFlags) {
 	}
 
 	emu.paused.Store(false)
+	// --capture-pushed-audio accumulators (see the drain in the frame loop).
+	// The realtime oto player is paused so the per-frame PullMono drain is
+	// the ring's ONLY consumer — the capture is then exactly the generated
+	// stream, as the browser's pull path sees it.
+	var capturedPushed []int16
+	var capturePushedBuf []int16
+	if f.capturePushed != "" && emu.ula != nil {
+		if as := emu.ula.Audio(); as != nil {
+			as.Stop()
+		}
+	}
 	if f.frames > 0 {
 		slog.Info("headless run starting", "model", roms.GetModelName(model),
 			"frames", f.frames)
@@ -1015,6 +1028,19 @@ func runHeadless(f *cliFlags) {
 			if emu.nexloadMacro != nil && emu.nexloadMacro.tick(emu) {
 				emu.nexloadMacro = nil
 			}
+			// --capture-pushed-audio: drain this frame's generated samples
+			// the way the browser's PullMono path does (AY/DAC mixed, no
+			// realtime pull/servo/device) — ground truth for generation.
+			if f.capturePushed != "" && emu.ula != nil {
+				if as := emu.ula.Audio(); as != nil {
+					emu.ula.FlushAudioFrame() // headless never renders; generate explicitly
+					if capturePushedBuf == nil {
+						capturePushedBuf = make([]int16, audio.SamplesPerFrame*4)
+					}
+					n := as.PullMono(capturePushedBuf)
+					capturedPushed = append(capturedPushed, capturePushedBuf[:n]...)
+				}
+			}
 			// ZX_GO_RUN_BAS_FILE=path[@frame]: invoke the real importAndRunBas
 			// flow (write autoexec.bas + reboot + boot macro) at the given
 			// frame — reproduces the browser Play-button path headlessly.
@@ -1072,6 +1098,14 @@ func runHeadless(f *cliFlags) {
 		slog.Info("headless run complete", "frames", f.frames,
 			"pc", emu.cpu.PC, "insns", emu.cpu.InstructionCount(),
 			"int_fires", z80.IntFireCount)
+		if f.capturePushed != "" {
+			if err := writeMonoWav(f.capturePushed, capturedPushed, audio.SampleRate); err != nil {
+				slog.Error("capture-pushed-audio write failed", "err", err)
+			} else {
+				slog.Info("capture-pushed-audio written", "path", f.capturePushed,
+					"samples", len(capturedPushed), "seconds", float64(len(capturedPushed))/audio.SampleRate)
+			}
+		}
 		emu.flushSDWriteback()
 		if provHost != nil {
 			provHost.logEndOfRunProvenance()
@@ -1144,4 +1178,38 @@ func runOneFrameHeadless(emu *emulator, model roms.SpectrumModel) {
 		emu.cpu.StepInstructionWithIRQ()
 	}
 	emu.tapeFrameHook()
+}
+
+// writeMonoWav writes 16-bit mono PCM samples as a canonical 44-byte-header
+// WAV. Diagnostic helper for --capture-pushed-audio.
+func writeMonoWav(path string, samples []int16, rate int) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	dataLen := len(samples) * 2
+	hdr := make([]byte, 44)
+	copy(hdr[0:], "RIFF")
+	binary.LittleEndian.PutUint32(hdr[4:], uint32(36+dataLen))
+	copy(hdr[8:], "WAVE")
+	copy(hdr[12:], "fmt ")
+	binary.LittleEndian.PutUint32(hdr[16:], 16)
+	binary.LittleEndian.PutUint16(hdr[20:], 1) // PCM
+	binary.LittleEndian.PutUint16(hdr[22:], 1) // mono
+	binary.LittleEndian.PutUint32(hdr[24:], uint32(rate))
+	binary.LittleEndian.PutUint32(hdr[28:], uint32(rate*2))
+	binary.LittleEndian.PutUint16(hdr[32:], 2)
+	binary.LittleEndian.PutUint16(hdr[34:], 16)
+	copy(hdr[36:], "data")
+	binary.LittleEndian.PutUint32(hdr[40:], uint32(dataLen))
+	if _, err := f.Write(hdr); err != nil {
+		return err
+	}
+	buf := make([]byte, dataLen)
+	for i, s := range samples {
+		binary.LittleEndian.PutUint16(buf[i*2:], uint16(s))
+	}
+	_, err = f.Write(buf)
+	return err
 }

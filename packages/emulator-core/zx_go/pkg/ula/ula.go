@@ -3877,11 +3877,30 @@ func (u *ULA) Reset() {
 	}
 }
 
+// FlushAudioFrame synthesises the just-finished frame's audio and pushes
+// it to the audio system. Idempotent per frame — the desktop frame loop
+// calls it after EVERY executed frame, and Render()'s own call (the
+// wasm/browser path, which renders every frame) becomes a no-op when the
+// frame was already flushed. Audio generation MUST NOT be gated on
+// rendering: the desktop's render gate races the 20 ms tick and skips
+// renders during catch-up bursts, and every skipped flush used to mean a
+// frame of audio never generated PLUS the next flush cramming two
+// frames of speaker events into one frame's sample window — heard as
+// 20 ms holes and time-compressed garble.
+func (u *ULA) FlushAudioFrame() { u.flushAudioFrame() }
+
 // flushAudioFrame synthesises the beeper waveform for the just-finished
 // frame from the recorded speaker events, pushes it to the audio
 // system, and resets the per-frame state for the next frame.
 func (u *ULA) flushAudioFrame() {
 	if u.audio == nil {
+		return
+	}
+	// Idempotence: if no CPU time has passed since the last flush there
+	// is no new frame to synthesise (a second Render() on the same
+	// frame, or a flush racing a stale screenshot render). Without this
+	// guard a duplicate flush pushed a spurious frame of silence.
+	if u.mem != nil && u.mem.TStates != nil && u.refNow() == u.frameStartRefTstate {
 		return
 	}
 	// During fast-tape turbo, many emulated frames collapse into this single
