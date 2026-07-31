@@ -1178,6 +1178,20 @@ func (u *ULA) currentScanline() int {
 	return 0
 }
 
+// paperTopRaster returns the raster line of paper row 0 in the same
+// line space the raster stamps use (currentScanline / BeamPosition):
+// the live NR$03/$05 geometry's c_min_vactive on the Next-composited
+// render (64 at 50 Hz, 40 at 60 Hz, 80 on Pentagon —
+// zxula_timing.vhd:203/:237/:167), the classic fixed 64 elsewhere
+// (48K paper top = T-state 14336 = line 64 x 224). Keyed on the
+// compositor like the rest of the wide-frame geometry (borderTop).
+func (u *ULA) paperTopRaster() int {
+	if u.nextCompositor != nil && u.mem != nil {
+		return u.mem.NextGeometry().MinVActive
+	}
+	return 64
+}
+
 // recordULAVideoChange appends the CURRENT live ulaVideoState to the
 // frame's change log, stamped with the same scanline clock the border
 // change list uses.
@@ -1371,11 +1385,12 @@ func (u *ULA) Render() *image.RGBA {
 		if u.borderChanges[0].scanline == 0 {
 			currentBorder = u.borderChanges[0].colour
 		}
+		paperTop := u.paperTopRaster()
 		changeIdx := 0
 		for line := 0; line < u.totalHeight; line++ {
 			// Advance past any border changes that apply to this scanline
 			// Map display line to frame scanline (line 0 = top border start)
-			frameScanline := line + (64 - u.borderTop) // display top = raster 64-borderTop (paper top = raster 64)
+			frameScanline := line + (paperTop - u.borderTop) // display top = raster paperTop-borderTop
 			for changeIdx < len(u.borderChanges) && u.borderChanges[changeIdx].scanline <= frameScanline {
 				currentBorder = u.borderChanges[changeIdx].colour
 				changeIdx++
@@ -1402,9 +1417,10 @@ func (u *ULA) Render() *image.RGBA {
 		liveVideo := u.liveULAVideoState()
 		if len(u.ulaVideoChanges) > 0 {
 			cur := u.frameStartULAVideo
+			paperTop := u.paperTopRaster()
 			idx := 0
 			for line := 0; line < u.totalHeight; line++ {
-				frameScanline := line + (64 - u.borderTop)
+				frameScanline := line + (paperTop - u.borderTop)
 				for idx < len(u.ulaVideoChanges) && u.ulaVideoChanges[idx].scanline <= frameScanline {
 					cur = u.ulaVideoChanges[idx].state
 					idx++
@@ -2624,26 +2640,55 @@ func (u *ULA) Close() {
 func (u *ULA) applyNextCompositor(stale bool) {
 	const w = 256
 	const h = 192
+	// Raster geometry for the copper interleave and the row map, all
+	// from the LIVE NR$03/NR$05 geometry mirror (zxula_timing.vhd
+	// constant table via next.FrameGeometryFor; sampled per render —
+	// the vsync eff-latch grain, zxnext.vhd:6693-6706):
+	//  - hcounts: 7 MHz pixels per line (c_max_hc+1 — 456 on 128K/+3
+	//    timing, 448 on 48K/Pentagon, zxula_timing.vhd:196/:262/:160).
+	//  - frameLines: lines per frame (c_max_vc+1: 311/312/264/320).
+	//    The old hardcoded 312 advanced the copper one extra line per
+	//    frame on the 311-line timing — +0.32% copper rate — which
+	//    broke engines that phase-lock NMI-pacer stub walks to raster
+	//    events (Atic Atac's sample engine overshot its per-buffer
+	//    stub walk by 1-2 stubs and derailed at a scene transition,
+	//    #187).
+	//  - paperTop: the raster line (vc) of paper row 0
+	//    (c_min_vactive: 64 at 50 Hz, 40 at 60 Hz, 80 on Pentagon) —
+	//    the anchor every raster-stamped replay folds against.
+	// The copper's hcount input is hc_ula, the ULA-anchored counter
+	// (reset at c_min_hactive-12, zxula_timing.vhd:423-424; wired at
+	// zxnext.vhd hcount_i => hc <= o_hc_ula), so the display mapping
+	// below — paper x 0 at hcount 12, frame pixel x at hcount x-20 —
+	// is TIMING-INDEPENDENT; only the line length and the left tail's
+	// position move with the geometry. Its vcount input is cvc, the
+	// paper-anchored counter (cvc 0 = paper top, :458-468), which the
+	// walk's y/v values already are.
+	g := memory.DefaultNextGeometry()
+	if u.mem != nil {
+		g = u.mem.NextGeometry()
+	}
+	hcounts := g.TStatesPerLine * 2 // 2 hc per 3.5 MHz T-state
+	hcMax := uint16(hcounts - 1)
+	frameLines := g.Lines
+	paperTop := g.MinVActive
 	// The copper runs at 28 MHz, one cycle per NOOP / two per MOVE
-	// (device/copper.vhd). A scanline on the Next's 128K/+3 timing is
-	// 456 hcounts (c_max_hc = 455, zxula_timing.vhd:196) x 4 cycles =
-	// 1824 copper cycles — Step's budget is in those cycles, so a
-	// free-running looped list (Atic Atac's NMI sample pacer: 1024
-	// entries ≈ 1361 cycles) wraps at the hardware rate (~20 kHz).
-	// WAIT-heavy programs park early and spend almost none of it.
-	// NB a WAIT whose threshold (X<<3)+12 exceeds 455 (X >= 56) can
-	// never release on hardware — the hcount wraps first — and both
-	// engines reproduce that (#179 equivalence).
-	const copperCyclesPerScanline = 456 * 4
-	// Raster geometry for the cycle-paced copper interleave. hcount
-	// counts 7MHz pixels (456 per 128K-timing line, 0..455); the copper
-	// runs 4 cycles per hcount (28 MHz, copper.CyclesPerHcount).
+	// (device/copper.vhd), 4 cycles per hcount — a 456-hcount line is
+	// 1824 copper cycles, a 448-hcount line 1792. Step's budget is in
+	// those cycles, so a free-running looped list (Atic Atac's NMI
+	// sample pacer: 1024 entries ≈ 1361 cycles) wraps at the hardware
+	// rate (~20 kHz). WAIT-heavy programs park early and spend almost
+	// none of it. NB a WAIT whose threshold (X<<3)+12 exceeds hcMax
+	// (X >= 56 on 456-hcount timing, X >= 55 on 448) can never release
+	// on hardware — the hcount wraps first — and both engines reproduce
+	// that (#179 equivalence; emergent from the live line length here).
+	//
 	// Display pixel x is influenced by copper activity through hcount
 	// x+12 — the same +12 offset the WAIT release threshold (X<<3)+12
 	// carries (device/copper.vhd:94), so WAIT(h=X) + MOVE recolours the
 	// pixel at exactly x = X*8, matching the real-board behaviour the
 	// upstream base/Copper test's ReadMe documents. The +2 inside
-	// halfCycle admits the releasing WAIT check (1 cycle) plus its
+	// slotAt admits the releasing WAIT check (1 cycle) plus its
 	// following MOVE's write pulse into the pixel's own 4-cycle window.
 	//
 	// The interleave grain is the 14 MHz HALF-pixel (#183 stage 2): the
@@ -2657,17 +2702,14 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// bit-compatible with the coalesced one on event-free rows) and the
 	// odd half at +4.
 	const cyclesPerHcount = 4
-	const lineEndCycle = 456*cyclesPerHcount - 1
-	// frameLines follows the LIVE geometry (zxula_timing.vhd c_max_vc+1:
-	// 311 on the +3 50 Hz boot timing, 312/264/320 on others). The old
-	// hardcoded 312 advanced the copper one extra line per frame on the
-	// 311-line timing — +0.32% copper rate — which broke engines that
-	// phase-lock NMI-pacer stub walks to raster events (Atic Atac's
-	// sample engine overshot its per-buffer stub walk by 1-2 stubs and
-	// derailed at a scene transition, #187).
-	frameLines := memory.DefaultNextGeometry().Lines
-	if u.mem != nil {
-		frameLines = u.mem.NextGeometry().Lines
+	copperCyclesPerScanline := hcounts * cyclesPerHcount
+	lineEndCycle := copperCyclesPerScanline - 1
+	// Keep the copper's own line clock (overrun carry, stop/start
+	// pause-window conversion) on the same live length — the
+	// startPhase source already produces instants at 8 cycles per
+	// live-geometry T-state, i.e. tpl*8 = hcounts*4 per line.
+	if lc, ok := u.nextCopper.(interface{ SetLineCycles(int) }); ok {
+		lc.SetLineCycles(copperCyclesPerScanline)
 	}
 	if len(u.compositorScan) < 2*w*4 {
 		u.compositorScan = make([]byte, 2*w*4)
@@ -2725,19 +2767,30 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// (nextTilemapScrollFold) before any compositor pass; this walk
 	// feeds it per-row captures below.
 	scrollCap, _ := u.nextCompositor.(nextLayerScrollFold)
-	// Raster order of one display row's border pixels (hcount = pixel+12,
-	// 448 hcounts per line): the left border's first 20 pixels display
-	// during the PREVIOUS line's tail (hcount 428..447) and its last 12
-	// during hcount 0..11 of the row's own line; the right border follows
-	// the paper at hcount 268..299. leftCarry hands the previous line's
-	// tail pixels (resolved live, mid-tail) to the next row — this is what
-	// renders the base/Copper test's over-left-border flag, whose MOVEs
-	// live entirely inside that tail and are white-restored before the
-	// line ends.
+	// Raster order of one display row's border pixels (paper x at
+	// hcount x+12): the left border's first 20 pixels display during
+	// the PREVIOUS line's tail, starting at hcount hcounts-28 (428 on
+	// 456-hcount timing — the BOARD-pinned position: base/Copper's
+	// over-left-border flag WAITs on column 52 = hcount 428 and the
+	// real-hardware photo shows it at wide pixel 0). The whc counter
+	// alone puts wide pixel 0 at hc_ula = -20 mod line (= 436 on 456
+	// timing; -16 preload at c_min_hactive-48, zxula_timing.vhd:
+	// 476-492) — the 8-hcount difference is the fixed video-pipeline
+	// depth between the palette lookup the copper races and the pixel
+	// leaving the mixer, a clocked-stage count that does NOT scale
+	// with line length, so the tail start is hcounts-28 under every
+	// timing (420 on 448-hcount lines). The left border's last 12
+	// pixels display during hcount 0..11 of the row's own line; the
+	// right border follows the paper at hcount 268..299. leftCarry
+	// hands the previous line's tail pixels (resolved live, mid-tail)
+	// to the next row — this is what renders the base/Copper test's
+	// over-left-border flag, whose MOVEs live entirely inside that
+	// tail and are white-restored before the line ends.
 	// leftCarry holds OUTPUT (half-pixel) columns: 20 frame pixels = 40
 	// half-pixel slots, each resolved at its own 2-cycle copper position
 	// on paced rows (coalesced rows fill both halves of a pair alike).
 	const leftTailPx = 20
+	tailStartHc := hcounts - 28
 	var leftCarry [2 * leftTailPx][4]byte
 	leftCarryValid := false
 	// Displayed-ULA-palette replay: push each row's raster-stamped
@@ -2793,19 +2846,19 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	}()
 	for y := 0; y < h; y++ {
 		// Apply the frame's stamped palette writes from lines BEFORE
-		// this paper row's raster line (y+64); the row's OWN stamps
-		// land per half-pixel inside the row loop at their (line, hpos)
-		// position (#183 stage 5 — the FPGA's write-visible-on-the-
-		// next-lookup rule, zxnext.vhd:6969-6977). Without the sub-line
-		// surface (reduced mocks) the whole line applies up front, the
-		// pre-stage-5 row-start convention.
+		// this paper row's raster line (y+paperTop); the row's OWN
+		// stamps land per half-pixel inside the row loop at their
+		// (line, hpos) position (#183 stage 5 — the FPGA's write-
+		// visible-on-the-next-lookup rule, zxnext.vhd:6969-6977).
+		// Without the sub-line surface (reduced mocks) the whole line
+		// applies up front, the pre-stage-5 row-start convention.
 		rowStamps := false
 		if palReplay != nil {
 			if subReplay != nil {
-				subReplay.ReplayPaletteToLineStart(64 + y)
-				rowStamps = subReplay.PaletteLineHasStamps(64 + y)
+				subReplay.ReplayPaletteToLineStart(paperTop + y)
+				rowStamps = subReplay.PaletteLineHasStamps(paperTop + y)
 			} else {
-				palReplay.ReplayPaletteThrough(64 + y)
+				palReplay.ReplayPaletteThrough(paperTop + y)
 			}
 		}
 		// Run the Copper for this row BEFORE composing it so MOVEs
@@ -2830,11 +2883,11 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			// stale-looking ships). Row granularity: a mid-row MOVE lands
 			// on the next row, the render's documented line quantum.
 			if scrollCap != nil {
-				scrollCap.CaptureLayerRowScroll(64 + y)
+				scrollCap.CaptureLayerRowScroll(paperTop + y)
 			}
-			u.nextCopper.Step(uint16(y), 455, copperCyclesPerScanline)
+			u.nextCopper.Step(uint16(y), hcMax, copperCyclesPerScanline)
 		} else if scrollCap != nil {
-			scrollCap.CaptureLayerRowScroll(64 + y)
+			scrollCap.CaptureLayerRowScroll(paperTop + y)
 		}
 		rowStart := (u.borderTop+y)*u.img.Stride + BorderLeft*u.xs*4
 		pushPriority(u.ulaVideoLine[u.borderTop+y].nr15)
@@ -2870,7 +2923,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		if rowStamps && !(liveULA && rowHalf) {
 			// No per-half-pixel resolution available for this row: apply
 			// its stamps up front (the row-start convention).
-			palReplay.ReplayPaletteThrough(64 + y)
+			palReplay.ReplayPaletteThrough(paperTop + y)
 			rowStamps = false
 		}
 		// slotAt advances the row's sub-line state to hcount hc, half h:
@@ -2881,7 +2934,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 				paced.RunToCycle(uint16(y), hc*cyclesPerHcount+2+2*hf)
 			}
 			if rowStamps {
-				subReplay.ReplayPaletteWithinLine(64+y, hc)
+				subReplay.ReplayPaletteWithinLine(paperTop+y, hc)
 			}
 		}
 		if liveULA {
@@ -2968,7 +3021,7 @@ func (u *ULA) applyNextCompositor(stale bool) {
 			if y+1 < h {
 				for obx := 0; obx < 2*leftTailPx; obx++ {
 					if rowPaced || rowStamps {
-						slotAt(428+(obx>>1), obx&1)
+						slotAt(tailStartHc+(obx>>1), obx&1)
 					}
 					leftCarry[obx] = u.nextBorderRGBA(u.borderTop+y+1, resolver)
 				}
@@ -2980,8 +3033,8 @@ func (u *ULA) applyNextCompositor(stale bool) {
 		}
 	}
 	// Sweep the copper through the vertical blank / border lines so WAITs
-	// targeting lines 192..311 release on their line and the raster wrap
-	// to line 0 restarts a StartOnVBL list next frame — and repaint the
+	// targeting lines 192..frameLines-1 release on their line and the raster
+	// wrap to line 0 restarts a StartOnVBL list next frame — and repaint the
 	// top/bottom border rows through the live palette at their raster
 	// lines. The FPGA resolves EVERY border pixel through the same
 	// palette SRAM as the paper, so these rows must match the paper-row
@@ -3009,26 +3062,28 @@ func (u *ULA) applyNextCompositor(stale bool) {
 				imgRow = v - (frameLines - u.borderTop) // top border, end of sweep
 			}
 			// Border rows: same per-row scroll capture as the paper
-			// walk (raster = image row + 32 on the wide frame),
+			// walk (raster = image row + paperTop - borderTop on the
+			// wide frame: image row 0 displays at vc = c_min_vactive -
+			// 32, the wvc counter's preload, zxula_timing.vhd:476-507),
 			// BEFORE this line's copper ops — the start-of-line state
 			// (see the paper walk's capture comment).
 			if imgRow >= 0 && scrollCap != nil {
-				scrollCap.CaptureLayerRowScroll(imgRow + 32)
+				scrollCap.CaptureLayerRowScroll(imgRow + paperTop - u.borderTop)
 			}
 			// Stamped-palette replay for the sweep rows. Bottom border
-			// rows scan at raster v+64, straight after the paper. The
-			// displayed frame's top border rows scanned BEFORE the
-			// paper (raster 40..63), so when the sweep reaches them the
-			// applied writes rewind to the frame start and replay
-			// forward again from there.
+			// rows scan at raster v+paperTop, straight after the paper.
+			// The displayed frame's top border rows scanned BEFORE the
+			// paper (raster paperTop-32..paperTop-1), so when the sweep
+			// reaches them the applied writes rewind to the frame start
+			// and replay forward again from there.
 			if liveULA && palReplay != nil {
 				if v < frameLines-u.borderTop {
-					palReplay.ReplayPaletteThrough(64 + v)
+					palReplay.ReplayPaletteThrough(paperTop + v)
 				} else {
 					if v == frameLines-u.borderTop {
 						palReplay.RewindPaletteReplay()
 					}
-					palReplay.ReplayPaletteThrough(v - (frameLines - u.borderTop) + (64 - u.borderTop))
+					palReplay.ReplayPaletteThrough(v - (frameLines - u.borderTop) + (paperTop - u.borderTop))
 				}
 			}
 			// Event-gated per-half-pixel border rows (#183 stage 5): a
@@ -3071,8 +3126,8 @@ func (u *ULA) applyNextCompositor(stale bool) {
 				paced.RunToCycle(uint16(v), lineEndCycle)
 			} else if u.nextCopper != nil {
 				// Non-live flow (the paper walk used per-row Step): keep
-				// stepping so line-192..311 WAITs release on their line.
-				u.nextCopper.Step(uint16(v), 455, copperCyclesPerScanline)
+				// stepping so border/blank-line WAITs release on their line.
+				u.nextCopper.Step(uint16(v), hcMax, copperCyclesPerScanline)
 			}
 			if imgRow >= 0 {
 				if liveULA {

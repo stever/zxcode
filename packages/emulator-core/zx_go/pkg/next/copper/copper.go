@@ -559,9 +559,10 @@ func Decode(w uint16) Instruction {
 // at or above which a WAIT with column field x releases on its
 // target scanline. The hardware compares hcount_i >= (x << 3) + 12, i.e.
 // the 6-bit column is taken as 8-pixel units with a fixed +12 pixel offset
-// (device/copper.vhd:94). hcount tops out at 455 on the Next's 128K/+3
-// timing (zxula_timing.vhd:196), so thresholds above that (x >= 56)
-// never release.
+// (device/copper.vhd:94). hcount tops out at c_max_hc — 455 on 128K/+3
+// timing (zxula_timing.vhd:196), 447 on 48K/Pentagon (:262/:160) — so
+// thresholds above it (x >= 56, or x >= 55 on 448-hcount lines) never
+// release; the boundary follows whatever line length the caller drives.
 func WaitHThreshold(x byte) uint16 { return uint16(x)<<3 + 12 }
 
 // RunToCycle advances the cycle-paced copper on raster line vcount through

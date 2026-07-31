@@ -107,9 +107,11 @@ type scrollStamp struct {
 	newVal uint16
 }
 
-// frameRasterLines bounds the per-line scroll fold (311 raster lines on
-// 128K/Next timing; 312 leaves headroom for the 48K's 312).
-const frameRasterLines = 312
+// frameRasterLines bounds the per-line scroll fold: the largest frame
+// any NR$03/$05 timing produces (Pentagon's 320; 311 on the boot
+// 128K/+3 timing, 312 on 48K, 264 at 60 Hz — zxula_timing.vhd
+// c_max_vc+1).
+const frameRasterLines = 320
 
 // maxScrollStamps caps the per-frame log; overflow degrades that frame
 // to the end-of-frame scroll resolution instead of growing without

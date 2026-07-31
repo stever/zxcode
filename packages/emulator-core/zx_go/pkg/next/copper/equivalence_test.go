@@ -37,11 +37,12 @@ func (r *eqRecorder) WriteReg(reg, val byte) {
 	r.writes = append(r.writes, eqWrite{line: r.line, reg: reg, val: val})
 }
 
-// eqFrameLines/eqLineHcounts match the Next's fixed 128K/+3 raster:
-// 311 lines (c_max_vc = 310) of 456 hcounts (c_max_hc = 455,
-// zxula_timing.vhd:196) — the same geometry pkg/ula's compositor pass
-// drives both engines with. A WAIT threshold above 455 (X >= 56)
-// never releases, exactly like the hardware.
+// eqFrameLines/eqLineHcounts match the Next's BOOT (128K/+3 50 Hz)
+// raster: 311 lines (c_max_vc = 310) of 456 hcounts (c_max_hc = 455,
+// zxula_timing.vhd:196) — the geometry pkg/ula's compositor pass
+// drives both engines with until NR$03/$05 retunes it (the 448-hcount
+// timings are pinned in geometry448_test.go). A WAIT threshold above
+// 455 (X >= 56) never releases, exactly like the hardware.
 const (
 	eqFrameLines  = 311
 	eqLineHcounts = 456
