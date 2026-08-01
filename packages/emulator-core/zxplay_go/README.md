@@ -7,7 +7,7 @@ zxplay_go is a fork of [zx_go](https://github.com/conorarmstrong/zx_go) by Conor
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8.svg)](https://go.dev)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#installation)
-[![Releases](https://img.shields.io/badge/downloads-releases-green.svg)](https://github.com/stever/zxplay_go/releases)
+[![Releases](https://img.shields.io/badge/downloads-releases-green.svg)](https://github.com/stever/zxcode/releases)
 
 | Cybernoid (+3) | NextZXOS welcome | NextZXOS menu |
 | :---: | :---: | :---: |
@@ -24,7 +24,7 @@ The 48K was the original author's first computer; this began as a Go learning ex
 > ### Honest status
 >
 > - **Classic line (ZX80 → +3, Pentagon, SAM Coupé): mature and stable.** Cycle-accurate Z80 (passes both Cringle `zexdoc`/`zexall` exercisers), full contention, every documented format. These are the solid, day-to-day-usable part of zxplay_go.
-> - **Spectrum Next: faithful boot, young *game* compatibility.** NextZXOS cold-boots end-to-end and the individual hardware blocks are extensively tested against the FPGA VHDL, but **running arbitrary `.NEX` games is the newest and least-finished area.** A growing set of titles are playable (e.g. Sonic), several render but still have bugs, and many have not been verified at all. If a Next game misbehaves for you, that's expected at this stage — please [open an issue](https://github.com/stever/zxplay_go/issues); a comparison against real hardware is exactly what moves it forward.
+> - **Spectrum Next: faithful boot, young *game* compatibility.** NextZXOS cold-boots end-to-end and the individual hardware blocks are extensively tested against the FPGA VHDL, but **running arbitrary `.NEX` games is the newest and least-finished area.** A growing set of titles are playable (e.g. Sonic), several render but still have bugs, and many have not been verified at all. If a Next game misbehaves for you, that's expected at this stage — please [open an issue](https://github.com/stever/zxcode/issues); a comparison against real hardware is exactly what moves it forward.
 >
 > The per-title manifest, with tested-on-hardware statuses and known issues, is in **[docs/compatibility.md](docs/compatibility.md)**. Feature claims below describe *implemented and tested hardware blocks*; they are not a promise that every title exercising them runs perfectly.
 
@@ -45,8 +45,8 @@ The 48K was the original author's first computer; this began as a Go learning ex
 
 ```bash
 # Requires Go 1.25+ and a C toolchain (Fyne uses cgo for the OS window layer)
-git clone https://github.com/stever/zxplay_go
-cd zxplay_go
+git clone https://github.com/stever/zxcode
+cd zxcode/packages/emulator-core/zxplay_go
 go build -o bin/zxplay_go ./cmd/zxplay_go
 ./bin/zxplay_go
 ```
@@ -167,16 +167,16 @@ Manual install, pointing at an SD card or `.img`, persistence (`--sd-writeback`)
 
 ### Pre-built binaries
 
-Grab the latest from the [Releases](https://github.com/stever/zxplay_go/releases) page:
+Grab the latest from the [Releases](https://github.com/stever/zxcode/releases) page:
 
 | Platform | Download |
 | --- | --- |
 | macOS (Apple Silicon) | `zxplay_go-macos-arm64.tar.gz` |
 | macOS (Intel) | `zxplay_go-macos-amd64.tar.gz` |
-| Windows | `zxplay_go-windows-amd64.exe.zip` |
+| Windows | `zxplay_go-windows-amd64.zip` |
 | Linux | `zxplay_go-linux-amd64.tar.gz` |
 
-On macOS/Linux: `tar xzf zxplay_go-macos-arm64.tar.gz && ./zxplay_go-macos-arm64`. On Windows: unzip and double-click the `.exe`.
+On macOS/Linux: `tar xzf zxplay_go-macos-arm64.tar.gz && ./zxplay_go`. On Windows: unzip and double-click `zxplay_go.exe`. The Linux tarball also carries the desktop integration (`./install-desktop.sh ./zxplay_go` sets up the menu entry and Spectrum file associations). Releases are cut from the [zxcode](https://github.com/stever/zxcode) monorepo, where this tree lives, by tagging `zxplay_go-v<version>`.
 
 The classic ROMs (48K → +3, plus the DISCiPLE / Multiface / Interface 1 peripheral ROMs) are **embedded in the binary** — nothing to install for those modes.
 
@@ -185,8 +185,8 @@ The classic ROMs (48K → +3, plus the DISCiPLE / Multiface / Interface 1 periph
 You need **Go 1.25+**, a C compiler (`cc`/`gcc`/`clang` — Fyne uses cgo), and OpenGL libraries (system-provided on macOS and most Linux; trivial on Windows).
 
 ```bash
-git clone https://github.com/stever/zxplay_go
-cd zxplay_go
+git clone https://github.com/stever/zxcode
+cd zxcode/packages/emulator-core/zxplay_go
 go build -o bin/zxplay_go ./cmd/zxplay_go
 ./bin/zxplay_go
 

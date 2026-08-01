@@ -4,7 +4,25 @@ All notable changes to this project are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 project targets [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v1.3.7]
+Versions up to and including v1.3.6 are upstream
+[zx_go](https://github.com/conorarmstrong/zx_go) releases. v2.0.0 is the
+first release of the zxplay_go fork — its numbering starts there so it
+cannot collide with upstream's own line; the entry below accrued as
+"v1.3.7 (unreleased)" during the fork's pre-release development.
+
+## [v2.0.0]
+
+First zxplay_go release. Fork changes on top of the v1.3.6 upstream base:
+renamed from zx_go (module path `github.com/stever/zxplay_go`, binary and
+desktop integration names, app identity — config now lives under
+`$UserConfigDir/zxplay_go/`); the startup splash is removed (the window
+opens straight into the running emulator); Help → About and `--help`
+identify the fork (source at stever/zxcode) while crediting upstream; the
+View menu's size presets are now pixel-exact in device pixels, with
+model-aware window geometry (the Next's 5:4 640×256 wide frame and the
+SAM's 6:5 frame are no longer squeezed into the classic 4:3 box); releases
+for all platforms are built by the monorepo's zxplay-go-release workflow
+on `zxplay_go-v*` tags.
 
 ### Changed
 

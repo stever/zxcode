@@ -22,8 +22,8 @@ Platform packages:
 Clone and build:
 
 ```
-git clone https://github.com/stever/zxplay_go
-cd zxplay_go
+git clone https://github.com/stever/zxcode
+cd zxcode/packages/emulator-core/zxplay_go
 go build ./...
 ./zxplay_go
 ```

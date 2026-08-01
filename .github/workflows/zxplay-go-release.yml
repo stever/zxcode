@@ -1,0 +1,159 @@
+# Builds the zxplay_go desktop GUI for every supported platform and attaches
+# the archives to a GitHub Release. Adapted from the workflow the vendored
+# tree carries at packages/emulator-core/zxplay_go/.github/workflows/
+# release.yml (inert there — GitHub only runs workflows from the repo root).
+#
+# Trigger: push a tag like `zxplay_go-v1.3.7`. The tag's version MUST match
+# pkg/version.Version (verified by the first job) so the binary's Help ->
+# About agrees with the release it shipped in. A workflow_dispatch run
+# builds everything as a smoke test but publishes nothing.
+#
+# The GUI needs CGO (Fyne/OpenGL/GLFW, ALSA on Linux), so each target
+# builds on its native runner rather than cross-compiling. The NextZXOS
+# ROMs are licensed and never bundled — the app offers to download them on
+# first Next use — so the release artifacts are clean to distribute.
+name: zxplay_go release
+
+on:
+  push:
+    tags:
+      - 'zxplay_go-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # The released binary reports pkg/version.Version in --version and the
+  # About dialog; refuse to publish a tag that disagrees with the source.
+  verify-version:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Tag matches pkg/version.Version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#zxplay_go-}"
+          SRC_VERSION=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' \
+            packages/emulator-core/zxplay_go/pkg/version/version.go)
+          echo "tag: $TAG_VERSION  source: $SRC_VERSION"
+          if [ -z "$SRC_VERSION" ] || [ "$TAG_VERSION" != "$SRC_VERSION" ]; then
+            echo "::error::tag version ($TAG_VERSION) does not match pkg/version.Version ($SRC_VERSION)"
+            exit 1
+          fi
+
+  build:
+    needs: verify-version
+    # Run when the version check passed, or when it was skipped because
+    # this is a workflow_dispatch smoke-test run.
+    if: ${{ !cancelled() && (needs.verify-version.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact: zxplay_go-linux-amd64
+          - os: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            artifact: zxplay_go-linux-arm64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            artifact: zxplay_go-windows-amd64
+          # Experimental: native Windows-on-ARM. OpenGL/CGO support there is
+          # immature, so this target is non-blocking (continue-on-error) and
+          # must never fail the release or cancel the other targets.
+          - os: windows-11-arm
+            goos: windows
+            goarch: arm64
+            cc: clang
+            experimental: true
+            artifact: zxplay_go-windows-arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            artifact: zxplay_go-macos-arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            cc: "clang -arch x86_64"
+            artifact: zxplay_go-macos-amd64
+
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
+
+    defaults:
+      run:
+        working-directory: packages/emulator-core/zxplay_go
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: packages/emulator-core/zxplay_go/go.mod
+          cache-dependency-path: packages/emulator-core/zxplay_go/go.sum
+
+      - name: Install Linux dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libasound2-dev
+
+      # The binary inside the archive is plain `zxplay_go`(.exe) — the
+      # archive name carries the platform — so the Linux tarball's
+      # install-desktop.sh works on it directly: ./install-desktop.sh
+      # after extraction, no renaming.
+      - name: Build
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+          CC: ${{ matrix.cc || '' }}
+        run: |
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          BIN=zxplay_go
+          [ "$GOOS" = windows ] && BIN=zxplay_go.exe
+          go build -ldflags "-X github.com/stever/zxplay_go/pkg/version.BuildDate=$BUILD_DATE" \
+            -o "$BIN" ./cmd/zxplay_go
+
+      # Linux users also get the desktop integration: .desktop entry, MIME
+      # definitions and the installer script, staged next to the binary so
+      # `./install-desktop.sh ./zxplay_go` sets up file associations.
+      - name: Package (Linux)
+        if: matrix.goos == 'linux'
+        run: |
+          chmod +x zxplay_go
+          mkdir -p pkgdir
+          cp zxplay_go desktop/install-desktop.sh desktop/zxplay_go.desktop \
+            desktop/zxplay_go-mime.xml desktop/README.md pkgdir/
+          tar czf ${{ matrix.artifact }}.tar.gz -C pkgdir \
+            zxplay_go install-desktop.sh zxplay_go.desktop zxplay_go-mime.xml README.md
+
+      - name: Package (macOS)
+        if: matrix.goos == 'darwin'
+        run: |
+          chmod +x zxplay_go
+          tar czf ${{ matrix.artifact }}.tar.gz zxplay_go
+
+      - name: Package (Windows)
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path zxplay_go.exe -DestinationPath ${{ matrix.artifact }}.zip
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/zxplay_go-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            packages/emulator-core/zxplay_go/${{ matrix.artifact }}.tar.gz
+            packages/emulator-core/zxplay_go/${{ matrix.artifact }}.zip
