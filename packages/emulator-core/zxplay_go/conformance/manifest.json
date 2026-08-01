@@ -283,9 +283,8 @@
       "area": "Meta",
       "kind": "manual",
       "status": "pass",
-      "link": "https://github.com/stever/zxcode/blob/main/packages/emulator-core/zxplay_go/VHDL_CONFORMANCE.md",
-      "detail": "vhdl.html",
-      "notes": "Hand-maintained matrix — ALL GREEN since the 2026-08 close-out (port deferrals, NR$82-$89 gating, DMA-delay enables, wide-L2 ULA residues). Sub-row-grain notes live in known-gaps.md."
+      "link": "vhdl.html",
+      "notes": "Hand-maintained matrix — ALL GREEN since the 2026-08 close-out (port deferrals, NR$82-$89 gating, DMA-delay enables, wide-L2 ULA residues). Rendered here from VHDL_CONFORMANCE.md; sub-row-grain notes live in known-gaps.md."
     },
     {
       "id": "ext-z80test",
