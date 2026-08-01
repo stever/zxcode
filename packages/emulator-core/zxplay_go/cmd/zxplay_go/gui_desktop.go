@@ -2757,17 +2757,11 @@ func desktopMain() {
 		container.NewHBox(layout.NewSpacer(), emu.fpsText))
 	content := container.NewStack(blackBG, aspectScreen, keyboardWidget, fpsOverlay)
 
-	// Show the splash artwork briefly, then swap to the real
-	// content and grab keyboard focus. The emulation goroutine
-	// starts running underneath the splash so by the time the
-	// user is looking at the emulator the first frames are warm.
 	emu.run(a, screen)
 	emu.togglePause() // Start in a running state
 
-	showSplash(w, func() {
-		w.SetContent(content)
-		w.Canvas().Focus(keyboardWidget)
-	})
+	w.SetContent(content)
+	w.Canvas().Focus(keyboardWidget)
 
 	// Set up cleanup on window close
 	w.SetOnClosed(func() {
