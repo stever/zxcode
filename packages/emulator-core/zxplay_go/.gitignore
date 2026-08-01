@@ -22,6 +22,8 @@ go.work.sum
 # Compiled binary
 /bin/
 /zxplay_go
+# `go build` inside the site generator drops its binary beside the source.
+/conformance/confgen/confgen
 
 # OS files
 .DS_Store

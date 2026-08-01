@@ -1,0 +1,225 @@
+{
+  "title": "ZX Play docs",
+  "tagline": "zxplay.org · code.zxplay.org · the zxplay_go emulator",
+  "repo": "https://github.com/stever/zxcode",
+  "branch": "main",
+  "sections": [
+    {
+      "title": "Start here",
+      "intro": "What this project publishes, and which part you want.",
+      "pages": [
+        {
+          "page": "index.html",
+          "title": "Overview",
+          "source": "docs/index.md",
+          "home": true,
+          "summary": "The player, the IDE and the emulator — and which one to reach for."
+        }
+      ]
+    },
+    {
+      "title": "Writing code — code.zxplay.org",
+      "intro": "The browser IDE: projects, ten toolchains, and a source-line debugger that runs against the real emulator.",
+      "pages": [
+        {
+          "page": "ide.html",
+          "title": "Using the IDE",
+          "source": "docs/apps/ide.md",
+          "summary": "Projects, files, compiling, running, sharing, and the asset editors."
+        },
+        {
+          "page": "languages.html",
+          "title": "Languages and toolchains",
+          "source": "docs/apps/languages.md",
+          "summary": "All ten languages, what each targets, and what each supports in the debugger."
+        },
+        {
+          "page": "ide-debugging.html",
+          "title": "Debugging in the browser",
+          "source": "docs/apps/debugging.md",
+          "summary": "Source-line breakpoints, the console command language, and how each language maps lines to the machine."
+        }
+      ]
+    },
+    {
+      "title": "Playing — zxplay.org",
+      "intro": "The player site, and the URL options that let you link straight to a program.",
+      "pages": [
+        {
+          "page": "player.html",
+          "title": "The player",
+          "source": "docs/apps/player.md",
+          "summary": "Loading programs, the URL parameters, and how Next games are distributed."
+        }
+      ]
+    },
+    {
+      "title": "Game development with the emulator",
+      "intro": "zxplay_go on your own machine: run it, script it, and use it as a test harness for the game you are building.",
+      "pages": [
+        {
+          "page": "emulator.html",
+          "title": "zxplay_go",
+          "source": "packages/emulator-core/zxplay_go/README.md",
+          "summary": "What the emulator is, what it supports, and how to install or build it."
+        },
+        {
+          "page": "automation.html",
+          "title": "Automating the emulator",
+          "source": "docs/emulator/automation.md",
+          "summary": "Headless runs, scripted debugging, screenshots and regression tests for your game."
+        },
+        {
+          "page": "debug-protocols.html",
+          "title": "DeZog, ZEsarUX and CSpect",
+          "source": "docs/emulator/debug-protocols.md",
+          "summary": "What zxplay_go's debug protocol is and is not — and how to work with the tools you already use."
+        },
+        {
+          "page": "manual.html",
+          "title": "User manual",
+          "source": "packages/emulator-core/zxplay_go/docs/manual.md",
+          "summary": "Day-to-day use: machines, loading, saving, peripherals, sound, shortcuts."
+        },
+        {
+          "page": "debugger.html",
+          "title": "Debugger reference",
+          "source": "packages/emulator-core/zxplay_go/DEBUGGER.md",
+          "summary": "The complete visual, telnet and headless debugger reference."
+        },
+        {
+          "page": "next.html",
+          "title": "The Spectrum Next",
+          "source": "packages/emulator-core/zxplay_go/docs/spectrum-next.md",
+          "summary": "ROM install, SD-card setup, boot modes, .nex loading, licensing."
+        },
+        {
+          "page": "hardware-debug.html",
+          "title": "Debugging real hardware",
+          "source": "packages/emulator-core/zxplay_go/hwdebug/README.md",
+          "summary": "Driving a real Spectrum Next over serial with DZRP — the silicon ground truth."
+        },
+        {
+          "page": "compatibility.html",
+          "title": "Game compatibility",
+          "source": "packages/emulator-core/zxplay_go/docs/compatibility.md",
+          "summary": "The tested-title manifest, per-title status and known issues."
+        },
+        {
+          "page": "comparison.html",
+          "title": "Compared to other emulators",
+          "source": "packages/emulator-core/zxplay_go/COMPARISON.md",
+          "summary": "zxplay_go against CSpect, ZEsarUX and MAME, criterion by criterion."
+        },
+        {
+          "page": "zx80-zx81.html",
+          "title": "ZX80 and ZX81",
+          "source": "packages/emulator-core/zxplay_go/docs/zx80-zx81.md",
+          "summary": "The CPU-generated-display machines in detail."
+        },
+        {
+          "page": "sam-coupe.html",
+          "title": "SAM Coupé",
+          "source": "packages/emulator-core/zxplay_go/docs/sam-coupe.md",
+          "summary": "MGT's 1989 Z80B machine: modes, sound, disk, status."
+        }
+      ]
+    },
+    {
+      "title": "Emulator internals",
+      "intro": "Developer documentation for the emulation core itself — read this before changing it.",
+      "pages": [
+        {
+          "page": "architecture.html",
+          "title": "Architecture docs",
+          "source": "packages/emulator-core/zxplay_go/docs/architecture/README.md",
+          "summary": "The index of the architecture set, and the rule for keeping it current."
+        },
+        {
+          "page": "arch-overview.html",
+          "title": "System overview",
+          "source": "packages/emulator-core/zxplay_go/docs/architecture/overview.md",
+          "summary": "How the machine is assembled and how a frame is executed."
+        },
+        {
+          "page": "arch-code.html",
+          "title": "Code organisation",
+          "source": "packages/emulator-core/zxplay_go/docs/architecture/code-organisation.md",
+          "summary": "Where each subsystem lives and what depends on what."
+        },
+        {
+          "page": "arch-patterns.html",
+          "title": "Emulation patterns",
+          "source": "packages/emulator-core/zxplay_go/docs/architecture/emulation-patterns.md",
+          "summary": "The recurring implementation idioms: timing, hooks, event scheduling."
+        },
+        {
+          "page": "arch-chips.html",
+          "title": "Chip emulation",
+          "source": "packages/emulator-core/zxplay_go/docs/architecture/chips.md",
+          "summary": "Per-chip notes: Z80, ULA, AY, FDC, WD179x and the rest."
+        },
+        {
+          "page": "arch-next-fpga.html",
+          "title": "Next FPGA internals",
+          "source": "packages/emulator-core/zxplay_go/docs/architecture/next-fpga.md",
+          "summary": "The Next's custom hardware as emulated, cited against the core's VHDL."
+        },
+        {
+          "page": "arch-frontends.html",
+          "title": "Frontends",
+          "source": "packages/emulator-core/zxplay_go/docs/architecture/frontends.md",
+          "summary": "The GUI, headless harness and wasm builds over one core."
+        },
+        {
+          "page": "known-gaps.html",
+          "title": "Known gaps",
+          "source": "packages/emulator-core/zxplay_go/docs/architecture/known-gaps.md",
+          "summary": "The register of deliberate differences from real hardware."
+        },
+        {
+          "page": "contributing.html",
+          "title": "Contributing",
+          "source": "packages/emulator-core/zxplay_go/CONTRIBUTING.md",
+          "summary": "How to work on the emulator, and what a change is expected to carry."
+        }
+      ]
+    },
+    {
+      "title": "Conformance",
+      "intro": "Generated on every publish from the manifest and the actual test run.",
+      "pages": [
+        {
+          "page": "conformance.html",
+          "title": "Conformance dashboard",
+          "generated": true,
+          "summary": "Live status of every conformance check against its oracle."
+        },
+        {
+          "page": "vhdl.html",
+          "title": "VHDL conformance matrix",
+          "generated": true,
+          "summary": "Our emulation against the Next's FPGA source, axis by axis."
+        },
+        {
+          "page": "z80test.html",
+          "title": "z80test inventory",
+          "generated": true,
+          "summary": "raxoft/z80test — per-test status."
+        },
+        {
+          "page": "nexttests.html",
+          "title": "ZXSpectrumNextTests (MrKWatkins)",
+          "generated": true,
+          "summary": "External Next test suite — per-test status."
+        },
+        {
+          "page": "327tests.html",
+          "title": "ZXSpectrumNextTests (327)",
+          "generated": true,
+          "summary": "External Next test suite — per-test status."
+        }
+      ]
+    }
+  ]
+}

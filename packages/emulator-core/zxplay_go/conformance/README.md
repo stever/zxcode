@@ -2,14 +2,19 @@
 
 Live documentation of the emulator's conformance to its oracles and to
 the external ZX Spectrum Next test suites, published to GitHub Pages by
-`.github/workflows/conformance-pages.yml` (repo root) on every push to
-main that touches the emulator. The published page is GENERATED — never
-edit site output by hand; change the inputs instead.
+`.github/workflows/pages.yml` (repo root) on every push to main that
+touches the emulator or the documentation. The published page is
+GENERATED — never edit site output by hand; change the inputs instead.
+
+The dashboard is one section of the wider ZX Play documentation site,
+which the same tool builds. The site map and its conventions are
+documented in `docs/README.md` at the repo root; this file covers the
+conformance inputs only.
 
 ## How it fits together
 
 - `manifest.json` — the machine-readable source of truth. Two sections:
-  `entries` (one per conformance check on the index page; a `runner`
+  `entries` (one per conformance check on the dashboard; a `runner`
   resolves live status from the actual `go test -json` run, otherwise an
   explicit `status` applies) and `suites` (per-suite breakdown pages
   listing every test in an external suite, same status rules per test).
@@ -17,13 +22,16 @@ edit site output by hand; change the inputs instead.
 - `confgen/` — a zero-dependency Go tool (its own module, so it adds
   nothing to the emulator's go.mod) that merges the manifest, the test
   results, `docs/architecture/known-gaps.md`, and `VHDL_CONFORMANCE.md`
-  into a static site: `index.html`, one page per suite
-  (`nexttests.html`, `327tests.html`), and `vhdl.html` (the matrix
-  document rendered per axis).
+  into the dashboard (`conformance.html`), one page per suite
+  (`z80test.html`, `nexttests.html`, `327tests.html`), and `vhdl.html`
+  (the matrix document rendered per axis) — alongside the documentation
+  pages named by `docs/site.json`.
 - The known-gaps register and the VHDL matrix are rendered as-is, so
   both stay single-sourced in their markdown files.
 
-Run locally:
+Run locally — the conformance pages on their own, without the docs site
+(the dashboard then takes `index.html`, as it did before the site
+existed):
 
 ```
 cd conformance/confgen
@@ -32,6 +40,9 @@ go run . -manifest ../manifest.json -results /tmp/gotest.json \
   -gaps ../../docs/architecture/known-gaps.md \
   -vhdl ../../VHDL_CONFORMANCE.md -out /tmp/site
 ```
+
+Add `-site ../../../../../docs/site.json -root ../../../../..` to build
+the full site as it is published.
 
 ## Manifest schema
 
