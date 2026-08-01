@@ -126,6 +126,18 @@
     border-bottom-color: transparent;
 }
 
+// The base theme tints a focused tab link cyan (rgba(43,212,212,0.12)), and a
+// mouse click leaves that focus in place: the clicked tab keeps a grey-cyan
+// block behind it until focus moves elsewhere, which reads as a rendering
+// glitch rather than a state. Same fix as the toggle/select buttons above —
+// pointer focus stays untinted, keyboard focus (:focus-visible) keeps the tint
+// as its indicator, since the theme zeroes the outline. The base theme's hover
+// rule is more specific, so hovering still lights an inactive tab; the active
+// tab is left to its cyan label and ink bar.
+.p-tabview .p-tabview-nav li .p-tabview-nav-link:focus:not(:focus-visible) {
+    background-color: transparent;
+}
+
 // Language tags label a project; they aren't actions. The base theme renders
 // every tag as a filled cyan chip, which reads like a button next to the real
 // buttons. Give the language tag an outline instead: cyan border and text on
