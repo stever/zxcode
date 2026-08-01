@@ -15,7 +15,7 @@ const Version = "v1.3.6"
 // banner and the Help → About dialog.
 const (
 	Author  = "Conor Armstrong"
-	RepoURL = "https://github.com/stever/zxplay_go"
+	RepoURL = "https://github.com/stever/zxcode"
 )
 
 // BuildDate is the build timestamp in RFC 3339, normally injected at

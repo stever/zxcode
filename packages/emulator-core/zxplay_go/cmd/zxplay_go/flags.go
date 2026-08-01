@@ -362,7 +362,7 @@ func parseCLI() *cliFlags {
 		_, _ = fmt.Fprintf(out, "zxplay_go %s — ZX Spectrum emulator (48K / 128K / +2 / +2A / +3 / Next)\n",
 			zxlog.Version)
 		_, _ = fmt.Fprintf(out, "Copyright (C) 2026 Conor Armstrong.\n")
-		_, _ = fmt.Fprintf(out, "Source: https://github.com/stever/zxplay_go\n")
+		_, _ = fmt.Fprintf(out, "Source: https://github.com/stever/zxcode\n")
 		_, _ = fmt.Fprintf(out, "\nUsage: %s [flags] [FILE]\n", os.Args[0])
 		_, _ = fmt.Fprintf(out, "\nFILE is a Spectrum program to boot straight into: .tap/.tzx\n")
 		_, _ = fmt.Fprintf(out, "(auto-typed LOAD), .z80/.sna/.szx snapshots, .nex (boots the\n")

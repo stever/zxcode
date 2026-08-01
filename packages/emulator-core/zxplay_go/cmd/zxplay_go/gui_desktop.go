@@ -2737,7 +2737,7 @@ func desktopMain() {
 						"built "+version.Date()+"\n\n"+
 						"A hardware-faithful ZX Spectrum emulator\n"+
 						"(48K / 128K / +2 / +2A / +3 / Next).\n\n"+
-						"by "+version.Author+"\n"+
+						"Forked from zx_go by "+version.Author+"\n"+
 						version.RepoURL+"\n\n"+
 						"The NextZXOS ROMs are licensed by their authors and\n"+
 						"are not bundled; the emulator can download them from\n"+
