@@ -35,6 +35,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -205,7 +206,87 @@ func main() {
 			log.Fatalf("site: %v", err)
 		}
 	}
+
+	// A link that resolves to nothing is a 404 for a reader, and publishing
+	// is automatic — so the build fails rather than shipping one. Missing
+	// anchors only mean the page does not scroll where it should, so those
+	// warn instead of failing.
+	pages, anchors, err := checkLinks(*outDir)
+	if err != nil {
+		log.Fatalf("link check: %v", err)
+	}
+	for _, w := range anchors {
+		log.Printf("warning: %s", w)
+	}
+	if len(pages) > 0 {
+		for _, e := range pages {
+			log.Printf("broken link: %s", e)
+		}
+		log.Fatalf("%d link(s) point at a page the site does not publish", len(pages))
+	}
+
 	fmt.Printf("wrote %s\n", *outDir)
+}
+
+// hrefRe finds every link and asset reference in a generated page.
+var hrefRe = regexp.MustCompile(`(?:href|src)="([^"]+)"`)
+
+// checkLinks verifies that every non-external reference in the generated
+// site resolves: the page exists, and any anchor is an id on it. Returns
+// broken page links and missing anchors separately.
+//
+// This exists because the failure it catches is invisible at build time and
+// obvious to a reader: an internal link written as a repository path (or a
+// renamed page) becomes a 404 on every visit.
+func checkLinks(outDir string) (pages, anchors []string, err error) {
+	entries, err := filepath.Glob(filepath.Join(outDir, "*.html"))
+	if err != nil {
+		return nil, nil, err
+	}
+	bodies := map[string]string{}
+	ids := map[string]map[string]bool{}
+	for _, e := range entries {
+		data, err := os.ReadFile(e)
+		if err != nil {
+			return nil, nil, err
+		}
+		name := filepath.Base(e)
+		bodies[name] = string(data)
+		ids[name] = map[string]bool{}
+		for _, m := range regexp.MustCompile(`id="([^"]+)"`).FindAllStringSubmatch(string(data), -1) {
+			ids[name][m[1]] = true
+		}
+	}
+	for _, name := range sortedNames(bodies) {
+		for _, m := range hrefRe.FindAllStringSubmatch(bodies[name], -1) {
+			href := m[1]
+			if href == "" || strings.HasPrefix(href, "http://") ||
+				strings.HasPrefix(href, "https://") || strings.HasPrefix(href, "mailto:") {
+				continue
+			}
+			target, anchor, _ := strings.Cut(href, "#")
+			if target == "" {
+				target = name
+			}
+			if _, ok := bodies[target]; !ok {
+				pages = append(pages, fmt.Sprintf("%s -> %s", name, href))
+				continue
+			}
+			if anchor != "" && !ids[target][anchor] {
+				anchors = append(anchors, fmt.Sprintf("%s -> %s (no such anchor)", name, href))
+			}
+		}
+	}
+	return pages, anchors, nil
+}
+
+func sortedNames(m map[string]string) []string {
+	names := make([]string, 0, len(m))
+	for k := range m {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func loadManifest(path string) (*manifest, error) {
@@ -407,10 +488,11 @@ var (
 // is, which repo files the site publishes as pages, and where to send links
 // that leave the site.
 type docRenderer struct {
-	dir    string            // directory of the source, repo-relative ("" for none)
-	pages  map[string]string // repo-relative source path -> output page
-	repo   string            // https://github.com/owner/repo
-	branch string
+	dir     string            // directory of the source, repo-relative ("" for none)
+	pages   map[string]string // repo-relative source path -> output page
+	outputs map[string]bool   // output page names the site publishes
+	repo    string            // https://github.com/owner/repo
+	branch  string
 }
 
 func (r *docRenderer) blobURL(p string) string {
@@ -437,10 +519,12 @@ func (r *docRenderer) rawURL(p string) string {
 }
 
 // resolveHref maps a markdown link target to its address on the published
-// site. Absolute URLs and pure anchors pass through. A relative path that
-// names a document the site publishes becomes that page (keeping any
-// anchor); anything else relative becomes a link into the repository on
-// GitHub, so no link silently dead-ends.
+// site. Absolute URLs and pure anchors pass through. A link that already
+// names a site page is left alone — pages must stay RELATIVE so the site
+// works wherever it is served from (a project path, a custom domain, or a
+// local directory). A relative path naming a document the site publishes
+// becomes that page (keeping any anchor); anything else relative becomes a
+// link into the repository on GitHub, so no link silently dead-ends.
 func (r *docRenderer) resolveHref(href string, image bool) string {
 	switch {
 	case href == "",
@@ -454,6 +538,12 @@ func (r *docRenderer) resolveHref(href string, image bool) string {
 	target, anchor := href, ""
 	if i := strings.IndexByte(href, '#'); i >= 0 {
 		target, anchor = href[:i], href[i:]
+	}
+	// An authored page links to its neighbours by output name ("ide.html").
+	// Without this, such a link would be read as a repository path and sent
+	// to GitHub, where no such file exists — a 404 on every one of them.
+	if !image && r.outputs[target] {
+		return href
 	}
 	if r.dir == "" {
 		return href
@@ -826,6 +916,7 @@ type chrome struct {
 	Home        string // the site's index page
 	Conformance string // where the conformance dashboard lives
 	pages       map[string]string
+	outputs     map[string]bool
 }
 
 func newChrome(sm *siteMap, st stamp) chrome {
@@ -837,6 +928,7 @@ func newChrome(sm *siteMap, st stamp) chrome {
 		Repo:        "https://github.com/stever/zxcode",
 		Branch:      "main",
 		pages:       map[string]string{},
+		outputs:     map[string]bool{},
 	}
 	if sm == nil {
 		return ch
@@ -855,6 +947,7 @@ func newChrome(sm *siteMap, st stamp) chrome {
 		ns := navSection{Title: sec.Title, Intro: sec.Intro}
 		for _, p := range sec.Pages {
 			ns.Pages = append(ns.Pages, navPage{Page: p.Page, Title: p.Title, Summary: p.Summary})
+			ch.outputs[p.Page] = true
 			if p.Source != "" {
 				ch.pages[path.Clean(p.Source)] = p.Page
 			}
@@ -888,7 +981,13 @@ func (ch chrome) renderer(source string) *docRenderer {
 			dir = ""
 		}
 	}
-	return &docRenderer{dir: dir, pages: ch.pages, repo: ch.Repo, branch: ch.Branch}
+	return &docRenderer{
+		dir:     dir,
+		pages:   ch.pages,
+		outputs: ch.outputs,
+		repo:    ch.Repo,
+		branch:  ch.Branch,
+	}
 }
 
 type areaGroup struct {

@@ -5,7 +5,7 @@ A ZX Spectrum emulator & programming environment for the browser.
 ## Documentation
 
 The published documentation site is at
-<https://stever.github.io/zxcode/> — how to use
+<https://stever.dev/zxcode/> — how to use
 [code.zxplay.org](https://code.zxplay.org) and its ten toolchains, how to
 use [zxplay.org](https://zxplay.org), how to automate the zxplay_go emulator
 when developing a game locally, the emulator's own manuals and architecture

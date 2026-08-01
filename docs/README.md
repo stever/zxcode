@@ -46,15 +46,24 @@ Adding a page means adding the markdown and one entry here. Nothing else.
 
 ## Links between documents
 
-Relative links in the rendered markdown are rewritten:
+Links in the rendered markdown are resolved like this:
 
-- a link to a document the site publishes becomes that page (anchors kept),
+- a link that already names a site page (`ide.html`) is **left alone** —
+  this is how the authored pages link to each other,
+- a link to a *markdown document* the site publishes becomes its page
+  (anchors kept),
 - any other relative link becomes a link to the file on GitHub,
 - images become raw GitHub URLs, so no assets need copying.
 
 The upshot is that the same markdown reads correctly both on GitHub and on
 the site, and no link silently dead-ends. Headings get GitHub-compatible
 anchors, so `#a-heading-link` written for GitHub resolves on the site too.
+
+**Every internal link stays relative — never absolute, never root-relative.**
+The site is served from a project subpath (`stever.dev/zxcode/`), so an
+absolute or `/`-rooted link is a 404. Rendering the site runs a link check
+over the output and **fails the build** if any link points at a page that
+does not exist; a missing *anchor* only warns, since the page still loads.
 
 ## Building it locally
 

@@ -248,3 +248,65 @@ func TestLoadSiteMap_Validation(t *testing.T) {
 func writeFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
+
+// The bug that shipped 404s: an authored page links to its neighbours by
+// output name ("ide.html"). That must stay a relative link — resolving it as
+// a repository path sends every one of them to a GitHub URL that does not
+// exist, and the site then only works from wherever those paths happen to
+// resolve, not from a custom domain or a local directory.
+func TestResolveHref_SitePageStaysRelative(t *testing.T) {
+	r := testRenderer()
+	r.outputs = map[string]bool{"ide.html": true, "conformance.html": true}
+	for _, href := range []string{"ide.html", "conformance.html", "ide.html#running"} {
+		if got := r.resolveHref(href, false); got != href {
+			t.Errorf("resolveHref(%q) = %q, want it unchanged", href, got)
+		}
+	}
+	// A repo document the site does not publish still goes to GitHub.
+	want := "https://github.com/stever/zxcode/blob/main/packages/emulator-core/zxplay_go/KEYBOARD_GUIDE.md"
+	if got := r.resolveHref("KEYBOARD_GUIDE.md", false); got != want {
+		t.Errorf("resolveHref(KEYBOARD_GUIDE.md) = %q, want %q", got, want)
+	}
+}
+
+func TestRenderedPageLinksToSiblingPageAreRelative(t *testing.T) {
+	r := testRenderer()
+	r.outputs = map[string]bool{"automation.html": true}
+	got := string(r.mdToHTML("see [automating](automation.html) for more\n"))
+	if !strings.Contains(got, `href="automation.html"`) {
+		t.Errorf("sibling page link was rewritten: %s", got)
+	}
+	if strings.Contains(got, "github.com") {
+		t.Errorf("sibling page link left the site: %s", got)
+	}
+}
+
+// checkLinks is the build-time guard that would have caught the above.
+func TestCheckLinks(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(dir+"/"+name, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("index.html", `<a href="ok.html">a</a>`+
+		`<a href="missing.html">b</a>`+
+		`<a href="ok.html#there">c</a>`+
+		`<a href="ok.html#nowhere">d</a>`+
+		`<a href="#self">e</a>`+
+		`<a href="https://example.org/x">f</a>`+
+		`<a href="mailto:x@example.org">g</a>`+
+		`<h2 id="self">s</h2>`)
+	write("ok.html", `<h2 id="there">t</h2>`)
+
+	pages, anchors, err := checkLinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) != 1 || !strings.Contains(pages[0], "missing.html") {
+		t.Errorf("broken page links = %v, want just the missing.html one", pages)
+	}
+	if len(anchors) != 1 || !strings.Contains(anchors[0], "#nowhere") {
+		t.Errorf("missing anchors = %v, want just the #nowhere one", anchors)
+	}
+}
