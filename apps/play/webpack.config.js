@@ -41,7 +41,25 @@ module.exports = (env, _) => {
     const loaders = [
         {
             test: /\.(s?)css$/i,
-            use: ['style-loader', 'css-loader', 'sass-loader'],
+            use: [
+                'style-loader',
+                'css-loader',
+                {
+                    loader: 'sass-loader',
+                    options: {
+                        // See apps/web's copy: a production build compresses
+                        // through dart-sass, which unescapes primeicons'
+                        // `content: "\e9b3"` to the literal character and then
+                        // prefixes the module with a BOM. style-loader injects
+                        // each module as its own <style>, where a leading
+                        // U+FEFF is not stripped and kills the rule after it —
+                        // primeicons' @font-face, so every icon renders blank.
+                        sassOptions: {
+                            charset: false
+                        }
+                    }
+                }
+            ],
         },
         {
             test: /\.svg/,

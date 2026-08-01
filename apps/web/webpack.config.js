@@ -56,7 +56,24 @@ module.exports = (env, _) => {
                 {
                     loader: 'sass-loader',
                     options: {
-                        api: 'modern'
+                        api: 'modern',
+                        // Every .css here goes through Sass too, and in a
+                        // production build sass-loader defaults dart-sass to
+                        // the `compressed` style. Compressed output unescapes
+                        // CSS escapes — primeicons' `content: "\e9b3"` becomes
+                        // the literal U+E9B3 — and dart-sass then prefixes that
+                        // module with a BOM instead of an @charset rule. Each
+                        // stylesheet is one module, so those BOMs land INSIDE
+                        // the concatenated bundle, where a stray U+FEFF is not
+                        // whitespace: it invalidates the rule that follows.
+                        // That silently dropped primeicons' whole @font-face
+                        // (icons blank everywhere) and primereact's
+                        // `.p-component, .p-component *` box-sizing reset. The
+                        // page is UTF-8 and Caddy serves text/css; charset=utf-8,
+                        // so the declaration buys nothing — turn it off.
+                        sassOptions: {
+                            charset: false
+                        }
                     }
                 }
             ],
