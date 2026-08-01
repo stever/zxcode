@@ -1324,8 +1324,10 @@ export class GoEmulator extends EventEmitter {
     // Loading overlay drivers. 'loading' shows the loading pill (or updates
     // it); 'loadingDone' removes it. UIController renders them. progress is
     // a 0..1 fraction for the circular progress ring, or null/undefined for
-    // an indeterminate spinner (the ring is CSS-animated so it keeps moving
-    // even when the main thread is busy).
+    // an indeterminate spinner (the ring's rotation is a Web Animations API
+    // animation — a CSS @keyframes rule would need an injected <style>, which
+    // the IDE's `style-src 'self'` CSP blocks — and it still runs on the
+    // compositor, so it keeps moving even when the main thread is busy).
     showLoading(message, progress) {
         this.lastLoadingMessage = message;
         this.loadingVisible = true;

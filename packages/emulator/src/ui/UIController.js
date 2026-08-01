@@ -81,15 +81,8 @@ export class UIController extends EventEmitter {
         game's files byte-by-byte) or an indeterminate spinner otherwise
         (downloading, driving the NextZXOS launch). The display stays
         visible underneath — the machine automation is part of the show —
-        and the ring is CSS-animated (compositor thread) so it keeps moving
-        even when staging busies the main thread. */
-        if (!document.getElementById('jsspeccy-spin-style')) {
-            const style = document.createElement('style');
-            style.id = 'jsspeccy-spin-style';
-            style.textContent =
-                '@keyframes jsspeccy-spin { to { transform: rotate(360deg); } }';
-            document.head.appendChild(style);
-        }
+        and the ring's spin runs on the compositor thread so it keeps
+        moving even when staging busies the main thread. */
         this.loadingPill = document.createElement('div');
         this.appContainer.appendChild(this.loadingPill);
         this.loadingPill.style.display = 'none';
@@ -138,6 +131,17 @@ export class UIController extends EventEmitter {
         this.loadingArc.setAttribute('stroke-dasharray', String(RING_C));
         /* start the arc at 12 o'clock */
         this.loadingArc.setAttribute('transform', 'rotate(-90 10 10)');
+        /* The indeterminate spin, as a Web Animations API animation rather
+        than a CSS @keyframes rule: keyframes would need an injected <style>,
+        and the IDE is served under `style-src 'self'` (apps/proxy's
+        prod.Caddyfile), which blocks it — the ring then sat motionless in
+        production. WAAPI is script, not inline style, and Chrome still
+        composites a transform-only animation off the main thread. */
+        this.loadingSpin = this.loadingRing.animate ? this.loadingRing.animate(
+            [{transform: 'rotate(0deg)'}, {transform: 'rotate(360deg)'}],
+            {duration: 900, iterations: Infinity, easing: 'linear'}
+        ) : null;
+        if (this.loadingSpin) this.loadingSpin.cancel();
         this.loadingText = document.createElement('span');
         this.loadingPill.appendChild(this.loadingText);
 
@@ -145,11 +149,14 @@ export class UIController extends EventEmitter {
             this.loadingText.textContent = message || 'Loading…';
             if (progress === null || progress === undefined) {
                 this.loadingArc.setAttribute('stroke-dashoffset', String(RING_C * 0.75));
-                this.loadingRing.style.animation = 'jsspeccy-spin 0.9s linear infinite';
+                if (this.loadingSpin) this.loadingSpin.play();
             } else {
                 const f = Math.min(Math.max(progress, 0), 1);
                 this.loadingArc.setAttribute('stroke-dashoffset', String(RING_C * (1 - f)));
-                this.loadingRing.style.animation = '';
+                /* cancel(), not pause(): it also drops the animation's
+                   transform, so the ring returns upright for the arc to
+                   read as a progress dial. */
+                if (this.loadingSpin) this.loadingSpin.cancel();
             }
             this.loadingPill.style.display = 'flex';
         });
