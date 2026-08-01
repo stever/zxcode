@@ -1,11 +1,11 @@
 # Build context is the repo root (for the wasm CLI toolchains copied below);
 # the emulator core + ROMs are vendored in this service's engine/ directory.
-# zx_go core -> WebAssembly — the single emulation engine for all machines.
+# zxplay_go core -> WebAssembly — the single emulation engine for all machines.
 FROM golang:1.25 AS wasmbuild
 WORKDIR /src
-COPY packages/emulator-core/zx_go ./zx_go
+COPY packages/emulator-core/zxplay_go ./zxplay_go
 RUN mkdir /out \
- && cd zx_go && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o /out/zx.wasm ./cmd/zx_go \
+ && cd zxplay_go && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o /out/zx.wasm ./cmd/zxplay_go \
  && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" /out/wasm_exec.js
 
 FROM node:22-slim
@@ -24,7 +24,7 @@ RUN npm install --omit=dev --no-audit --no-fund && npm install tsx typescript
 # Service source.
 COPY apps/gif-service/ ./
 
-# Emulator core: zx_go (all machines), compiled by the golang stage into
+# Emulator core: zxplay_go (all machines), compiled by the golang stage into
 # engine/zxgo. The Next also needs the licensed NextZXOS assets staged into
 # next-assets/ in the build context (never committed — see
 # packages/emulator-core/LICENSES.md); they ride along with the COPY above

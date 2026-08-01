@@ -6,7 +6,7 @@ import { useTranslation } from "@zxplay/i18n";
 // surface). The console itself is English-only — commands, arguments, and
 // engine responses — so this reference stays in that language too; only the
 // framing text is translated. Syntax lines mirror the engine's own usage
-// strings; update alongside command changes in zx_go's cmd dispatch.
+// strings; update alongside command changes in zxplay_go's cmd dispatch.
 const SECTIONS = [
   {
     title: "Running",

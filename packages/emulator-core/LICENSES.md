@@ -10,13 +10,14 @@ retrogamecoders fork of Steven Hugg's 8bitworkshop, which is **GPLv3**. `makeNEX
 in `nex.js` is a port of that fork's `src/platform/zxnext.ts`. Distribution of the
 web host is therefore GPLv3, with corresponding source available (this repo).
 
-## zx_go emulator tree — MIT upstream, GPLv3 modifications
+## zxplay_go emulator tree — MIT upstream, GPLv3 modifications
 
-`zx_go/` vendors [zx_go](https://github.com/conorarmstrong/zx_go), which is
+`zxplay_go/` vendors [zx_go](https://github.com/conorarmstrong/zx_go)
+(now developed as the zxplay_go fork), which is
 **MIT** (Conor Armstrong). The modifications and additions made in this
 repository — the wasm port and every in-tree change since the vendored
 import — are **GPLv3** (Steven Robertson), so the modified tree as a whole is
-distributed under GPLv3; the dual notice is in `zx_go/LICENSE`. A *compiled*
+distributed under GPLv3; the dual notice is in `zxplay_go/LICENSE`. A *compiled*
 `zx.wasm` also embeds the GPLv3 `tbblue_loader.rom` FPGA loader, so the built
 binary is GPLv3 either way — which is why it is not committed here (build it
 yourself; source is available).

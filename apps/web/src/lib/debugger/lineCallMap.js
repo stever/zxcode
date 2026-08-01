@@ -2,7 +2,7 @@
 // service compiles with --enable-break, which plants one CHECK_BREAK
 // runtime call per executed source line with a line number in HL; the
 // emulator's linecall breakpoints anchor on that routine's address
-// (`linecall-anchor` / `set-linecall-bp`, zx_go linecallbp_cmd.go).
+// (`linecall-anchor` / `set-linecall-bp`, zxplay_go linecallbp_cmd.go).
 //
 // Line numbers are per-file in the raw codegen, so the service rewrites
 // include-file check operands to disjoint VIRTUAL ranges (base 10000·k per

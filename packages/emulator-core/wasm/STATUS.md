@@ -1,14 +1,14 @@
-# zx_go → WebAssembly: WORKING
+# zxplay_go → WebAssembly: WORKING
 
-A `zx.wasm` built from your zx_go source that boots the ZX Spectrum Next in the
+A `zx.wasm` built from your zxplay_go source that boots the ZX Spectrum Next in the
 browser, renders at 60 fps, runs `.nex` builds, AND produces real emulator audio
 through oto's Web Audio backend. Built into `../dist/` by
 `../scripts/build-wasm.sh`, where the monorepo apps pick it up.
 
 ## Verified
 
-- Compiles: `GOOS=js GOARCH=wasm go build -o zx.wasm ./cmd/zx_go` (31 MB).
-- Desktop build still works (`go build ./cmd/zx_go`) — changes are wasm-safe.
+- Compiles: `GOOS=js GOARCH=wasm go build -o zx.wasm ./cmd/zxplay_go` (31 MB).
+- Desktop build still works (`go build ./cmd/zxplay_go`) — changes are wasm-safe.
 - Boots NextZXOS (TBBlue splash, Core v3.02.03) at 61 fps in headless Chrome.
 - Audio: a hand-assembled beeper `.nex` drives `PushBeeperSamples` to a measured
   peak of 16000 (full-scale square). The emulator generates sound and feeds oto.
@@ -22,22 +22,22 @@ through oto's Web Audio backend. Built into `../dist/` by
 
 ## Source
 
-These changes are applied in-tree in the vendored [`../zx_go`](../zx_go); there
+These changes are applied in-tree in the vendored [`../zxplay_go`](../zxplay_go); there
 is no separate patch to apply. Pull upstream with
-`git subtree pull --prefix=zx_go zx_go-upstream main --squash`.
+`git subtree pull --prefix=zxplay_go zxplay_go-upstream main --squash`.
 
 ## What each change does
 
 New files:
-- `cmd/zx_go/wasm_js.go` — js exports (zxBootNext / zxBoot48 / zxBoot128, zxFrame,
+- `cmd/zxplay_go/wasm_js.go` — js exports (zxBootNext / zxBoot48 / zxBoot128, zxFrame,
   zxRunNex, zxRunBas, zxLoadTap, zxReset, zxKeyName, zxType, zxRegisterROM,
   zxReady, zxAudioLevel, zxPullAudio). Boot runs in a goroutine so the js
-  callback returns promptly. 48K/128K use zx_go's embedded ROMs (no SD).
-- `cmd/zx_go/tape_macro.go` — mount a `.tap` from bytes and auto-run it: reboot,
+  callback returns promptly. 48K/128K use zxplay_go's embedded ROMs (no SD).
+- `cmd/zxplay_go/tape_macro.go` — mount a `.tap` from bytes and auto-run it: reboot,
   then drive LOAD"" (48K) or the 128 Tape Loader; the LD-BYTES trap fast-loads it.
-- `cmd/zx_go/entry_js.go` / `entry_desktop.go` — build-tagged `main()` (js keeps
+- `cmd/zxplay_go/entry_js.go` / `entry_desktop.go` — build-tagged `main()` (js keeps
   the runtime alive with a timer goroutine to dodge the wasm deadlock detector).
-- `cmd/zx_go/tracedb_js.go` — sqlite-free trace ring for wasm.
+- `cmd/zxplay_go/tracedb_js.go` — sqlite-free trace ring for wasm.
 - `pkg/next/install/inject.go` — in-memory ROM injection (+ DiskDisabled) so the
   browser-supplied NextZXOS ROMs are used and absent optional ROMs don't error on
   os.Getwd.
@@ -51,15 +51,15 @@ New files:
 - `pkg/audio/peakmeter.go` — diagnostic beeper peak meter (LastPeak).
 
 In-place edits:
-- `cmd/zx_go/main.go` — `main()` → `desktopMain()`.
-- `cmd/zx_go/tracedb.go` — `//go:build !js`.
+- `cmd/zxplay_go/main.go` — `main()` → `desktopMain()`.
+- `cmd/zxplay_go/tracedb.go` — `//go:build !js`.
 - `pkg/next/install/install.go` — LoadROM checks injected ROMs / DiskDisabled first.
 - `pkg/audio/audio.go` — `<-ready` → `waitAudioReady(ready)`; peak meter in
   PushBeeperSamples.
 
 ## Debug bridge (port-owned surface)
 
-- `cmd/zx_go/wasm_debug_js.go` — browser debugger over the upstream command
+- `cmd/zxplay_go/wasm_debug_js.go` — browser debugger over the upstream command
   layer: zxDebugAttach/Detach, zxDebugCmd (the full `handleCommand` dispatch,
   so upstream command additions work unmodified), zxDebugState/Mem/Disasm
   (structured reads for the UI panels), zxDebugStepFrame. A stand-in goroutine
@@ -67,7 +67,7 @@ In-place edits:
   desktop headless loop normally provides; `step-over` is rerouted to a
   non-blocking variant because on wasm the CPU only advances when JS calls
   zxFrame (see the file comment for the threading model).
-- `cmd/zx_go/debugger.go` — two in-place edits for the above: (1) the
+- `cmd/zxplay_go/debugger.go` — two in-place edits for the above: (1) the
   constructor is split into `newDebuggerCore` (hooks, no listener; used by
   the bridge) and `newRemoteDebugger` (adds the TCP listener; desktop
   unchanged); (2) the instruction-history setup is extracted from the
@@ -76,7 +76,7 @@ In-place edits:
   because the bridge constructs with history off — the browser UI arms the
   ring on demand from its History panel. Re-apply both if an upstream pull
   rewrites the constructor or the command dispatch.
-- `cmd/zx_go/wasm_js.go` — `zxFrame` skips execution while the debugger holds
+- `cmd/zxplay_go/wasm_js.go` — `zxFrame` skips execution while the debugger holds
   the machine paused (render-only, so the page can repaint after pokes) and
   reports `{debug, paused, pc}` so the JS frame loop can observe breakpoint
   hits. Adds ~0.9 MB to zx.wasm (the command layer stops being dead code).

@@ -1,7 +1,7 @@
 # gif-service
 
 Generates an animated GIF from a ZX Spectrum `.tap` file. It loads the tape in
-a headless zx_go WASM core (the same engine the sites run — 48K, 128K and Spectrum Next), runs the program, and encodes the frames.
+a headless zxplay_go WASM core (the same engine the sites run — 48K, 128K and Spectrum Next), runs the program, and encodes the frames.
 
 ## Run the service
 

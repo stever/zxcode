@@ -1,17 +1,18 @@
 # @zxplay/emulator-core
 
-The zx_go emulator (Go; MIT upstream, this repository's modifications
+The zxplay_go emulator (Go; MIT upstream, this repository's modifications
 GPLv3 — see LICENSES.md) compiled to WebAssembly — the engine that
-replaces the JSSpeccy3 AssemblyScript core. Vendored from
-[zx_go](https://github.com/conorarmstrong/zx_go) with the wasm-port changes
+replaces the JSSpeccy3 AssemblyScript core. A fork of
+[zx_go](https://github.com/conorarmstrong/zx_go) by Conor Armstrong,
+vendored with the wasm-port changes
 applied in-tree (see `wasm/STATUS.md` for the port design and
 `wasm/README.md` for build detail). Migrated here from the
 stever/zxnext-inbrowser-poc repository.
 
 ## Layout
 
-    zx_go/     vendored emulator source (Go module); wasm exports live in
-               zx_go/cmd/zx_go/wasm_js.go
+    zxplay_go/     vendored emulator source (Go module); wasm exports live in
+               zxplay_go/cmd/zxplay_go/wasm_js.go
     wasm/      design notes for the wasm port (read STATUS.md before touching)
     scripts/   stage-zxnext-assets.sh (build the staged card + ROMs from an
                official distro image and stage them into apps/*/public/next/),
@@ -24,17 +25,17 @@ stever/zxnext-inbrowser-poc repository.
 
 ## Build
 
-Requires a Go toolchain (see zx_go/go.mod for the version).
+Requires a Go toolchain (see zxplay_go/go.mod for the version).
 
     npm run build     # GOOS=js GOARCH=wasm go build -> dist/zx.wasm
-    npm run test      # zx_go's own Go test suite
+    npm run test      # zxplay_go's own Go test suite
 
-Test note: with the licensed Next ROMs staged in `zx_go/roms/next/`, the
+Test note: with the licensed Next ROMs staged in `zxplay_go/roms/next/`, the
 classic→Next switch tests activate and need an SD image too — point
 `ZX_GO_NEXT_SD_IMG` at a staged tbblue.mmc, or unstage the ROMs (the tests
 then skip). Full suite passes either way.
 
-The desktop build (`cd zx_go && go build ./cmd/zx_go`) must keep working —
+The desktop build (`cd zxplay_go && go build ./cmd/zxplay_go`) must keep working —
 the wasm port is gated behind `//go:build js` / `!js` tags.
 
 ## Machines
@@ -52,7 +53,7 @@ zip fetched through the same-origin `/specnext/` Caddy proxy route
 fallback. The version is PINNED because the boot accelerators are verified
 per distro version — see "Next boot modes" below. Before boot a pristine
 distro card is normalised in-RAM by the `zxSdPrepDistro` export
-(`cmd/zx_go/distro_prep.go`): the first-boot welcome pager
+(`cmd/zxplay_go/distro_prep.go`): the first-boot welcome pager
 (`nextzxos/autoexec.1st`) is deleted and `machines/next/config.ini` seeded
 when absent — the shape a once-configured card has on real hardware.
 
@@ -84,9 +85,9 @@ TBBLUE.FW → NextZXOS. The BROWSER opts out of it for speed:
 `@zxplay/emulator` sets `ZX_GO_NO_FPGA_BOOTROM=1` +
 `ZX_GO_NEXT_DIRECT_BOOT=1` via `go.env` in `GoEmulator.js` (loadGoRuntime),
 which resets the CPU straight into the NextZXOS ROM with the post-firmware
-NextReg personality seeded from `cmd/zx_go/next_directboot.go`. On top of
+NextReg personality seeded from `cmd/zxplay_go/next_directboot.go`. On top of
 that, the page fast-forwards emulation until the NextZXOS menu wait loop
-(`cmd/zx_go/fastboot.go`, polled through the `zxFastBoot()` export). Boot
+(`cmd/zxplay_go/fastboot.go`, polled through the `zxFastBoot()` export). Boot
 drops from ~384 to ~80 frames, all of it time-compressed.
 
 Two things are coupled to the exact SD distro version and both fail on a
@@ -106,14 +107,14 @@ produce the PREPPED card (what `zxSdPrepDistro` mounts):
 
     unzip sn-emulator-<ver>.zip cspect-next-1gb.img
     ZX_GO_DISTRO_IMG=cspect-next-1gb.img ZX_GO_DISTRO_IMG_OUT=prepped.img \
-      go test ./cmd/zx_go/ -run 'TestPrepDistroCard_OfficialImage' -v
+      go test ./cmd/zxplay_go/ -run 'TestPrepDistroCard_OfficialImage' -v
 
 then re-run (covers seeds + menu navigation, in both boot modes):
 
     ZX_GO_NEXT_SD_IMG=<prepped.img or staged tbblue.mmc> \
-      go test ./cmd/zx_go/ -run 'TestDirectBootSurvivesReboot|TestImportAndRun|TestMenuCursorNavigation'
+      go test ./cmd/zxplay_go/ -run 'TestDirectBootSurvivesReboot|TestImportAndRun|TestMenuCursorNavigation'
     ZX_GO_NEXT_SD_IMG=<prepped.img or staged tbblue.mmc> ZX_GO_NO_FPGA_BOOTROM=1 \
-      ZX_GO_NEXT_DIRECT_BOOT=1 go test ./cmd/zx_go/ \
+      ZX_GO_NEXT_DIRECT_BOOT=1 go test ./cmd/zxplay_go/ \
       -run 'TestDirectBootSurvivesReboot|TestImportAndRun|TestMenuCursorNavigation'
 
 If the boot tests fail, either recapture the seeds (see the comments in

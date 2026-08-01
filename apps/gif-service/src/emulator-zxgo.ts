@@ -1,4 +1,4 @@
-// Headless emulation for rendering — the zx_go core (Go → WebAssembly, the
+// Headless emulation for rendering — the zxplay_go core (Go → WebAssembly, the
 // same engine the sites run) hosted under Node. Drives every machine: the
 // 48K/128K classics (embedded ROMs, tape auto-run with the LD-BYTES trap)
 // and the Spectrum Next (real NextZXOS boot, programs delivered the way the
@@ -59,7 +59,7 @@ function installBrowserShims(): void {
     }
 }
 
-// One Go runtime per process (the zx_go exports are globals).
+// One Go runtime per process (the zxplay_go exports are globals).
 let runtimePromise: Promise<void> | null = null;
 
 function loadRuntime(): Promise<void> {
@@ -83,7 +83,7 @@ function loadRuntime(): Promise<void> {
             const t0 = Date.now();
             const t = setInterval(() => {
                 if ((globalThis as any).zxReady) { clearInterval(t); resolve(); }
-                else if (Date.now() - t0 > 30000) { clearInterval(t); reject(new Error('zx_go core did not become ready')); }
+                else if (Date.now() - t0 > 30000) { clearInterval(t); reject(new Error('zxplay_go core did not become ready')); }
             }, 10);
         });
     })();

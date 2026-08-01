@@ -1,4 +1,4 @@
-// GoEmulator — drop-in replacement for Emulator.js backed by the zx_go core
+// GoEmulator — drop-in replacement for Emulator.js backed by the zxplay_go core
 // (packages/emulator-core, Go compiled to WebAssembly) instead of the
 // JSSpeccy3 AssemblyScript worker. Same constructor signature, methods and
 // events, so JSSpeccy.js and the app sagas cannot tell the difference.
@@ -39,7 +39,7 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r100-vhdl-allgreen';
+const ENGINE_REV = 'r101-zxplay-go-rename';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
@@ -56,7 +56,7 @@ const ENGINE_REV = 'r100-vhdl-allgreen';
 const SPECNEXT_DISTRO_PATH = null;
 
 // ---- Go wasm runtime singleton --------------------------------------------
-// wasm_exec.js's Go class runs one program per instantiation and the zx_go
+// wasm_exec.js's Go class runs one program per instantiation and the zxplay_go
 // exports are globals, so the runtime is page-level state shared by every
 // GoEmulator instance (in practice there is one per page; a remounted
 // component reuses the already-running core and just boots its machine).
@@ -78,7 +78,7 @@ function loadGoRuntime() {
         const go = new globalThis.Go();
         // Direct-core Next boot: skip the FPGA bootrom splash + TBBLUE.FW
         // stage and reset straight into NextZXOS with the post-firmware
-        // NextReg personality seeded (zx_go next_directboot.go). NextZXOS
+        // NextReg personality seeded (zxplay_go next_directboot.go). NextZXOS
         // still performs its entire init from the unmodified staged assets;
         // combined with the boot fast-forward this takes boot-to-welcome
         // from ~384 to ~80 emulated frames. The hardware-faithful bootrom
@@ -278,10 +278,10 @@ export class GoEmulator extends EventEmitter {
 
         this.initAudio(); // fire and forget; pump no-ops until it lands
 
-        console.info(`[zxplay] emulator engine: zxgo (zx_go wasm core) ${ENGINE_REV}`
+        console.info(`[zxplay] emulator engine: zxgo (zxplay_go wasm core) ${ENGINE_REV}`
             + (this.tapToNextEnabled ? ' +tapToNext' : ' (tapes->128K on Next)'));
         loadGoRuntime().then(() => {
-            console.info('[zxplay] zx_go core ready');
+            console.info('[zxplay] zxplay_go core ready');
             this.setMachine(opts.machine || 128);
             this.setTapeTraps(this.tapeTrapsEnabled);
             const afterOpen = () => {
@@ -500,7 +500,7 @@ export class GoEmulator extends EventEmitter {
             return;
         }
         // Boot fast-forward: while the core reports the Next still booting
-        // (or its load macro still typing keystrokes — zx_go fastboot.go),
+        // (or its load macro still typing keystrokes — zxplay_go fastboot.go),
         // run as many frames as fit a ~10ms budget per displayed frame
         // instead of the audio-paced 1x cadence. Nothing is skipped: the
         // FPGA bootrom, TBBLUE.FW and NextZXOS all execute unmodified —
@@ -1226,7 +1226,7 @@ export class GoEmulator extends EventEmitter {
                 }
             }
             // Player mode: a .tap is classic-machine media (the Next cannot
-            // tape-load in zx_go yet) — switch to the 128K and play it there.
+            // tape-load in zxplay_go yet) — switch to the 128K and play it there.
             this.setMachine(128);
             return this.waitForModel('128').then(() => this.classicTapeLoad(data));
         }

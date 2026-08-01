@@ -19,7 +19,7 @@ router.post('/tape-to-gif', upload.single('tape'), async (req, res) => {
             ? ('next' as const)
             : parseInt(req.query.machineType as string) || 128;
 
-        // Serialise every render through the one shared slot: the zx_go core is
+        // Serialise every render through the one shared slot: the zxplay_go core is
         // a single global wasm machine, so concurrent renders corrupt each
         // other and sum their peak memory (OOM). See concurrency.ts.
         const gifBuffer = await withRenderSlot(async () => {

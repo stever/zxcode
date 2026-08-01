@@ -48,19 +48,20 @@ export default function AboutPage() {
                 </p>
                 <ul>
                     <li>
+                        zxplay_go — the ZX Spectrum 48K/128K and Spectrum Next emulator core,
+                        compiled to WebAssembly; this site{"'"}s fork of{' '}
                         <a href="https://github.com/conorarmstrong/zx_go" target="_blank">zx_go</a> by
-                        Conor Armstrong — the ZX Spectrum 48K/128K and Spectrum Next emulator core,
-                        compiled to WebAssembly. Upstream is licensed under terms of The MIT License.
-                        The core running here is this site{"'"}s modified version: the modifications
-                        are licensed under The GPL version 3, making the built core GPLv3 as a whole
-                        (it also embeds the Spectrum Next{"'"}s GPLv3 FPGA loader) - see{' '}
-                        <a href="https://github.com/stever/zxcode/blob/main/packages/emulator-core/zx_go/LICENSE" target="_blank">LICENSE</a>.
+                        Conor Armstrong. Upstream is licensed under terms of The MIT License; the
+                        fork{"'"}s modifications are licensed under The GPL version 3, making the
+                        built core GPLv3 as a whole (it also embeds the Spectrum Next{"'"}s GPLv3
+                        FPGA loader) - see{' '}
+                        <a href="https://github.com/stever/zxcode/blob/main/packages/emulator-core/zxplay_go/LICENSE" target="_blank">LICENSE</a>.
                     </li>
                     <li>
                         <a href="https://github.com/gasman/jsspeccy3" target="_blank">JSSpeccy3</a>{' '}
                         <a href="https://github.com/dcrespo3d/jsspeccy3-mobile" target="_blank">JSSpeccy3-mobile</a>.
                         The emulator UI and keyboard handling descend from these projects
-                        (the emulation core itself is now zx_go). Licensed under terms of
+                        (the emulation core itself is now zxplay_go). Licensed under terms of
                         The GPL version 3 - see{' '}
                         <a href="https://github.com/gasman/jsspeccy3/blob/main/COPYING" target="_blank">COPYING</a>.
                     </li>

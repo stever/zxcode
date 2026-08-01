@@ -23,7 +23,7 @@
 # stay out of git and are staged locally. See ../LICENSES.md for the
 # deployment rules (free access, bare bootable system, attribution).
 #
-# It does NOT build zx.wasm — that comes from zx_go via build-wasm.sh.
+# It does NOT build zx.wasm — that comes from zxplay_go via build-wasm.sh.
 # After staging, re-verify per "Next boot modes" in ../README.md.
 # Needs: GNU mtools, python3, a Go toolchain (for trim's prep step).
 set -euo pipefail

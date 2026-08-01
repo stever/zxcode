@@ -5,7 +5,7 @@
 // breakpoint arms at is simply the BASIC line number; the engine watches
 // the interpreter's PPC system variable ($5C45, the line being executed —
 // identical on the 48K-derived ROMs and NextZXOS) and halts when it enters
-// an armed line (`set-basic-bp` — see zx_go's basicbp_cmd.go).
+// an armed line (`set-basic-bp` — see zxplay_go's basicbp_cmd.go).
 //
 // The returned object matches the parseSld shape so the debugger reducer's
 // snapping/re-anchoring and the session's map plumbing work unchanged:

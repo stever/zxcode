@@ -18,7 +18,7 @@ import {createDebugSession} from "../../lib/debugger/mockSession";
 import {createRealSession} from "../../lib/debugger/realSession";
 import {handleException} from "../../errors";
 
-// The live session for this tab: the zx_go wasm bridge when the loaded
+// The live session for this tab: the zxplay_go wasm bridge when the loaded
 // engine exposes it, else the mock (older wasm, tests). Both implement the
 // contract documented in lib/debugger/mockSession.js.
 let session = null;

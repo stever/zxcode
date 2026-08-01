@@ -61,7 +61,7 @@ const HELP =
     "history hexdump read-memory write-memory set-breakpoint clear-breakpoint " +
     "list-breakpoints disassemble get-mmu get-divmmc nr-panel sprite-list " +
     "palette-dump watch-mem watch-read watch-port tp tt-on tt-rewind ... " +
-    "(the full zx_go command set arrives with the emulator bridge)";
+    "(the full zxplay_go command set arrives with the emulator bridge)";
 
 const hex16 = (v) => v.toString(16).toUpperCase().padStart(4, "0");
 

@@ -1,4 +1,4 @@
-// Host gamepad -> zx_go joystick vector.
+// Host gamepad -> zxplay_go joystick vector.
 //
 // The Gamepad API is poll-only by design: navigator.getGamepads() hands
 // back a snapshot and there are no button events, so this is read once

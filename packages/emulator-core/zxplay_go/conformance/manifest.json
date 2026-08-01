@@ -1,0 +1,982 @@
+{
+  "comment": "Conformance manifest: the machine-readable source for the published conformance dashboard. Schema and maintenance rules: conformance/README.md. Entries with a runner get their live status from the go-test JSON stream; entries without one use the explicit status field.",
+  "entries": [
+    {
+      "id": "cpu-zexdoc",
+      "title": "zexdoc — documented Z80 instruction exerciser",
+      "area": "CPU (Z80)",
+      "kind": "internal",
+      "oracle": "Cringle zexdoc",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/z80",
+        "tests": [
+          "TestZexdoc"
+        ]
+      }
+    },
+    {
+      "id": "cpu-zexall",
+      "title": "zexall — undocumented-flags Z80 instruction exerciser",
+      "area": "CPU (Z80)",
+      "kind": "internal",
+      "oracle": "Cringle zexall",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/z80",
+        "tests": [
+          "TestZexall"
+        ]
+      }
+    },
+    {
+      "id": "cpu-z80n-gate",
+      "title": "Z80N gate-level golden (GHDL simulation of the FPGA t80n core)",
+      "area": "CPU (Z80)",
+      "kind": "internal",
+      "oracle": "t80n VHDL via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/z80",
+        "tests": [
+          "TestZ80NMatchesCoreGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-ay",
+      "title": "AY / YM2149 FPGA golden",
+      "area": "Audio",
+      "kind": "internal",
+      "oracle": "audio/ym2149.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/ay",
+        "tests": [
+          "TestYM2149MatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-dac",
+      "title": "DAC / SounDrive FPGA golden",
+      "area": "Audio",
+      "kind": "internal",
+      "oracle": "DAC VHDL via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/dac",
+        "tests": [
+          "TestSounDriveMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-paging",
+      "title": "Memory paging FPGA golden",
+      "area": "Memory / paging",
+      "kind": "internal",
+      "oracle": "zxnext.vhd memory mux via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/memory",
+        "tests": [
+          "TestPagingMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-divmmc",
+      "title": "divMMC automap FPGA golden",
+      "area": "Storage",
+      "kind": "internal",
+      "oracle": "divmmc.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/divmmc",
+        "tests": [
+          "TestDivMMCMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-sdcard",
+      "title": "SD SPI master FPGA golden",
+      "area": "Storage",
+      "kind": "internal",
+      "oracle": "SPI VHDL via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/sdcard",
+        "tests": [
+          "TestSPIMasterMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-layer2",
+      "title": "Layer 2 address + pixel FPGA goldens",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "layer2.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/layer2",
+        "tests": [
+          "TestLayer2AddressMatchesFPGAGolden",
+          "TestLayer2PixelMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-tilemap",
+      "title": "Tilemap render + below/text status FPGA goldens",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "tilemap.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/tilemap",
+        "tests": [
+          "TestTilemapRenderMatchesFPGAGolden",
+          "TestTilemapBelowTextStatusFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-sprite",
+      "title": "Sprite render FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "sprites.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/sprite",
+        "tests": [
+          "TestSpriteRenderMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-lores",
+      "title": "LoRes / Radastan FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "lores.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/lores",
+        "tests": [
+          "TestLoResMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-palette",
+      "title": "Palette FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "zxnext.vhd palette via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/palette",
+        "tests": [
+          "TestPaletteMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-mixer",
+      "title": "Video mixer (compositor) FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "zxnext.vhd mixer via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/compositor",
+        "tests": [
+          "TestMixerMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-copper",
+      "title": "Copper FPGA golden",
+      "area": "Video (Next)",
+      "kind": "internal",
+      "oracle": "copper.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/copper",
+        "tests": [
+          "TestCopperMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-ctc",
+      "title": "CTC channel FPGA golden",
+      "area": "Interrupts / timing",
+      "kind": "internal",
+      "oracle": "ctc_chan.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/ctc",
+        "tests": [
+          "TestCTCMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-im2",
+      "title": "IM2 daisy-chain FPGA golden",
+      "area": "Interrupts / timing",
+      "kind": "internal",
+      "oracle": "peripherals.vhd / im2_*.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next",
+        "tests": [
+          "TestIM2DaisyChainMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-multiface",
+      "title": "Multiface FPGA golden",
+      "area": "Peripherals",
+      "kind": "internal",
+      "oracle": "multiface.vhd via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/multiface",
+        "tests": [
+          "TestMultifaceMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-uart",
+      "title": "UART FPGA golden",
+      "area": "Peripherals",
+      "kind": "internal",
+      "oracle": "UART VHDL via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/next/uart",
+        "tests": [
+          "TestUARTMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "golden-keyboard",
+      "title": "Keyboard / keymap FPGA golden",
+      "area": "Peripherals",
+      "kind": "internal",
+      "oracle": "keymap VHDL via GHDL",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/keyboard",
+        "tests": [
+          "TestKeyboardMatchesFPGAGolden"
+        ]
+      }
+    },
+    {
+      "id": "boot-nextzxos",
+      "title": "NextZXOS cold boot end-to-end (real licensed ROMs)",
+      "area": "Boot",
+      "kind": "internal",
+      "oracle": "Real NextZXOS through the FPGA-bootrom chain",
+      "notes": "The licensed ROMs are never committed; the Pages workflow fetches them from the official specnext.com distro at build time. If that fetch fails the test skips cleanly and this row shows grey until the next build.",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/testharness",
+        "tests": [
+          "TestNextRealROMBoot"
+        ]
+      }
+    },
+    {
+      "id": "matrix-vhdl",
+      "title": "VHDL conformance matrix (per-axis enumeration of the FPGA surface)",
+      "area": "Meta",
+      "kind": "manual",
+      "status": "pass",
+      "link": "https://github.com/stever/zxcode/blob/main/packages/emulator-core/zxplay_go/VHDL_CONFORMANCE.md",
+      "detail": "vhdl.html",
+      "notes": "Hand-maintained matrix — ALL GREEN since the 2026-08 close-out (port deferrals, NR$82-$89 gating, DMA-delay enables, wide-L2 ULA residues). Sub-row-grain notes live in known-gaps.md."
+    },
+    {
+      "id": "ext-z80test",
+      "title": "raxoft/z80test v1.2a — all six CPU variants",
+      "area": "CPU (Z80)",
+      "kind": "external",
+      "roadmap": "ZX Play #r3",
+      "link": "https://github.com/raxoft/z80test",
+      "detail": "z80test.html",
+      "notes": "Stricter than zexall: all six variants pass 160/160 (Q register, block/OUTx flags and MEMPTR included) — see the breakdown page. z80ccfscr is manual-only.",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/testharness",
+        "tests": [
+          "TestZ80TestDoc",
+          "TestZ80TestDocFlags",
+          "TestZ80TestFlags",
+          "TestZ80TestFull",
+          "TestZ80TestCcf",
+          "TestZ80TestMemptr"
+        ]
+      }
+    },
+    {
+      "id": "ext-nexttests",
+      "title": "MrKWatkins/ZXSpectrumNextTests — Z80N, sprites, Layer 2, mixing, Copper, DMA, ULA, interrupts, timing",
+      "area": "Next acceptance",
+      "kind": "external",
+      "roadmap": "ZX Play #139",
+      "link": "https://github.com/MrKWatkins/ZXSpectrumNextTests",
+      "detail": "nexttests.html",
+      "notes": "Community acceptance suite with real-hardware reference screenshots. 35 tests in 8 groups, all wired — see the breakdown page. DmaInteractive is manual-only (a free-form WR-register editor judged against real Zilog hardware photos; its port-$0B finding is covered by the ZilogDMA runner).",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/testharness",
+        "tests": [
+          "TestNexttestsZ80N",
+          "TestNexttestsZ80Nc2",
+          "TestNexttestsNextRegDefaults",
+          "TestNexttestsCopper",
+          "TestNexttestsDMA",
+          "TestNexttestsZilogDMA",
+          "TestNexttestsGraphicsLayer2Colours",
+          "TestNexttestsGraphicsLayer2Port",
+          "TestNexttestsGraphicsLayer2Scroll",
+          "TestNexttestsGraphicsLayersMixingHiCol",
+          "TestNexttestsGraphicsLayersMixingHiRes",
+          "TestNexttestsGraphicsLayersMixingLoRes",
+          "TestNexttestsGraphicsLightenDarken",
+          "TestNexttestsGraphicsNextReg0x69",
+          "TestNexttestsSpritesTransparency",
+          "TestNexttestsSpritesRelative",
+          "TestNexttestsSpritesBigSprite",
+          "TestNexttestsSpritesBigSprite4b",
+          "TestNexttestsSpritesScanlineDelay",
+          "TestNexttestsULADefaultTransparency",
+          "TestNexttestsULABorderTransparencyFallback",
+          "TestNexttestsULAChangePaletteTransparency",
+          "TestNexttestsULAChangePaletteTransparencyV2",
+          "TestNexttestsULAChangePaletteTransparencyV3",
+          "TestNexttestsULAClassicPaletized",
+          "TestNexttestsULAScroll",
+          "TestNexttestsDIHalt",
+          "TestNexttestsChanging8kBank",
+          "TestNexttestsScanlineIRQ",
+          "TestNexttestsZ80BlockFlags",
+          "TestNexttestsCcfScfStability",
+          "TestNexttestsZ80IntSkipBasics",
+          "TestNexttestsZ80IntSkipInhibition",
+          "TestNexttestsULAvsSJS"
+        ]
+      }
+    },
+    {
+      "id": "ext-327tests",
+      "title": "Threetwosevensixseven/ZXSpectrumNextTests — all five tests",
+      "area": "Next acceptance",
+      "kind": "external",
+      "roadmap": "ZX Play #140",
+      "link": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests",
+      "detail": "327tests.html",
+      "notes": "All five tests pass (16 builds: upstream DMA binaries + sjasmplus ports of the Zeus-only sources). Found and pinned two emulator gaps en route: the palette power-on identity default and ULA-palette transparency.",
+      "runner": {
+        "package": "github.com/stever/zxplay_go/pkg/testharness",
+        "tests": [
+          "TestExt327DMAFill",
+          "TestExt327DMACopy",
+          "TestExt327LDIRFill",
+          "TestExt327LDIRCopy",
+          "TestExt327MMUPaging",
+          "TestExt327DFFDPaging",
+          "TestExt327Level2Order",
+          "TestExt327ULAScreenPaging"
+        ]
+      }
+    }
+  ],
+  "suites": [
+    {
+      "id": "z80test",
+      "title": "raxoft/z80test v1.2a — test inventory",
+      "page": "z80test.html",
+      "link": "https://github.com/raxoft/z80test",
+      "description": "Patrik Rak's Z80 instruction exerciser: exhaustive per-instruction CRCs compared against captures from a real Zilog Z80 in a 48K Spectrum. Vendored release taps (pkg/testharness/testdata/z80test) run on the 48K harness via direct CODE-block injection. All six CPU variants pass; z80ccfscr is manual/visual only.",
+      "groups": [
+        {
+          "name": "Variants",
+          "tests": [
+            {
+              "name": "z80doc",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestDoc"
+                ]
+              },
+              "notes": "All registers, documented flags — 160/160 pass"
+            },
+            {
+              "name": "z80docflags",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestDocFlags"
+                ]
+              },
+              "notes": "Documented flags only — 160/160 pass"
+            },
+            {
+              "name": "z80flags",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestFlags"
+                ]
+              },
+              "notes": "All flags — 160/160 pass (Q register + block/OUTx flag work, ZX Play #141)"
+            },
+            {
+              "name": "z80full",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestFull"
+                ]
+              },
+              "notes": "All flags and registers — 160/160 pass"
+            },
+            {
+              "name": "z80ccf",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestCcf"
+                ]
+              },
+              "notes": "Flags after CCF following every instruction — 160/160 pass (the Q register)"
+            },
+            {
+              "name": "z80memptr",
+              "path": "https://github.com/raxoft/z80test",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestZ80TestMemptr"
+                ]
+              },
+              "notes": "BIT n,(HL) after every instruction — 160/160 pass (MEMPTR emulation is deeper than its in-source caveat suggests)"
+            },
+            {
+              "name": "z80ccfscr",
+              "path": "https://github.com/raxoft/z80test",
+              "notes": "Visualises random CCF behaviour; emulators produce a stable pattern by construction — manual/visual only, not wired into CI",
+              "status": "manual"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nexttests",
+      "title": "MrKWatkins/ZXSpectrumNextTests — test inventory",
+      "page": "nexttests.html",
+      "link": "https://github.com/MrKWatkins/ZXSpectrumNextTests",
+      "description": "The main community acceptance suite for Spectrum Next emulators and FPGA cores: .nex/.tap programs with reference screenshots from real hardware. Statuses flip from planned to live results as each test is wired into the headless harness (ZX Play work item #137).",
+      "groups": [
+        {
+          "name": "base — CPU and register fundamentals",
+          "tests": [
+            {
+              "name": "Z80N",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80N",
+              "notes": "All 23 Z80N instructions OK with green border (matches the real-hardware photo). First run caught LDDX/LDDRX direction and LDWS flags — fixed in pkg/z80",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80N"
+                ]
+              }
+            },
+            {
+              "name": "Z80Nc2",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Z80Nc2",
+              "notes": "Core-2 additions (barrel shifts, JP (C)) all OK; caught the JP (C) I/O-jump semantics bug — fixed in pkg/z80",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80Nc2"
+                ]
+              }
+            },
+            {
+              "name": "NextReg_defaults",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/NextReg_defaults",
+              "notes": "Full 256-cell verdict grid asserted (attribute decode). Matches the core-3.1.5 board photo except: 7 cells the board shows yellow from NextZXOS boot side-effects (OS-less harness earns strict green) and NR$0A/NR$10 red on core 3.2.x semantics (we follow master zxnext.vhd + MAME 0.282; test targets 3.1.5). Audit fixed: copper NR$61-$63 byte-granular cursor, NR$8E paging-lock bypass, NR$7F/$82-$89 reset defaults, ULA-first classic palette default",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsNextRegDefaults"
+                ]
+              }
+            },
+            {
+              "name": "Copper",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/Copper",
+              "notes": "Full visible surface asserted: both self-reported counters 03F3 (board + MAME), all five Swedish flags incl. the over-left-border one, the horizontal-wait >= probe's single yellow pixel, the Z80-animated line with its left-border segment one row lower, rulers and background. Drove the cycle-paced copper (MOVE 2 / NOOP 1 cycles at 28MHz, mode-transition-only list restart) and the live-palette ULA/border render (ULANext decode). Residual precision: palette sampled once per 7MHz pixel, so half-pixel flag detail collapses to one colour per pixel",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsCopper"
+                ]
+              }
+            },
+            {
+              "name": "DMA",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/base/DMA",
+              "notes": "Full verdict surface asserted: all 24 A->B/B->A mode cells (IO rows yellow), short-init 4+4+1 and CONTINUE 4+4 areas, the 16-byte read-back stream (adjudicated against dma.vhd — the board photo predates the hex display and MAME 0.281's read-back is non-conformant), the auto-restart prescaler burst fill and the IM2 CPU-speed stepping. Fixed: $BF read-status, read-state machine, $83 disable, burst auto-restart, monotonic burst clock, turbo-scaled prescaler delay, harness DMA IO-bus wiring",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsDMA"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Graphics — Layer 2 and layer mixing",
+          "tests": [
+            {
+              "name": "Layer2Colours",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Colours",
+              "notes": "All 24 sprite/L2/ULA combinations in all six NR$15 orders: the 6-band 4x6 verdict grid pixel-pinned (cross-checked against the upstream SLU table + MAME 0.282), raster-banded border asserted. Drove the port $123B shadow-PAGING fix, the NR$1E/$1F cvc raster counter and the raster-stamped NR$15 replay",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayer2Colours"
+                ]
+              }
+            },
+            {
+              "name": "Layer2Port",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Port",
+              "notes": "Write/read-over-ROM windows (visible + shadow banks), IM1-in-L2, and the core-3.0.7+ bank-offset form: green border + full verdict surface scanned (no red pixel anywhere). Drove the composed $123B read-back (zxnext.vhd:3933)",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayer2Port"
+                ]
+              }
+            },
+            {
+              "name": "Layer2Scroll",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/Layer2Scroll",
+              "notes": "NR$16/$17 scroll to [196,133] + NR$18/$1A clips: self-reported register sheet OCR'd, ruler ULA-tick/L2-dot alignment pixel-pinned, clip margins show the fallback",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayer2Scroll"
+                ]
+              }
+            },
+            {
+              "name": "LayersMixingHiCol",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiCol",
+              "notes": "The mixing matrix with Timex HI-COLOUR as the ULA layer (8x1 attributes, zxula.vhd:238): shared verdict grid + the per-pixel-row black banner as the mode witness",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayersMixingHiCol"
+                ]
+              }
+            },
+            {
+              "name": "LayersMixingHiRes",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingHiRes",
+              "notes": "The matrix with Timex HI-RES 512x192: composited at native half-pixel granularity (ComposeHiResScanline), 640x240 frame, synthesized attribute border (index 130 — the core-2.00.25+ rule the upstream ReadMe documents), sub-pixel checker transitions asserted",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayersMixingHiRes"
+                ]
+              }
+            },
+            {
+              "name": "LayersMixingLoRes",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LayersMixingLoRes",
+              "notes": "The matrix with LORES as the ULA layer: wired the orphaned pkg/next/lores into the live render (NR$15 bit 7 per-pixel replace, zxnext.vhd:6980); L2-drawn header text over LoRes white as the mode witness",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLayersMixingLoRes"
+                ]
+              }
+            },
+            {
+              "name": "LightenDarken_L2_ULA",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/LightenDarken_L2_ULA",
+              "notes": "Additive blend modes 6/7 through the FPGA-golden Mix per pixel: gradient sums/differences pixel-pinned per band incl. the clamps, and transparent-L2 cells show the fallback (upstream table sTlTuu->TT). The catalogued approximated-as-SLU gap row CLOSED as a fix",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsLightenDarken"
+                ]
+              }
+            },
+            {
+              "name": "NextReg0x69",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Graphics/NextReg0x69",
+              "notes": "NR$69 as a composed live alias of $123B/$7FFD/port $FF: the 10 read/write cross-checks self-report 10/10, and the copper switches the display source per scanline band (L2 / shadow / scr1 / hi-colour / two hi-res rows / combined) — every band's verdict cells pixel-pinned. Runner pokes NR$12=9, the NextZXOS launch state the test assumes. Mode-switch settle artefacts not modelled (upstream marks them core-version-specific); mixed-frame hi-res text bands render decimated (known-gaps.md)",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsGraphicsNextReg0x69"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sprites",
+          "tests": [
+            {
+              "name": "Transparency",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Transparency",
+              "notes": "White transparent squares + green opaque squares pixel-pinned (board core 2.00.26). Drove the faithful NR$4B transparency: the ENGINE compares the raw pattern value (8bpp byte / 4bpp nibble, sprites.vhd:971), replacing the compositor's index-based approximation",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesTransparency"
+                ]
+              }
+            },
+            {
+              "name": "Relative",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/Relative",
+              "notes": "Composite relatives: positions, palette-offset relativity + wrap, relative pattern names, scales, invisibility, over-border dot — all pixel-pinned; whole image scanned for forbidden red/violet/stray-green. Also DISPROVED the catalogued '8 rows lower' sprite offset (sprite fill exactly inside its ULA-drawn outline, same relation as the MAME capture) — gap row deleted",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesRelative"
+                ]
+              }
+            },
+            {
+              "name": "BigSprite",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite",
+              "notes": "Eight anchor mirror/rotate combinations transform the 10-sprite body rigidly: every arm's colour bounding box asserted per group; invisible ninth big sprite + red sub-sprite absent; violet over-border sprite present (board core 2.00.27)",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesBigSprite"
+                ]
+              }
+            },
+            {
+              "name": "BigSprite4b",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/BigSprite4b",
+              "notes": "4bpp big sprites: relative patterns crossing the N6 half boundary, palette-offset saturation. Per-group pixel count / bbox / 32-colour set / orientation samples asserted; border pattern sprites + red square (board core 3.1.5)",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesBigSprite4b"
+                ]
+              }
+            },
+            {
+              "name": "ScanlineDelay",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Sprites/ScanlineDelay",
+              "notes": "Copper-timed one-scanline sprite effects (visibility, rotate+move, NR$4B, palette — core 3.0.7+ WAIT_H=48 build) land on exactly the target line; 4/5-byte records 'ooo1'/'o1' and the NR$09 lockstep exercise '11' asserted. Drove the dual NR$34/IO sprite indexes + lockstep tie, and the per-line render budget now models the bandwidth limit ($303B bit 1) — gap row closed",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsSpritesScanlineDelay"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ULA — palettes, transparency, scroll",
+          "tests": [
+            {
+              "name": "DefaultTransparency",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/DefaultTransparency",
+              "notes": "Classic bright-magenta paper stays OPAQUE over Layer 2: whole paper + all four border regions asserted per pixel. Adjudicated the boot ULA palette's bright magenta to %111'001'111 ($E7 projection, dodging NR$14=$E3) — board photo + MAME 0.282 + CSpect 2.11.1 + ZEsarUX 8.0 all agree (255,36,255); fixed classicRGB333",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULADefaultTransparency"
+                ]
+              }
+            },
+            {
+              "name": "BorderTransparencyFallback",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/BorderTransparencyFallback",
+              "notes": "All three key-driven phases asserted whole-surface (border + both paper halves): ULANext entry-128=$AA=NR$14 fallback in border+paper, ink-mask 255 background fallback, and Enhanced-ULA-off immunity. ZEsarUX 8.0 is the good reference (upstream marks the CSpect capture BAD)",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULABorderTransparencyFallback"
+                ]
+              }
+            },
+            {
+              "name": "ChangePaletteTransparency",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency",
+              "notes": "Every paper pixel asserted = Layer 2 identity-palette column (paper-7 entry 135 redefined to $E3), column 227 = NR$4A fallback cyan (L2's own $E3), border cyan via the transparent entry 135",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAChangePaletteTransparency"
+                ]
+              }
+            },
+            {
+              "name": "ChangePaletteTransparency_v2",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v2",
+              "notes": "Ink-mask 15 variant: paper-3 entry 131 transparent, border resolves entry 135 redefined to green %000'100'00 — full paper + border asserted per pixel",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAChangePaletteTransparencyV2"
+                ]
+              }
+            },
+            {
+              "name": "ChangePaletteTransparency_v3",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ChangePaletteTransparency_v3",
+              "notes": "ULANext OFF: redefining entry 128+7 must NOT affect the classic decode (white paper+border asserted whole-surface); the rainbow text via transparent INK-0 entry 0 asserted = Layer 2 columns",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAChangePaletteTransparencyV3"
+                ]
+              }
+            },
+            {
+              "name": "ClassicPaletized",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/ClassicPaletized",
+              "notes": "Classic screen through the Next ULA palettes with CPU raster timing: the mid-screen NR$43 displayed-palette flip (raster-stamped replay, landing row asserted ~95), attr cells through both palettes (incl. the $E7 bright magenta), and the full deduped left-border rainbow sequence — classic colours through palette 1, custom gradient + 'green/light blue' edges through palette 2. Closed the ULA-palette-colour gap row",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAClassicPaletized"
+                ]
+              }
+            },
+            {
+              "name": "UlaScroll",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ULA/UlaScroll",
+              "notes": "NR$26/$27 ULA hardware scroll (new wiring + render per zxula.vhd:192-208) cross-checked against live register read-back after interactive OPQA scrolling; NR$1A clip window [8,8]->[239,175] hides the marker rows (zxula.vhd:562, border exempt); NR$69 bit 6 shadow-display (bank 7 highlight switch) asserted. Timex 512/8x1 M-modes not asserted (classic Timex render path — see known-gaps)",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAScroll"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Interrupts",
+          "tests": [
+            {
+              "name": "HaltAfterDisable",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Interrupts/HaltAfterDisable",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsDIHalt"
+                ]
+              },
+              "notes": "DI + HALT must hang forever; asserted via the border-colour signature"
+            }
+          ]
+        },
+        {
+          "name": "Timing",
+          "tests": [
+            {
+              "name": "Changing8kBank",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsChanging8kBank"
+                ]
+              },
+              "notes": "MMU bank-switch timing off the frame INT: 2048 Z80N NEXTREG r,n (20T) render a green border band ending at image row 151 — pinned by instruction/frame-INT arithmetic (border-change stamps at raster 4 and 191) and matching MAME 0.282's proportion, the only upstream reference (no board photo). zxplay_go's fixed 128K-flavour raster (228T lines under 48K personality) is ~2% short of the FPGA's 48K timing — known-gaps.md"
+            },
+            {
+              "name": "Changing8kBank_NoContention",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/Changing8kBank_NoContention",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsChanging8kBank"
+                ]
+              },
+              "notes": "NR$08 bit 6 contention-OFF variant: renders identically to the ON variant (equality asserted), matching MAME 0.282's identical capture pair. Machine-wide per-access contention is a catalogued deferral (known-gaps.md) — on the FPGA the ON band would be slightly taller; no board photo exists to pin that delta"
+            },
+            {
+              "name": "ScanlineReadingAndInterrupt",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Timing/ScanlineReadingAndInterrupt",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsScanlineIRQ"
+                ]
+              },
+              "notes": "All three modes driven and pixel-pinned: NR$1F busy-wait markers land on their cvc row (incl. the 8-bit double trigger echoing into the displayed top border), the NR$22/$23 line interrupt's cyan band, and the copper WAIT band (paper + right border, left border clean). Drove the raster-stamped palette-CONTENT replay (palette.Bank write log; zxnext.vhd:4919-4930). READ/IRQ markers carry the documented one-line granularity (upstream ReadMe: marker starts 'somewhat midway'); NR$64 line offset is a catalogued no-op"
+            }
+          ]
+        },
+        {
+          "name": "Misc — DMA deep dives",
+          "tests": [
+            {
+              "name": "ZilogDMA",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/ZilogDMA",
+              "notes": "Zilog-DMA-mode behaviour through port $0B: the -1 counter seed (length N moves N+1 bytes), LOAD-latched source/destination roles surviving a direction flip, CONTINUE short-inits and the 4T/byte border timing bands — pinned to the core-3.1.5 board photo. Drove wiring port $0B (the dma_mode latch), the LOAD-latched src/dst pointer model and the harness Next's narrow frame-INT pulse",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": ["TestNexttestsZilogDMA"]
+              }
+            },
+            {
+              "name": "DmaInteractive",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/Misc/DmaInteractive",
+              "notes": "Interactive; includes real Zilog hardware photos — manual comparison rather than CI. Status re-confirmed 2026-07-13 with a hand-run: boots, full UI + byte-stream parser work (commit/LOAD/FORCE-RDY/ENABLE all recognized), but it is a free-form WR-register editor with grey-+2 Zilog photos as ground truth — no self-verdicting surface to pin. The run surfaced one real finding — its DEFAULT port $0B (Zilog-compatibility decode) was unclaimed in zxplay_go — since closed: port $0B is wired and covered by the Misc/ZilogDMA runner",
+              "status": "manual"
+            }
+          ]
+        },
+        {
+          "name": "ZX48 / ZX128 classic tests",
+          "tests": [
+            {
+              "name": "Z80BlockInstructionFlags",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80BlockInstructionFlags",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80BlockFlags"
+                ]
+              },
+              "notes": "Interrupted-block flags (David Banks) — matches real hardware (blockRepeatFlags); hard regression guard"
+            },
+            {
+              "name": "Z80CcfScfOutcomeStability",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80CcfScfOutcomeStability",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsCcfScfStability"
+                ]
+              },
+              "notes": "SCF/CCF outcomes must be deterministic frame over frame"
+            },
+            {
+              "name": "Z80IntSkip (basics)",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80IntSkipBasics"
+                ]
+              },
+              "notes": "NOP benchmark, DI inhibition, SCF/CCF chains, IFF2 reads during int-ack"
+            },
+            {
+              "name": "Z80IntSkip (prefix/EI inhibition)",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/Z80IntSkip",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsZ80IntSkipInhibition"
+                ]
+              },
+              "notes": "Prefix/EI interrupt inhibition + level-triggered /INT pulse re-entry — conformant via the classic narrow-pulse frame INT; hard regression guard"
+            },
+            {
+              "name": "ULAvsSJS",
+              "path": "https://github.com/MrKWatkins/ZXSpectrumNextTests/tree/develop/Tests/ZX48_ZX128/ULAvsSJS",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestNexttestsULAvsSJS"
+                ]
+              },
+              "notes": "Keyboard/Sinclair-joystick port mixing (not a timing test — the old note was wrong): $00FE whole-matrix reads must include every zero bit read on the $F7FE/$EFFE half-rows. Keys driven within and across half-rows; the live attribute cells, the hidden 'difference detected' message and the cyan border are asserted — the grey-+2 SJS quirk must never appear"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "327tests",
+      "title": "Threetwosevensixseven/ZXSpectrumNextTests — test inventory",
+      "page": "327tests.html",
+      "link": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests",
+      "description": "Five feature tests (MIT). The DMA builds are upstream binaries; the other four are sjasmplus ports of the upstream Zeus sources (pkg/testharness/testdata/ext327/src), each header documenting its deviations. All pass.",
+      "groups": [
+        {
+          "name": "Tests",
+          "tests": [
+            {
+              "name": "MMUPaging",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/MMUPaging.asm",
+              "notes": "Both variants: bank markers via $7FFD vs the MMU, including the FPGA rule that classic paging-port writes reset MMU slots 0/1 to ROM (paging golden)",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestExt327MMUPaging"
+                ]
+              }
+            },
+            {
+              "name": "DFFDPaging",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DFFDPaging.asm",
+              "notes": "$DFFD metabanks composing with $7FFD and the MMU; NR$56/$57 read-backs asserted for all 8 checkpoints",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestExt327DFFDPaging"
+                ]
+              }
+            },
+            {
+              "name": "ULAScreenPaging",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/ULAScreenPaging.asm",
+              "notes": "Main/shadow ULA screen via $7FFD bit 3 on 128K paging and inside both +3 special all-RAM configs (the 4/5/6/7 build survives its own paging switch from bank 6)",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestExt327ULAScreenPaging"
+                ]
+              }
+            },
+            {
+              "name": "DMACopy",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/DMACopy.asm",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestExt327DMAFill",
+                  "TestExt327DMACopy",
+                  "TestExt327LDIRFill",
+                  "TestExt327LDIRCopy"
+                ]
+              },
+              "notes": "All four build variants vendored (pkg/testharness/testdata/ext327) and asserted at memory level: zxnDMA fill/copy must be byte-identical to the LDIR ground truth, with each mode's border/attr signature"
+            },
+            {
+              "name": "Level2Order",
+              "path": "https://github.com/Threetwosevensixseven/ZXSpectrumNextTests/blob/master/Level2Order.asm",
+              "notes": "All six NR$15 orderings pixel-asserted (layer wins per region, ULA-palette transparency, sprite relations). Exposed two emulator fixes: the palette power-on identity default and value-driven ULA transparency",
+              "runner": {
+                "package": "github.com/stever/zxplay_go/pkg/testharness",
+                "tests": [
+                  "TestExt327Level2Order"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

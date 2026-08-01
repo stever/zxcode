@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=zxplay_go
+GenericName=ZX Spectrum Emulator
+Comment=ZX Spectrum / Spectrum Next emulator (48K, 128K, +2, +3, Next, Pentagon, ZX80/81, SAM)
+Exec=zxplay_go %f
+TryExec=zxplay_go
+Icon=zxplay_go
+Terminal=false
+Categories=Game;Emulator;
+MimeType=application/x-spectrum-tap;application/x-spectrum-tzx;application/x-spectrum-z80;application/x-spectrum-sna;application/x-spectrum-szx;application/x-spectrum-rzx;application/x-spectrum-trd;application/x-spectrum-next-nex;application/x-zx81-p;application/x-zx80-o;
+Keywords=spectrum;sinclair;zx;emulator;next;retro;

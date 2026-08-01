@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { sendConsoleCommand } from "../../redux/debugger/actions";
 import { useTranslation } from "@zxplay/i18n";
 
-// REPL over the zx_go debug command protocol. This surfaces the entire
+// REPL over the zxplay_go debug command protocol. This surfaces the entire
 // command set, including commands the panels don't wrap — and commands
 // added upstream work here without any UI changes.
 export function DebugConsole() {

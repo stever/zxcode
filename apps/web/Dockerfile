@@ -1,12 +1,12 @@
 FROM caddy:2 AS base
 COPY apps/web/Caddyfile /etc/caddy/Caddyfile
 
-# zx_go emulator core -> WebAssembly (see apps/play/Dockerfile for detail).
+# zxplay_go emulator core -> WebAssembly (see apps/play/Dockerfile for detail).
 FROM golang:1.25 AS wasmbuild
 WORKDIR /src
-COPY packages/emulator-core/zx_go ./zx_go
+COPY packages/emulator-core/zxplay_go ./zxplay_go
 RUN mkdir /out \
- && cd zx_go && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o /out/zx.wasm ./cmd/zx_go \
+ && cd zxplay_go && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o /out/zx.wasm ./cmd/zxplay_go \
  && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" /out/wasm_exec.js
 
 FROM node:22 AS npmbuild

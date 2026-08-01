@@ -1,7 +1,7 @@
 // Vendored copy of packages/emulator/src/zxgo/tapToNext.js (canonical) —
 // this service installs standalone (no workspace hoisting in its Docker
 // image), so cross-package imports are not available. Keep in sync.
-// TAP -> Spectrum Next translation. The Next cannot tape-load in zx_go yet
+// TAP -> Spectrum Next translation. The Next cannot tape-load in zxplay_go yet
 // (two upstream core defects, see plan_zxgo_migration.md), but NextZXOS has
 // two fully working program-delivery routes: an autoexec NextBASIC file
 // (zxRunBas) and a .nex via the OS's own .nexload (zxRunNex). This module

@@ -6,7 +6,7 @@ import { useTranslation } from "@zxplay/i18n";
 
 // Live memory-map pane: which bank each slot of the address space exposes,
 // colour-coded by role. The classification mirrors the desktop debugger's
-// PageMapWidget (zx_go pkg/debugger/pagemap.go) so both debuggers read the
+// PageMapWidget (zxplay_go pkg/debugger/pagemap.go) so both debuggers read the
 // same. Bank labels stay untranslated deliberately — they are the same
 // technical vocabulary the disassembly pane already uses.
 

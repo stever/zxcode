@@ -334,7 +334,7 @@
 /* --- paging map --- */
 
 /* Cell colours track the desktop debugger's PageMapWidget palette
-   (zx_go pkg/debugger/pagemap.go) so both debuggers read the same:
+   (zxplay_go pkg/debugger/pagemap.go) so both debuggers read the same:
    ROM blue, screen green, shadow pale green, contended red, Next high
    banks purple, divMMC overlay amber, plain RAM grey. */
 .debug-pagemap {

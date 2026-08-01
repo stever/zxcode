@@ -38,7 +38,7 @@ set -euo pipefail
 SRC="${1:?usage: trim-distro-card.sh <pristine-distro.img> [out.mmc]}"
 OUT="${2:-$(dirname "$SRC")/tbblue.mmc}"
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
-ZXGO="$SCRIPTS/../zx_go"
+ZXGO="$SCRIPTS/../zxplay_go"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -48,7 +48,7 @@ KEEP=(dot home LICENSE.md machines nextzxos README.md sys TBBLUE.FW TBBLUE.TBU t
 
 echo "1/4 prep (welcome pager + config.ini) ..."
 (cd "$ZXGO" && ZX_GO_DISTRO_IMG="$SRC" ZX_GO_DISTRO_IMG_OUT="$TMP/prepped.img" \
-    go test -count=1 -run TestPrepDistroCard_OfficialImage ./cmd/zx_go/ >/dev/null)
+    go test -count=1 -run TestPrepDistroCard_OfficialImage ./cmd/zxplay_go/ >/dev/null)
 
 # Source partition offset (for extraction) and total image size (for the
 # rebuilt card's capacity).

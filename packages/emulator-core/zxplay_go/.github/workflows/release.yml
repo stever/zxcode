@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact: zxplay_go-linux-amd64
+          - os: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            artifact: zxplay_go-linux-arm64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            artifact: zxplay_go-windows-amd64.exe
+          # Experimental: native Windows-on-ARM. OpenGL/CGO support there is
+          # immature, so this target is non-blocking (continue-on-error) and
+          # must never fail the release or cancel the other targets.
+          - os: windows-11-arm
+            goos: windows
+            goarch: arm64
+            cc: clang
+            experimental: true
+            artifact: zxplay_go-windows-arm64.exe
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            artifact: zxplay_go-macos-arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            cc: "clang -arch x86_64"
+            artifact: zxplay_go-macos-amd64
+
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+
+      - name: Install Linux dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libasound2-dev
+
+      - name: Build
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+          CC: ${{ matrix.cc || '' }}
+        run: |
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          go build -ldflags "-X github.com/stever/zxplay_go/pkg/version.BuildDate=$BUILD_DATE" \
+            -o ${{ matrix.artifact }} ./cmd/zxplay_go
+
+      - name: Package binary (Unix)
+        if: matrix.goos != 'windows'
+        shell: bash
+        run: |
+          chmod +x ${{ matrix.artifact }}
+          tar czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+
+      - name: Package binary (Windows)
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ${{ matrix.artifact }} -DestinationPath ${{ matrix.artifact }}.zip
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.artifact }}.tar.gz
+            ${{ matrix.artifact }}.zip

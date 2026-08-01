@@ -1,0 +1,121 @@
+<mxfile host="app.diagrams.net" version="24.7.7">
+  <diagram id="system-overview" name="System overview">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="lane-frontends" value="Surfaces (selected by build tag + CLI flags)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="1320" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-desktop" value="Desktop GUI&#10;Fyne window, menus, visual debugger&#10;cmd/zxplay_go/gui_desktop.go" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="70" y="75" width="270" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-headless" value="Headless CLI&#10;--headless, --press-key, trace, CI&#10;cmd/zxplay_go/headless.go" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="370" y="75" width="270" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-wasm" value="Browser (wasm)&#10;GoEmulator.js drives zx.wasm exports&#10;cmd/zxplay_go/wasm_js.go, entry_js.go" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="670" y="75" width="290" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-telnet" value="Telnet debugger&#10;ZRCP-style line protocol&#10;--debugger-port=N" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="990" y="75" width="240" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="cmd" value="cmd/zxplay_go — machine assembly and shared debugger backend&#10;main.go (emulator struct, run loop) · next.go (Next wiring) · debugger.go (handleCommand, one dispatch for GUI/telnet/wasm) · fastboot.go · flags.go" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="1320" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-core" value="Core execution (every machine)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="310" width="1320" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="core-z80" value="pkg/z80&#10;Z80 + Z80N CPU&#10;hooks, frame INT, turbo" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="70" y="350" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="core-memory" value="pkg/memory&#10;16K paging + Next 8K MMU&#10;contention, overlays" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="320" y="350" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="core-ula" value="pkg/ula — the I/O hub&#10;video render, port dispatch, tape,&#10;audio events, Next hook interfaces" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="580" y="350" width="270" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="core-kbd" value="pkg/keyboard&#10;8x5 matrix" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="880" y="350" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="core-audio" value="pkg/audio + pkg/ay&#10;44.1 kHz ring, oto / PullMono&#10;AY = FPGA ym2149 port" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="350" width="260" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-machines" value="Machine-specific stacks" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="1320" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="mach-next" value="pkg/next/* — Spectrum Next FPGA stack&#10;nextregs, wire.go, layer2, tilemap, sprite, copper, palette,&#10;compositor, lores, dma, ctc + ctcblock.go, im2 + im2block.go, divmmc, esxdos,&#10;sdcard, nex, rtc, uart, dac, keymap, install" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="70" y="515" width="420" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="mach-classic" value="pkg/peripherals + devices&#10;plus3fdc, betadisk, disciple, if1,&#10;if2, multiface, microdrive,&#10;kempmouse, zxprinter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="520" y="515" width="290" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="mach-zx8x" value="pkg/zx8x&#10;ZX80 / ZX81&#10;CPU-generated video" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="840" y="515" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="mach-sam" value="pkg/sam + pkg/saa1099&#10;SAM Coupé ASIC,&#10;WD1772, SAA1099" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="515" width="260" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-support" value="Support" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="650" width="1320" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="sup-snapshot" value="pkg/snapshot&#10;SNA / Z80 / SZX" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="70" y="685" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sup-rzx" value="pkg/rzx&#10;input recording, DSA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="270" y="685" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sup-debugger" value="pkg/debugger&#10;visual UI widgets, BreakpointSet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="480" y="685" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sup-harness" value="pkg/testharness&#10;scripted machine + screen OCR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="730" y="685" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sup-roms" value="pkg/roms&#10;embedded ROMs, model timing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="980" y="685" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sup-misc" value="pkg/trace, zxlog, config" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1210" y="685" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e-fe1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="fe-desktop" target="cmd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-fe2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="fe-headless" target="cmd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-fe3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="fe-wasm" target="cmd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-fe4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="fe-telnet" target="cmd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-cmd-z80" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="cmd" target="core-z80">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-cmd-ula" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="cmd" target="core-ula">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-z80-mem" value="Memory iface" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="core-z80" target="core-memory">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-z80-ula" value="ULA iface (ports)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=1;exitY=0.25;entryX=0;entryY=0.25;" edge="1" parent="1" source="core-z80" target="core-ula">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ula-next" value="consumer-site interfaces, SetXxx()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="core-ula" target="mach-next">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ula-classic" value="PeripheralManager" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="core-ula" target="mach-classic">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ula-audio" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="core-ula" target="core-audio">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-next-mem" value="MMU / overlays" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.25;exitY=0;entryX=0.25;entryY=1;" edge="1" parent="1" source="mach-next" target="core-memory">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-next-z80" value="CTC pulse INT (cpu.ExtIntFunc)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.05;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="mach-next" target="core-z80">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

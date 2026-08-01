@@ -1,4 +1,4 @@
-// Real debug session, backed by the zx_go wasm debug bridge through the
+// Real debug session, backed by the zxplay_go wasm debug bridge through the
 // JSSpeccy handle's `debug` API (packages/emulator). Implements the same
 // contract as mockSession.js — see there for the shape.
 //

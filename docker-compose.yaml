@@ -214,7 +214,7 @@ services:
       - "5001:5001"
     environment:
       GRAPHQL_URL: http://api:8080/v1/graphql
-      # The zx_go core is ONE global machine per process: every render drives
+      # The zxplay_go core is ONE global machine per process: every render drives
       # the same wasm emulator. Classic renders only serialize by accident
       # (their frame loop never yields); the Next path awaits during its boot
       # poll, so a concurrent render would reboot the machine under it and

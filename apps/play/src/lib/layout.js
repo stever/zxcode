@@ -1,6 +1,6 @@
 // Pure, viewport-driven layout for the emulator + on-screen keyboard.
 //
-// Screen aspect is 5:4 (the zx_go engine composites every machine into a
+// Screen aspect is 5:4 (the zxplay_go engine composites every machine into a
 // fixed 640x512 display box; UIController sizes the on-screen element from
 // the canvas's real shape, so the layout must assume the same ratio or the
 // landscape screen overflows the height it was given). The keyboard's aspect

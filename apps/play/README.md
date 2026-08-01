@@ -13,13 +13,14 @@ Launch the URL for the web server on port 8000 (http://localhost:8000).
 
 ## Emulation engine
 
-The emulator core is [zx_go](https://github.com/conorarmstrong/zx_go) — a
+The emulator core is zxplay_go — this repository's fork of
+[zx_go](https://github.com/conorarmstrong/zx_go) by Conor Armstrong — a
 ZX Spectrum 48K/128K and Spectrum Next emulator written in Go — compiled to
 WebAssembly. It is vendored (with the wasm-port changes applied in-tree) at
 packages/emulator-core, and consumed through the JSSpeccy(container, opts)
 handle in packages/emulator, whose UI chrome and keyboard handling descend
 from [JSSpeccy3](https://github.com/gasman/jsspeccy3) (GPLv3) — the engine
-this project used before the zx_go migration.
+this project used before the zxplay_go migration.
 
 Engine highlights:
 

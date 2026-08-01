@@ -40,7 +40,7 @@ export class GIFGenerator {
     }
 
     async initialize(): Promise<void> {
-        // The zx_go runtime loads lazily on first capture; kept for API
+        // The zxplay_go runtime loads lazily on first capture; kept for API
         // compatibility with the routes.
     }
 
@@ -126,7 +126,7 @@ export class GIFGenerator {
     }
 
     /**
-     * Classic 48K/128K path on the zx_go core: boot from embedded ROMs, let
+     * Classic 48K/128K path on the zxplay_go core: boot from embedded ROMs, let
      * the core's own keystroke macro drive LOAD"" / the 128 Tape Loader with
      * the LD-BYTES trap loading blocks instantly. Capture runs THROUGH the
      * boot-and-typing phase (stale-stop disarmed until the macro ends) and
@@ -140,7 +140,7 @@ export class GIFGenerator {
         captureAudio: boolean,
     ): Promise<{ frames: Uint8Array[]; audio: AudioFrame[] }> {
         const emu = new ZxGoEmulator();
-        console.log(`Booting ${machineType}K machine (zx_go core)`);
+        console.log(`Booting ${machineType}K machine (zxplay_go core)`);
         await emu.bootClassic(machineType === 128 ? 128 : 48);
         emu.runTAPClassic(tapData);
 
@@ -214,7 +214,7 @@ export class GIFGenerator {
         captureAudio: boolean,
     ): Promise<{ frames: Uint8Array[]; audio: AudioFrame[] }> {
         const emu = new ZxGoEmulator();
-        console.log('Booting Spectrum Next (zx_go core) for render');
+        console.log('Booting Spectrum Next (zxplay_go core) for render');
         await emu.boot();
         emu.runTAP(tapData);
 

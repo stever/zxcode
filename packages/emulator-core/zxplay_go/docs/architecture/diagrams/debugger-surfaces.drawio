@@ -1,0 +1,46 @@
+<mxfile host="app.diagrams.net" version="24.7.7">
+  <diagram id="debugger-surfaces" name="Debugger surfaces">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="s1" value="Visual debugger (Fyne GUI)&#10;pkg/debugger widgets: registers, disassembly,&#10;hex view, paging diagram, Next inspectors&#10;(palette / sprites / Layer 2 / tilemap)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="60" width="360" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="Telnet server (ZRCP-style)&#10;--debugger-port=N; one command per line&#10;~130 commands via handleCommand" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="480" y="60" width="360" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="wasm bridge (wasm_debug_js.go)&#10;zxDebugCmd reuses handleCommand verbatim;&#10;pause state delivered via zxFrame return fields&#10;(single JS thread: calls never overlap a frame)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="900" y="60" width="380" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="core" value="Shared backend — remoteDebugger (cmd/zxplay_go/debugger.go)&#10;newDebuggerCore(): CPU hooks, no listener · handleCommand(): single dispatch for every surface&#10;pause/step handshake: WaitIfPaused + resume/stepDone/pauseAck channels" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="200" y="210" width="940" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="st1" value="BreakpointSet (pkg/debugger/bpset.go)&#10;lock-free M1 hot path: atomic.Pointer to a&#10;copy-on-write map; ONE instance shared by&#10;GUI + telnet + wasm (set in one, fires in all)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="60" y="340" width="300" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="st2" value="Watch + trace state&#10;register/memory/port watches, tracepoints,&#10;NextReg traces, SD break, continue-until,&#10;M1 history ring, crash-detect heuristics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="390" y="340" width="300" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="st3" value="Time-travel ring (timetravel.go)&#10;CPU + visible 64K + ports + border per snap&#10;Phase 2 gap: upper banks / divMMC RAM /&#10;NextRegs / MMU not yet captured" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="720" y="340" width="300" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="st4" value="Source-level breakpoints (IDE)&#10;basicbp_cmd.go: PPC $5C45 RAM-write hook,&#10;edge-triggered (interpreted BASICs)&#10;linecallbp_cmd.go: Boriel CHECK_BREAK&#10;anchor PC + line in HL (compiled BASIC)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="340" width="300" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="cpu" value="CPU hooks (pkg/z80)&#10;BreakpointCheck on every M1 · pre/post-fetch hook registries · OnSPLoad · RETN hook&#10;memory hooks: SetRAMWriteHook, WriteObserver, tracers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="200" y="480" width="940" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="es1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s1" target="core"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="es2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s2" target="core"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="es3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s3" target="core"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="core" target="st1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="core" target="st2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="core" target="st3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="core" target="st4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="eh1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="st1" target="cpu"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="eh2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="st4" target="cpu"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
