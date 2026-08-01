@@ -45,11 +45,30 @@ jobs:
             exit 1
           fi
 
-  build:
+  # Create the release ONCE before the build fan-out. The v2.0.0 release
+  # hit softprops' create race: the first matrix job to finish and another
+  # job both created a release for the tag, and the loser's finalize died
+  # on already_exists, stranding its asset on a duplicate draft. With the
+  # release pre-created, the matrix jobs only ever upload to it.
+  create-release:
     needs: verify-version
-    # Run when the version check passed, or when it was skipped because
-    # this is a workflow_dispatch smoke-test run.
-    if: ${{ !cancelled() && (needs.verify-version.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    if: startsWith(github.ref, 'refs/tags/zxplay_go-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Create release for tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+
+  build:
+    needs: [verify-version, create-release]
+    # Run when the release exists (tag push, checks passed), or when both
+    # gate jobs were skipped because this is a workflow_dispatch smoke-test
+    # run that builds everything and publishes nothing.
+    if: ${{ !cancelled() && (needs.create-release.result == 'success' || github.event_name == 'workflow_dispatch') }}
     strategy:
       fail-fast: false
       matrix:
@@ -153,7 +172,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/zxplay_go-v')
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
           files: |
             packages/emulator-core/zxplay_go/${{ matrix.artifact }}.tar.gz
             packages/emulator-core/zxplay_go/${{ matrix.artifact }}.zip
