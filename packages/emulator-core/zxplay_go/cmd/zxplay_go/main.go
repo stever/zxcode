@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"io"
 	"log/slog"
+	"math"
 	"math/bits"
 	"os"
 	"path/filepath"
@@ -217,14 +218,29 @@ type emulator struct {
 	keyQueue chan keyState
 	stopChan chan struct{}
 
-	// CRT scanline filter toggle. When true, the rendered image is upscaled
-	// 2x and every other row is darkened to mimic a CRT.
+	// CRT scanline filter toggle. When true, the rendered image is scaled
+	// to the display's device-pixel grid and one device row per emulated
+	// scanline is darkened to mimic a CRT.
 	crtFilter atomic.Bool
 
 	// CRT post-process destination. When the filter is enabled the render
-	// goroutine writes the upscaled image here and points screen.Image at
-	// it. Sized lazily on first use; reused across frames.
+	// goroutine writes the scaled image here and points screen.Image at
+	// it. Sized lazily to the image widget's device-pixel rectangle and
+	// reused across frames; reallocated when the window is resized.
 	crtScratch *image.RGBA
+
+	// Destination-column -> source-column map for the CRT scale, and the
+	// source width it was built for. Rebuilt only when either end of the
+	// scale changes. Render goroutine only, like crtScratch.
+	crtCols     []int32
+	crtColsSrcW int
+
+	// The emulator image widget's size in DEVICE pixels, published by the
+	// UI thread after each paint (noteDisplaySize) and consumed by the
+	// render goroutine's CRT pass. Zero until the window is first laid
+	// out. Atomic because those are different goroutines.
+	dispW atomic.Int32
+	dispH atomic.Int32
 
 	// Currently active joystick interface. Mutated only from the UI thread.
 	joystickType JoystickType
@@ -387,39 +403,126 @@ func joystickKeyForArrow(name fyne.KeyName) int {
 	return -1
 }
 
-// applyCRTFilterInto writes a 2x upscaled CRT version of src into dst:
-// each input pixel becomes a 2x2 block where the bottom row is halved in
-// brightness. dst must have the right dimensions; callers reuse it across
-// frames to avoid per-frame allocations.
-func applyCRTFilterInto(dst, src *image.RGBA) {
-	w, h := src.Bounds().Dx(), src.Bounds().Dy()
-	for y := 0; y < h; y++ {
-		srcRow := src.Pix[y*src.Stride : y*src.Stride+w*4]
-		topRow := dst.Pix[(y*2)*dst.Stride : (y*2)*dst.Stride+w*8]
-		botRow := dst.Pix[(y*2+1)*dst.Stride : (y*2+1)*dst.Stride+w*8]
-		for x := 0; x < w; x++ {
-			r := srcRow[x*4]
-			g := srcRow[x*4+1]
-			b := srcRow[x*4+2]
-			a := srcRow[x*4+3]
-			topRow[x*8+0] = r
-			topRow[x*8+1] = g
-			topRow[x*8+2] = b
-			topRow[x*8+3] = a
-			topRow[x*8+4] = r
-			topRow[x*8+5] = g
-			topRow[x*8+6] = b
-			topRow[x*8+7] = a
-			r2, g2, b2 := r/2, g/2, b/2
-			botRow[x*8+0] = r2
-			botRow[x*8+1] = g2
-			botRow[x*8+2] = b2
-			botRow[x*8+3] = a
-			botRow[x*8+4] = r2
-			botRow[x*8+5] = g2
-			botRow[x*8+6] = b2
-			botRow[x*8+7] = a
+// crtFrame post-processes a rendered frame for the CRT filter, returning
+// the scratch image the UI should display. The scratch is sized to the
+// emulator image widget's device-pixel rectangle as last measured by
+// noteDisplaySize, so the texture fyne uploads maps 1:1 onto the quad it
+// is drawn over and no resampling — and so no boundary tie, see
+// applyCRTFilterInto — happens on the GPU at all.
+//
+// Called on the render goroutine only; the scratch and column map are
+// owned by it.
+func (e *emulator) crtFrame(src *image.RGBA) *image.RGBA {
+	b := src.Bounds()
+	dw, dh := int(e.dispW.Load()), int(e.dispH.Load())
+	if dw <= 0 || dh <= 0 {
+		// Before the window's first paint the widget's device size is
+		// unknown. Fall back to a plain 2x for those first frames; the
+		// next one lands on the real geometry.
+		dw, dh = b.Dx()*2, b.Dy()*2
+	}
+	want := image.Rect(0, 0, dw, dh)
+	if e.crtScratch == nil || e.crtScratch.Bounds() != want {
+		e.crtScratch = image.NewRGBA(want)
+	}
+	if len(e.crtCols) != dw || e.crtColsSrcW != b.Dx() {
+		e.crtCols = make([]int32, dw)
+		for x := range e.crtCols {
+			e.crtCols[x] = int32(x * b.Dx() / dw)
 		}
+		e.crtColsSrcW = b.Dx()
+	}
+	applyCRTFilterInto(e.crtScratch, src, e.crtCols)
+	return e.crtScratch
+}
+
+// noteDisplaySize records the emulator image widget's size in DEVICE
+// pixels for the next frame's CRT pass. UI THREAD ONLY — it measures the
+// laid-out canvas.
+//
+// The rectangle is derived the way the GL painter derives the quad it
+// draws the image over: both edges are rounded to the pixel grid
+// independently and the size is their difference (fyne
+// internal/painter/gl/draw.go roundToPixelCoords), which is not always
+// round(size * scale). Matching it is the whole point — one pixel out and
+// the texture is no longer 1:1.
+func (e *emulator) noteDisplaySize(screen *canvas.Image) {
+	if e.window == nil {
+		return
+	}
+	c := e.window.Canvas()
+	if c == nil {
+		return
+	}
+	scale := c.Scale()
+	size := screen.Size()
+	if scale <= 0 || size.Width <= 0 || size.Height <= 0 {
+		return
+	}
+	pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(screen)
+	px := func(a, b float32) int32 {
+		return int32(math.Round(float64(b*scale)) - math.Round(float64(a*scale)))
+	}
+	e.dispW.Store(px(pos.X, pos.X+size.Width))
+	e.dispH.Store(px(pos.Y, pos.Y+size.Height))
+}
+
+// applyCRTFilterInto renders src into dst — sized to the emulator image
+// widget's EXACT device-pixel rectangle (see (*emulator).crtFrame) — with
+// nearest-neighbour scaling and one darkened device row per emulated
+// scanline: the LAST device row of each source row's band is halved in
+// brightness, so a scanline keeps its full-brightness leading rows at any
+// vertical scale. cols maps each destination column to its source column
+// and must hold at least dst-width entries.
+//
+// Sizing the post-processed frame to the DISPLAY, rather than to a fixed
+// 2x multiple of the source, is what keeps the scanlines stable. The
+// image is uploaded as a GL_NEAREST texture (canvas.ImageScalePixels) and
+// stretched over a four-vertex TRIANGLE_STRIP whose two triangles share
+// the quad's top-left/bottom-right diagonal (fyne internal/painter/gl:
+// draw.go rectCoords + drawTextureWithDetails). Each triangle interpolates
+// the texture coordinate from its own plane equation, so the two agree
+// only to the last float bits — and wherever a destination pixel's sample
+// lands EXACTLY on a texel boundary the tie breaks one way above that
+// diagonal and the other way below it, drawing the diagonal across the
+// picture. The old fixed 2x filter did exactly that: 256 source rows
+// doubled to 512 and stretched over the 300% preset's 768 device rows
+// gives (j+0.5)*2/3, an integer on every third row, so every third
+// scanline flipped between light and dark across the diagonal. At 1:1
+// every sample lands in a texel's interior and no tie exists to break.
+func applyCRTFilterInto(dst, src *image.RGBA, cols []int32) {
+	sw, sh := src.Bounds().Dx(), src.Bounds().Dy()
+	dw, dh := dst.Bounds().Dx(), dst.Bounds().Dy()
+	if sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0 || len(cols) < dw {
+		return
+	}
+	// A scanline gap needs a device row of its own to live in. Below 2x
+	// vertical there is none to spare, so the frame is scaled plain
+	// rather than losing half the picture to the filter.
+	scanlines := dh >= 2*sh
+	prevSrcY, prevDark := -1, false
+	for y := 0; y < dh; y++ {
+		srcY := y * sh / dh
+		dark := scanlines && (y+1)*sh/dh != srcY
+		row := dst.Pix[y*dst.Stride : y*dst.Stride+dw*4]
+		if srcY == prevSrcY && dark == prevDark {
+			// Same source row, same brightness: an exact copy of the
+			// row we just built. Only 2 rows per source scanline (the
+			// first lit one and the gap) are ever built pixel by pixel.
+			copy(row, dst.Pix[(y-1)*dst.Stride:(y-1)*dst.Stride+dw*4])
+			continue
+		}
+		srcRow := src.Pix[srcY*src.Stride : srcY*src.Stride+sw*4]
+		for x := 0; x < dw; x++ {
+			s := int(cols[x]) * 4
+			r, g, b := srcRow[s], srcRow[s+1], srcRow[s+2]
+			if dark {
+				r, g, b = r/2, g/2, b/2
+			}
+			d := x * 4
+			row[d], row[d+1], row[d+2], row[d+3] = r, g, b, srcRow[s+3]
+		}
+		prevSrcY, prevDark = srcY, dark
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
 	"image/color"
 	"io"
 	"log/slog"
@@ -599,17 +598,11 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 						// In plain mode, screen.Image already points at the
 						// ULA's frame buffer (set at startup) and Render
 						// mutated it in place — we just need to refresh.
-						// In CRT mode we post-process into a 2x scratch
-						// buffer and point screen.Image at that instead.
+						// In CRT mode we post-process into a display-sized
+						// scratch buffer and point screen.Image at that.
 						displayImg := newImage
 						if e.crtFilter.Load() {
-							b := newImage.Bounds()
-							want := image.Rect(0, 0, b.Dx()*2, b.Dy()*2)
-							if e.crtScratch == nil || e.crtScratch.Bounds() != want {
-								e.crtScratch = image.NewRGBA(want)
-							}
-							applyCRTFilterInto(e.crtScratch, newImage)
-							displayImg = e.crtScratch
+							displayImg = e.crtFrame(newImage)
 						}
 
 						// Update UI on main thread
@@ -618,6 +611,10 @@ func (e *emulator) run(a fyne.App, screen *canvas.Image) {
 								screen.Image = displayImg
 							}
 							screen.Refresh()
+							// Publish the widget's device-pixel size for
+							// the next frame's CRT pass — only the UI
+							// thread may measure the laid-out canvas.
+							e.noteDisplaySize(screen)
 						})
 
 						lastRender = now

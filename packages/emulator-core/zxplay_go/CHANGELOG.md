@@ -221,6 +221,25 @@ FPGA source, and the ESP UART moved to its real ports.
   `$F0`/`$F8-$FA` (Issue-4/5 XDEV block; we present as Issue 3) read
   their idle live sources.
 
+### Fixed
+
+- **The CRT filter drew a diagonal seam corner to corner across the
+  picture.** The filter always built a fixed 2× buffer, leaving the GPU to
+  stretch it onto whatever the window actually was — 256 Next rows doubled
+  to 512 and drawn over the 300% preset's 768 device rows samples at
+  `(j+0.5)·2/3`, which is an integer on every third row. Those rows land
+  exactly on a texel boundary, and fyne draws the image over a
+  four-vertex `TRIANGLE_STRIP` whose two triangles share the quad's
+  top-left/bottom-right diagonal and interpolate the texture coordinate
+  from their own plane equations: the tie broke one way above that
+  diagonal and the other way below, so every third scanline swapped
+  light for dark across it. The filter now renders straight onto the
+  image widget's device-pixel rectangle (measured the way the GL painter
+  measures the quad it draws), so the texture maps 1:1 and no sample is
+  ever ambiguous. Scanlines are also even at every zoom now — one dimmed
+  row per emulated scanline instead of a 2×-then-resampled beat — and are
+  skipped below 2×, where there is no spare row to dim.
+
 ## [v1.3.6]
 
 ### Fixed
