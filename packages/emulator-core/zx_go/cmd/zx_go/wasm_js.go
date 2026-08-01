@@ -449,6 +449,25 @@ func setupWasmExports() {
 		return nil
 	}))
 
+	// zxMouse(dx, dy, wheelDelta, buttons): feed the Next's Kempston
+	// mouse ($FADF/$FBDF/$FFDF). dx/dy are host screen-pixel deltas
+	// (screen-down dy; the counter's PS/2 up-positive convention is
+	// applied here), wheelDelta in detents, buttons a bitmask (bit 0
+	// left, bit 1 right, bit 2 middle). No-op on non-Next cores.
+	g.Set("zxMouse", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		e := wasmEmu
+		if e == nil || e.nextMouse == nil || len(a) < 4 {
+			return nil
+		}
+		e.nextMouse.Move(a[0].Int(), -a[1].Int())
+		if dz := a[2].Int(); dz != 0 {
+			e.nextMouse.Wheel(dz)
+		}
+		b := a[3].Int()
+		e.nextMouse.SetButtons(b&1 != 0, b&2 != 0, b&4 != 0)
+		return nil
+	}))
+
 	// zxJoystickDebug() -> {type, effective, kempstonEnabled, state,
 	// kempstonPortReads}. Splits the three ways pad input can appear to do
 	// nothing, which are indistinguishable from the outside:
@@ -463,9 +482,9 @@ func setupWasmExports() {
 			return nil
 		}
 		out := map[string]any{
-			"type":         joystickToConfigString(e.joystickType),
-			"effective":    joystickToConfigString(e.effectiveJoystick()),
-			"state":        int(e.joyState),
+			"type":      joystickToConfigString(e.joystickType),
+			"effective": joystickToConfigString(e.effectiveJoystick()),
+			"state":     int(e.joyState),
 			// Cumulative: these survive letting go of the pad, so they
 			// answer "did input EVER arrive?" rather than "is a button
 			// down right now?".
@@ -508,8 +527,8 @@ func setupWasmExports() {
 			top := []any{}
 			for _, b := range busy {
 				top = append(top, map[string]any{
-					"port":   "0x" + strconv.FormatUint(uint64(b.port), 16),
-					"reads":  int(b.n),
+					"port":  "0x" + strconv.FormatUint(uint64(b.port), 16),
+					"reads": int(b.n),
 					// A real Kempston decodes on A5 low; if this is
 					// true, hardware would have answered where we did not.
 					"a5low": b.port&0x20 == 0,

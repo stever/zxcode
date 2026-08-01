@@ -27,6 +27,7 @@ import (
 	"github.com/conorarmstrong/zx_go/pkg/next/install"
 	"github.com/conorarmstrong/zx_go/pkg/next/keymap"
 	"github.com/conorarmstrong/zx_go/pkg/next/layer2"
+	"github.com/conorarmstrong/zx_go/pkg/next/mouse"
 	"github.com/conorarmstrong/zx_go/pkg/next/nextregs"
 	"github.com/conorarmstrong/zx_go/pkg/next/palette"
 	rtcpkg "github.com/conorarmstrong/zx_go/pkg/next/rtc"
@@ -1273,6 +1274,13 @@ func wireNextSubsystems(e *emulator) error {
 	// The prescaler delay scales with the CPU speed (dma.vhd:250-255):
 	// prescaler*4^turbo/2 T-states per byte.
 	dmaEngine.SetTurbo(func() byte { return cpu.SpeedSelect() & 3 })
+	// NR$CC-$CE DMA-interrupt enables (zxnext.vhd:2005-2008): an enabled
+	// chain source outside idle — or an outstanding NMI with NR$CC bit 7 —
+	// holds the DMA off the bus between bytes until the ISR's RETI (or
+	// the NMI window closes).
+	next.WireDMAPause(dmaEngine, im2Blk, disp, func() bool {
+		return cpu.PendingNMI.Load() || pager.NMIInFlight() || mem.MultifaceActive()
+	})
 	cpu.AddPreFetchHook("zxndma-step", func(uint16) { dmaEngine.Step(cpu.RefTstates()) })
 	// i2c DS1307 RTC on ports $103B/$113B (zxnext.vhd:2630/3234) —
 	// NextZXOS bit-bangs this bus for the menu's date/time line; with
@@ -1280,7 +1288,27 @@ func wireNextSubsystems(e *emulator) error {
 	// degenerates into a re-render storm.
 	u.SetNextI2C(rtcpkg.NewBus(rtcEngine))
 	u.SetNextCopper(cop)
+	// Kempston mouse on $FADF/$FBDF/$FFDF (zxnext.vhd:2668-2670), its
+	// NR$0A control state (button reverse bit 3, DPI bits 1:0 —
+	// o_MOUSE_CONTROL, :1599) served live from the dispatcher.
+	mouseDev := mouse.New()
+	mouseDev.SetControlSource(func() (bool, byte) {
+		v := disp.Raw(0x0A)
+		return v&0x08 != 0, v & 0x03
+	})
+	u.SetNextMouse(mouseDev)
+	e.nextMouse = mouseDev
+	// Multiface enable/disable port pair (zxnext.vhd:2612-2616) around
+	// the GHDL-golden multiface.Core, plus the FDC iotraps
+	// (NR$D8/$D9/$DA + $2FFD/$3FFD) whose trap NMI feeds the same MF
+	// machinery.
+	mfBlk := next.WireMF(disp, mem, cpu, func() byte { return u.BorderColour })
+	u.SetNextMF(mfBlk)
+	next.WireIOTraps(disp, mem, cpu, pager, u, mfBlk.ButtonNMI)
 	u.SetNextDAC(dacBank)
+	// DAC decode personalities follow the NR$82-$89 port enables and
+	// the NR$08 bit-3 master DAC gate (zxnext.vhd:2437-2443/:2461).
+	next.WireDACGates(disp, dacBank)
 
 	// divMMC pager was constructed above and wired through
 	// next.Wire so NextReg $0A bit 4 toggles its automap state.
@@ -1372,6 +1400,9 @@ func wireNextSubsystems(e *emulator) error {
 		if mem.MultifaceActive() {
 			mem.SetMultifaceActive(false)
 		}
+		// RETN releases the Multiface state machine's NMI hold and
+		// mf_enable latch (multiface.vhd:144/:178).
+		mfBlk.Retn()
 		// FPGA NMI-arbiter envelope: the gate for new divMMC NMI pulses
 		// reopens ~6 CPU cycles BEFORE this RETN completes (retn_seen at
 		// T3 of the $45 M1 fetch, im2_control.vhd:236; hold drop and

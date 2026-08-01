@@ -32,12 +32,16 @@
 //     LOAD ($CF), CONTINUE ($D3), ENABLE ($87), DISABLE ($83), the
 //     read-back commands ($BB read mask, $A7 initiate sequence, $BF
 //     read status) and $8B reinitialise status; the interrupt
-//     commands are accepted as no-ops
+//     commands are accepted as no-ops — CONFORMANT: the FPGA's
+//     dma.vhd carries the Zilog interrupt-control machinery commented
+//     out (:94-96/:836-856), the zxnDMA never generates interrupts
 //
 // Memory<->memory transfers run synchronously to completion; IO-port
 // endpoints and burst+prescaler transfers interleave with the CPU via
-// Step. Not modelled: the interrupt/match logic and DMA-vs-CPU bus
-// contention.
+// Step. Transfers yield to the dma-delay condition between bytes when
+// a pauseFn is attached (NR$CC-$CE enabled interrupt sources / NMI —
+// zxnext.vhd:2005-2008, dma.vhd:269/427; see SetPauseFunc). Not
+// modelled: the match logic and DMA-vs-CPU bus contention.
 package dma
 
 import (
@@ -193,6 +197,28 @@ type DMA struct {
 	remaining   int
 	nextDue     uint64
 
+	// pauseFn, when set, is the FPGA's dma-delay condition
+	// (zxnext.vhd:2005-2008 im2_dma_delay): the DMA must yield the bus
+	// between byte transfers while an NR$CC-$CE-enabled interrupt source
+	// is outside its idle state (im2_device.vhd:151 o_dma_int =
+	// state /= S_0 and dma_int_en) or an NMI is outstanding with NR$CC
+	// bit 7 set. It reports (paused, recheckAt): paused = yield right
+	// now; recheckAt = the earliest reference T-state at which the
+	// answer could change (0 = re-ask before every byte, ^uint64(0) =
+	// can never pause). The FPGA consults the condition between bytes at
+	// START_DMA / WAITING_ACK (dma.vhd:269/427), which is exactly where
+	// the transfer loops call it.
+	pauseFn func(nowRef uint64) (paused bool, recheckAt uint64)
+
+	// suspended marks a continuous-mode block parked mid-transfer by
+	// pauseFn with `remaining` bytes still to move; Step resumes it once
+	// the pause clears. (The FPGA never idles the FSM in this window —
+	// it sits in START_DMA re-testing dma_delay_i.)
+	suspended bool
+	// burstPaused marks an interleaved burst held off the bus by pauseFn;
+	// on unpause the due schedule restarts from that instant.
+	burstPaused bool
+
 	// pending holds the setters for the follow bytes the most recent
 	// base byte announced; each subsequent WriteCommand consumes one.
 	pending []func(byte)
@@ -224,6 +250,15 @@ func (d *DMA) SetClock(clock func() uint64) { d.clock = clock }
 // SetTurbo attaches the CPU speed source (NR$07 value, 0..3) used to scale
 // the prescaler delay. Optional — without it the reset speed 0 is assumed.
 func (d *DMA) SetTurbo(turbo func() byte) { d.turbo = turbo }
+
+// SetPauseFunc attaches the dma-delay condition (see the pauseFn field).
+// Optional — without it transfers never yield, the pre-#158 behaviour and
+// the correct one whenever NR$CC-$CE are all zero (the reset default).
+func (d *DMA) SetPauseFunc(f func(nowRef uint64) (bool, uint64)) { d.pauseFn = f }
+
+// Suspended reports whether a continuous-mode block is parked mid-transfer
+// waiting for the dma-delay condition to clear.
+func (d *DMA) Suspended() bool { return d.suspended }
 
 // SetZilogMode latches the dma_mode select. The ULA calls it on every
 // DMA port access with "was this port $0B" — mirroring the FPGA, which
@@ -394,7 +429,7 @@ func (d *DMA) command(val byte) {
 	case 0xC3: // RESET — clear configuration + state machine (keep the buses
 		// and the mode latch: dma_mode lives outside the z80dma entity)
 		*d = DMA{mem: d.mem, io: d.io, cycleSink: d.cycleSink, clock: d.clock,
-			turbo: d.turbo, zilogMode: d.zilogMode,
+			turbo: d.turbo, zilogMode: d.zilogMode, pauseFn: d.pauseFn,
 			aCycleLen: 2, bCycleLen: 2, readMask: 0x7F}
 	case 0xCF: // LOAD — latch the start addresses into the source/destination
 		// pointers per the direction in force NOW (dma.vhd:646-663). A later
@@ -417,8 +452,10 @@ func (d *DMA) command(val byte) {
 			d.Trigger()
 		}
 	case 0x83: // DISABLE — dma_seq_s := IDLE (dma.vhd:727-728): stops an
-		// in-flight interleaved burst; IDLE clears status_atleastone (:265).
+		// in-flight interleaved burst or a pause-parked continuous block;
+		// IDLE clears status_atleastone (:265).
 		d.activeBurst = false
+		d.suspended = false
 		d.atLeastOne = false
 	case 0xBB: // READ MASK FOLLOWS — next byte sets the read mask AND aims
 		// the read state at the first masked register (dma.vhd:859-886).
@@ -477,7 +514,56 @@ func (d *DMA) Trigger() {
 		return
 	}
 
-	for remaining := moved; remaining > 0; remaining-- {
+	d.runSynchronous(moved)
+}
+
+// runSynchronous moves a continuous-mode (or clockless-burst) block's bytes,
+// yielding to the dma-delay condition between bytes (dma.vhd:269/427 test
+// dma_delay_i at START_DMA / WAITING_ACK). Without a pauseFn — or while it
+// reports "can never pause" — this is byte-identical to the old
+// uninterruptible loop. With one, the block advances in chunks bounded by
+// the condition's recheck deadline: bytes that fit before the deadline move
+// and charge their duration (the CPU clock advances to the yield instant),
+// then the block parks `suspended` for Step to resume once the pause clears.
+func (d *DMA) runSynchronous(moved int) {
+	remaining := moved
+	if d.pauseFn != nil && d.clock != nil {
+		refPerByte := d.perByteCycles() >> d.turboLevel()
+		if refPerByte == 0 {
+			refPerByte = 1
+		}
+		proj := d.clock()
+		checkAt := proj // ask before the first byte
+		movedNow := 0
+		for remaining > 0 {
+			if proj >= checkAt {
+				paused, recheck := d.pauseFn(proj)
+				if paused {
+					break
+				}
+				checkAt = recheck
+				if checkAt <= proj { // 0 = re-ask before every byte
+					checkAt = proj + 1
+				}
+			}
+			d.moveByte()
+			movedNow++
+			remaining--
+			proj += refPerByte
+		}
+		if d.mode == modeContinuous && d.cycleSink != nil && movedNow > 0 {
+			d.cycleSink(uint64(movedNow) * d.perByteCycles())
+		}
+		if remaining > 0 {
+			d.suspended = true
+			d.remaining = remaining
+			return
+		}
+		d.suspended = false
+		d.finishBlock()
+		return
+	}
+	for ; remaining > 0; remaining-- {
 		d.moveByte()
 	}
 	// Continuous mode stalls the CPU for the whole transfer; charge the time
@@ -521,8 +607,35 @@ func (d *DMA) finishBlock() {
 // going — the FPGA goes FINISH_DMA -> START_DMA without ever idling
 // (dma.vhd:469-489) — until DISABLE ($83) or RESET stops it.
 func (d *DMA) Step(now uint64) {
+	if d.suspended {
+		// A pause-parked continuous block: resume the moment the
+		// dma-delay condition clears (the FPGA sits in START_DMA
+		// re-testing dma_delay_i, dma.vhd:269).
+		if d.pauseFn != nil {
+			if paused, _ := d.pauseFn(now); paused {
+				return
+			}
+		}
+		d.suspended = false
+		d.runSynchronous(d.remaining)
+		return
+	}
 	if !d.activeBurst {
 		return
+	}
+	if d.pauseFn != nil && d.remaining > 0 && now >= d.nextDue {
+		if paused, _ := d.pauseFn(now); paused {
+			// Yield: the schedule restarts from the unpause instant —
+			// delayed bytes resume at prescaler pace, they do not
+			// catch up in a burst (the FPGA re-enters START_DMA and
+			// paces from there).
+			d.burstPaused = true
+			return
+		}
+		if d.burstPaused {
+			d.burstPaused = false
+			d.nextDue = now
+		}
 	}
 	per := d.perByteClockUnits()
 	for d.remaining > 0 && now >= d.nextDue {

@@ -340,6 +340,21 @@ type ULA struct {
 	// then fall through to the existing floating-bus dispatch.
 	nextRegs NextRegAccess
 
+	// nextMouse is the Kempston mouse when wired (ModelNext only).
+	nextMouse NextMouse
+
+	// ioTrapSink receives FDC-iotrap events (see SetIOTrapSink).
+	ioTrapSink func(cause byte, val byte)
+
+	// nextMF is the Multiface port pair when wired (ModelNext only).
+	nextMF NextMF
+
+	// nextPortEnMask is the live internal_port_enable vector
+	// (zxnext.vhd:2392-2443), pushed by SetNextPortEnableMask from the
+	// NR$80/$82-$89 write handlers. All-ones (the power-on decode)
+	// until a wiring pushes something else.
+	nextPortEnMask uint32
+
 	// nextAY is the Spectrum Next's three-chip AY engine when
 	// wired. When non-nil, port 0xFFFD / 0xBFFD traffic routes
 	// to engine.Active() instead of the singleton u.ay. Stays
@@ -529,7 +544,8 @@ type NextUART interface {
 // uartClaims reports whether the Next UART claims IO address addr,
 // per the FPGA decode above. Returns the 2-bit register select.
 func (u *ULA) uartClaims(addr uint16) (byte, bool) {
-	if u.nextUART == nil || addr&0xFF != 0x3B || addr&0xF800 != 0x1000 {
+	if u.nextUART == nil || addr&0xFF != 0x3B || addr&0xF800 != 0x1000 ||
+		!u.nextPortEnabled(nrPortEnUART) {
 		return 0, false
 	}
 	a10 := addr >> 10 & 1
@@ -548,22 +564,99 @@ func (u *ULA) nextAYA2OK(addr uint16) bool {
 	if u.mem == nil || u.mem.GetCurrentModel() != roms.ModelNext {
 		return true
 	}
-	return addr&0x0004 != 0
+	// The internal-port-enable gate rides the same predicate: a cleared
+	// NR$82 bit 0(16) removes the AY decode entirely (zxnext.vhd:2646).
+	return addr&0x0004 != 0 && u.nextPortEnabled(nrPortEnAY)
+}
+
+// Internal port-enable bit positions (internal_port_enable,
+// zxnext.vhd:2397-2443): NR$82-$85 concatenated little-endian, each
+// bit removing one internal device's decode from the I/O map when
+// cleared. With the expansion bus effectively enabled (NR$80 bit 7)
+// the vector is ANDed with NR$86-$89 (zxnext.vhd:2392-2393).
+const (
+	nrPortEnTimexFF   = 0  // port $FF Timex read-back / write latch
+	nrPortEn7FFD      = 1  // 128K paging
+	nrPortEnDFFD      = 2  // Pentagon-512 paging
+	nrPortEn1FFD      = 3  // +3 paging
+	nrPortEnP3Float   = 4  // +3-timing floating bus
+	nrPortEnDMA6B     = 5  // zxnDMA port $6B
+	nrPortEnJoy1F     = 6  // Kempston joystick $1F
+	nrPortEnJoy37     = 7  // Kempston joystick $37
+	nrPortEnDivMMC    = 8  // divMMC control $E3
+	nrPortEnMultiface = 9  // MF enable/disable pair + paging readback
+	nrPortEnI2C       = 10 // $103B/$113B
+	nrPortEnSPI       = 11 // $E7/$EB
+	nrPortEnUART      = 12 // $133B-$163B
+	nrPortEnMouse     = 13 // Kempston mouse $FADF/$FBDF/$FFDF
+	nrPortEnSprite    = 14 // $57/$5B/$303B
+	nrPortEnLayer2    = 15 // $123B
+	nrPortEnAY        = 16 // $FFFD/$BFFD
+	nrPortEnDACSD1    = 17 // soundrive 1: $1F/$0F/$4F/$5F
+	nrPortEnDACSD2    = 18 // soundrive 2: $F1/$F3/$F9/$FB
+	nrPortEnDACStAD   = 19 // profi covox stereo: $3F/$5F
+	nrPortEnDACStBC   = 20 // covox stereo: $0F/$4F
+	nrPortEnDACMonoFB = 21 // pentagon/atm mono $FB (yields to sd2)
+	nrPortEnDACMonoB3 = 22 // gs covox mono $B3
+	nrPortEnDACMonoDF = 23 // specdrum mono $DF
+	nrPortEnULAPlus   = 24 // $BF3B/$FF3B
+	nrPortEnDMA0B     = 25 // zxnDMA Zilog-compat port $0B
+	nrPortEnEFF7      = 26 // Pentagon-1024 $EFF7
+	nrPortEnCTC       = 27 // $183B-$1F3B
+)
+
+// SetNextPortEnableMask installs the live internal_port_enable vector
+// (zxnext.vhd:2392-2393: NR$85..$82, ANDed with NR$89..$86 while the
+// expansion bus is enabled). Pushed by next.Wire's NR$80/$82-$89
+// handlers (next.PortEnableMask); defaults to all-enabled so partial
+// wirings and non-dispatcher stubs keep the power-on decode.
+func (u *ULA) SetNextPortEnableMask(m uint32) { u.nextPortEnMask = m }
+
+// nextPortEnabled reports one internal_port_enable gate: a cleared bit
+// removes that device's port decode entirely — the access falls through
+// the dispatch exactly as if the device were absent (zxnext.vhd gates
+// every port_* decode predicate on its *_io_en term, :2580-2695).
+// Non-Next models always report enabled.
+func (u *ULA) nextPortEnabled(bit uint) bool {
+	if u.mem == nil || u.mem.GetCurrentModel() != roms.ModelNext {
+		return true
+	}
+	return u.nextPortEnMask&(1<<bit) != 0
+}
+
+// nextDivMMCPortEnabled applies the per-port internal-port-enable gates
+// to the divMMC pager's decode surface: $E3 (divMMC control, bit 8) and
+// the SPI pair $E7/$EB (bit 11) — zxnext.vhd:2608/2620-2621.
+func (u *ULA) nextDivMMCPortEnabled(addr uint16) bool {
+	switch addr & 0xFF {
+	case 0xE3:
+		return u.nextPortEnabled(nrPortEnDivMMC)
+	case 0xE7, 0xEB:
+		return u.nextPortEnabled(nrPortEnSPI)
+	}
+	return true
 }
 
 // dmaClaims reports whether the Spectrum Next DMA claims IO address addr
 // (low byte 0x6B or 0x0B — both decoded on the low 8 bits only,
 // zxnext.vhd:2544/2558), latching the controller's Zilog-compatibility
-// mode from the port used before the access proceeds.
+// mode from the port used before the access proceeds. Each port has its
+// own internal-port-enable gate (bits 5 / 25).
 func (u *ULA) dmaClaims(addr uint16) bool {
 	if u.nextDMA == nil {
 		return false
 	}
 	switch addr & 0xFF {
 	case 0x6B:
+		if !u.nextPortEnabled(nrPortEnDMA6B) {
+			return false
+		}
 		u.nextDMA.SetZilogMode(false)
 		return true
 	case 0x0B:
+		if !u.nextPortEnabled(nrPortEnDMA0B) {
+			return false
+		}
 		u.nextDMA.SetZilogMode(true)
 		return true
 	}
@@ -798,6 +891,52 @@ func (u *ULA) SetNextDMA(d NextDMA) { u.nextDMA = d }
 // $183B-$1F3B (a(15:11)="00011", low byte $3B) route to it.
 func (u *ULA) SetNextCTC(c NextCTC) { u.nextCTC = c }
 
+// NextMouse is the Kempston mouse device on ports $FADF (buttons +
+// wheel), $FBDF (X) and $FFDF (Y) — decode zxnext.vhd:2668-2670
+// (a(11:8) = $A/$B/$F, low byte $DF, a(15:12) don't-care), read data
+// :3541-3560. pkg/next/mouse.Mouse implements it.
+type NextMouse interface {
+	ReadButtons() byte
+	ReadX() byte
+	ReadY() byte
+}
+
+// NextMF is the Multiface enable/disable port pair + read-back
+// (zxnext.vhd:2612-2616 decode, :4305-4320 data; the state machine is
+// pkg/multiface.Core via pkg/next.MFBlock). PortRead's bool reports
+// whether the enable port SERVES data (mf_port_en) — a claimed access
+// with no data source reads the port mux's idle $00, resolved at the
+// dispatch fall-through so co-decoded devices (the $1F joystick under
+// the MF48 personality) can still supply theirs.
+type NextMF interface {
+	Claims(addr uint16) bool
+	PortRead(addr uint16) (byte, bool)
+	PortWrite(addr uint16, val byte) bool
+}
+
+// SetNextMF installs the Multiface port pair. Passing nil restores the
+// legacy NMI-window-gated $7F3F/$1F3F read-back only.
+func (u *ULA) SetNextMF(m NextMF) { u.nextMF = m }
+
+// SetIOTrapSink installs the FDC-iotrap event sink (zxnext.vhd:3835:
+// nmi_gen_iotrap = $2FFD read / $3FFD read / $3FFD write, already
+// qualified by NR$D8 bit 0). cause: 1 = $2FFD read, 2 = $3FFD read,
+// 3 = $3FFD write (val = the written byte, latched into NR$D9).
+// next.WireIOTraps supplies the sink.
+func (u *ULA) SetIOTrapSink(f func(cause byte, val byte)) { u.ioTrapSink = f }
+
+// nextIOTrapEnabled reports NR$D8 bit 0 (nr_d8_io_trap_fdc_en) — the
+// $2FFD/$3FFD decode exists only while it is set (zxnext.vhd:2601-2602).
+func (u *ULA) nextIOTrapEnabled() bool {
+	return u.nextRegs != nil && u.nextRegs.ReadReg(0xD8)&0x01 != 0
+}
+
+// SetNextMouse installs the Kempston mouse. Passing nil unhooks; the
+// ports then fall through (and, with the SpecDrum $DF DAC decode on
+// and the mouse decode disabled, $xxDF reads become the Kempston
+// joystick alias — zxnext.vhd:2674).
+func (u *ULA) SetNextMouse(m NextMouse) { u.nextMouse = m }
+
 // SetNextUART installs the Spectrum Next UART. Ports
 // $133B/$143B/$153B/$163B (zxnext.vhd:2639) route to it.
 func (u *ULA) SetNextUART(nu NextUART) { u.nextUART = nu }
@@ -947,12 +1086,14 @@ type audioEvent struct {
 // New creates a new ULA instance.
 func New(mem *memory.Memory, kbd *keyboard.Keyboard) *ULA {
 	u := &ULA{
-		mem:         mem,
-		kbd:         kbd,
-		borderTop:   BorderTop,
-		totalHeight: TotalHeight,
-		xs:          1,
-		img:         image.NewRGBA(image.Rect(0, 0, TotalWidth, TotalHeight)),
+		mem:       mem,
+		kbd:       kbd,
+		borderTop: BorderTop,
+		// Power-on internal_port_enable: everything decoded.
+		nextPortEnMask: ^uint32(0),
+		totalHeight:    TotalHeight,
+		xs:             1,
+		img:            image.NewRGBA(image.Rect(0, 0, TotalWidth, TotalHeight)),
 		// ULA clip window reset default = the full paper
 		// (zxnext.vhd:4971-4976 {00,FF,00,BF}); the NextReg wiring
 		// re-pushes this, but a bare ULA must not clip anything.
@@ -1792,6 +1933,11 @@ func (u *ULA) ReadPort(addr uint16) (byte, bool) {
 // RZX bookkeeping. Pulled out so ReadPort can sandwich it between the
 // playback and recording hooks without duplicating dispatch code.
 func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
+	// mfClaims: the Multiface port pair claimed the bus without a data
+	// source — resolved to the port mux's idle $00 at the fall-through
+	// (after co-decoded devices supply their data).
+	mfClaims := false
+
 	// Spectrum Next NextReg ports. Data port (0x253B) reads return
 	// whatever the dispatcher's currently-selected register says.
 	// Select port (0x243B) reads back the selected register NUMBER
@@ -1839,7 +1985,47 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// paging register, not open bus. The $Dxxx/$Exxx (dffd/eff7) and border
 	// high-nibble cases aren't modelled — ours doesn't track those
 	// registers and the launch doesn't read them.
-	if u.mem != nil && u.mem.MultifaceActive() && addr&0x00FF == 0x003F {
+	// FDC iotrap ports (zxnext.vhd:2601-2602): $2FFD/$3FFD (a(15:14)=00,
+	// a(13:12)=10/11, the $FD low-byte pattern), decoded only while
+	// NR$D8 bit 0 is set. Reads claim the bus with no read-data source
+	// (the port mux idle $00) and fire the trap NMI (:3835).
+	if u.mem != nil && u.mem.GetCurrentModel() == roms.ModelNext &&
+		(addr&0xF003 == 0x2001 || addr&0xF003 == 0x3001) &&
+		u.nextIOTrapEnabled() {
+		cause := byte(1) // $2FFD read
+		if addr&0x1000 != 0 {
+			cause = 2 // $3FFD read
+		}
+		if u.ioTrapSink != nil {
+			u.ioTrapSink(cause, 0)
+		}
+		return 0x00, true
+	}
+
+	// +3-timing floating bus (zxnext.vhd:2589): a(15:12)=0000 with the
+	// $FD low-byte pattern (a1:0=01), live only under +3 machine timing
+	// (p3_timing_hw_en) and internal_port_enable(4). Returns the ULA's
+	// floating bus, or $FF while 7FFD paging is locked (:4517).
+	if u.mem != nil && u.mem.GetCurrentModel() == roms.ModelNext &&
+		addr&0xF003 == 0x0001 && u.mem.NextMachineTiming() == 3 &&
+		u.nextPortEnabled(nrPortEnP3Float) {
+		return u.nextP3FloatByte(), true
+	}
+
+	// Multiface enable/disable port pair (zxnext.vhd:2612-2616, low-byte
+	// decode per the NR$0A personality). The strobe fires even when the
+	// enable port serves no data (invisible / MF48) — the claim then
+	// resolves to the port mux's idle $00 at the fall-through, after
+	// co-decoded devices (the $1F joystick under MF48) had their turn.
+	if u.nextMF != nil && u.nextPortEnabled(nrPortEnMultiface) && u.nextMF.Claims(addr) {
+		if v, hasData := u.nextMF.PortRead(addr); hasData {
+			return v, true
+		}
+		mfClaims = true
+	}
+
+	if u.nextMF == nil && u.mem != nil && u.mem.MultifaceActive() && addr&0x00FF == 0x003F &&
+		u.nextPortEnabled(nrPortEnMultiface) {
 		p7ffd, p1ffd, _ := u.mem.GetPortState()
 		switch addr >> 12 {
 		case 0x7:
@@ -1857,7 +2043,7 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// $123B to snapshot Layer 2 state, so this must return the real
 	// state, not open bus (which would read as bit1=1, "Layer 2
 	// visible", and leave it visibly enabled afterwards).
-	if u.nextRegs != nil && addr == 0x123B {
+	if u.nextRegs != nil && addr == 0x123B && u.nextPortEnabled(nrPortEnLayer2) {
 		var v byte
 		if u.mem != nil {
 			v = u.mem.Layer2MapControl()
@@ -1870,13 +2056,13 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 
 	// Port $303B read: sprite status (bit 0 collision, bit 1
 	// max-per-line); reading clears the latched collision flag.
-	if u.nextSprite != nil && addr == 0x303B {
+	if u.nextSprite != nil && addr == 0x303B && u.nextPortEnabled(nrPortEnSprite) {
 		return u.nextSprite.ReadStatus(), true
 	}
 
 	// CTC channel ports $183B-$1F3B: the selected channel's live
 	// down-counter (ctc_chan.vhd:168 o_cpu_d).
-	if u.nextCTC != nil && u.nextCTC.ClaimsPort(addr) {
+	if u.nextCTC != nil && u.nextPortEnabled(nrPortEnCTC) && u.nextCTC.ClaimsPort(addr) {
 		return u.nextCTC.ReadPort(addr), true
 	}
 
@@ -1891,7 +2077,8 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// GGGRRRBB (:4563); any other group reads "0000000" & ulap_en.
 	// $BF3B is decoded (claims the bus) but has no read data source —
 	// it returns the port mux's idle $00.
-	if u.nextRegs != nil && (addr == 0xFF3B || addr == 0xBF3B) {
+	if u.nextRegs != nil && (addr == 0xFF3B || addr == 0xBF3B) &&
+		u.nextPortEnabled(nrPortEnULAPlus) {
 		if addr == 0xBF3B {
 			return 0x00, true
 		}
@@ -1914,7 +2101,7 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// high — open-drain bus). Port $103B reads return the SCL latch
 	// the same way on real hardware but NextZXOS never reads it; we
 	// serve SDA only and leave $103B to the float path.
-	if u.nextI2C != nil && addr == 0x113B {
+	if u.nextI2C != nil && addr == 0x113B && u.nextPortEnabled(nrPortEnI2C) {
 		v := byte(0xFE)
 		if u.nextI2C.ReadSDA() {
 			v |= 0x01
@@ -1924,7 +2111,7 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 
 	// divMMC control register read-back (port 0xE3). The divMMC
 	// IRQ handler does IN A,(0xE3) to capture the current state.
-	if u.nextDivMMC != nil {
+	if u.nextDivMMC != nil && u.nextDivMMCPortEnabled(addr) {
 		if val, ok := u.nextDivMMC.ReadPort(addr); ok {
 			return val, true
 		}
@@ -1989,7 +2176,8 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// port_ff_rd_dat <= port_ff_dat_tmx when nr_08_port_ff_rd_en). The
 	// MrKWatkins NextReg0x69 test sets this bit and reads Timex state
 	// through the port to verify the NR$69 aliasing.
-	if u.nextRegs != nil && (addr&0xFF) == 0xFF && u.nextRegs.ReadReg(0x08)&0x04 != 0 {
+	if u.nextRegs != nil && (addr&0xFF) == 0xFF && u.nextRegs.ReadReg(0x08)&0x04 != 0 &&
+		u.nextPortEnabled(nrPortEnTimexFF) {
 		return u.timexVideoMode, true
 	}
 
@@ -2005,15 +2193,47 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// every frame — a floating-bus $FF from an undecoded $37 reads as
 	// every button held, so its title screen never saw a fire edge.
 	isNext := u.mem != nil && u.mem.GetCurrentModel() == roms.ModelNext
-	if isNext && u.nextRegs != nil && (byte(addr) == 0x1F || byte(addr) == 0x37) {
-		// NR$05 read-back layout (see WireJoystickMode): bits 7:6 =
-		// joy0[1:0], bit 3 = joy0[2]; bits 5:4 = joy1[1:0], bit 1 =
-		// joy1[2].
-		mode05 := u.nextRegs.ReadReg(0x05)
-		joy0 := mode05>>6&0x03 | mode05>>1&0x04
-		joy1 := mode05>>4&0x03 | mode05<<1&0x04
-		return nextJoyPortByte(u.MDJoyLeft(), joy0, byte(addr)) |
-			nextJoyPortByte(u.MDJoyRight(), joy1, byte(addr)), true
+
+	// Kempston mouse $FADF/$FBDF/$FFDF (zxnext.vhd:2668-2670): low byte
+	// $DF with a(11:8) selecting buttons/X/Y; a(15:12) are don't-care.
+	// Gated by internal_port_enable(13); reads only (writes to $xxDF
+	// belong to the SpecDrum DAC decode).
+	if isNext && u.nextMouse != nil && byte(addr) == 0xDF &&
+		u.nextPortEnabled(nrPortEnMouse) {
+		switch addr >> 8 & 0x0F {
+		case 0x0A:
+			return u.nextMouse.ReadButtons(), true
+		case 0x0B:
+			return u.nextMouse.ReadX(), true
+		case 0x0F:
+			return u.nextMouse.ReadY(), true
+		}
+	}
+
+	if isNext && u.nextRegs != nil {
+		joyPort := byte(0)
+		switch {
+		case byte(addr) == 0x1F && u.nextPortEnabled(nrPortEnJoy1F):
+			joyPort = 0x1F
+		case byte(addr) == 0x37 && u.nextPortEnabled(nrPortEnJoy37):
+			joyPort = 0x37
+		case byte(addr) == 0xDF && u.nextPortEnabled(nrPortEnJoy1F) &&
+			u.nextPortEnabled(nrPortEnDACMonoDF) && !u.nextPortEnabled(nrPortEnMouse):
+			// port_1f's $DF alias (zxnext.vhd:2674): with the SpecDrum
+			// $DF DAC decode enabled and the MOUSE decode disabled,
+			// reads of any $xxDF serve the Kempston $1F byte.
+			joyPort = 0x1F
+		}
+		if joyPort != 0 {
+			// NR$05 read-back layout (see WireJoystickMode): bits 7:6 =
+			// joy0[1:0], bit 3 = joy0[2]; bits 5:4 = joy1[1:0], bit 1 =
+			// joy1[2].
+			mode05 := u.nextRegs.ReadReg(0x05)
+			joy0 := mode05>>6&0x03 | mode05>>1&0x04
+			joy1 := mode05>>4&0x03 | mode05<<1&0x04
+			return nextJoyPortByte(u.MDJoyLeft(), joy0, joyPort) |
+				nextJoyPortByte(u.MDJoyRight(), joy1, joyPort), true
+		}
 	}
 
 	// Kempston joystick: port 0x1F. Decoded as A7..A5 = 0 and A4..A0 = 0x1F.
@@ -2037,7 +2257,7 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 			// is set to keyboard — and no emulator-side fix applies.
 			u.KempstonReadsWhileHeld++
 		}
-		if u.KempstonEnabled || isNext {
+		if u.KempstonEnabled || (isNext && u.nextPortEnabled(nrPortEnJoy1F)) {
 			return u.KempstonState & 0x1F, true
 		}
 	}
@@ -2055,6 +2275,11 @@ func (u *ULA) readPortInternal(addr uint16) (byte, bool) {
 	// that settles it, and guessing at Kempston clone decodes is how you
 	// break the games (Arkanoid included) that read the bus ON PURPOSE.
 	// Low byte only — that is what every interface decodes on.
+	if mfClaims {
+		// The Multiface pair claimed the bus (port_internal_response)
+		// with no read-data source: the port mux idles at $00.
+		return 0x00, true
+	}
 	u.unattachedReads[byte(addr)]++
 	return u.floatingBusByte(), false
 }
@@ -2173,6 +2398,66 @@ func (u *ULA) floatingBusByte() byte {
 		return page[screenAddrForRowCol(line, column+1)]
 	case 5:
 		return page[0x1800+(line/8)*32+column+1]
+	}
+	return 0xFF
+}
+
+// nextP3FloatByte serves the Next's +3-timing floating-bus port
+// (zxnext.vhd:2589/4517 + video/zxula.vhd:307-345/:573): while the ULA
+// fetches paper data, the port reads the byte on the video bus with
+// bit 0 forced 1 (the o_ula_floating_bus +3-timing OR); while 7FFD
+// paging is locked (bit 5) it reads $FF. The fetch grid is the same
+// slot pattern the classic 128K floating bus validated against
+// libspectrum (#194) — bitmap/attr pairs in the first 128 T of each
+// paper line, t%8 slots 2..5 — anchored one T after the live
+// geometry's contention paper anchor (the classic 14361/14362
+// relation). Idle/border reads approximate the FPGA's last-contended-
+// bus-byte latch (i_p3_floating_bus, zxnext.vhd:4503-4514) as $FF —
+// the latch's never-written value (known-gaps note).
+func (u *ULA) nextP3FloatByte() byte {
+	if p7, _, _ := u.mem.GetPortState(); p7&0x20 != 0 {
+		return 0xFF // port_7ffd_locked
+	}
+	g := u.mem.NextGeometry()
+	var t int
+	switch {
+	case u.mem.FrameOriginRef != nil:
+		t = int(u.refNow() - u.mem.FrameOriginRef())
+	case u.mem.TStates != nil:
+		t = int(*u.mem.TStates)
+	default:
+		return 0xFF
+	}
+	if frame := g.FrameTStates(); frame > 0 && t >= frame {
+		t %= frame
+	}
+	off := t - (g.PaperStartT + 1)
+	if off < 0 || off >= 192*g.TStatesPerLine {
+		return 0xFF
+	}
+	line := off / g.TStatesPerLine
+	tInDisplay := off % g.TStatesPerLine
+	if tInDisplay >= 128 {
+		return 0xFF
+	}
+	column := (tInDisplay / 8) * 2
+	screenBank := u.mem.ScreenPage
+	if screenBank == 0 {
+		screenBank = 5
+	}
+	page := u.mem.GetPage(screenBank)
+	if page == nil {
+		return 0xFF
+	}
+	switch tInDisplay % 8 {
+	case 2:
+		return page[screenAddrForRowCol(line, column)] | 1
+	case 3:
+		return page[0x1800+(line/8)*32+column] | 1
+	case 4:
+		return page[screenAddrForRowCol(line, column+1)] | 1
+	case 5:
+		return page[0x1800+(line/8)*32+column+1] | 1
 	}
 	return 0xFF
 }
@@ -2339,7 +2624,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// bit 6), pushed to the CPU's INT generator when the Next wiring has
 	// connected the sink. Stored here; rendered by renderTimexHiRes. Falls
 	// through so any other $FF semantics are unaffected.
-	if (addr & 0xFF) == 0xFF {
+	if (addr&0xFF) == 0xFF && u.nextPortEnabled(nrPortEnTimexFF) {
 		u.timexVideoMode = val
 		if u.frameIntDisableSink != nil {
 			u.frameIntDisableSink(val&0x40 != 0)
@@ -2366,10 +2651,23 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 		return
 	}
 
+	// FDC iotrap ports (zxnext.vhd:2601-2602/:2725): a $3FFD write fires
+	// the trap and latches the written byte into NR$D9; a $2FFD write
+	// claims the bus but has no write arm (nmi_gen_iotrap covers 2ffd_rd,
+	// 3ffd_rd, 3ffd_wr only — :3835). Decoded only while NR$D8 bit 0 set.
+	if u.mem != nil && u.mem.GetCurrentModel() == roms.ModelNext &&
+		(addr&0xF003 == 0x2001 || addr&0xF003 == 0x3001) &&
+		u.nextIOTrapEnabled() {
+		if addr&0x1000 != 0 && u.ioTrapSink != nil {
+			u.ioTrapSink(3, val) // $3FFD write
+		}
+		return
+	}
+
 	// Ports $103B / $113B: Spectrum Next i2c SCL / SDA write latches
 	// (zxnext.vhd:3234-3250 — bit 0 of the data byte drives the
 	// open-drain line; full 16-bit decode $10xx/$11xx + $3B).
-	if u.nextI2C != nil && (addr&0xFF) == 0x3B {
+	if u.nextI2C != nil && (addr&0xFF) == 0x3B && u.nextPortEnabled(nrPortEnI2C) {
 		switch addr >> 8 {
 		case 0x10:
 			u.nextI2C.WriteSCL(val&0x01 != 0)
@@ -2387,7 +2685,8 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// GGGRRRBB byte swizzled to RRRGGGBB + or-blue (:4741/:4746/:4919/
 	// :6958); mode group writes drive the live ULA+ enable (:4548-4549)
 	// that NR$68 bit 3 shares.
-	if u.nextRegs != nil && (addr == 0xBF3B || addr == 0xFF3B) {
+	if u.nextRegs != nil && (addr == 0xBF3B || addr == 0xFF3B) &&
+		u.nextPortEnabled(nrPortEnULAPlus) {
 		if addr == 0xBF3B {
 			u.ulapMode = val >> 6 & 0x03
 			if u.ulapMode == 0 {
@@ -2415,7 +2714,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 
 	// CTC channel ports $183B-$1F3B (zxnext.vhd:2690): control word /
 	// time constant / vector writes to the selected channel.
-	if u.nextCTC != nil && u.nextCTC.ClaimsPort(addr) {
+	if u.nextCTC != nil && u.nextPortEnabled(nrPortEnCTC) && u.nextCTC.ClaimsPort(addr) {
 		u.nextCTC.WritePort(addr, val)
 		return
 	}
@@ -2436,7 +2735,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 
 	// Port $303B write: select the active sprite AND pattern-upload cursor
 	// (ports.txt 0x303B — sets both quantities from the one value).
-	if u.nextSprite != nil && addr == 0x303B {
+	if u.nextSprite != nil && addr == 0x303B && u.nextPortEnabled(nrPortEnSprite) {
 		u.nextSprite.SelectSlot(val)
 		return
 	}
@@ -2444,7 +2743,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// Port $005B write: stream a byte into the sprite pattern RAM at the
 	// current cursor (ports.txt 0x5B). Decoded on the low 8 bits only because
 	// OTIR (the canonical pattern-upload loop) varies the high byte via B.
-	if u.nextSprite != nil && (addr&0xFF) == 0x5B {
+	if u.nextSprite != nil && (addr&0xFF) == 0x5B && u.nextPortEnabled(nrPortEnSprite) {
 		u.nextSprite.WritePatternByte(val)
 		return
 	}
@@ -2455,7 +2754,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// 8 bits only because the OTIR upload loop varies the high byte via B — the
 	// same convention as the $5B pattern stream above. Nextoid uploads all its
 	// sprites (bat, ball, HUD) through this port each frame.
-	if u.nextSprite != nil && (addr&0xFF) == 0x57 {
+	if u.nextSprite != nil && (addr&0xFF) == 0x57 && u.nextPortEnabled(nrPortEnSprite) {
 		u.nextSprite.WriteAttr(val)
 		return
 	}
@@ -2469,7 +2768,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// untouched: the FPGA's $123B write drives no ULA-shadow signal),
 	// bits 7:6 = segment. A write with bit 4 set loads only the 3-bit
 	// bank offset (core 3.0.7+) and must leave the control state alone.
-	if u.nextRegs != nil && addr == 0x123B {
+	if u.nextRegs != nil && addr == 0x123B && u.nextPortEnabled(nrPortEnLayer2) {
 		// Layer-2 write/read paging: route CPU accesses to Layer-2 RAM while
 		// enabled (bit 0/2) so a game's Layer-2 screen clear hits Layer-2 RAM,
 		// not normal RAM. (zxnext.vhd:3915-3933)
@@ -2491,6 +2790,15 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 			u.nextRegs.WriteReg(0x69, nr69)
 		}
 		return
+	}
+
+	// Multiface enable/disable writes (zxnext.vhd:2731/2733): release
+	// the NMI hold and set the invisible latch per personality. NON-
+	// consuming — on the FPGA the MF strobe fires alongside any
+	// co-decoded port (a $xx1F write under the MF48 personality is
+	// also soundrive-1 channel A, which the DAC block below serves).
+	if u.nextMF != nil && u.nextPortEnabled(nrPortEnMultiface) && u.nextMF.Claims(addr) {
+		u.nextMF.PortWrite(addr, val)
 	}
 
 	// Spectrum Next DAC ports (0x0F / 0x1F / 0xF1 / 0xF3 / 0xF9 /
@@ -2526,7 +2834,7 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 	// writes 0 to 0xE3 to drop the divMMC overlay after it
 	// finishes initialising; without this dispatch the boot
 	// deadlocks in a tight 0x006A→0x1FF9→0x0001 loop.
-	if u.nextDivMMC != nil && u.nextDivMMC.WritePort(addr, val) {
+	if u.nextDivMMC != nil && u.nextDivMMCPortEnabled(addr) && u.nextDivMMC.WritePort(addr, val) {
 		return
 	}
 
@@ -2566,7 +2874,8 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 		// selects are 0x00-0x0F, so there is no overlap. (NextReg 0x06 does
 		// NOT select the chip.)
 		u.nextAY.SelectChip(0xFF - val)
-	} else if u.mem.GetCurrentModel() == roms.ModelNext && (addr&0xF0FF) == 0xE0F7 {
+	} else if u.mem.GetCurrentModel() == roms.ModelNext && (addr&0xF0FF) == 0xE0F7 &&
+		u.nextPortEnabled(nrPortEnEFF7) {
 		// Port 0xEFF7 (zxnext.vhd:2604): incompletely decoded on address
 		// bits 15:12="1110" and low byte $F7 only — bits 11:8 are don't-
 		// care, so $E0F7-$EFF7 all alias this port (a classic Pentagon/
@@ -2575,7 +2884,8 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 		// overlap them, but ordering it early keeps the loose-decode
 		// port from ever being shadowed by a future broader pattern.
 		u.mem.SetEFF7(val)
-	} else if u.mem.GetCurrentModel() == roms.ModelNext && (addr&0xF002) == 0xD000 {
+	} else if u.mem.GetCurrentModel() == roms.ModelNext && (addr&0xF002) == 0xD000 &&
+		u.nextPortEnabled(nrPortEnDFFD) {
 		// Port 0xDFFD (Spectrum Next high RAM-bank extension): bits 3:0 are the
 		// MSBs of the $C000-slot RAM bank. Must be decoded before the AY
 		// register-select port 0xFFFD below, which shares the same
@@ -2602,9 +2912,9 @@ func (u *ULA) writePortInternal(addr uint16, val byte) {
 		// loose 0x7FFD pattern below (0x1FFD & 0x8002 == 0), so without the
 		// strict decode here a $1FFD write would be misread as a $7FFD
 		// paging write and remap the wrong RAM bank into the $C000 slot.
-		if addr&0xC002 == 0x4000 {
+		if addr&0xC002 == 0x4000 && u.nextPortEnabled(nrPortEn7FFD) {
 			u.mem.PageMemory(val)
-		} else if addr&0xF002 == 0x1000 {
+		} else if addr&0xF002 == 0x1000 && u.nextPortEnabled(nrPortEn1FFD) {
 			u.mem.PageMemoryPlus3(val)
 		}
 	} else if addr&0x8002 == 0 { // Port 0x7FFD (128K memory paging): A15=0, A1=0
@@ -2744,6 +3054,15 @@ func (u *ULA) applyNextCompositor(stale bool) {
 	// compositor) and the sub=2 row pass (reduced test mocks). Mocks
 	// with neither keep the coalesced 256 stride.
 	liveComp, _ := u.nextCompositor.(nextLiveRowComposer)
+	// Live ULA row capture for the wide-L2 U-above-L overlay: the
+	// compositor overwrites its classic pre-walk snapshot's paper rows
+	// with the walk's live output (ULANext palettes, scroll, LoRes/
+	// Timex, alpha-0 transparency, NR$1A clip — the #204 residues).
+	capComp, _ := u.nextCompositor.(interface {
+		WantULALiveRows() bool
+		CaptureULALiveRow(y int, scan []byte, px int)
+	})
+	captureRows := capComp != nil && capComp.WantULALiveRows()
 	hiComp, _ := u.nextCompositor.(interface {
 		ComposeHiResScanline(y int, ulaRGBA []byte, dst []byte)
 	})
@@ -2969,6 +3288,9 @@ func (u *ULA) applyNextCompositor(stale bool) {
 				img := u.img
 				liveComp := liveComp
 				fuse = func(i int, pix [4]byte) {
+					if captureRows {
+						copy(ulaScan[i*4:i*4+4], pix[:])
+					}
 					out := liveComp.ComposeLiveHalfPixel(i, pix)
 					off := rowStart + i*4
 					img.Pix[off+0] = out[0]
@@ -2982,6 +3304,13 @@ func (u *ULA) applyNextCompositor(stale bool) {
 				pace = func(sx int) { slotAt(sx>>1+12, sx&1) }
 			}
 			u.renderNextULARow(y, ulaScan, resolver, pace, st, rowHalf, fuse)
+			if captureRows {
+				px := w
+				if rowHalf {
+					px = 2 * w
+				}
+				capComp.CaptureULALiveRow(y, ulaScan, px)
+			}
 		} else {
 			// Non-live fallback: recover the logical 256 pixels from the
 			// pre-rendered (xs-doubled) row.

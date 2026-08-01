@@ -406,19 +406,15 @@ func (c *Compositor) HasActiveSprites() bool {
 // the combined ULA+TM result above Layer 2 there). Ordering within
 // the overpaint: SUL is S-over-U, so its ULA+TM slot paints below the
 // sprites; USL/ULS paint it above. Within the slot the ULA paints
-// first and the tilemap over it — the per-pixel tm_below arbitration
-// against an opaque ULA pixel (zxnext.vhd:7116) is not applied here
-// (documented residue; below-tiles above wide L2 need the ULA
-// opacity threaded into the tilemap overlay). The blend modes 6/7
+// first and the tilemap over it, with the per-pixel tm_below
+// arbitration against the captured ULA opacity (zxnext.vhd:7116 —
+// see composeTilemapOverlayRow). The blend modes 6/7
 // keep the sprites-only overpaint. Last, priority-bit L2 pixels are
 // repainted on top (composeL2PriorityOverlayRow) in every mode whose
 // mixer ladder promotes them. dst is a full frame row at xScale
 // output pixels per frame pixel (1 = 320-wide, 2 = 640).
 func (c *Compositor) OverpaintWideL2Row(frameY int, dst []byte, xScale int) {
-	mode := ModeSLU
-	if c.prioritySource != nil {
-		mode = c.prioritySource.Mode()
-	}
+	mode := c.resolveMode()
 	sprites := mode != ModeLSU && mode != ModeLUS && mode != ModeULS
 	tilemap := mode == ModeSUL || mode == ModeUSL || mode == ModeULS
 	if mode == ModeSUL {
@@ -472,6 +468,66 @@ func (c *Compositor) CaptureULABase(pix []byte, stride, w, h int) {
 	c.ulaBaseValid = true
 }
 
+// WantULALiveRows reports whether CaptureULABase armed this frame's
+// capture — the ULA's live row walk then feeds the paper rows in.
+func (c *Compositor) WantULALiveRows() bool { return c.ulaBaseValid }
+
+// CaptureULALiveRow overwrites the captured base's paper span of paper
+// row y (0..191) with the walk's LIVE ULA scan (px = 256 coalesced or
+// 512 half-pixel entries, RGBA with alpha 0 = transparent). The
+// pre-walk snapshot is the CLASSIC render; the live rows carry what
+// the FPGA's U layer actually shows — ULANext/redefined palettes,
+// NR$26/$27 scroll, LoRes and Timex content, per-pixel transparency
+// and the NR$1A clip (clipped pixels arrive alpha-0, zxula.vhd:562 →
+// zxnext.vhd:7100) — closing the #204 residues. Paper geometry derives
+// from the captured base: x0 = (W-512)/2, top row = (H-192)/2.
+func (c *Compositor) CaptureULALiveRow(y int, scan []byte, px int) {
+	if !c.ulaBaseValid || px <= 0 || len(scan) < px*4 {
+		return
+	}
+	xs := 512 / px
+	if xs < 1 {
+		return
+	}
+	fy := y + (c.ulaBaseH-192)/2
+	if fy < 0 || fy >= c.ulaBaseH {
+		return
+	}
+	x0 := (c.ulaBaseW - px*xs) / 2
+	if x0 < 0 {
+		return
+	}
+	row := c.ulaBase[fy*c.ulaBaseStride:]
+	if len(row) < (x0+px*xs)*4 {
+		return
+	}
+	for i := 0; i < px; i++ {
+		src := scan[i*4 : i*4+4]
+		off := (x0 + i*xs) * 4
+		for k := 0; k < xs; k++ {
+			copy(row[off+k*4:off+k*4+4], src)
+		}
+	}
+}
+
+// capturedULATransparent reports the captured ULA pixel's transparency
+// at frame (x, y) — the ulatm below-tile arbitration input for the
+// wide overpaint (zxnext.vhd:7116).
+func (c *Compositor) capturedULATransparent(y, frameX int) bool {
+	if !c.ulaBaseValid {
+		return false
+	}
+	xs := c.ulaBaseW / FullWidth
+	if xs < 1 {
+		return false
+	}
+	off := y*c.ulaBaseStride + frameX*xs*4
+	if off < 0 || off+4 > len(c.ulaBase) {
+		return false
+	}
+	return c.ulaPixTransparent([4]byte{c.ulaBase[off], c.ulaBase[off+1], c.ulaBase[off+2], c.ulaBase[off+3]})
+}
+
 // composeULAOverlayRow repaints the classic ULA pixels of frame row y
 // above the wide Layer 2 overlay — the U slot of the U-above-L modes.
 // Pixels equal to the NR$14 transparency (via the classic palette
@@ -479,9 +535,9 @@ func (c *Compositor) CaptureULABase(pix []byte, stride, w, h int) {
 // stay transparent, so content like Space Invaders' NR$14=black arcade
 // overlay shows only its ink above the 320x256 backdrop (#204). The
 // captured base is already at output resolution, so rows map 1:1.
-// Residue: the NR$1A ULA clip window is not applied (the base render
-// is unclipped); out-of-window ULA pixels above wide L2 would need the
-// clip state threaded in here.
+// The base's paper rows are the LIVE walk's output (CaptureULALiveRow)
+// — ULANext palettes, scroll, LoRes/Timex content, alpha-0
+// transparency and the NR$1A clip included.
 func (c *Compositor) composeULAOverlayRow(y int, dst []byte) {
 	if !c.ulaBaseValid || y < 0 || y >= c.ulaBaseH {
 		return
@@ -581,17 +637,12 @@ func (c *Compositor) composeSpriteOverlayRow(frameY int, dst []byte, xScale int)
 // over dst at xScale output pixels per frame pixel, with the same
 // rules as the inner pass's paintTilemapOnULA: opacity is the low
 // nibble against NR$4C (tilemap.vhd:427). A per-pixel BELOW tile
-// (tilemap.vhd:388) arbitrates against the ULA pixel, which this
-// overlay cannot consult — EXCEPT when the ULA output is disabled
-// (NR$68 bit 7): then every ULA pixel is transparent
-// (ula_transparent, zxnext.vhd:7102) and the FPGA's ulatm mux shows
-// the below tile (tm_pixel_below_2 = '0' OR ula_transparent = '1',
-// zxnext.vhd:7116), so it paints here too. Atic Atac's story scene
-// and closed-door graphics are below-flagged tiles over a disabled
-// ULA (#196). With the ULA ENABLED a below tile is still skipped
-// (needs the per-pixel ULA data — the same documented residue as
-// the un-repainted classic ULA pixels), so a below tile over a
-// TRANSPARENT ULA pixel under-paints there.
+// (tilemap.vhd:388) arbitrates against the ULA pixel via the captured
+// live base (capturedULATransparent) — the FPGA's ulatm mux shows the
+// below tile when the ULA pixel is transparent or the ULA output is
+// disabled (tm_pixel_below_2 = '0' OR ula_transparent = '1',
+// zxnext.vhd:7116/:7102). Atic Atac's story scene and closed-door
+// graphics are below-flagged tiles over a disabled ULA (#196).
 func (c *Compositor) composeTilemapOverlayRow(frameY int, dst []byte, xScale int) {
 	if !c.HasActiveTilemap() {
 		return
@@ -606,7 +657,11 @@ func (c *Compositor) composeTilemapOverlayRow(frameY int, dst []byte, xScale int
 		if (idx & 0x0F) == c.tilemapTrans {
 			continue
 		}
-		if below[x] != 0 && !c.ulaOutputDisabled {
+		if below[x] != 0 && !c.ulaOutputDisabled && !c.capturedULATransparent(frameY, x) {
+			// BELOW tile under an OPAQUE ULA pixel: the ulatm mux
+			// shows the ULA (tm wins only when tm_pixel_below_2='0'
+			// or ula_transparent='1', zxnext.vhd:7116). The captured
+			// live base supplies the per-pixel transparency.
 			continue
 		}
 		r, g, b := tilemapPal.RGB(idx)

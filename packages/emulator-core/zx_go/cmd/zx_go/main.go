@@ -33,6 +33,7 @@ import (
 	"github.com/conorarmstrong/zx_go/pkg/next/esxdos"
 	"github.com/conorarmstrong/zx_go/pkg/next/install"
 	"github.com/conorarmstrong/zx_go/pkg/next/layer2"
+	nextmouse "github.com/conorarmstrong/zx_go/pkg/next/mouse"
 	"github.com/conorarmstrong/zx_go/pkg/next/nextregs"
 	"github.com/conorarmstrong/zx_go/pkg/next/palette"
 	"github.com/conorarmstrong/zx_go/pkg/next/sdcard"
@@ -180,6 +181,11 @@ type emulator struct {
 	ula         *ula.ULA
 	kbd         *keyboard.Keyboard
 	peripherals *peripherals.PeripheralManager
+
+	// nextMouse is the Next's Kempston mouse ($FADF/$FBDF/$FFDF) when
+	// the current core is a Next — desktop mouse input feeds it in
+	// parallel with the classic peripheral-manager mouse.
+	nextMouse *nextmouse.Mouse
 	// model is the machine this emulator was built for. Used to pick the
 	// ULA frame length (frameTStatesForModel) so the maskable INT cadence
 	// is model-correct in the GUI render loop too (timing.md §1a).

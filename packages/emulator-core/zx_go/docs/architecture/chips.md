@@ -22,13 +22,13 @@ FPGA blocks are summarised here and detailed in
 | FDC (DISCiPLE) | WD1772 | `pkg/disciple` | I/O-advanced | datasheet; WD1772-vs-1793 differences modelled |
 | FDC (SAM) | WD1772 | `pkg/sam` | I/O-advanced | modelled on betadisk structure |
 | Microdrive + IF1 ULA | Sinclair IF1 | `pkg/if1`, `pkg/microdrive` | tape-loop with pulse-accurate GAP/SYNC | FUSE if1.c (near line-for-line), libspectrum .mdr |
-| Multiface | Romantic Robot MF1/128/3 | `pkg/multiface` | two models: integration model + clock-exact FPGA core | multiface.vhd + GHDL golden |
+| Multiface | Romantic Robot MF1/128/3 | `pkg/multiface` | two models: integration model + clock-exact FPGA core (the Next's port pair drives the FPGA core via `pkg/next/mf.go`) | multiface.vhd + GHDL golden |
 | RTC | DS1307 on i2c | `pkg/next/rtc` | register-accurate; host clock; NVRAM persisted | DS1307 datasheet; NextZXOS bit-bang traffic |
 | SD card | SPI-mode SD/SDHC | `pkg/next/sdcard` | protocol-accurate SPI state machine, CSD v1/v2, CRC16 | SD spec + SPI golden test + boot behaviour |
 | ESP Wi-Fi | ESP8266 AT firmware | `pkg/next/uart` (ports $133B-$163B via ULA.SetNextUART) | deliberate stub (AT responder, no networking; NR$A8/$A9 are the ESP GPIO regs, not the UART) | scope decision |
 | Kempston joystick | — | `pkg/ula` | port $1F bitmap | classic behaviour |
 | Megadrive pad (Next) | 3/6-button MD controller | `pkg/ula` (MDJoyLeft/MDExtraState), `pkg/next` (NR$B2) | left pad only: 12-bit i_JOY vector fed by the host gamepad; ports $1F/$37 per NR$05 routing. The pad's own 3-state select/multiplex protocol is not modelled — the FPGA presents the decoded vector, so there is nothing to multiplex | zxnext.vhd:90, :3472-3507, :6206-6215 |
-| Kempston mouse | — | `pkg/kempmouse` | free-running 8-bit counters, atomics | port decode masks |
+| Kempston mouse | — | `pkg/kempmouse` (classic), `pkg/next/mouse` (Next $FADF/$FBDF/$FFDF, NR$0A DPI/reverse) | free-running 8-bit counters | port decode masks; ps2_mouse.v + zxnext.vhd:3541-3560 |
 | ZX Printer | — | `pkg/zxprinter` | cycle-accurate drum timing | ROM polling behaviour |
 | SAM ASIC | MGT ASIC | `pkg/sam` | line-accurate lazy renderer + contention tables | SAM technical docs; spec tests |
 | ZX80/81 "ULA" | discrete logic + Z80 tricks | `pkg/zx8x` | CPU-generated display (NOP substitution) | hardware documentation; spec tests |

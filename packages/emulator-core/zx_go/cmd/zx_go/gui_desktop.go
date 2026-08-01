@@ -1079,9 +1079,16 @@ func desktopMain() {
 	keyboardWidget.onFocusLost = emu.releaseAllInput
 	keyboardWidget.onMouseMove = func(dx, dy int) {
 		emu.peripherals.KempstonMouseMove(dx, dy)
+		if emu.nextMouse != nil {
+			// PS/2 Y grows upwards; screen deltas grow downwards.
+			emu.nextMouse.Move(dx, -dy)
+		}
 	}
 	keyboardWidget.onMouseBtn = func(btn int, pressed bool) {
 		emu.peripherals.KempstonMouseButton(btn, pressed)
+		if emu.nextMouse != nil {
+			emu.nextMouse.SetButton(btn, pressed)
+		}
 	}
 
 	// Create model selection callback

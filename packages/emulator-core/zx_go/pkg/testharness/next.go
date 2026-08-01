@@ -19,6 +19,7 @@ import (
 	"github.com/conorarmstrong/zx_go/pkg/next/install"
 	"github.com/conorarmstrong/zx_go/pkg/next/keymap"
 	"github.com/conorarmstrong/zx_go/pkg/next/layer2"
+	"github.com/conorarmstrong/zx_go/pkg/next/mouse"
 	"github.com/conorarmstrong/zx_go/pkg/next/nex"
 	"github.com/conorarmstrong/zx_go/pkg/next/nextregs"
 	"github.com/conorarmstrong/zx_go/pkg/next/palette"
@@ -152,7 +153,19 @@ func newNext() (*Harness, error) {
 	dmaEngine.SetTurbo(func() byte { return cpu.SpeedSelect() & 3 })
 	cpu.AddPreFetchHook("zxndma-step", func(uint16) { dmaEngine.Step(cpu.RefTstates()) })
 	u.SetNextCopper(cop)
+	// Kempston mouse on $FADF/$FBDF/$FFDF (zxnext.vhd:2668-2670), its
+	// NR$0A control state (button reverse bit 3, DPI bits 1:0 —
+	// o_MOUSE_CONTROL, :1599) served live from the dispatcher.
+	mouseDev := mouse.New()
+	mouseDev.SetControlSource(func() (bool, byte) {
+		v := disp.Raw(0x0A)
+		return v&0x08 != 0, v & 0x03
+	})
+	u.SetNextMouse(mouseDev)
 	u.SetNextDAC(dacBank)
+	// DAC decode personalities follow the NR$82-$89 port enables and
+	// the NR$08 bit-3 master DAC gate (zxnext.vhd:2437-2443/:2461).
+	next.WireDACGates(disp, dacBank)
 	// i2c DS1307 RTC on ports $103B/$113B: NextZXOS bit-bangs this bus
 	// for the menu's date/time line, so the harness needs a slave to
 	// ACK or a real boot's clock read hangs.
@@ -170,6 +183,27 @@ func newNext() (*Harness, error) {
 	pager := divmmc.New(divROM)
 	cpu.AddPreFetchHook("divmmc", pager.Step)
 	u.SetNextDivMMC(pager)
+	// NR$CC-$CE DMA-interrupt enables — production wiring parity
+	// (cmd/zx_go/next.go): enabled chain sources / NMIs pause transfers.
+	next.WireDMAPause(dmaEngine, im2Blk, disp, func() bool {
+		return cpu.PendingNMI.Load() || pager.NMIInFlight() || mem.MultifaceActive()
+	})
+	// Multiface enable/disable port pair (zxnext.vhd:2612-2616) around
+	// the GHDL-golden multiface.Core, plus the FDC iotraps
+	// (NR$D8/$D9/$DA + $2FFD/$3FFD) whose trap NMI feeds the same MF
+	// machinery.
+	mfBlk := next.WireMF(disp, mem, cpu, func() byte { return u.BorderColour })
+	u.SetNextMF(mfBlk)
+	next.WireIOTraps(disp, mem, cpu, pager, u, mfBlk.ButtonNMI)
+	// The harness had no RETN hook (production's also drives the divMMC
+	// pager + NMI pacer); install the Multiface half so an MF NMI's RETN
+	// pages the overlay out here too.
+	cpu.SetRETNHook(func() {
+		if mem.MultifaceActive() {
+			mem.SetMultifaceActive(false)
+		}
+		mfBlk.Retn()
+	})
 
 	if os.Getenv("ZX_GO_SKIP_FPGA_BOOTROM") == "" {
 		// Disk-only: the harness boots the FPGA chain only with a

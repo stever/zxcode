@@ -132,6 +132,10 @@ func applyResetDefaults(regs *[256]byte) {
 	// already set and silently does nothing. Fire-on-every-write is
 	// required.
 	regs[0x02] = 0x01
+	// Peripheral 1 (NR$0A): mouse DPI resets to "01" (×1) — the
+	// nr_0a_mouse_dpi signal's power-on init (zxnext.vhd:1128); read
+	// composition :5912 places it in bits 1:0.
+	regs[0x0A] = 0x01
 	regs[0x0E] = defaultCoreSubMinor // NR$0E = core version sub-minor
 	regs[0x0F] = defaultBoardID      // NR$0F = board ID
 	// Peripheral 1: bit 0 = scandoubler enable (FPGA reset value 1),

@@ -134,15 +134,13 @@ func TestTMBelow512ModeForcesBelow(t *testing.T) {
 }
 
 // TestTMBelowWideOverlayULADisabled pins the WIDE-path tilemap overlay's
-// below-tile arbitration against a DISABLED ULA (#196, Atic Atac's story
-// scene and closed-door tiles). FPGA truth: NR$68 bit 7 makes every ULA
-// pixel transparent (ula_transparent <= ... or ula_en_2 = '0',
-// zxnext.vhd:7102), and the ulatm mux shows a below tile over a
-// transparent ULA (tm_pixel_below_2 = '0' OR ula_transparent = '1',
-// zxnext.vhd:7116). The overlay cannot see per-pixel ULA data, but with
-// the ULA disabled there is none to consult: below tiles must paint.
-// With the ULA enabled the overlay keeps the documented conservative
-// skip (it would need the per-pixel ULA data).
+// below-tile arbitration (#196 Atic Atac; per-pixel since the 2026-08
+// close-out). FPGA truth: the ulatm mux shows a below tile over a
+// transparent ULA pixel (tm_pixel_below_2 = '0' OR ula_transparent =
+// '1', zxnext.vhd:7116), and NR$68 bit 7 makes EVERY ULA pixel
+// transparent (:7102). With the ULA enabled the arbitration consults
+// the captured live base per pixel (capturedULATransparent); without a
+// captured base the conservative skip stands.
 func TestTMBelowWideOverlayULADisabled(t *testing.T) {
 	// Fixture frame row 32 holds the below tile at tile cell 4 (frame
 	// x 32-39) and the above tile at cell 5 (frame x 40-47).
@@ -166,9 +164,46 @@ func TestTMBelowWideOverlayULADisabled(t *testing.T) {
 
 	dst = overlayRow(false)
 	if isGreen(dst, belowX) {
-		t.Errorf("ULA enabled: below tile must keep the conservative skip in the wide overlay")
+		t.Errorf("ULA enabled, no captured base: below tile must keep the conservative skip")
 	}
 	if !isGreen(dst, aboveX) {
 		t.Errorf("ULA enabled: above tile must paint in the wide overlay")
+	}
+}
+
+// TestTMBelowWideOverlayPerPixelULA: with a captured ULA base the wide
+// overlay's below-tile arbitration is PER PIXEL — a below tile paints
+// where the captured ULA pixel is transparent (alpha 0) and yields
+// where it is opaque (zxnext.vhd:7116 via capturedULATransparent).
+func TestTMBelowWideOverlayPerPixelULA(t *testing.T) {
+	const belowX, aboveX = 32, 40
+
+	c := tmBelowFixture(t, 0x00)
+	// Captured base: opaque non-transparent grey everywhere except an
+	// alpha-0 hole over the below tile's left half (frame x 32-35).
+	const w, h = FullWidth, 256
+	base := make([]byte, w*h*4)
+	for i := 0; i < len(base); i += 4 {
+		base[i+0], base[i+1], base[i+2], base[i+3] = 0x40, 0x40, 0x40, 0xFF
+	}
+	for x := belowX; x < belowX+4; x++ {
+		base[(32*w+x)*4+3] = 0
+	}
+	// Install the base directly (CaptureULABase self-gates on hi-res
+	// L2 + a U-above mode, which this tilemap-only fixture lacks).
+	c.ulaBase, c.ulaBaseStride, c.ulaBaseW, c.ulaBaseH = base, w*4, w, h
+	c.ulaBaseValid = true
+
+	dst := make([]byte, FullWidth*4)
+	c.composeTilemapOverlayRow(32, dst, 1)
+
+	if !isGreen(dst, belowX) {
+		t.Errorf("below tile over a TRANSPARENT captured ULA pixel must paint")
+	}
+	if isGreen(dst, belowX+4) {
+		t.Errorf("below tile over an OPAQUE captured ULA pixel must yield")
+	}
+	if !isGreen(dst, aboveX) {
+		t.Errorf("above tile must paint regardless of the ULA pixel")
 	}
 }

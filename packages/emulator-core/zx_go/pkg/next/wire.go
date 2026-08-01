@@ -1478,6 +1478,13 @@ func Wire(opts WireOpts) {
 		WireTilemap(opts.Dispatcher, opts.Tilemap, opts.Palette, opts.ULANext)
 	}
 	WirePeripheralMasks(opts.Dispatcher)
+	// Internal port-enable gating (NR$82-$89 / NR$80 expbus AND,
+	// zxnext.vhd:2392-2443): push the composed vector into the ULA's
+	// port dispatch. AFTER WirePeripheralMasks so the $85/$89 reserved-
+	// bit masks chain underneath the push.
+	if sink, ok := opts.ULANext.(interface{ SetNextPortEnableMask(uint32) }); ok {
+		WirePortEnableSink(opts.Dispatcher, sink.SetNextPortEnableMask)
+	}
 	ulaVideo, _ := opts.ULANext.(ULAVideoSink)
 	WireULAControl(opts.Dispatcher, ulaVideo, opts.Layer2, opts.Memory)
 	WireClipWindows(opts.Dispatcher, opts.Tilemap, opts.Sprites, opts.Layer2, ulaVideo)
@@ -1618,6 +1625,168 @@ func WireIM2(d *nextregs.Dispatcher, cpu *z80.CPU, ctcBlock *CTCBlock) *IM2Block
 		})
 	}
 	return blk
+}
+
+// IOTrapULA is the surface WireIOTraps needs from pkg/ula.ULA.
+type IOTrapULA interface {
+	SetIOTrapSink(func(cause byte, val byte))
+}
+
+// WireIOTraps connects the FDC iotrap machinery (zxnext.vhd:3835-3895):
+// with NR$D8 bit 0 set, $2FFD reads / $3FFD reads / $3FFD writes fire a
+// Multiface-class NMI so NextZXOS can emulate the +3 FDC. Per the VHDL:
+//   - the CAUSE latches into NR$DA (01 = $2FFD rd, 10 = $3FFD rd,
+//     11 = $3FFD wr) only while no NMI is in flight (nmi_accept_cause);
+//     an NR$02 write with bit 4 = 0 clears it (:3878-3880). NR$DA has
+//     NO software write arm — writes to it do not alter the cause.
+//   - a $3FFD write's byte latches into NR$D9 (:3891-3893); NR$D9
+//     writes also set the latch directly (nr_d9_we).
+//   - NR$02 reads compose bit 4 = (cause /= 0) live (:3885/:5891).
+//   - the NMI asserts through the same MF gates as the NR$02 bit-3
+//     software pulse: NR$06 bit 3 enable, no MF already paged, no
+//     divMMC hold (nmi_assert_mf, :2090).
+//
+// mfNotify (nil ok) mirrors a fired trap NMI into the Multiface state
+// machine (MFBlock.ButtonNMI) so the port pair's invisible/NMI-hold
+// latches track it. Call AFTER Wire (chains WireReset's NR$02 handler
+// and overrides WirePeripheralMasks' NR$DA store).
+func WireIOTraps(d *nextregs.Dispatcher, mem *memory.Memory, cpu *z80.CPU, divmmcSPI SPIResetter, u IOTrapULA, mfNotify func()) {
+	cause := func() byte { return d.Raw(0xDA) & 0x03 }
+	setCause := func(c byte) { d.Store(0xDA, c&0x03) }
+
+	// NR$DA: no software write arm for the cause (the VHDL process has
+	// only the trap-set and NR$02-clear arms). Replaces the plain
+	// reserved-bit mask WirePeripheralMasks installed.
+	d.SetOnWrite(0xDA, func(*nextregs.Dispatcher, byte) {})
+
+	// NR$02 read: bit 4 composes the live cause (:5891 nr_02_iotrap).
+	d.SetOnRead(0x02, func(disp *nextregs.Dispatcher) byte {
+		v := disp.Raw(0x02) &^ 0x10
+		if cause() != 0 {
+			v |= 0x10
+		}
+		return v
+	})
+	// NR$02 write with bit 4 = 0 clears the cause (:3878-3880).
+	if prev := d.OnWriteFn(0x02); prev != nil {
+		d.SetOnWrite(0x02, func(disp *nextregs.Dispatcher, v byte) {
+			if v&0x10 == 0 {
+				setCause(0)
+			}
+			prev(disp, v)
+		})
+	}
+
+	u.SetIOTrapSink(func(c byte, val byte) {
+		// nmi_accept_cause: the NMI machine must be idle for the cause
+		// (and the $3FFD write byte) to latch.
+		nmiInFlight := false
+		if q, ok := divmmcSPI.(interface{ NMIInFlight() bool }); ok {
+			nmiInFlight = q.NMIInFlight()
+		}
+		accept := !mem.MultifaceActive() && !nmiInFlight
+		if accept {
+			setCause(c)
+			if c == 3 {
+				d.Store(0xD9, val)
+			}
+		}
+		// nmi_assert_mf (:2090): NR$06 bit 3 gate + the MF latch gates
+		// (no MF paged, no divMMC hold) — the same arm the NR$02 bit-3
+		// software NMI takes.
+		divmmcHold := false
+		if q, ok := divmmcSPI.(interface{ DisableNMI() bool }); ok {
+			divmmcHold = q.DisableNMI()
+		}
+		if d.Raw(0x06)&0x08 != 0 && !mem.MultifaceActive() && !divmmcHold {
+			mem.SetMultifaceActive(true)
+			cpu.PendingNMI.Store(true)
+			if mfNotify != nil {
+				mfNotify()
+			}
+		}
+	})
+}
+
+// PortEnableMask composes the live internal_port_enable vector from
+// the NR$82-$85 mirrors, ANDed with NR$86-$89 while the expansion bus
+// is enabled (NR$80 bit 7) — zxnext.vhd:2392-2393. Bit numbering is
+// zxnext.vhd:2397-2443 (0 = port $FF ... 27 = CTC). The ULA holds an
+// equivalent composition for its own dispatch (pkg/ula
+// nextPortEnableMask); devices wired outside the ULA (the DAC bank)
+// consult this one.
+func PortEnableMask(d *nextregs.Dispatcher) uint32 {
+	en := uint32(d.Raw(0x82)) | uint32(d.Raw(0x83))<<8 |
+		uint32(d.Raw(0x84))<<16 | uint32(d.Raw(0x85)&0x0F)<<24
+	if d.Raw(0x80)&0x80 != 0 {
+		en &= uint32(d.Raw(0x86)) | uint32(d.Raw(0x87))<<8 |
+			uint32(d.Raw(0x88))<<16 | uint32(d.Raw(0x89)&0x0F)<<24
+	}
+	return en
+}
+
+// WirePortEnableSink pushes the recomposed internal_port_enable vector
+// to the ULA's dispatch cache on every NR$80/$82-$89 write (and once at
+// wiring time), chaining any masking handlers already installed. The
+// ULA caches the vector rather than reading the registers per access —
+// and the default all-ones cache keeps partial wirings (tests with
+// NextReg stubs) on the power-on decode.
+func WirePortEnableSink(d *nextregs.Dispatcher, sink func(uint32)) {
+	push := func() { sink(PortEnableMask(d)) }
+	for _, reg := range [...]byte{0x80, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89} {
+		reg := reg
+		if prev := d.OnWriteFn(reg); prev != nil {
+			d.SetOnWrite(reg, func(disp *nextregs.Dispatcher, v byte) {
+				prev(disp, v)
+				push()
+			})
+		} else {
+			d.SetOnWrite(reg, func(disp *nextregs.Dispatcher, v byte) {
+				disp.Store(reg, v)
+				push()
+			})
+		}
+	}
+	d.SetOnReset(push)
+	push()
+}
+
+// WireDACGates connects a DAC bank's decode to the internal
+// port-enable personalities (bits 17-23) and the NR$08 bit-3 master
+// DAC enable (dac_hw_en, zxnext.vhd:2461).
+func WireDACGates(d *nextregs.Dispatcher, bank interface {
+	SetDecodeGates(func(bit uint) bool, func() bool)
+}) {
+	bank.SetDecodeGates(
+		func(bit uint) bool { return PortEnableMask(d)&(1<<bit) != 0 },
+		func() bool { return d.Raw(0x08)&0x08 != 0 },
+	)
+}
+
+// DMAPausable is the surface WireDMAPause needs from pkg/next/dma.DMA
+// (interface here to keep the import graph acyclic — DMA is port-mapped
+// and deliberately outside WireOpts, see the note above Wire).
+type DMAPausable interface {
+	SetPauseFunc(func(nowRef uint64) (paused bool, recheckAt uint64))
+}
+
+// WireDMAPause connects the zxnDMA to the FPGA's dma-delay condition
+// (zxnext.vhd:2005-2008 im2_dma_delay): an ongoing transfer yields the
+// bus between bytes while (a) any im2-chain device with its NR$CC-$CE
+// DMA-interrupt enable bit set is outside idle (IM2Block.DMAPause — the
+// chain is held reset in pulse mode, so this arm is hw-IM2 only), or
+// (b) an NMI is outstanding and NR$CC bit 7 is set
+// (nmi_activated and nr_cc_dma_int_en_0_7). nmiActive supplies the
+// machine's nmi_activated equivalent (pending NMI / MF or divMMC NMI
+// window); nil disables the NMI arm.
+func WireDMAPause(dmaEngine DMAPausable, blk *IM2Block, d *nextregs.Dispatcher, nmiActive func() bool) {
+	dmaEngine.SetPauseFunc(func(now uint64) (bool, uint64) {
+		paused, recheck := blk.DMAPause(now)
+		if !paused && nmiActive != nil && d.Raw(0xCC)&0x80 != 0 && nmiActive() {
+			return true, 0
+		}
+		return paused, recheck
+	})
 }
 
 // clipWindow models a Spectrum Next clip-window register (NR$18 Layer2,

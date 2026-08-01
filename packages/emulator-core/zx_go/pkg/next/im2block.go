@@ -398,6 +398,70 @@ func (b *IM2Block) syncStatus() {
 	}
 }
 
+// dmaIntEnables composes the FPGA's im2_dma_int_en vector from the
+// NR$CC/$CD/$CE mirrors (zxnext.vhd:1957-1958): per chain device,
+// whether that source may interrupt an ongoing DMA transfer.
+//
+//	dev 0  (line INT)  = NR$CC bit 1
+//	dev 1  (uart0 rx)  = NR$CE bits 1|0
+//	dev 2  (uart1 rx)  = NR$CE bits 5|4
+//	dev 3+k (ctc k)    = NR$CD bit k
+//	dev 11 (ULA frame) = NR$CC bit 0
+//	dev 12 (uart0 tx)  = NR$CE bit 2
+//	dev 13 (uart1 tx)  = NR$CE bit 6
+func (b *IM2Block) dmaIntEnables() (en [IM2NumPeriph]bool, any bool) {
+	cc, cd, ce := b.disp.Raw(0xCC), b.disp.Raw(0xCD), b.disp.Raw(0xCE)
+	en[0] = cc&0x02 != 0
+	en[11] = cc&0x01 != 0
+	en[1] = ce&0x03 != 0
+	en[2] = ce&0x30 != 0
+	en[12] = ce&0x04 != 0
+	en[13] = ce&0x40 != 0
+	for k := 0; k < 8 && 3+k < IM2NumPeriph; k++ {
+		en[3+k] = cd&(1<<uint(k)) != 0
+	}
+	for _, e := range en {
+		if e {
+			return en, true
+		}
+	}
+	return en, false
+}
+
+// DMAPause is the chain half of the FPGA's dma-delay condition
+// (zxnext.vhd:2005-2008): the zxnDMA must yield the bus while any chain
+// device with its NR$CC-$CE enable bit is outside idle
+// (im2_device.vhd:151 o_dma_int = state /= S_0 and i_dma_int_en) — from
+// the request latching through the whole in-service window until the
+// RETI release. It returns (paused, recheckAt): recheckAt is the
+// earliest reference T-state at which a pause could BEGIN (the chain's
+// own assert prediction), ^uint64(0) when no enable bit is set or the
+// chain is held reset (pulse mode — im2_reset_n, im2_peripheral.vhd:105,
+// so only the NMI arm of NR$CC can pause DMA outside hw-IM2 mode; the
+// machine wiring composes that arm separately). A device parked in S_0
+// with its request latch already set counts as pausing too: it becomes
+// S_REQ on the next 28 MHz tick, a gap far below our tick granularity.
+func (b *IM2Block) DMAPause(nowRef uint64) (paused bool, recheckAt uint64) {
+	if !b.hwMode {
+		return false, ^uint64(0)
+	}
+	en, any := b.dmaIntEnables()
+	if !any {
+		return false, ^uint64(0)
+	}
+	b.syncStatus()
+	for i := range b.chain.per {
+		if !en[i] {
+			continue
+		}
+		st := b.chain.per[i].state
+		if st != im2S0 || b.chain.per[i].im2IntReq {
+			return true, 0
+		}
+	}
+	return false, b.NextAssertRef8()
+}
+
 // StatusC8 composes the NR$C8 read: bit 0 = ULA (source 11), bit 1 =
 // line (source 0).
 func (b *IM2Block) StatusC8() byte {

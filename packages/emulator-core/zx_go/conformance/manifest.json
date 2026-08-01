@@ -281,10 +281,10 @@
       "title": "VHDL conformance matrix (per-axis enumeration of the FPGA surface)",
       "area": "Meta",
       "kind": "manual",
-      "status": "partial",
+      "status": "pass",
       "link": "https://github.com/stever/zxcode/blob/main/packages/emulator-core/zx_go/VHDL_CONFORMANCE.md",
       "detail": "vhdl.html",
-      "notes": "Hand-maintained matrix; open rows are listed in the document and mirrored in known-gaps.md."
+      "notes": "Hand-maintained matrix — ALL GREEN since the 2026-08 close-out (port deferrals, NR$82-$89 gating, DMA-delay enables, wide-L2 ULA residues). Sub-row-grain notes live in known-gaps.md."
     },
     {
       "id": "ext-z80test",

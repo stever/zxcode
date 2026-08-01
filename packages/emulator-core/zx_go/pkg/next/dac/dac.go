@@ -35,7 +35,40 @@ type Bank struct {
 	// level per audio pull. Carries the last level across frames.
 	events     []dacEvent
 	startLevel byte
+
+	// portEnabled reports the internal-port-enable gates (NR$82-$85
+	// AND NR$86-$89 under expbus, zxnext.vhd:2392-2443) for the seven
+	// DAC decode personalities — bit numbering matches
+	// internal_port_enable: 17 soundrive-1 $1F/$0F/$4F/$5F, 18
+	// soundrive-2 $F1/$F3/$F9/$FB, 19 profi-covox stereo $3F/$5F, 20
+	// covox stereo $0F/$4F, 21 pentagon/atm mono $FB, 22 gs-covox
+	// mono $B3, 23 specdrum mono $DF. nil = all enabled (power-on).
+	portEnabled func(bit uint) bool
+	// dacEnabled is the NR$08 bit-3 master DAC gate (dac_hw_en,
+	// zxnext.vhd:2461). nil = enabled.
+	dacEnabled func() bool
 }
+
+// Internal-port-enable bit positions for the DAC personalities.
+const (
+	enSD1    uint = 17
+	enSD2    uint = 18
+	enStAD   uint = 19
+	enStBC   uint = 20
+	enMonoFB uint = 21
+	enMonoB3 uint = 22
+	enMonoDF uint = 23
+)
+
+// SetDecodeGates installs the port-enable and NR$08 DAC-enable sources
+// (see the field docs). Passing nils keeps the power-on all-enabled
+// decode.
+func (b *Bank) SetDecodeGates(portEnabled func(bit uint) bool, dacEnabled func() bool) {
+	b.portEnabled = portEnabled
+	b.dacEnabled = dacEnabled
+}
+
+func (b *Bank) en(bit uint) bool { return b.portEnabled == nil || b.portEnabled(bit) }
 
 type dacEvent struct {
 	tstateOffset int
@@ -121,23 +154,73 @@ func (b *Bank) Level(c Channel) byte {
 // stereo through $0F/$4F while the jingle voice (death/reincarnation)
 // goes to $DF — dropping $DF silences exactly those jingles (#207).
 func (b *Bank) WritePort(port uint16, val byte) bool {
+	if b.dacEnabled != nil && !b.dacEnabled() {
+		return false
+	}
+	// Per-alias channel sets are the FPGA's port_dac_A/B/C/D terms
+	// (zxnext.vhd:2657-2664), each alias contributing only under its
+	// personality's port enable. $FB's mono-AD contribution rides
+	// port_dac_mono_AD_fb_io_en = enable(21) AND NOT sd2 (:2440) — the
+	// soundrive-2 decode has precedence, which is why $FB is D-only at
+	// power-on.
+	var chans byte
 	switch port & 0xFF {
-	case 0x1F, 0xF1, 0x3F:
-		b.levels[ChannelA] = val
-	case 0x0F, 0xF3:
-		b.levels[ChannelB] = val
-	case 0x4F, 0xF9:
-		b.levels[ChannelC] = val
-	case 0x5F, 0xFB:
-		b.levels[ChannelD] = val
+	case 0x1F:
+		if b.en(enSD1) {
+			chans = 1 << ChannelA
+		}
+	case 0xF1:
+		if b.en(enSD2) {
+			chans = 1 << ChannelA
+		}
+	case 0x3F:
+		if b.en(enStAD) {
+			chans = 1 << ChannelA
+		}
+	case 0x0F:
+		if b.en(enSD1) || b.en(enStBC) {
+			chans = 1 << ChannelB
+		}
+	case 0xF3:
+		if b.en(enSD2) {
+			chans = 1 << ChannelB
+		}
+	case 0x4F:
+		if b.en(enSD1) || b.en(enStBC) {
+			chans = 1 << ChannelC
+		}
+	case 0xF9:
+		if b.en(enSD2) {
+			chans = 1 << ChannelC
+		}
+	case 0x5F:
+		if b.en(enSD1) || b.en(enStAD) {
+			chans = 1 << ChannelD
+		}
+	case 0xFB:
+		if b.en(enSD2) {
+			chans = 1 << ChannelD
+		} else if b.en(enMonoFB) {
+			chans = 1<<ChannelA | 1<<ChannelD
+		}
 	case 0xDF:
-		b.levels[ChannelA] = val
-		b.levels[ChannelD] = val
+		if b.en(enMonoDF) {
+			chans = 1<<ChannelA | 1<<ChannelD
+		}
 	case 0xB3:
-		b.levels[ChannelB] = val
-		b.levels[ChannelC] = val
+		if b.en(enMonoB3) {
+			chans = 1<<ChannelB | 1<<ChannelC
+		}
 	default:
 		return false
+	}
+	if chans == 0 {
+		return false
+	}
+	for c := ChannelA; c <= ChannelD; c++ {
+		if chans&(1<<c) != 0 {
+			b.levels[c] = val
+		}
 	}
 	return true
 }

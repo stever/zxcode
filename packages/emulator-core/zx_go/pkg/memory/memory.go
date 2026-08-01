@@ -726,6 +726,11 @@ func (m *Memory) SetDFFD(val byte) {
 // derive bank mappings through ResolvePage/GetMMU instead.
 func (m *Memory) DFFDValue() byte { return m.portDFFD }
 
+// EFF7Bits returns the $EFF7 register's latched bits 2 and 3 (the
+// Multiface +3-personality shadow read-back composes them —
+// zxnext.vhd:4315).
+func (m *Memory) EFF7Bits() (bit2, bit3 bool) { return m.portEFF7Reg2, m.portEFF7Reg3 }
+
 // SetEFF7 applies a write to port $EFF7 (decoded as address&$F0FF==$E0F7,
 // zxnext.vhd:2604 — high nibble $E, low byte $F7; a classic incompletely
 // decoded Pentagon/Scorpion-style port carried through on the Next).

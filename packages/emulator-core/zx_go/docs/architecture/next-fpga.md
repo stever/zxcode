@@ -129,6 +129,26 @@ drift. Highlights:
   machine, exactly like hardware.
 - Deliberately not wired here: the zxnDMA (ports $6B/$0B, wired via
   `ULA.SetNextDMA`) and the Pi accelerator registers (default storage).
+- Port-decode gating (2026-08-01): every internal decode consults the
+  live internal_port_enable vector (NR$82-$89 / NR$80 expbus AND,
+  zxnext.vhd:2392-2443) pushed into the ULA by `WirePortEnableSink`;
+  the DAC personalities + NR$08 bit-3 dac_hw_en gate the DAC bank via
+  `WireDACGates`.
+- Kempston mouse (`pkg/next/mouse`, ports $FADF/$FBDF/$FFDF): the
+  ps2_mouse.v counters — DPI-scaled X/Y accumulators, wheel nibble,
+  active-low buttons with the NR$0A reverse; fed by the desktop mouse
+  and the wasm `zxMouse` export.
+- Multiface (`pkg/next/mf.go` + `pkg/multiface/core.go`): the
+  enable/disable port pair per NR$0A personality drives the
+  GHDL-golden multiface.Core state machine (invisible/NMI-hold/
+  mf_enable) and the same memory overlay the NR$02-NMI path pages;
+  enable-port reads serve the +3 paging shadow / MF128 bit-7 form.
+- FDC iotraps (`WireIOTraps`): NR$D8-gated $2FFD/$3FFD traps fire an
+  MF-class NMI and latch NR$DA (cause) / NR$D9 (trapped byte); NR$02
+  bit 4 composes the cause live.
+- +3 floating bus: a(15:12)=0000 + $FD pattern under +3 timing serves
+  the ULA fetch byte with bit 0 forced, $FF while 7FFD-locked
+  (`ULA.nextP3FloatByte`).
 
 ## Memory: MMU and the overlay mux (`pkg/memory`)
 
@@ -346,11 +366,15 @@ shape, zxnext.vhd:6543-6552). The pieces:
   above L2 from their sources (OverpaintWideL2Row): sprites in the
   non-L-topmost modes, the ULA+TM slot in the U-above-L modes (SUL
   below sprites, USL/ULS above — classic ULA pixels repaint from the
-  CaptureULABase pure-ULA frame snapshot with per-pixel NR$14
-  transparency, r94/#204 Space Invaders, then the tilemap over them),
-  then priority-bit L2 pixels back on top (composeL2PriorityOverlayRow,
-  #195). Residues: the ULA repaint ignores the NR$1A clip window and
-  the ULA-vs-below-tile per-pixel arbitration (known-gaps).
+  captured ULA base with per-pixel NR$14 transparency, r94/#204 Space
+  Invaders, then the tilemap over them), then priority-bit L2 pixels
+  back on top (composeL2PriorityOverlayRow, #195). Since the 2026-08
+  close-out the captured base's paper rows are the LIVE row walk's
+  output (CaptureULALiveRow — ULANext palettes, NR$26/$27 scroll,
+  LoRes/Timex content, alpha-0 per-pixel transparency and the NR$1A
+  clip), and the wide overlay's below-tile arbitration is per-pixel
+  against that base (capturedULATransparent, the ulatm mux
+  zxnext.vhd:7116).
 - Copper (`pkg/next/copper`): 1024 × 16-bit instruction store, MOVE /
   WAIT / NOOP / HALT, four start modes (NR$62, list restart only on a
   mode TRANSITION into 01/11 per copper.vhd's edge detect), and the
@@ -627,8 +651,18 @@ dma.vhd's timer (prescaler*4^turbo/2 CPU T-states per byte). Continuous
 mode stalls the CPU by charging cycles; burst+ prescaler mode
 interleaves with CPU execution via a per-instruction Step paced on the
 MONOTONIC reference clock (the raw per-frame T-state counter wraps),
-and an auto-restart block reloads and repeats until DISABLE. Not
-modelled: interrupt/match logic and DMA-vs-CPU bus contention;
+and an auto-restart block reloads and repeats until DISABLE.
+Interrupts (2026-08-01): the zxnDMA generates NONE — the FPGA's
+dma.vhd carries the Zilog interrupt-control machinery commented out,
+so the no-op interrupt commands are conformant. What NR$CC-$CE gate is
+the DMA-DELAY condition (zxnext.vhd:2005-2008): an im2-chain device
+outside idle with its enable bit set — or an outstanding NMI with
+NR$CC bit 7 — holds a transfer off the bus between bytes until the
+RETI/RETN release (IM2Block.DMAPause + dma.SetPauseFunc, composed by
+next.WireDMAPause; continuous blocks split at the pause instant and
+charge only the bytes moved, burst schedules restart at the unpause
+instant; in pulse mode the chain is held reset so only the NMI arm
+applies). Not modelled: match logic and DMA-vs-CPU bus contention;
 read/write cycle lengths are charged in CPU T-states as a model
 convention, and a continuous transfer's port writes all land at one
 raster instant (known-gaps.md).

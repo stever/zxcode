@@ -188,11 +188,48 @@ rejections ($263B/$173B/$203B/$2001/$C001), and the port-$FF NR$08
 gate. FIXED by the sweep: the Next's AY decode gained its A2=1 term
 (:2646-2647 — $C001/$8001 are NOT AY ports on the Next; the classics
 keep their loose partial decode).
-⚠️ Enumerated deferrals (test doc + known-gaps): MF enable/disable
-port pair (:2612-2616 — MF paging is NMI-driven in our model),
-Kempston mouse $FADF/$FBDF/$FFDF (:2673-2675), +3 float (:2589), FDC
-iotrap $2FFD/$3FFD (:2601-2602), and the internal/bus port-enable
-GATING (NR$82-$89, :2400-2430 — registers faithful, decode not gated).
+✅ Former enumerated deferrals — ALL CLOSED (2026-08 close-out; each
+pinned in `TestNextPortDecode_*`, pkg/ula):
+- **internal/bus port-enable GATING** (NR$82-$89, :2392-2443): the
+  live internal_port_enable vector (NR$85..$82, ANDed with NR$89..$86
+  under NR$80 bit 7) gates EVERY internal decode — a cleared bit
+  removes the port; the access falls through as if the device were
+  absent. Pushed into the ULA dispatch by next.WirePortEnableSink;
+  the DAC personalities (bits 17-23, :2437-2443 incl. the $FB
+  sd2-over-monoAD precedence) and the NR$08 bit-3 dac_hw_en (:2461)
+  gate the DAC decode via next.WireDACGates (pkg/next/dac
+  TestDecodeGates). `_InternalPortEnableGating`.
+- **Kempston mouse $FADF/$FBDF/$FFDF** (:2668-2670, data :3541-3560):
+  pkg/next/mouse — X/Y wrapping counters with the NR$0A DPI scaling
+  (ps2_mouse.v xydelta: ×2/×1/÷2/÷4; NR$0A resets to $01 = ×1, the
+  nr_0a_mouse_dpi power-on init, zxnext.vhd:1128), wheel nibble,
+  active-low buttons with the NR$0A bit-3 left/right reverse.
+  Desktop mouse + the wasm `zxMouse` export feed it. The port_1f $DF
+  joystick alias (:2674 — DAC-DF on, mouse decode OFF) is emergent
+  from the same gates (`_DFJoystickAlias`). `_KempstonMouse`.
+- **+3 float** (:2589, data :4517 + zxula.vhd:307-345/:573): a(15:12)
+  =0000 + the $FD pattern, live only under +3 machine timing; returns
+  the ULA fetch byte with bit 0 forced (the o_ula_floating_bus
+  +3-timing OR), $FF while 7FFD paging is locked, on the classic-
+  validated slot grid anchored to the live geometry (known-gaps note:
+  idle slots approximate the last-contended-bus-byte latch as $FF).
+  `_P3FloatingBus`.
+- **FDC iotrap $2FFD/$3FFD** (:2601-2602, machinery :3835-3895):
+  NR$D8-gated decode; reads/3FFD-writes fire a Multiface-class NMI
+  through the same NR$06/no-NMI-in-flight gates as the NR$02 bit-3
+  pulse, latch the cause into NR$DA (no software write arm; NR$02
+  bit 4 composes it live, write-0 clears) and the trapped byte into
+  NR$D9. next.WireIOTraps. `_FDCIOTrap`.
+- **MF enable/disable port pair** (:2612-2616, read data :4305-4320):
+  the GHDL-golden pkg/multiface.Core (device/multiface.vhd) drives
+  the pair via next.MFBlock — per-personality low-byte roles
+  ($3F/$BF, $BF/$3F, $9F/$1F by NR$0A mf_type), enable-read paging-in
+  when visible with the +3 paging-shadow / MF128 bit-7 read-back,
+  disable-read page-out, write-driven invisible/NMI-release, RETN and
+  NR$02/iotrap NMIs feeding the same state machine, and the port
+  strobes firing alongside co-decoded devices (the MF48 $1F is also
+  soundrive-1 A / the joystick). `_MultifacePorts` + pkg/next
+  TestMFPortRolesPerPersonality.
 
 ## Axis 5 — Interrupts / timing  (zxula_timing.vhd + zxnext.vhd 2014-2033)
 Tests: `pkg/z80/int_timing_test.go` (narrow pulse, DI-across-pulse, speed-scaled
@@ -206,12 +243,20 @@ ScanlineReadingAndInterrupt's NR$1E/$1F marker rows (cvc 200 renders exactly
 8 rows under the paper) pin INT→paper-top = 64 lines within a line for the
 128K/+3 geometry the Next runs. Per-NR$03/$05 geometry retune landed with #182
 (FrameGeometryFor: 48K/Pentagon/60 Hz frame length + INT position live, vsync-latched
-at the frame origin — Axis 10 row). ⚠️ Remaining: the sub-line hc
-component of the INT origin is below the render's one-line floor; the CTC
-counter-mode ZC/TO cascade between channels (zxnext.vhd:4082); UART INT
-sources (chain vectors 1/2/12/13 — the UART generates no interrupts);
-NR$CC-$CE DMA int enables (registers faithful, the DMA generates no
-interrupts — known-gaps zxnDMA row). (Line-INT at turbo IS pinned —
+at the frame origin — Axis 10 row).
+✅ Sub-line hc INT-origin component: the model carries it exactly —
+c_int_h enters `FrameGeometry.IntAssertTstate()` directly
+((c_int_v·(c_max_hc+1)+c_int_h)/2; +3 boot timing = (1·456+126)/2 =
+291 T, i.e. one line + 63 T) and the per-mode values are pinned to the
+zxula_timing.vhd:155-298 constants by `TestFrameGeometryFor` +
+`inttiming_test.go`. What sits at one-line granularity is only the
+BOARD-instrument validation floor (the Timing-group instruments read
+raster rows) and the render's border-sweep representation — the
+existing known-gaps row, not a CPU-timing gap.
+✅ NR$CC-$CE DMA-interrupt enables are LIVE (this close-out — see the
+CTC/IM2 axis below for the row). The CTC counter-mode ZC/TO cascade and
+the UART INT sources listed here previously both landed with #158
+(✅ rows in the CTC/IM2 axis below). (Line-INT at turbo IS pinned —
 `TestWireLineInterruptScalesWithSpeed`, NR$07-chained recompute; the IM2
 vector table + $C0 mode landed with r54's hw-IM2 chain.)
 ✅ CTC pulse-mode interrupts (r50, #169): channels 0-3 wired behind ports
@@ -267,10 +312,30 @@ UART source states ('0' & st13 & st2 & st2 & '0' & st12 & st1 & st1,
 the chain reset in pulse mode too (im2_reset_n = mode & not reset,
 im2_peripheral.vhd:105), so NR$C8/$C9/$CA recording only in hw mode IS
 the hardware behaviour.
-⚠️ Remaining: NR$CC-$CE DMA-interrupt enables (registers faithful; the
-DMA generates no interrupts — known-gaps zxnDMA row), and port reads of
-a mid-count channel return the batch-advanced counter (exact at
-observation points).
+✅ NR$CC-$CE DMA-interrupt enables (this close-out): they are NOT "the
+DMA generates interrupts" — the FPGA's dma.vhd has the Zilog
+interrupt-control machinery commented OUT (:94-96/:836-856), so the
+zxnDMA generates no interrupts on real hardware either and our no-op
+interrupt commands were already conformant. What the registers gate is
+the DMA-DELAY condition (zxnext.vhd:1957-1958 im2_dma_int_en →
+im2_device.vhd:151 o_dma_int = state /= S_0 and dma_int_en →
+:2005-2008 im2_dma_delay; dma.vhd:269/427 test dma_delay_i between
+byte transfers): a chain device outside idle whose NR$CC/$CD/$CE bit
+is set — from request latch through the whole in-service window until
+the RETI release — holds the DMA off the bus, as does an outstanding
+NMI with NR$CC bit 7. LIVE: dma.DMA.SetPauseFunc (chunked continuous
+transfers that split at the pause instant and charge only the bytes
+moved; burst schedules restart at the unpause instant) composed by
+next.WireDMAPause from IM2Block.DMAPause + the machine's nmi_activated
+equivalent. In pulse mode the chain is held reset so only the NMI arm
+applies — emergent from the same chain state. Pinned by
+TestWireDMAPauseChainSourceHeldThroughISR / TestWireDMAPauseNMIArm /
+TestWireDMAPausePulseModeChainInert (pkg/next) + TestPausePark/Splits/
+HoldsBurstSchedule (pkg/next/dma); the FPGA-golden replay and the
+Zilog board goldens are unchanged (all NR$CC-$CE zero — the reset
+default — takes the byte-identical fast path). Port reads of a
+mid-count channel return the batch-advanced counter — exact at
+observation points, the block's documented granularity, not a gap.
 
 ## Axis 6 — Z80 / Z80N operations  (FUSE + Sean Young + GHDL gate oracle)
 Tests: canonical T-state tables (iter 266-270), per-op timing batches, flags
@@ -384,8 +449,18 @@ Pinned since (base/Copper + base/DMA conformance work):
   CPU writes beam-stamped + folded, copper render-time MOVEs captured
   per walk row (TestScrollFold*/TestScrollCapture* — RAMS's
   copper-banded Galaxian player ship, NR$62=$C0 restart-on-vblank).
-  ⚠️ Residue: classic ULA pixels above wide L2 (SUL/USL/ULS)
-  still approximate as covered (known-gaps.md).
+  ✅ Classic ULA pixels above wide L2 (SUL/USL/ULS): the repaint
+  landed with r94 (#204, CaptureULABase + composeULAOverlayRow —
+  Space Invaders' USL arcade overlay; this row was stale) and the
+  2026-08 close-out retired its three residues: the captured base's
+  paper rows are now the LIVE walk's output (CaptureULALiveRow —
+  ULANext palettes, NR$26/$27 scroll, LoRes/Timex content, per-pixel
+  alpha-0 transparency and the NR$1A clip, zxula.vhd:562 →
+  zxnext.vhd:7100), the below-tile arbitration in the wide overlay is
+  per-pixel against that base (ulatm mux, zxnext.vhd:7116 —
+  capturedULATransparent), and the overpaint's mode read shares
+  resolveMode with the capture. TestULAAboveWideL2* (USL/SUL/ULS/
+  live-row) + TestTMBelowWideOverlayPerPixelULA.
 - ✅ NR$1E/$1F active-video-line counter runs on the VIDEO clock, not the
   CPU clock (zxnext.vhd:5982-5986 port_253b_dat <= cvc; zxula_timing.vhd
   cvc/c_int_v): `ULA.BeamPosition` derives the beam on the 3.5 MHz-
@@ -539,18 +614,23 @@ here means real architectural work, not a quick pin.
 | Per-NR$03/$05 display geometry (48K 312×224/448hc, Pentagon 320×224, 60 Hz 264-line vs the boot 311×228) | zxula_timing.vhd:146-311 constant table; vsync eff-latch zxnext.vhd:6693-6706; Pentagon-forces-50Hz :5834-5836; copper hcount = hc_ula (ULA-anchored, reset at c_min_hactive-12, :423-424 → zxnext.vhd:6737/:3949), vcount = cvc (paper-anchored, :458-468) | LIVE end-to-end. TIMING (#182): NR$03/NR$05 writes retune frame length, T/line, frame-INT assert+pulse, the contention paper anchor, NR$1E/$1F wrap and the NR$22/$23 line-INT via FrameGeometryFor (pkg/next/geometry.go), applied at the next frame origin; audio window + samples/frame follow. RENDER (this close-out): the copper interleave's line clock is hcounts×4 cycles from the live mirror (Step hcMax + RunToCycle's SetLineCycles — the WAIT wrap boundary X≥56/X≥55 is emergent), the left-border tail anchors at hcounts−28 (the BOARD-pinned 428 on boot timing; the 8-hc lead over the raw whc preload is fixed video-pipeline depth, length-independent), and the raster-stamp row map (border/ULA-video folds, palette replay, scroll captures, sweep top/bottom mapping) anchors at the live c_min_vactive (64/40/80); scroll tables sized for Pentagon's 320 lines. The hc_ula anchoring makes the paper/WAIT +12 mapping timing-INDEPENDENT — only line length and tail move | ✅ | TestCopperInterleaveAnchorTimingIndependent / TestCopperWaitWrapFollowsLineLength / TestBorderFoldFollowsPaperTop (pkg/ula), TestCopperEngineEquivalence448 / TestWaitWrapThresholdPerLineLength (pkg/next/copper), TestFrameGeometryFor / TestWireFrameGeometry*; nexttests board goldens unchanged. Residue: border sweep rows stay line-granular and NR$64 is stored-raw — existing known-gaps rows |
 | Mixed-frame Timex hi-res decimation + hi-res end-of-frame palette | the FPGA resolves display mode per character cell (zxula.vhd:191-214) and palette per 14 MHz half-pixel | CLOSED (#183, r59): the mode re-latches per character cell inside the one row walk and hi-res renders the native 512 stream in stable AND copper-banded mixed frames; the decimation branch, the stable/mixed split and the dedicated wide pass (end-of-frame palette) are deleted — hi-res rows resolve palette through the same paced per-row replay as every row | ✅ | TestCopperMidRowNR69HiResBand (mid-row native band), LayersMixingHiRes now pins the unified path |
 
-**This axis's enumerated rows are now ALL ✅** — the geometry render
-close-out retired the last one. What remains non-green anywhere in the
-matrix is scope-deferral, not accuracy debt: the Axis 4 enumerated
-deferrals (Kempston mouse / MF port pair / +3 float / FDC iotrap /
-NR$82-$89 decode gating — each waiting on a device or personality
-nobody has needed), the Axis 5 leftovers of the same kind (DMA
-interrupt generation, the sub-line hc INT-origin component), and the
-Axis 9 wide-L2 blend residue. The remaining sub-row-grain
-approximations (border sweep rows line-granular, mid-row layer-ENABLE
-flips landing next row, NR$64) are enumerated in known-gaps.md — a
-"matrix is green but the game still breaks" bisect should look there
-first.
+**The matrix is ALL GREEN** (2026-08 close-out). The geometry render
+close-out retired this axis's last ⚙️ row; the scope-deferral tier
+that followed — the Axis 4 enumerated port deferrals (Kempston mouse,
+MF enable/disable pair, +3 float, FDC iotraps, NR$82-$89 decode
+gating), the Axis 5 NR$CC-$CE DMA-interrupt enables (resolved as the
+FPGA's DMA-DELAY condition — the zxnDMA generates no interrupts on
+hardware either, its Zilog interrupt machinery is commented out of
+dma.vhd) and sub-line hc INT-origin note (the model always carried
+c_int_h; the one-line floor was the board-instrument validation
+grain), and the Axis 9 ULA-above-wide-L2 residues (live-row capture +
+per-pixel below-tile arbitration) — closed with it. What remains
+catalogued anywhere is sub-row-grain or environment scope in
+known-gaps.md (border sweep rows line-granular, mid-row layer-ENABLE
+flips landing next row, NR$64 stored-raw, the +3 float's idle-slot
+last-bus-byte latch approximated as $FF, UART networking, zxnDMA
+match logic / descriptor mode) — a "matrix is green but the game
+still breaks" bisect should look there first.
 
 ---
 
