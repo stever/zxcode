@@ -761,6 +761,35 @@ func menuBarHeight() float32 {
 	th := fyne.CurrentApp().Settings().Theme()
 	return th.Size(theme.SizeNameText) + 2*th.Size(theme.SizeNameInnerPadding)
 }
+
+// resizeForScale sizes the window so the emulator's 320x240 source frame is
+// drawn at exactly percent% in DEVICE pixels — the property the View menu's
+// presets promise (100% = one source pixel per screen pixel, 300% = 3x3).
+// Two things make the naive points-based Resize inexact: fyne coordinates
+// are DPI-scaled points, so "320 points" is 320*scale physical pixels (1.5x
+// on a typical HiDPI desktop — a non-integer ratio the nearest-neighbour
+// scaler renders as uneven pixel rows); and the window chrome (menu bar,
+// content padding) consumes real laid-out space that theme constants only
+// approximate, squeezing the image to fractionally under the intended size.
+// So the target is converted device px -> points through the live canvas
+// scale, and the chrome is measured as the difference between the current
+// canvas and content sizes rather than estimated. Needs a shown, laid-out
+// window: the pre-show path uses the scaleToWindowSize estimate and the
+// post-show correction in desktopMain snaps it exact.
+func resizeForScale(w fyne.Window, percent int) {
+	scale := w.Canvas().Scale()
+	if scale <= 0 {
+		scale = 1
+	}
+	imgW := float32(ula.TotalWidth*percent) / 100 / scale
+	imgH := float32(ula.TotalHeight*percent) / 100 / scale
+	canvasSz := w.Canvas().Size()
+	contentSz := w.Content().Size()
+	w.Resize(fyne.NewSize(
+		imgW+canvasSz.Width-contentSz.Width,
+		imgH+canvasSz.Height-contentSz.Height,
+	))
+}
 func desktopMain() {
 	flags := parseCLI()
 	zxlog.Setup(flags.logLevel)
@@ -880,6 +909,10 @@ func desktopMain() {
 
 	w := a.NewWindow(fmt.Sprintf("ZX Spectrum Emulator %s - %s", version.Version, roms.GetModelName(currentModel)))
 	w.SetIcon(spectrumIcon())
+	// No padding around the content: the emulator image should sit on the
+	// black stack edge-to-edge, and the padding's DPI-scaled thickness
+	// otherwise lands the pixel grid on fractional device coordinates.
+	w.SetPadded(false)
 	wScaleW, wScaleH := scaleToWindowSize(currentScale)
 	w.Resize(fyne.NewSize(wScaleW, wScaleH))
 
@@ -2211,31 +2244,31 @@ func desktopMain() {
 		fyne.NewMenu("View",
 			fyne.NewMenuItem("100% (320x240)", func() {
 				w.SetFullScreen(false)
-				w.Resize(fyne.NewSize(scaleToWindowSize(100)))
+				resizeForScale(w, 100)
 				currentScale = 100
 				saveConfig()
 			}),
 			fyne.NewMenuItem("125% (400x300)", func() {
 				w.SetFullScreen(false)
-				w.Resize(fyne.NewSize(scaleToWindowSize(125)))
+				resizeForScale(w, 125)
 				currentScale = 125
 				saveConfig()
 			}),
 			fyne.NewMenuItem("150% (480x360)", func() {
 				w.SetFullScreen(false)
-				w.Resize(fyne.NewSize(scaleToWindowSize(150)))
+				resizeForScale(w, 150)
 				currentScale = 150
 				saveConfig()
 			}),
 			fyne.NewMenuItem("200% (640x480)", func() {
 				w.SetFullScreen(false)
-				w.Resize(fyne.NewSize(scaleToWindowSize(200)))
+				resizeForScale(w, 200)
 				currentScale = 200
 				saveConfig()
 			}),
 			fyne.NewMenuItem("300% (960x720)", func() {
 				w.SetFullScreen(false)
-				w.Resize(fyne.NewSize(scaleToWindowSize(300)))
+				resizeForScale(w, 300)
 				currentScale = 300
 				saveConfig()
 			}),
@@ -2762,6 +2795,25 @@ func desktopMain() {
 
 	w.SetContent(content)
 	w.Canvas().Focus(keyboardWidget)
+
+	// The pre-show Resize above could only estimate: the canvas DPI scale
+	// and the menu bar's laid-out height aren't known until the window is
+	// mapped. Snap to the exact device-pixel geometry as soon as they are.
+	go func() {
+		for range 40 {
+			time.Sleep(50 * time.Millisecond)
+			done := false
+			fyne.DoAndWait(func() {
+				if c := w.Content(); c != nil && c.Size().Height > 0 && w.Canvas().Scale() > 0 {
+					resizeForScale(w, currentScale)
+					done = true
+				}
+			})
+			if done {
+				return
+			}
+		}
+	}()
 
 	// Set up cleanup on window close
 	w.SetOnClosed(func() {
