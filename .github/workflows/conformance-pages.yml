@@ -37,10 +37,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev xorg-dev libasound2-dev
 
-      # Full suite (not -short) so zexdoc/zexall run. Tests that need the
-      # licensed Next ROMs skip cleanly when the assets are absent, and a
-      # failing test must still publish (it shows as a red row), so the
-      # exit code is deliberately swallowed.
+      # Stage the licensed NextZXOS ROMs by fetching the OFFICIAL distro —
+      # the same URL install.DefaultDistroURL pins (pkg/next/install/
+      # download.go) — so the real-ROM boot row (boot-nextzxos) runs on the
+      # published dashboard instead of skipping. The ROMs are licensed
+      # content, gitignored and never committed (roms/next/); fetching
+      # fresh from specnext.com per build keeps them out of the repo and
+      # its artifacts. Best-effort: if specnext.com is unreachable the
+      # gated tests skip cleanly and the dashboard still publishes — the
+      # row goes grey again rather than the build going red.
+      - name: Stage licensed Next ROMs from the official distro
+        working-directory: packages/emulator-core/zx_go
+        run: |
+          if curl -fsSL --retry 3 --max-time 300 -o /tmp/sn-complete.zip \
+               https://www.specnext.com/distro/24.11/sn-complete-24.11.zip \
+             && mkdir -p roms/next \
+             && unzip -o -j /tmp/sn-complete.zip \
+                  machines/next/enNextZX.rom machines/next/enNxtmmc.rom \
+                  -d roms/next; then
+            ls -l roms/next
+          else
+            echo "::warning::Next distro fetch failed; real-ROM boot tests will skip"
+          fi
+
+      # Full suite (not -short) so zexdoc/zexall run. Tests gated on assets
+      # the previous step could not stage (or on a staged SD image, which
+      # CI never has) skip cleanly, and a failing test must still publish
+      # (it shows as a red row), so the exit code is deliberately swallowed.
       - name: Run zx_go test suite
         working-directory: packages/emulator-core/zx_go
         run: go test -json -count=1 ./... > /tmp/gotest.json || true

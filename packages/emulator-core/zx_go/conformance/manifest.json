@@ -265,10 +265,11 @@
     },
     {
       "id": "boot-nextzxos",
-      "title": "NextZXOS cold boot end-to-end (skips when licensed ROMs are not staged)",
+      "title": "NextZXOS cold boot end-to-end (real licensed ROMs)",
       "area": "Boot",
       "kind": "internal",
       "oracle": "Real NextZXOS through the FPGA-bootrom chain",
+      "notes": "The licensed ROMs are never committed; the Pages workflow fetches them from the official specnext.com distro at build time. If that fetch fails the test skips cleanly and this row shows grey until the next build.",
       "runner": {
         "package": "github.com/conorarmstrong/zx_go/pkg/testharness",
         "tests": [
