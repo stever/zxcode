@@ -119,10 +119,19 @@
     background: #1c1c1c;
 }
 
-// Tabs: an inactive tab's underline should be the same line that runs behind
-// the whole strip, so only the active tab's cyan underline stands out. Make the
-// inactive underline transparent and let the nav's border show through.
-.p-tabview .p-tabview-nav li .p-tabview-nav-link {
+// Tabs: one unbroken line runs under the whole strip, so only the active tab's
+// cyan ink bar stands out. The base theme draws that line twice — the nav has a
+// 1px bottom border in rgba(255,255,255,0.12), and every link repeats the same
+// border with `margin-bottom: -1px`, landing it ON TOP of the nav's. Where both
+// are painted the line doubles up (over the #444 page grey, 70 -> 92 -> 112),
+// so the active tab (and any hovered tab) gets a visibly lighter stub of line
+// for exactly its own width. Blanking the link's border in EVERY state leaves
+// the nav's line alone to draw it. Each selector repeats a base-theme one so it
+// matches on specificity and wins on order (this overlay loads last): the rest
+// state, `li.p-highlight` for the active tab, and the hover rule.
+.p-tabview .p-tabview-nav li .p-tabview-nav-link,
+.p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link,
+.p-tabview .p-tabview-nav li:not(.p-highlight):not(.p-disabled):hover .p-tabview-nav-link {
     border-bottom-color: transparent;
 }
 
