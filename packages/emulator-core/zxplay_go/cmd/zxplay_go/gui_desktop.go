@@ -762,9 +762,29 @@ func menuBarHeight() float32 {
 	return th.Size(theme.SizeNameText) + 2*th.Size(theme.SizeNameInnerPadding)
 }
 
-// resizeForScale sizes the window so the emulator's 320x240 source frame is
-// drawn at exactly percent% in DEVICE pixels — the property the View menu's
-// presets promise (100% = one source pixel per screen pixel, 300% = 3x3).
+// displayUnits returns a machine's frame size in square-pixel units —
+// classic-Spectrum-pixel-sized cells, the frame's true shape on a square-
+// pixel monitor. The Next's wide frame renders 640 half-width samples x
+// 256 rows = 320x256 units (5:4 — the same shape as the browser's fixed
+// 640x512 canvas); the SAM's 576 half-width samples x 240 rows = 288x240
+// (6:5, pkg/sam/display.go); everything else is the classic 320x240 (4:3).
+func displayUnits(model roms.SpectrumModel) (int, int) {
+	switch model {
+	case roms.ModelNext:
+		return ula.TotalWidth, ula.NextTotalHeight
+	case roms.ModelSAM:
+		return 288, 240
+	default:
+		return ula.TotalWidth, ula.TotalHeight
+	}
+}
+
+// resizeForScale sizes the window so the emulator's source frame is drawn
+// at exactly percent% of its square-pixel-unit size in DEVICE pixels — the
+// property the View menu's presets promise (at 100% on a classic machine,
+// one source pixel per screen pixel; the Next's and SAM's half-width
+// samples get percent/200 device px per sample, so their sample grid is
+// exact at even multiples and a regular 1px/2px cadence at odd ones).
 // Two things make the naive points-based Resize inexact: fyne coordinates
 // are DPI-scaled points, so "320 points" is 320*scale physical pixels (1.5x
 // on a typical HiDPI desktop — a non-integer ratio the nearest-neighbour
@@ -776,13 +796,14 @@ func menuBarHeight() float32 {
 // canvas and content sizes rather than estimated. Needs a shown, laid-out
 // window: the pre-show path uses the scaleToWindowSize estimate and the
 // post-show correction in desktopMain snaps it exact.
-func resizeForScale(w fyne.Window, percent int) {
+func resizeForScale(w fyne.Window, model roms.SpectrumModel, percent int) {
 	scale := w.Canvas().Scale()
 	if scale <= 0 {
 		scale = 1
 	}
-	imgW := float32(ula.TotalWidth*percent) / 100 / scale
-	imgH := float32(ula.TotalHeight*percent) / 100 / scale
+	uw, uh := displayUnits(model)
+	imgW := float32(uw*percent) / 100 / scale
+	imgH := float32(uh*percent) / 100 / scale
 	canvasSz := w.Canvas().Size()
 	contentSz := w.Content().Size()
 	w.Resize(fyne.NewSize(
@@ -1132,6 +1153,14 @@ func desktopMain() {
 	// switch crosses the ZX80/ZX81 boundary, because those machines have no ULA
 	// or peripheral manager and so cannot use the in-place mem.SwitchModel path
 	// that switches between Spectrum models.
+	// applyDisplayGeometry retargets the window to the current model's frame
+	// shape: the Next and SAM frames are not 4:3 like the classics (see
+	// displayUnits), so a model switch must update the aspect container's
+	// ratio and re-derive the preset window size. Assigned once the aspect
+	// container exists (just before ShowAndRun); both model-switch paths
+	// call it after currentModel is updated.
+	var applyDisplayGeometry func()
+
 	rebuildEmulatorCore := func(newModel roms.SpectrumModel) {
 		wasPaused := emu.paused.Load()
 		if !emu.paused.Load() {
@@ -1186,6 +1215,9 @@ func desktopMain() {
 		currentModel = newModel
 		saveConfig()
 		w.SetTitle(fmt.Sprintf("ZX Spectrum Emulator %s - %s", version.Version, roms.GetModelName(newModel)))
+		if applyDisplayGeometry != nil {
+			applyDisplayGeometry()
+		}
 		if !wasPaused {
 			emu.togglePause()
 		}
@@ -1298,6 +1330,9 @@ func desktopMain() {
 
 		// Update window title to show current model
 		w.SetTitle(fmt.Sprintf("ZX Spectrum Emulator %s - %s", version.Version, roms.GetModelName(currentModel)))
+		if applyDisplayGeometry != nil {
+			applyDisplayGeometry()
+		}
 
 		// Resume emulation if it was running
 		if !wasPaused {
@@ -2242,33 +2277,33 @@ func desktopMain() {
 			cpuSpeedMenuItem(emu),
 		),
 		fyne.NewMenu("View",
-			fyne.NewMenuItem("100% (320x240)", func() {
+			fyne.NewMenuItem("100%", func() {
 				w.SetFullScreen(false)
-				resizeForScale(w, 100)
+				resizeForScale(w, currentModel, 100)
 				currentScale = 100
 				saveConfig()
 			}),
-			fyne.NewMenuItem("125% (400x300)", func() {
+			fyne.NewMenuItem("125%", func() {
 				w.SetFullScreen(false)
-				resizeForScale(w, 125)
+				resizeForScale(w, currentModel, 125)
 				currentScale = 125
 				saveConfig()
 			}),
-			fyne.NewMenuItem("150% (480x360)", func() {
+			fyne.NewMenuItem("150%", func() {
 				w.SetFullScreen(false)
-				resizeForScale(w, 150)
+				resizeForScale(w, currentModel, 150)
 				currentScale = 150
 				saveConfig()
 			}),
-			fyne.NewMenuItem("200% (640x480)", func() {
+			fyne.NewMenuItem("200%", func() {
 				w.SetFullScreen(false)
-				resizeForScale(w, 200)
+				resizeForScale(w, currentModel, 200)
 				currentScale = 200
 				saveConfig()
 			}),
-			fyne.NewMenuItem("300% (960x720)", func() {
+			fyne.NewMenuItem("300%", func() {
 				w.SetFullScreen(false)
-				resizeForScale(w, 300)
+				resizeForScale(w, currentModel, 300)
 				currentScale = 300
 				saveConfig()
 			}),
@@ -2783,7 +2818,10 @@ func desktopMain() {
 
 	// 4:3 aspect ratio container with black letterbox/pillarbox bars
 	blackBG := canvas.NewRectangle(color.Black)
-	aspectScreen := container.New(&aspectRatioLayout{ratio: 4.0 / 3.0}, screen)
+	aspectLayout := &aspectRatioLayout{}
+	initUW, initUH := displayUnits(currentModel)
+	aspectLayout.ratio = float64(initUW) / float64(initUH)
+	aspectScreen := container.New(aspectLayout, screen)
 	// FPS overlay pinned bottom-right via spacers; canvas.Text is not
 	// interactive, so keyboard/mouse events still reach keyboardWidget.
 	fpsOverlay := container.NewVBox(layout.NewSpacer(),
@@ -2796,6 +2834,15 @@ func desktopMain() {
 	w.SetContent(content)
 	w.Canvas().Focus(keyboardWidget)
 
+	applyDisplayGeometry = func() {
+		uw, uh := displayUnits(currentModel)
+		aspectLayout.ratio = float64(uw) / float64(uh)
+		aspectScreen.Refresh()
+		if !w.FullScreen() {
+			resizeForScale(w, currentModel, currentScale)
+		}
+	}
+
 	// The pre-show Resize above could only estimate: the canvas DPI scale
 	// and the menu bar's laid-out height aren't known until the window is
 	// mapped. Snap to the exact device-pixel geometry as soon as they are.
@@ -2805,7 +2852,7 @@ func desktopMain() {
 			done := false
 			fyne.DoAndWait(func() {
 				if c := w.Content(); c != nil && c.Size().Height > 0 && w.Canvas().Scale() > 0 {
-					resizeForScale(w, currentScale)
+					resizeForScale(w, currentModel, currentScale)
 					done = true
 				}
 			})
