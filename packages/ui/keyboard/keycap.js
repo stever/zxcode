@@ -160,20 +160,21 @@ export function drawKey(ctx, {rects, legend = {}, palette, cell}) {
     // The fingertip pad. It follows the key's whole shape, so the L-shaped
     // ENTER gets an L-shaped pad exactly as the moulding does: the piece above
     // runs into the piece below rather than each having its own rounded end.
+    //
+    // EVERY piece starts its pad on its own row's pad line, so the L's lower
+    // arm lines up with the row it sits in just as its upper arm lines up with
+    // the row above. The piece above therefore reaches down to where the piece
+    // below begins, and the two meet there rather than at the row boundary.
     const face = rects.reduce((a, b) => (a.w * a.h >= b.w * b.h ? a : b));
-    const first = rects[0];
-    const last = rects[rects.length - 1];
-    const pads = rects.map((r) => {
-        const isTop = r === first;
-        const isBottom = r === last;
-        const y = r.y + (isTop ? ch * PAD.top : 0);
+    const pads = rects.map((r, i) => {
+        const next = rects[i + 1];
+        const y = r.y + ch * PAD.top;
+        const foot = next ? next.y + ch * PAD.top : r.y + r.h - ch * PAD.bottom;
         return {
             x: r.x + cw * PAD.inset,
             y,
             w: r.w - cw * PAD.inset * 2,
-            h: r.y + r.h - y - (isBottom ? ch * PAD.bottom : 0),
-            isTop,
-            isBottom,
+            h: foot - y,
         };
     });
     const pad = pads.find((p) => p.x === face.x + cw * PAD.inset && p.w === face.w - cw * PAD.inset * 2);
