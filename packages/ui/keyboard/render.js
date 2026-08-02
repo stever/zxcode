@@ -23,6 +23,23 @@ export function drawKeyboard(ctx, image, width, height) {
     ctx.drawImage(image, 0, 0, width, height);
 }
 
+// The parts of a rectangle's top edge that are actually exposed — the stretches
+// with no other rectangle of the same key resting on them. An L-shaped ENTER is
+// one moulding: its lower rectangle only has a gap above it where it juts out
+// past the upper one, and a seam drawn across the whole width would split the
+// key in half.
+function exposedTop(rect, rects) {
+    let spans = [[rect.x, rect.x + rect.w]];
+    for (const other of rects) {
+        if (other === rect || Math.abs(other.y + other.h - rect.y) > 1e-6) continue;
+        const [a, b] = [other.x, other.x + other.w];
+        spans = spans.flatMap(([x0, x1]) => (
+            [[x0, Math.min(x1, a)], [Math.max(x0, b), x1]].filter(([s, e]) => e - s > 1e-6)
+        ));
+    }
+    return spans;
+}
+
 /**
  * Redraw one key as held down.
  *
@@ -40,27 +57,37 @@ export function drawKeyPressed(ctx, image, {rects, width, height, seam}) {
     const ih = image.naturalHeight;
     const sink = Math.max(1, height * SINK);
 
+    const x0 = Math.min(...rects.map((r) => r.x));
+    const y0 = Math.min(...rects.map((r) => r.y));
+    const x1 = Math.max(...rects.map((r) => r.x + r.w));
+    const y1 = Math.max(...rects.map((r) => r.y + r.h));
+
+    ctx.save();
+    // Clip to the key's whole shape, so a key made of several rectangles
+    // travels as the single piece of plastic it is.
+    ctx.beginPath();
     for (const r of rects) {
-        const dx = r.x * width, dy = r.y * height;
-        const dw = r.w * width, dh = r.h * height;
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(dx, dy, dw, dh);
-        ctx.clip();
-
-        // The gap the key has just vacated at its top edge.
-        ctx.fillStyle = seam;
-        ctx.fillRect(dx, dy, dw, sink + 1);
-
-        // The key itself, one step down; its own bottom edge is clipped away,
-        // which is exactly what travel looks like from straight on.
-        ctx.drawImage(image, r.x * iw, r.y * ih, r.w * iw, r.h * ih, dx, dy + sink, dw, dh);
-
-        ctx.fillStyle = SHADE;
-        ctx.fillRect(dx, dy, dw, dh);
-        ctx.restore();
+        ctx.rect(r.x * width, r.y * height, r.w * width, r.h * height);
     }
+    ctx.clip();
+
+    // The key itself, one step down and in one piece; its own bottom edge is
+    // clipped away, which is exactly what travel looks like from straight on.
+    ctx.drawImage(image, x0 * iw, y0 * ih, (x1 - x0) * iw, (y1 - y0) * ih,
+        x0 * width, y0 * height + sink, (x1 - x0) * width, (y1 - y0) * height);
+
+    // The gaps it has just vacated. Drawn after the key, because the step down
+    // drags a slice of whatever sits above the key into them.
+    ctx.fillStyle = seam;
+    for (const r of rects) {
+        for (const [a, b] of exposedTop(r, rects)) {
+            ctx.fillRect(a * width, r.y * height, (b - a) * width, sink + 1);
+        }
+    }
+
+    ctx.fillStyle = SHADE;
+    ctx.fillRect(x0 * width, y0 * height, (x1 - x0) * width, (y1 - y0) * height);
+    ctx.restore();
 }
 
 /**

@@ -64,6 +64,11 @@ describe.each(layouts)('%s layout', (name, layout) => {
         const [top, bottom] = enter.rects;
         expect(bottom.y).toBeGreaterThan(top.y);
         expect(bottom.w).toBeGreaterThan(top.w);
+        // They meet: the renderer keys off that to travel the L as one piece
+        // and to leave a gap only where the lower rectangle is really exposed.
+        expect(top.y + top.h).toBeCloseTo(bottom.y, 6);
+        expect(bottom.x).toBeLessThan(top.x);
+        expect(bottom.x + bottom.w).toBeCloseTo(top.x + top.w, 6);
     });
 
     it('does not overlap keys', () => {
