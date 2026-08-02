@@ -15,9 +15,12 @@
 
 const UNITS = 13.5; // key widths across
 const ROWS = 5;
-// Height / width of the whole keyboard. A row is a touch taller than a key
-// width, which is what both machines measure.
-const ASPECT = 0.3772;
+// Height / width of the whole keyboard: the 48K's rubber keyboard, which is
+// four rows of ten square keys. Every machine's keyboard therefore draws into
+// the SAME box, so switching machine moves nothing on the page. Both these
+// machines measure a shade under it (0.377, a row being a touch taller than a
+// key width), so their keys end up a few percent taller than square.
+const ASPECT = 4 / 10;
 
 const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 const TOP = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'];

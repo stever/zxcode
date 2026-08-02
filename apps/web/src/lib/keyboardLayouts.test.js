@@ -8,6 +8,7 @@ import {
     KEY_ACTIONS, LAYOUTS, baseKeyId, heldKeys, keyRects, layoutAspect, layoutForMachine,
     legendsFor, matrixKey,
 } from "@zxplay/ui/keyboard";
+import {DEFAULT_KEYSTR, keyboardAspect} from "./layout";
 
 const layouts = Object.entries(LAYOUTS);
 
@@ -227,12 +228,18 @@ describe('which keys light up', () => {
     });
 });
 
-describe('both machines draw at one size', () => {
+describe('every keyboard draws at one size', () => {
     it('gives the two layouts the same grid and the same aspect', () => {
         // #212: switching machine must not move anything on the page.
         expect(LAYOUTS.plus.units).toBe(LAYOUTS.next.units);
         expect(LAYOUTS.plus.rows).toBe(LAYOUTS.next.rows);
         expect(layoutAspect('plus')).toBe(layoutAspect('next'));
+    });
+
+    it('draws at the same shape as the 48K rubber keyboard', () => {
+        // Which is the box all three have to share, so the 48K's four rows of
+        // ten square keys set it.
+        expect(layoutAspect('plus')).toBe(keyboardAspect(DEFAULT_KEYSTR));
     });
 });
 

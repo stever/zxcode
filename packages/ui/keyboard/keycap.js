@@ -27,10 +27,11 @@ const SHOULDER_INSET = 0.016;  // dark gap between neighbouring keys
 const SHOULDER_RADIUS = 0.05;
 // The pad reaches almost to the shoulder's edges, and its underside is a
 // single sweeping arc — on a letter key, a circle chopped flat across the top.
-// A key with no E-mode words on its shoulder (the shifts, the dedicated keys)
-// has nothing to leave room for, so its pad starts higher.
-const PAD = {top: 0.335, bareTop: 0.225, bottom: 0.045, inset: 0.065, topRadius: 0.06,
-    corner: 0.42};
+// Every pad starts on the same line, which is where a key carrying E-mode
+// words on its shoulder has to put it: the machines let their bare keys (the
+// shifts, the dedicated keys) start higher, but a row of pads that do not line
+// up reads as a mistake on screen.
+const PAD = {top: 0.335, bottom: 0.045, inset: 0.065, topRadius: 0.06, corner: 0.42};
 
 // Where each legend sits, as a fraction of the cell's height (y) or width (x).
 const EXT_Y = 0.135;
@@ -160,13 +161,12 @@ export function drawKey(ctx, {rects, legend = {}, palette, cell}) {
     // ENTER gets an L-shaped pad exactly as the moulding does: the piece above
     // runs into the piece below rather than each having its own rounded end.
     const face = rects.reduce((a, b) => (a.w * a.h >= b.w * b.h ? a : b));
-    const padTop = (legend.ext || legend.extSym) ? PAD.top : PAD.bareTop;
     const first = rects[0];
     const last = rects[rects.length - 1];
     const pads = rects.map((r) => {
         const isTop = r === first;
         const isBottom = r === last;
-        const y = r.y + (isTop ? ch * padTop : 0);
+        const y = r.y + (isTop ? ch * PAD.top : 0);
         return {
             x: r.x + cw * PAD.inset,
             y,
