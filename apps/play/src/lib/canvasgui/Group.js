@@ -49,16 +49,18 @@ export class Group extends Widget {
                 cuc.onPointerEvent('move', x, y);
             }
         } else if (type == 'end') {
-            if (pointerId in this.cwrb) {
-                if (cuc == this.cwrb[pointerId]) {
-                    this.cwrb[pointerId].onPointerEvent('leave', x, y);
+            // The child that took the press gets the release WHEREVER the
+            // pointer has got to. It used to get it only while the pointer was
+            // still over it, so holding an on-screen key and letting go
+            // somewhere else — including off the canvas, where a mouseout
+            // stands in for the release — left that key lit and, worse, held
+            // down in the machine, so the next key pressed made two.
+            const captured = this.cwrb[pointerId];
+            if (captured) {
+                if (this.cwrb_entered[pointerId]) {
+                    captured.onPointerEvent('leave', x, y);
                 }
-            }
-
-            if (cuc != null) {
-                if (cuc == this.cwrb[pointerId]) {
-                    cuc.onPointerEvent('end', x, y);
-                }
+                captured.onPointerEvent('end', x, y);
             }
 
             delete this.cwrb[pointerId];

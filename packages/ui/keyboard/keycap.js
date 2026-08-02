@@ -245,11 +245,14 @@ function drawLegends(ctx, legend, {face, pad, cw, ch, ink}) {
     }
 
     const stacked = legend.sym && isWord(legend.sym);
-    if (legend.graphic) {
-        // The graphic sits where a letter key's keyword does, with the SYMBOL
-        // SHIFT character beside it.
-        drawGraphic(ctx, legend.graphic, pad.x + pad.w * 0.10, face.y + ch * (HEAD_Y - 0.09),
-            ch * 0.18, ink);
+    // A number key: the graphic sits where a letter key's keyword does, with
+    // the SYMBOL SHIFT character beside it. 9 and 0 have no graphic — the
+    // machines print none — but they carry that character in the same place.
+    if (legend.graphic || (legend.sym && !legend.keyword)) {
+        if (legend.graphic) {
+            drawGraphic(ctx, legend.graphic, pad.x + pad.w * 0.10, face.y + ch * (HEAD_Y - 0.09),
+                ch * 0.18, ink);
+        }
         label(ctx, legend.sym, pad.x + pad.w * 0.70, face.y + ch * HEAD_Y, ch * TEXT * 1.2,
             ink, 'center', pad.w * 0.34);
     } else if (legend.keyword) {
@@ -267,7 +270,7 @@ function drawLegends(ctx, legend, {face, pad, cw, ch, ink}) {
     }
 
     if (!legend.main) return;
-    const hasHead = !!(legend.keyword || legend.graphic);
+    const hasHead = !!(legend.keyword || legend.graphic || (legend.sym && !legend.keyword));
     label(ctx, legend.main, padCentre, hasHead ? face.y + ch * MAIN_Y : pad.y + pad.h / 2,
         ch * MAIN, ink, 'center', pad.w - inset);
 }
