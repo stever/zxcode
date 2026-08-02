@@ -65,7 +65,16 @@ export class SingleWindow extends Group {
             window.addEventListener('resize', this._resizeListener);
         }
 
-        this._setTouchHandler();
+        // Likewise the pointer listeners. They go on the CANVAS, which the host
+        // keeps across a rebuild, and destroy() can only take off the handler
+        // it still has: a second one made here would stay on that canvas for
+        // good, answering clicks for a keyboard that has been replaced and
+        // pressing whatever key used to be under the pointer as well as the one
+        // that is. Only bites when the page's load event arrives after the
+        // keyboard is built, which is why it depends on how fast the page is.
+        if (!this._pehandler) {
+            this._setTouchHandler();
+        }
         this._ondraw();
     }
 
@@ -126,6 +135,7 @@ export class SingleWindow extends Group {
     // detached canvas can be collected and stop responding to window events.
     destroy() {
         // The pointer listeners sit on the canvas, which outlives this window.
+        this.destroyed = true;
         if (this._pehandler) {
             this._pehandler.destroy();
             this._pehandler = null;
@@ -143,6 +153,8 @@ export class SingleWindow extends Group {
         let that = this;
         this._pehandler = new PointerEventHandler(this.canvas);
         this._pehandler.addEventListener(function (e) {
+            // Whatever else happens, a torn-down window answers nothing.
+            if (that.destroyed) return;
             const wox = (e.x - that.xf.x) / that.xf.w;
             const woy = (e.y - that.xf.y) / that.xf.h;
             that.onPointerEvent(e.pointerId, e.type, wox, woy);
