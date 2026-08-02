@@ -7,7 +7,9 @@
 // into its own shadow rather than changing shape.
 
 import {drawKey, PALETTE} from './keycap';
-import {drawRainbow, drawRubberKey, drawRubberKeyPressed, RUBBER_PALETTE} from './rubberkey';
+import {
+    drawRainbow, drawRubberKeyCap, drawRubberKeyCase, drawRubberKeyPressed, RUBBER_PALETTE,
+} from './rubberkey';
 import {legendsFor} from './legends';
 import {baseKeyId, keyRects} from './layouts';
 
@@ -15,6 +17,10 @@ import {baseKeyId, keyRects} from './layouts';
 const SINK = 0.008;
 // How much darker a held key sits.
 const SHADE = 'rgba(0, 0, 0, 0.3)';
+
+// Each rubber keyboard's backdrop — what the caps sit on — kept against the
+// board it belongs to, so the apps carry on passing one canvas around.
+const BACKDROPS = new WeakMap();
 
 /**
  * Draw a whole keyboard into an offscreen canvas.
@@ -32,21 +38,39 @@ export function buildKeyboard(layout, width, height, createCanvas) {
     const rubber = layout.style === 'rubber';
     const palette = rubber ? RUBBER_PALETTE : PALETTE;
     const cell = {w: width / layout.units, h: height / layout.rows};
+    const pixels = (key) => keyRects(key).map((r) => ({
+        x: r.x * width, y: r.y * height, w: r.w * width, h: r.h * height,
+    }));
+    const legendOf = (key) => legends[baseKeyId(key.id)];
 
-    ctx.fillStyle = palette.case;
-    ctx.fillRect(0, 0, width, height);
+    // A rubber key travels far enough to uncover the keyboard behind it, and
+    // what is behind it is not always plain case: the rainbow crosses it, and
+    // the 48K prints its E-mode words there rather than on the rubber. So that
+    // layout keeps a copy of everything BEHIND the caps, which drawKeyPressed
+    // uncovers instead of painting a flat rectangle. The moulded keyboards need
+    // no such thing — a held key there is its own pixels, slid down.
+    const backdrop = rubber ? createCanvas(width, height) : null;
+    const bctx = backdrop ? backdrop.getContext('2d') : ctx;
+
+    bctx.fillStyle = palette.case;
+    bctx.fillRect(0, 0, width, height);
     if (layout.rainbow) {
-        drawRainbow(ctx, {cols: layout.units, rows: layout.rows, width, height});
+        drawRainbow(bctx, {cols: layout.units, rows: layout.rows, width, height});
+    }
+    if (rubber) {
+        // Every rubber key is one square cell, so the cell IS the key.
+        for (const key of layout.keys) {
+            drawRubberKeyCase(bctx, {rect: pixels(key)[0], legend: legendOf(key), palette});
+        }
+        BACKDROPS.set(canvas, backdrop);
+        ctx.drawImage(backdrop, 0, 0);
     }
 
     for (const key of layout.keys) {
-        const rects = keyRects(key).map((r) => ({
-            x: r.x * width, y: r.y * height, w: r.w * width, h: r.h * height,
-        }));
-        const legend = legends[baseKeyId(key.id)];
+        const rects = pixels(key);
+        const legend = legendOf(key);
         if (rubber) {
-            // Every rubber key is one square cell, so the cell IS the key.
-            drawRubberKey(ctx, {rect: rects[0], legend, palette});
+            drawRubberKeyCap(ctx, {rect: rects[0], legend, palette});
         } else {
             drawKey(ctx, {rects, legend, palette, cell});
         }
@@ -101,10 +125,16 @@ export function drawKeyPressed(ctx, board, {rects, width, height, seam, layout, 
     // travels, so it is redrawn rather than slid out of the picture.
     if (layout && layout.style === 'rubber') {
         const r = rects[0];
+        const behind = BACKDROPS.get(board);
         drawRubberKeyPressed(ctx, {
             rect: {x: r.x * width, y: r.y * height, w: r.w * width, h: r.h * height},
             legend,
             palette: RUBBER_PALETTE,
+            backdrop: behind && ((x, y, w, h) => {
+                const sx = behind.width / width;
+                const sy = behind.height / height;
+                ctx.drawImage(behind, x * sx, y * sy, w * sx, h * sy, x, y, w, h);
+            }),
         });
         return;
     }

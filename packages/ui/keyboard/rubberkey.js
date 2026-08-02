@@ -147,7 +147,7 @@ function drawCap(ctx, {rect, legend, palette, sink = 0}) {
 }
 
 /**
- * Draw one rubber key.
+ * Draw the rubber cap of one key, with the legends printed on the rubber.
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {Object} opts
@@ -155,29 +155,54 @@ function drawCap(ctx, {rect, legend, palette, sink = 0}) {
  * @param {Object} opts.legend an entry from the 48K legend table
  * @param {Object} opts.palette RUBBER_PALETTE
  */
-export function drawRubberKey(ctx, {rect, legend = {}, palette}) {
+export function drawRubberKeyCap(ctx, {rect, legend = {}, palette}) {
     drawCap(ctx, {rect, legend, palette});
+}
+
+/**
+ * Draw what one key prints on the CASE — the E-mode words above and below the
+ * cap, or the white CAPS SHIFT function on a number key. Part of the keyboard
+ * rather than of the key: it does not move when the key goes down.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Object} opts as for drawRubberKeyCap
+ */
+export function drawRubberKeyCase(ctx, {rect, legend = {}, palette}) {
     drawCaseLegends(ctx, legend, {rect, palette});
 }
 
 /**
  * Redraw one rubber key as held down: only the cap travels, into the space its
- * shadow occupied. The words printed on the CASE stay where they are, because
- * on the machine they are not on the key at all.
+ * shadow occupied.
  *
  * @param {CanvasRenderingContext2D} ctx
- * @param {Object} opts as for drawRubberKey
+ * @param {Object} opts as for drawRubberKeyCap, plus:
+ * @param {Function} [opts.backdrop] paints the keyboard BEHIND the keys over a
+ *     given rectangle. Without it the patch is filled with the case colour,
+ *     which is only right where nothing is printed behind the key.
  */
-export function drawRubberKeyPressed(ctx, {rect, legend = {}, palette}) {
+export function drawRubberKeyPressed(ctx, {rect, legend = {}, palette, backdrop}) {
     const cap = capRect(rect);
     const margin = rect.h * 0.07; // enough to take the shadow with it
+    const patch = {
+        x: cap.x - margin, y: cap.y - margin,
+        w: cap.w + margin * 2, h: cap.h + margin * 2,
+    };
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(cap.x - margin, cap.y - margin, cap.w + margin * 2, cap.h + margin * 2);
+    ctx.rect(patch.x, patch.y, patch.w, patch.h);
     ctx.clip();
-    ctx.fillStyle = palette.case;
-    ctx.fillRect(cap.x - margin, cap.y - margin, cap.w + margin * 2, cap.h + margin * 2);
+    // Clear the key out of the way by putting back what is behind it. It has
+    // to be the real backdrop rather than the flat case colour: the rainbow
+    // crosses the case behind ENTER and BREAK SPACE, and filling over it drew
+    // a dark rectangle around those two keys whenever they were held.
+    if (backdrop) {
+        backdrop(patch.x, patch.y, patch.w, patch.h);
+    } else {
+        ctx.fillStyle = palette.case;
+        ctx.fillRect(patch.x, patch.y, patch.w, patch.h);
+    }
     drawCap(ctx, {rect, legend, palette, sink: rect.h * SINK});
     ctx.restore();
 }
