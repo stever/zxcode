@@ -21,17 +21,19 @@ const JOYSTICK_TYPES = ['Kempston', 'Sinclair1', 'Sinclair2', 'Cursor'];
 const DEFAULT_KEYSTR = '1234567890,QWERTYUIOP,ASDFGHJKLe,cZXCVBNMs_';
 
 // The "k" query parameter overrides the on-screen keys; otherwise the full
-// keyboard is shown.
+// keyboard is shown. `override` records which it was: a game's own key subset
+// is kept whatever machine is selected, while the default keyboard follows the
+// machine (see resolveKeyboard).
 const loadKeyConfig = () => {
     try {
         const fromUrl = queryString.parse(location.search).k;
         if (typeof fromUrl === 'string' && fromUrl.length > 0) {
-            return parseKeyConfig(fromUrl);
+            return {...parseKeyConfig(fromUrl), override: true};
         }
     } catch (e) {
         console.error('Failed to read keys query parameter:', e);
     }
-    return parseKeyConfig(DEFAULT_KEYSTR);
+    return {...parseKeyConfig(DEFAULT_KEYSTR), override: false};
 };
 
 // Side the keyboard appears on in landscape: 'right' (right-handed, default) or

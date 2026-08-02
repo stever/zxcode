@@ -38,12 +38,37 @@ menu's checkmark follows those switches rather than going stale.
 Older links using `m=5` (Pentagon) still work — the value maps to the 128K,
 the closest supported machine, rather than failing.
 
+### The keyboard matches the machine
+
+The on-screen keyboard is the one the selected machine actually has:
+
+| Machine | Keyboard |
+| --- | --- |
+| 48K | the 40 rubber keys |
+| 128K | the 58-key Spectrum+ / toastrack keyboard |
+| Next | the Next's own 58-key keyboard |
+
+The two 58-key layouts add the keys the 48K makes you type as combinations —
+EDIT, DELETE, GRAPH, EXTEND MODE, CAPS LOCK, TRUE and INV VIDEO, BREAK, the
+cursor keys and `;` `"` `,` `.` — which is what makes the 128K menus, the
+NextZXOS Browser and the BASIC editors usable without a physical keyboard.
+They press the same keys underneath as a real machine does: EDIT holds CAPS
+SHIFT and 1. The on-screen keys show what the machine sees, so a key you
+press lights up, and so does one the running program is holding down.
+
+The 128K and Next keyboards are photographs of those machines rather than
+drawings, so what you press is what the hardware looks like, down to the
+keyword printed on each key.
+
+Switching machines switches the keyboard; nothing to set.
+
 ### Tailoring the keyboard to a game
 
-Most games use four or five keys. Showing a full 40-key Spectrum keyboard on
-a phone makes all of them small. The `k` parameter replaces the on-screen
-keyboard with just the keys your game uses, and the layout resizes to match —
-fewer keys means bigger keys.
+Most games use four or five keys. Showing a full keyboard on a phone makes
+all of them small. The `k` parameter replaces the on-screen keyboard with just
+the keys your game uses, and the layout resizes to match — fewer keys means
+bigger keys. Keys you name this way are kept on every machine, so a game's
+play surface does not change size when the machine does.
 
 The value is comma-separated rows of key characters. Letters and digits are
 themselves; four characters are special:

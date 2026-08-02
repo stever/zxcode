@@ -19,7 +19,7 @@ import AboutPage from "./AboutPage";
 import LinkingPage from "./LinkingPage";
 import ErrorNotFoundPage from "./ErrorNotFoundPage";
 import ErrorPage from "./ErrorPage";
-import {computeMode} from "../lib/layout";
+import {computeMode, resolveKeyboard} from "../lib/layout";
 import clsx from "clsx";
 
 export default function App() {
@@ -28,6 +28,7 @@ export default function App() {
     const width = useSelector(state => state?.window.width);
     const height = useSelector(state => state?.window.height);
     const keyConfig = useSelector(state => state?.app.keyConfig);
+    const machine = useSelector(state => state?.app.machine);
     const pathname = useSelector(state => state?.router.location.pathname);
     const className = clsx('pb-1', isMobile ? 'mobile' : 'desktop');
 
@@ -36,7 +37,7 @@ export default function App() {
     // The wrapper element is kept stable across this toggle (only its class and
     // the nav's presence change) so the routed tree - and the emulator's screen
     // DOM - is never remounted on rotation.
-    const mode = computeMode({width, height, kbAspect: keyConfig.aspect});
+    const mode = computeMode({width, height, kbAspect: resolveKeyboard(keyConfig, machine).aspect});
     const sideHome = !err && pathname === '/' && mode === 'side';
 
     return (

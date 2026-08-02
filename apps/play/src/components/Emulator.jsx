@@ -12,7 +12,8 @@ Emulator.propTypes = {
     kbH: PropTypes.number,
     colW: PropTypes.number,
     side: PropTypes.oneOf(['left', 'right']),
-    keystr: PropTypes.string
+    keystr: PropTypes.string,
+    kbLayout: PropTypes.oneOf(['plus', 'next'])
 }
 
 export function Emulator(props) {
@@ -24,7 +25,7 @@ export function Emulator(props) {
         dispatch(loadEmulator(elem));
     }, []);
 
-    const {mode, height, kbW, kbH, colW, side, keystr} = props;
+    const {mode, height, kbW, kbH, colW, side, keystr, kbLayout} = props;
     const isSide = mode === 'side';
 
     // The emulator's screen DOM is appended into #jsspeccy-screen once
@@ -34,7 +35,8 @@ export function Emulator(props) {
     // taking the imperatively-attached canvas with it (#190: rotating a phone
     // to landscape blanked the screen for good).
     const screen = <div id="jsspeccy-screen" style={{flex: '0 0 auto'}}/>;
-    const keyboard = <Keyboard cssWidth={kbW} cssHeight={kbH} keystr={keystr} rounded={!isSide && !isMobile}/>;
+    const keyboard = <Keyboard cssWidth={kbW} cssHeight={kbH} keystr={keystr} layout={kbLayout}
+                               rounded={!isSide && !isMobile}/>;
 
     return (
         <div

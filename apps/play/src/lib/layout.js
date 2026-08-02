@@ -1,3 +1,5 @@
+import {layoutForMachine, layoutAspect} from "@zxplay/ui/keyboard";
+
 // Pure, viewport-driven layout for the emulator + on-screen keyboard.
 //
 // Screen aspect is 5:4 (the zxplay_go engine composites every machine into a
@@ -34,6 +36,27 @@ export function parseKeyConfig(keystr) {
     }
 
     return {keystr, rowCount: rows.length, maxCols, aspect};
+}
+
+/**
+ * Decide which keyboard the player gets, and the shape it draws at.
+ *
+ * A game that names its own keys (the "k" query parameter) keeps them on every
+ * machine — a five-key play surface is the point, and it stays the same size on
+ * a phone. Otherwise the keyboard matches the machine: the 128K gets the
+ * Spectrum+ / toastrack layout, the Next its own, and the 48K the rubber keys
+ * it has always had.
+ *
+ * @param {{keystr:String, aspect:Number, override:Boolean}} keyConfig
+ * @param {Number|String} machine
+ * @returns {{layout:(String|null), keystr:(String|null), aspect:Number}}
+ */
+export function resolveKeyboard(keyConfig, machine) {
+    const layout = keyConfig.override ? null : layoutForMachine(machine);
+    if (!layout) {
+        return {layout: null, keystr: keyConfig.keystr, aspect: keyConfig.aspect};
+    }
+    return {layout, keystr: null, aspect: layoutAspect(layout)};
 }
 
 /**

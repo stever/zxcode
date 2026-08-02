@@ -1,3 +1,5 @@
+import {layoutForMachine, layoutAspect} from "@zxplay/ui/keyboard";
+
 // Pure, viewport-driven layout for the editor + emulator across orientations.
 //
 // The emulator stacks a 4:3 screen above the on-screen keyboard, so its total
@@ -50,6 +52,36 @@ export function keyboardAspect(keystr) {
         aspect += 1 / len;
     }
     return aspect;
+}
+
+/**
+ * Whether the "k" query parameter names its own keys.
+ * @returns {Boolean}
+ */
+export function hasKeystrOverride() {
+    try {
+        return !!new URL(window.location.href).searchParams.get('k');
+    } catch (e) {
+        return false; // A malformed URL names nothing.
+    }
+}
+
+/**
+ * Decide which keyboard is drawn, and the shape it draws at.
+ *
+ * Keys named by the "k" parameter are kept on every machine. Otherwise the
+ * keyboard matches the machine: the 128K gets the Spectrum+ / toastrack
+ * layout, the Next its own, and the 48K the rubber keys it has always had.
+ *
+ * @param {Number|String} machine
+ * @returns {{layout:(String|null), aspect:Number}}
+ */
+export function resolveKeyboard(machine) {
+    const layout = hasKeystrOverride() ? null : layoutForMachine(machine);
+    return {
+        layout,
+        aspect: layout ? layoutAspect(layout) : keyboardAspect(currentKeystr()),
+    };
 }
 
 /**

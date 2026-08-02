@@ -36,10 +36,12 @@ export class SingleWindow extends Group {
         // image manager
         this.imagemgr = new ImageManager(this);
 
-        let that = this;
-        window.addEventListener('load', function () {
-            that._onload();
-        });
+        // Keep references to window-level listeners so destroy() can remove
+        // them when the host component unmounts; otherwise stale instances keep
+        // firing against a detached canvas.
+        this._loadListener = () => this._onload();
+        this._resizeListener = null;
+        window.addEventListener('load', this._loadListener);
     }
 
     _onload() {
@@ -56,10 +58,12 @@ export class SingleWindow extends Group {
 
         this._onresize();
 
-        let that = this;
-        window.addEventListener('resize', function () {
-            that._onresize();
-        })
+        // _onload may run more than once (manual call + window 'load' event);
+        // only register the resize listener once.
+        if (!this._resizeListener) {
+            this._resizeListener = () => this._onresize();
+            window.addEventListener('resize', this._resizeListener);
+        }
 
         this._setTouchHandler();
         this._ondraw();
@@ -67,6 +71,10 @@ export class SingleWindow extends Group {
 
     _onresize() {
         if (this.dolog) console.log("SingleWindow._onresize");
+
+        // Defensive: destroy() removes the listeners and nulls the canvas, but
+        // guard in case a queued event still reaches here without one.
+        if (!this.canvas) return;
 
         this.wi.w = this.dst.w;
         this.wi.h = this.dst.h;
@@ -94,6 +102,9 @@ export class SingleWindow extends Group {
         // this.ctx.fillStyle = this.outerColor;
         // this.ctx.fillRect(0, 0, this.wi.w, this.wi.h);
 
+        // Deferred redraws (e.g. image loads) can fire after the canvas is gone.
+        if (!this.ctx) return;
+
         this._setTransform(this.xf.x, this.xf.y, this.xf.w, this.xf.h);
         this.ctx.fillStyle = this.bgColor;
         this.ctx.fillRect(0, 0, this.wo.w, this.wo.h);
@@ -108,6 +119,19 @@ export class SingleWindow extends Group {
     setTargetSize(w, h) {
         this.dst.w = w;
         this.dst.h = h;
+    }
+
+    // Remove the window-level listeners and release the canvas. Hosts must call
+    // this on teardown (e.g. a React effect cleanup) so the instance and its
+    // detached canvas can be collected and stop responding to window events.
+    destroy() {
+        window.removeEventListener('load', this._loadListener);
+        if (this._resizeListener) {
+            window.removeEventListener('resize', this._resizeListener);
+            this._resizeListener = null;
+        }
+        this.canvas = null;
+        this.ctx = null;
     }
 
     _setTouchHandler() {

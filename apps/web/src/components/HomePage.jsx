@@ -11,7 +11,7 @@ import {reset} from "../redux/jsspeccy/actions";
 import {showToastsForErrorItems} from "../errors";
 import {selectHasUnsavedChanges} from "../redux/project/selectors";
 import {useTranslation, Trans} from "@zxplay/i18n";
-import {computeMode, currentKeystr, keyboardAspect, tabEmulatorWidth} from "../lib/layout";
+import {computeMode, resolveKeyboard, tabEmulatorWidth} from "../lib/layout";
 import {login} from "../auth";
 
 export default function HomePage() {
@@ -24,6 +24,7 @@ export default function HomePage() {
     const windowWidth = useSelector(state => state?.window.width);
     const windowHeight = useSelector(state => state?.window.height);
     const userId = useSelector(state => state?.identity.userId);
+    const machine = useSelector(state => state?.app.machine);
 
     // Both machines share one neutral BASIC sample, so the tab is just "BASIC".
     // The editor still highlights the machine's dialect and the run saga routes
@@ -33,7 +34,9 @@ export default function HomePage() {
     const toast = useRef(null);
 
     const mode = computeMode(windowWidth, windowHeight);
-    const kbAspect = keyboardAspect(currentKeystr());
+    // The 128K and the Next draw their own keyboards, a different shape
+    // from the 48K rubber grid, so the machine feeds the layout maths.
+    const kbAspect = resolveKeyboard(machine).aspect;
     // The identity saga resolves userId to null when logged out; while it is
     // still undefined the notice is held back to avoid flashing it at users
     // who are about to be recognised as logged in.

@@ -88,7 +88,11 @@ some degree; see [Debugging in the browser](ide-debugging.html) for what each
 one can do and how it works.
 
 The emulator has the on-screen Spectrum keyboard available, so you can drive
-programs that expect specific keys on a machine with no such keys.
+programs that expect specific keys on a machine with no such keys. It matches
+the machine you are building for: the 48K's rubber keys, the 128K's Spectrum+
+/ toastrack keyboard, or the Next's own — the last two carrying the dedicated
+EDIT, DELETE, GRAPH, EXTEND MODE, TRUE/INV VIDEO, BREAK and cursor keys that
+the 128K menus and the NextZXOS Browser expect.
 
 ## Sharing your work
 

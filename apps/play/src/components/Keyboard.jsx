@@ -1,11 +1,15 @@
 import React, {useEffect} from "react";
 import PropTypes from "prop-types";
-import {ImageButton, SingleWindow} from "../lib/canvasgui";
+import {ImageButton, Control, SingleWindow} from "../lib/canvasgui";
+import {
+    KEY_ACTIONS, LAYOUTS, baseKeyId, drawKeyboard, drawKeyPressed, heldKeys, keyRects, matrixKey,
+} from "@zxplay/ui/keyboard";
 
 Keyboard.propTypes = {
     cssWidth: PropTypes.number,
     cssHeight: PropTypes.number,
     keystr: PropTypes.string,
+    layout: PropTypes.oneOf(['plus', 'next']),
     rounded: PropTypes.bool
 }
 
@@ -14,12 +18,17 @@ Keyboard.propTypes = {
 // back through the internal/CSS scale ratio, so scaling is safe.
 const BASE_WIDTH = 640;
 
+// The machine keyboards are photographs, rendered at twice the nominal width:
+// the printed legends are small, and the extra resolution is what keeps them
+// readable once the canvas is scaled down to the layout's width.
+const PHOTO_SCALE = 2;
+
 export function Keyboard(props) {
-    const keystr = props.keystr;
+    const {keystr, layout} = props;
 
     useEffect(() => {
-        return renderKeyboard(BASE_WIDTH, keystr);
-    }, [keystr]);
+        return renderKeyboard(layout ? BASE_WIDTH * PHOTO_SCALE : BASE_WIDTH, keystr, layout);
+    }, [keystr, layout]);
 
     const cssWidth = props.cssWidth || BASE_WIDTH;
     const cssHeight = props.cssHeight;
@@ -62,37 +71,24 @@ export function Keyboard(props) {
 // c: [caps   shift] shift
 // s: [symbol shift] ctrl
 //
-const keyCodes = {
-    '0': 48, '1': 49, '2': 50, '3': 51, '4': 52,
-    '5': 53, '6': 54, '7': 55, '8': 56, '9': 57,
-    A: 65, B: 66, C: 67, D: 68, E: 69,
-    F: 70, G: 71, H: 72, I: 73, J: 74,
-    K: 75, L: 76, M: 77, N: 78, O: 79,
-    P: 80, Q: 81, R: 82, S: 83, T: 84,
-    U: 85, V: 86, W: 87, X: 88, Y: 89,
-    Z: 90, e: 13, c: 16, s: 17, _: 32,
+// The characters a "k" key string may name, mapped to the ids of KEY_ACTIONS.
+const keystrKeys = {
+    '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
+    '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
+    A: 'A', B: 'B', C: 'C', D: 'D', E: 'E',
+    F: 'F', G: 'G', H: 'H', I: 'I', J: 'J',
+    K: 'K', L: 'L', M: 'M', N: 'N', O: 'O',
+    P: 'P', Q: 'Q', R: 'R', S: 'S', T: 'T',
+    U: 'U', V: 'V', W: 'W', X: 'X', Y: 'Y',
+    Z: 'Z', e: 'ENTER', c: 'CAPS', s: 'SYMBOL', _: 'SPACE',
 };
 
 const imgExceptions = {
-    e: 'ENT',
-    c: 'CAP',
-    s: 'SYM',
-    _: 'SPC',
+    ENTER: 'ENT',
+    CAPS: 'CAP',
+    SYMBOL: 'SYM',
+    SPACE: 'SPC',
 }
-
-// Spectrum keyboard matrix position (row, mask) of each drawable key — must
-// match the emulator's SPECCY table (packages/emulator KeyboardHandler.js).
-// Used to mirror the machine's real key state onto the on-screen keys.
-const matrixByCh = {
-    '1': [3, 1], '2': [3, 2], '3': [3, 4], '4': [3, 8], '5': [3, 16],
-    '6': [4, 16], '7': [4, 8], '8': [4, 4], '9': [4, 2], '0': [4, 1],
-    Q: [2, 1], W: [2, 2], E: [2, 4], R: [2, 8], T: [2, 16],
-    Y: [5, 16], U: [5, 8], I: [5, 4], O: [5, 2], P: [5, 1],
-    A: [1, 1], S: [1, 2], D: [1, 4], F: [1, 8], G: [1, 16],
-    H: [6, 16], J: [6, 8], K: [6, 4], L: [6, 2], e: [6, 1],
-    c: [0, 1], Z: [0, 2], X: [0, 4], C: [0, 8], V: [0, 16],
-    B: [7, 16], N: [7, 8], M: [7, 4], s: [7, 2], _: [7, 1],
-};
 
 /**
  * Simulate a key event.
@@ -111,6 +107,18 @@ function simulateKey(keyCode, type) {
     // without the canvas needing focus.
     const screen = document.querySelector('#jsspeccy-screen canvas');
     (screen || document).dispatchEvent(event);
+}
+
+// Press (and release) every code a key stands for. Single-code keys are the
+// letters and digits; the dedicated keys of the Spectrum+ / Next keyboards name
+// two, a shift and a key, which is exactly what a physical keyboard sends when
+// you hold Shift and press 1 for EDIT. Releasing in reverse order leaves the
+// shift down until its partner has lifted, as a real hand would.
+function pressKey(codes, down) {
+    const order = down ? codes : [...codes].reverse();
+    for (const code of order) {
+        simulateKey(code, down ? 'down' : 'up');
+    }
 }
 
 // Geometry of the 132x132 key artwork, as fractions of the image size. The
@@ -143,17 +151,19 @@ const SINK = 3 / 132;
 const PANEL_STRIP = {y: 25 / 132, h: 5 / 132};
 
 class MyImageButton extends ImageButton {
-    constructor(parent, x, y, w, h, suffix, keyCode) {
+    constructor(parent, x, y, w, h, suffix, codes) {
         super(parent, x, y, w, h, '/keys/key' + suffix + '.png', '/keys/keyNONE.png');
-        this.keyCode = keyCode;
         this.face = FACE_OVERRIDES[suffix] || FACE;
+        const win = parent.win;
 
-        this.on_begin = this.on_enter = function () {
-            simulateKey(keyCode, 'down');
+        this.on_begin = this.on_enter = () => {
+            win.pointerKey = this;
+            pressKey(codes, true);
         }
 
-        this.on_end = this.on_leave = function () {
-            simulateKey(keyCode, 'up');
+        this.on_end = this.on_leave = () => {
+            if (win.pointerKey === this) win.pointerKey = null;
+            pressKey(codes, false);
         }
     }
 
@@ -201,88 +211,93 @@ class MyImageButton extends ImageButton {
     }
 }
 
-function renderKeyboard(width, keystr) {
-    if (!keystr) {
-        keystr = '1234567890,QWERTYUIOP,ASDFGHJKLe,cZXCVBNMs_';
-        // let keystr = '-W-P,ASDe,123456789M';    // snake
-        // let keystr = 'GH-e,OP-Z';    // manic miner
-        // let keystr = 'OPeZ'; // manic miner simple
+// The photograph of the machine's keyboard, behind the keys. It never takes a
+// pointer: the keys sit on top of it and do that.
+class KeyboardImage extends Control {
+    constructor(parent, image, width, height) {
+        super(parent, 0, 0, width, height);
+        this.image = image;
+    }
 
-        const url = new URL(window.location.href);
-        for (const [key, value] of url.searchParams) {
-            if (key === 'k') {
-                keystr = value;
-            }
+    isPointerInside() {
+        return false;
+    }
+
+    onDraw(ctx) {
+        drawKeyboard(ctx, this.image, this.w, this.h);
+    }
+}
+
+// One key of a photographed keyboard. There is nothing to draw until it is
+// held — the photograph already shows it — and it hit-tests against the key's
+// own rectangles rather than its bounding box, or the notch of the L-shaped
+// ENTER would steal the corner of the key beside it.
+class PhotoKey extends Control {
+    constructor(parent, layout, key, image, width, height, codes) {
+        const rects = keyRects(key);
+        const left = Math.min(...rects.map((r) => r.x)) * width;
+        const top = Math.min(...rects.map((r) => r.y)) * height;
+        const right = Math.max(...rects.map((r) => r.x + r.w)) * width;
+        const bottom = Math.max(...rects.map((r) => r.y + r.h)) * height;
+        super(parent, left, top, right - left, bottom - top);
+
+        this.rects = rects;
+        this.image = image;
+        this.boardW = width;
+        this.boardH = height;
+        this.seam = layout.seam;
+        const win = parent.win;
+
+        this.on_begin = this.on_enter = () => {
+            win.pointerKey = this;
+            pressKey(codes, true);
+        }
+
+        this.on_end = this.on_leave = () => {
+            if (win.pointerKey === this) win.pointerKey = null;
+            pressKey(codes, false);
         }
     }
 
-    let height = 0;
-
-    const btnrows = [];
-    const buttonsByMatrix = {};
-
-    const keyrows = keystr.split(',');
-    for (let j = 0; j < keyrows.length; j++) {
-        const keyrow = keyrows[j];
-
-        let rowlen = keyrow.length;
-        if (rowlen === 0) continue;
-        if (rowlen > 10) rowlen = 10;
-
-        const d = width / rowlen;
-        const btnrow = {d: d, chs: []};
-
-        for (let i = 0; i < rowlen; i++) {
-            let ch = keyrow.charAt(i);
-
-            if (!(ch in keyCodes)) {
-                ch = '-';
-            }
-
-            btnrow.chs.push(ch);
-        }
-
-        btnrows.push(btnrow);
-        height += d;
+    isPointerInside(x, y) {
+        return this.rects.some((r) => (
+            x >= r.x * this.boardW && x <= (r.x + r.w) * this.boardW
+            && y >= r.y * this.boardH && y <= (r.y + r.h) * this.boardH
+        ));
     }
 
-    // console.log(btnrows)
+    onDraw(ctx) {
+        if (!this.pressed) return;
+        drawKeyPressed(ctx, this.image, {
+            rects: this.rects,
+            width: this.boardW,
+            height: this.boardH,
+            seam: this.seam,
+        });
+    }
+}
 
+/**
+ * Draw the on-screen keyboard and wire it to the emulator.
+ *
+ * @param {Number} width canvas width, in pixels
+ * @param {String} keystr the keys to draw, when a game names its own
+ * @param {String} layout a machine keyboard layout ('plus' or 'next'), when it does not
+ * @returns {Function} cleanup for the host effect
+ */
+function renderKeyboard(width, keystr, layout) {
     const win = new SingleWindow('virtkeys');
-    win.setTargetSize(width, height);
+    // Every drawable key, with the matrix positions it holds down.
+    const keys = [];
+    const registerKey = (btn, positions) => {
+        btn.positions = positions;
+        keys.push(btn);
+    };
 
-    let x = 0;
-    let y = 0;
-    for (let j = 0; j < btnrows.length; j++) {
-        const btnrow = btnrows[j];
-        const d = btnrow.d;
-
-        x = 0;
-        for (let i = 0; i < btnrow.chs.length; i++) {
-            const ch = btnrow.chs[i];
-
-            if (ch === '-') {
-                new ImageButton(win, x, y, d, d, '/keys/keyNONE.png', '/keys/keyNONE.png');
-            } else {
-                let suffix = ch;
-
-                if (suffix in imgExceptions) {
-                    suffix = imgExceptions[ch];
-                }
-
-                let code = keyCodes[ch];
-                const btn = new MyImageButton(win, x, y, d, d, suffix, code);
-                const [row, mask] = matrixByCh[ch];
-                const matrixKey = row * 256 + mask;
-                (buttonsByMatrix[matrixKey] = buttonsByMatrix[matrixKey] || []).push(btn);
-
-                // console.log(x, y, d, d, suffix, code);
-            }
-
-            x += d;
-        }
-
-        y += d;
+    if (layout) {
+        layoutMachineKeyboard(win, width, LAYOUTS[layout], registerKey);
+    } else {
+        layoutRubberKeyboard(win, width, keystr, registerKey);
     }
 
     win._onload();
@@ -295,14 +310,21 @@ function renderKeyboard(width, keystr) {
     // while the emulator is trapping keys (or from the virtual keys), and
     // the emulator releases everything on focus loss, so no key can stick.
     // Render-only: the key callbacks never fire from here.
+    //
+    // heldKeys decides which of the drawn keys that accounts for: pressing
+    // EDIT lights EDIT alone, not EDIT and CAPS SHIFT and 1.
+    const down = new Set();
     const reflect = (evt) => {
-        const {row, mask, down} = evt.detail;
-        const buttons = buttonsByMatrix[row * 256 + mask];
-        if (!buttons) return;
+        const {row, mask, down: isDown} = evt.detail;
+        const key = matrixKey(row, mask);
+        if (isDown) down.add(key); else down.delete(key);
+
+        const held = heldKeys(keys, down, win.pointerKey);
         let redraw = false;
-        for (const btn of buttons) {
-            if (btn.pressed !== down) {
-                btn.pressed = down;
+        for (const btn of keys) {
+            const lit = held.has(btn);
+            if (btn.pressed !== lit) {
+                btn.pressed = lit;
                 redraw = true;
             }
         }
@@ -317,5 +339,70 @@ function renderKeyboard(width, keystr) {
     // level and must not outlive this keyboard instance.
     return () => {
         document.removeEventListener('zx-matrix-key', reflect);
+        win.destroy();
     };
+}
+
+// The 48K's rubber keys, or the subset a game named: a uniform square grid of
+// photographic key art, at most ten to a row.
+function layoutRubberKeyboard(win, width, keystr, registerKey) {
+    if (!keystr) {
+        keystr = '1234567890,QWERTYUIOP,ASDFGHJKLe,cZXCVBNMs_';
+        // let keystr = '-W-P,ASDe,123456789M';    // snake
+        // let keystr = 'GH-e,OP-Z';    // manic miner
+        // let keystr = 'OPeZ'; // manic miner simple
+
+        const url = new URL(window.location.href);
+        for (const [key, value] of url.searchParams) {
+            if (key === 'k') {
+                keystr = value;
+            }
+        }
+    }
+
+    const rows = keystr.split(',').filter((row) => row.length > 0);
+    const height = rows.reduce((total, row) => total + width / Math.min(row.length, 10), 0);
+
+    win.setTargetSize(width, height);
+
+    let y = 0;
+    for (const row of rows) {
+        const cols = Math.min(row.length, 10);
+        const d = width / cols;
+
+        for (let i = 0; i < cols; i++) {
+            const id = keystrKeys[row.charAt(i)];
+            const x = i * d;
+
+            if (!id) {
+                new ImageButton(win, x, y, d, d, '/keys/keyNONE.png', '/keys/keyNONE.png');
+                continue;
+            }
+
+            const action = KEY_ACTIONS[id];
+            const suffix = imgExceptions[id] || id;
+            const btn = new MyImageButton(win, x, y, d, d, suffix, action.codes);
+            registerKey(btn, action.matrix);
+        }
+
+        y += d;
+    }
+}
+
+// A machine's own keyboard: the Spectrum+ / 128K toastrack or the Next. The
+// photograph goes down once and each key is an invisible control over the key
+// it can see, so an idle keyboard costs one drawImage.
+function layoutMachineKeyboard(win, width, layout, registerKey) {
+    const height = Math.round(width * layout.aspect);
+    const image = win.imagemgr.imageForPath(layout.image);
+
+    win.bgColor = layout.seam;
+    win.setTargetSize(width, height);
+    new KeyboardImage(win, image, width, height);
+
+    for (const key of layout.keys) {
+        const action = KEY_ACTIONS[baseKeyId(key.id)];
+        const btn = new PhotoKey(win, layout, key, image, width, height, action.codes);
+        registerKey(btn, action.matrix);
+    }
 }

@@ -3,7 +3,7 @@ import {useDispatch, useSelector} from "react-redux";
 import {Toast} from "primereact/toast";
 import {Emulator} from "./Emulator";
 import {reset, setZoom} from "../redux/jsspeccy/actions";
-import {computeLayout} from "../lib/layout";
+import {computeLayout, resolveKeyboard} from "../lib/layout";
 
 export default function HomePage() {
     const dispatch = useDispatch();
@@ -14,8 +14,13 @@ export default function HomePage() {
     const height = useSelector(state => state?.window.height);
     const keyConfig = useSelector(state => state?.app.keyConfig);
     const keyboardSide = useSelector(state => state?.app.keyboardSide);
+    const machine = useSelector(state => state?.app.machine);
 
     const [navHeight, setNavHeight] = useState(0);
+
+    // The 128K and the Next draw their own keyboards, which are a different
+    // shape from the 48K's rubber grid, so the machine feeds the layout maths.
+    const keyboard = resolveKeyboard(keyConfig, machine);
 
     // Measure the nav bar so the landscape layout can use the remaining height.
     useLayoutEffect(() => {
@@ -27,7 +32,7 @@ export default function HomePage() {
         width,
         height,
         navHeight,
-        kbAspect: keyConfig.aspect,
+        kbAspect: keyboard.aspect,
         side: keyboardSide
     });
 
@@ -67,7 +72,8 @@ export default function HomePage() {
                 kbH={layout.kbH}
                 colW={layout.colW}
                 side={layout.side}
-                keystr={keyConfig.keystr}
+                keystr={keyboard.keystr}
+                kbLayout={keyboard.layout}
             />
         </>
     )
