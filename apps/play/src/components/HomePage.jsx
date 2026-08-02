@@ -15,12 +15,14 @@ export default function HomePage() {
     const keyConfig = useSelector(state => state?.app.keyConfig);
     const keyboardSide = useSelector(state => state?.app.keyboardSide);
     const machine = useSelector(state => state?.app.machine);
+    const keyboardLayout = useSelector(state => state?.app.keyboardLayout);
 
     const [navHeight, setNavHeight] = useState(0);
 
     // The 128K and the Next draw their own keyboards, which are a different
-    // shape from the 48K's rubber grid, so the machine feeds the layout maths.
-    const keyboard = resolveKeyboard(keyConfig, machine);
+    // shape from the 48K's rubber grid, so the machine — or the player's own
+    // choice of keyboard — feeds the layout maths.
+    const keyboard = resolveKeyboard(keyConfig, machine, keyboardLayout);
 
     // Measure the nav bar so the landscape layout can use the remaining height.
     useLayoutEffect(() => {

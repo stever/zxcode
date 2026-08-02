@@ -1,4 +1,5 @@
 import queryString from "query-string";
+import {KEYBOARD_CHOICES} from "@zxplay/ui/keyboard";
 import {actionTypes} from "./actions";
 import {parseKeyConfig} from "../../lib/layout";
 
@@ -8,6 +9,7 @@ import {parseKeyConfig} from "../../lib/layout";
 
 const MACHINE_KEY = 'machine';
 const KEYBOARD_SIDE_KEY = 'keyboardSide';
+const KEYBOARD_LAYOUT_KEY = 'keyboardLayout';
 const JOYSTICK_KEY = 'joystick';
 
 // Joystick interfaces the host gamepad can drive. A game reads exactly one
@@ -46,6 +48,18 @@ const loadKeyboardSide = () => {
         console.error('Failed to load keyboard side preference:', e);
     }
     return 'right';
+};
+
+// Which keyboard is drawn: 'auto' (the machine's own) or one named outright.
+// Persisted like the side it appears on.
+const loadKeyboardLayout = () => {
+    try {
+        const saved = localStorage.getItem(KEYBOARD_LAYOUT_KEY);
+        if (KEYBOARD_CHOICES.includes(saved)) return saved;
+    } catch (e) {
+        console.error('Failed to load keyboard layout preference:', e);
+    }
+    return 'auto';
 };
 
 const loadJoystick = () => {
@@ -99,6 +113,7 @@ const initialState = {
     machineLocked: machineState.machineLocked,
     keyConfig: loadKeyConfig(),
     keyboardSide: loadKeyboardSide(),
+    keyboardLayout: loadKeyboardLayout(),
     joystick: loadJoystick()
 };
 
@@ -146,6 +161,19 @@ function setKeyboardSide(state, action) {
     }
 }
 
+function setKeyboardLayout(state, action) {
+    if (!KEYBOARD_CHOICES.includes(action.layout)) return state;
+    try {
+        localStorage.setItem(KEYBOARD_LAYOUT_KEY, action.layout);
+    } catch (e) {
+        console.error('Failed to save keyboard layout preference:', e);
+    }
+    return {
+        ...state,
+        keyboardLayout: action.layout
+    }
+}
+
 function setJoystick(state, action) {
     if (!JOYSTICK_TYPES.includes(action.joystick)) return state;
     try {
@@ -169,6 +197,7 @@ const actionsMap = {
     [actionTypes.setMachine]: setMachine,
     [actionTypes.machineChanged]: setMachine,
     [actionTypes.setKeyboardSide]: setKeyboardSide,
+    [actionTypes.setKeyboardLayout]: setKeyboardLayout,
     [actionTypes.setJoystick]: setJoystick,
     [actionTypes.joystickChanged]: setJoystick,
 };

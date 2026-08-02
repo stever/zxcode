@@ -7,6 +7,7 @@ export const actionTypes = {
     receivePrivacyPolicy: 'app/receivePrivacyPolicy',
     toggleLineNumbers: 'app/toggleLineNumbers',
     toggleBreakpointGutter: 'app/toggleBreakpointGutter',
+    setKeyboardLayout: 'app/setKeyboardLayout',
     setMachine: 'app/setMachine',
     machineChanged: 'app/machineChanged',
     setJoystick: 'app/setJoystick',
@@ -48,6 +49,14 @@ export const toggleBreakpointGutter = (enabled) => ({
     type: actionTypes.toggleBreakpointGutter,
     enabled
 })
+
+// Which on-screen keyboard is drawn: 'auto' follows the machine, and the three
+// layout names pin one. What you are building for and what the program you are
+// running expects are not always the same keyboard.
+export const setKeyboardLayout = (layout) => ({
+    type: actionTypes.setKeyboardLayout,
+    layout
+});
 
 export const setMachine = (machine) => ({
     type: actionTypes.setMachine,

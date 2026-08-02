@@ -8,6 +8,7 @@ export const actionTypes = {
     setMachine: 'app/setMachine',
     machineChanged: 'app/machineChanged',
     setKeyboardSide: 'app/setKeyboardSide',
+    setKeyboardLayout: 'app/setKeyboardLayout',
     setJoystick: 'app/setJoystick',
     joystickChanged: 'app/joystickChanged',
 };
@@ -36,6 +37,14 @@ export const machineChanged = (machine) => ({
 export const setKeyboardSide = (side) => ({
     type: actionTypes.setKeyboardSide,
     side
+})
+
+// Which on-screen keyboard is drawn: 'auto' follows the machine, and the three
+// layout names pin one. A machine can be running something its own keyboard
+// does not suit, so the choice stays with the player.
+export const setKeyboardLayout = (layout) => ({
+    type: actionTypes.setKeyboardLayout,
+    layout
 })
 
 // Which joystick interface the host gamepad drives. Games read exactly one

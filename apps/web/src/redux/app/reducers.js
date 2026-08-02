@@ -1,4 +1,5 @@
 import queryString from "query-string";
+import {KEYBOARD_CHOICES} from "@zxplay/ui/keyboard";
 import {actionTypes} from "./actions";
 
 // -----------------------------------------------------------------------------
@@ -32,6 +33,7 @@ const loadBreakpointGutter = () => {
 };
 
 const MACHINE_KEY = 'machine';
+const KEYBOARD_LAYOUT_KEY = 'keyboardLayout';
 const JOYSTICK_KEY = 'joystick';
 
 // Joystick interfaces the host gamepad can drive. A game reads exactly one
@@ -39,6 +41,17 @@ const JOYSTICK_KEY = 'joystick';
 // default: it is the commonest interface, and the emulator fits it on every
 // machine, so it is never a wrong-but-harmful choice.
 const JOYSTICK_TYPES = ['Kempston', 'Sinclair1', 'Sinclair2', 'Cursor'];
+
+// Which keyboard is drawn: 'auto' (the machine's own) or one named outright.
+const loadKeyboardLayout = () => {
+    try {
+        const saved = localStorage.getItem(KEYBOARD_LAYOUT_KEY);
+        if (KEYBOARD_CHOICES.includes(saved)) return saved;
+    } catch (e) {
+        console.error('Failed to load keyboard layout preference:', e);
+    }
+    return 'auto';
+};
 
 const loadJoystick = () => {
     try {
@@ -91,6 +104,7 @@ const initialState = {
     breakpointGutter: loadBreakpointGutter(),
     machine: machineState.machine,
     machineLocked: machineState.machineLocked,
+    keyboardLayout: loadKeyboardLayout(),
     joystick: loadJoystick()
 };
 
@@ -153,6 +167,19 @@ function setMachine(state, action) {
 // Reducer
 // -----------------------------------------------------------------------------
 
+function setKeyboardLayout(state, action) {
+    if (!KEYBOARD_CHOICES.includes(action.layout)) return state;
+    try {
+        localStorage.setItem(KEYBOARD_LAYOUT_KEY, action.layout);
+    } catch (e) {
+        console.error('Failed to save keyboard layout preference:', e);
+    }
+    return {
+        ...state,
+        keyboardLayout: action.layout
+    }
+}
+
 function setJoystick(state, action) {
     if (!JOYSTICK_TYPES.includes(action.joystick)) return state;
     try {
@@ -173,6 +200,7 @@ const actionsMap = {
     [actionTypes.toggleBreakpointGutter]: toggleBreakpointGutter,
     [actionTypes.setMachine]: setMachine,
     [actionTypes.machineChanged]: setMachine,
+    [actionTypes.setKeyboardLayout]: setKeyboardLayout,
     [actionTypes.setJoystick]: setJoystick,
     [actionTypes.joystickChanged]: setJoystick,
 };

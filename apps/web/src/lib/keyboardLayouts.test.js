@@ -5,10 +5,10 @@
 // engine, or a single press lighting several keys — are checked here.
 
 import {
-    KEY_ACTIONS, LAYOUTS, baseKeyId, heldKeys, keyRects, layoutAspect, layoutForMachine,
-    layoutFromKeystr, legendsFor, matrixKey,
+    KEY_ACTIONS, KEYBOARD_CHOICES, LAYOUTS, baseKeyId, heldKeys, keyRects, layoutAspect,
+    layoutForChoice, layoutForMachine, layoutFromKeystr, legendsFor, matrixKey,
 } from "@zxplay/ui/keyboard";
-import {DEFAULT_KEYSTR, keyboardAspect} from "./layout";
+import {DEFAULT_KEYSTR, keyboardAspect, resolveKeyboard} from "./layout";
 
 // The two 58-key machines. The 48K's rubber keyboard is a different beast and
 // is checked on its own below.
@@ -396,5 +396,45 @@ describe('layoutForMachine', () => {
     it('gives the 48K its rubber keys', () => {
         expect(layoutForMachine(48)).toBe('rubber');
         expect(layoutForMachine(undefined)).toBe('rubber');
+    });
+});
+// #214: the keyboard follows the machine, but a machine can be running
+// something its own keyboard does not suit, so the user can name one.
+describe('choosing a keyboard', () => {
+    it('offers every layout, plus following the machine', () => {
+        expect(KEYBOARD_CHOICES[0]).toBe('auto');
+        expect([...KEYBOARD_CHOICES].slice(1).sort()).toEqual(Object.keys(LAYOUTS).sort());
+    });
+
+    it('follows the machine when nothing is chosen', () => {
+        for (const [machine, layout] of [[48, 'rubber'], [128, 'plus'], ['next', 'next']]) {
+            expect(layoutForChoice('auto', machine)).toBe(layout);
+            expect(layoutForChoice(undefined, machine)).toBe(layout);
+        }
+    });
+
+    it('keeps the chosen keyboard whatever machine is selected', () => {
+        for (const choice of ['rubber', 'plus', 'next']) {
+            for (const machine of [48, 128, 'next']) {
+                expect(layoutForChoice(choice, machine)).toBe(choice);
+            }
+        }
+    });
+
+    // A saved preference outlives the code that wrote it; a name no layout
+    // answers to must not leave the app with no keyboard at all.
+    it('falls back to the machine when the choice is not a keyboard', () => {
+        for (const bad of ['toastrack', '', null, 'RUBBER']) {
+            expect(layoutForChoice(bad, 128)).toBe('plus');
+        }
+    });
+
+    it('is what the app asks resolveKeyboard for', () => {
+        expect(resolveKeyboard(48).layout).toBe('rubber');
+        expect(resolveKeyboard(48, 'auto').layout).toBe('rubber');
+        expect(resolveKeyboard(48, 'next').layout).toBe('next');
+        expect(resolveKeyboard('next', 'rubber').layout).toBe('rubber');
+        // Every keyboard draws in the same box, so choosing one moves nothing.
+        expect(resolveKeyboard(48, 'next').aspect).toBe(resolveKeyboard(48).aspect);
     });
 });

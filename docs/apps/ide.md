@@ -94,6 +94,12 @@ the machine you are building for: the 48K's rubber keys, the 128K's Spectrum+
 EDIT, DELETE, GRAPH, EXTEND MODE, TRUE/INV VIDEO, BREAK and cursor keys that
 the 128K menus and the NextZXOS Browser expect.
 
+The **Keyboard** menu overrides that when the machine you are building for is
+not the keyboard you want in front of you — a Next program running in 48K
+mode, or a 48K one you would rather type into with the dedicated EDIT and
+cursor keys. The keys are matrix positions, so any keyboard drives any
+machine, and the choice is remembered.
+
 The emulator only takes your real keyboard while it has focus, so typing goes
 to the editor until you ask for it — and pressing an on-screen key asks for
 it, exactly as clicking the screen does. So the two can be used together:

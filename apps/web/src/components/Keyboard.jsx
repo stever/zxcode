@@ -20,10 +20,12 @@ const KEYBOARD_SCALE = 2;
 export function Keyboard(props) {
     const width = props.width || 960;
     const isMobile = useSelector(state => state?.window.isMobile);
-    // The keyboard follows the machine: the 48K's rubber keys, the 128K's
-    // Spectrum+ / toastrack layout, or the Next's own.
+    // The keyboard follows the machine — the 48K's rubber keys, the 128K's
+    // Spectrum+ / toastrack layout, or the Next's own — unless the user has
+    // picked one outright from the nav.
     const machine = useSelector(state => state?.app.machine);
-    const layout = resolveKeyboard(machine).layout;
+    const keyboardLayout = useSelector(state => state?.app.keyboardLayout);
+    const layout = resolveKeyboard(machine, keyboardLayout).layout;
     const keystr = hasKeystrOverride() ? currentKeystr() : null;
 
     // Redraw at the current (responsive) width so a viewport/orientation change

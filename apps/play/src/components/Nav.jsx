@@ -3,7 +3,9 @@ import {useDispatch, useSelector} from "react-redux";
 import {useNavigate} from "react-router-dom";
 import {Nav as Deck} from "@zxplay/ui";
 import {viewFullScreen, showOpenFileDialog} from "../redux/jsspeccy/actions";
-import {resetEmulator, setMachine, setKeyboardSide, setJoystick} from "../redux/app/actions";
+import {
+    resetEmulator, setMachine, setKeyboardSide, setKeyboardLayout, setJoystick,
+} from "../redux/app/actions";
 import {useTranslation} from "@zxplay/i18n";
 
 export default function Nav({compact = false} = {}) {
@@ -20,9 +22,11 @@ export default function Nav({compact = false} = {}) {
     const machine = useSelector(state => state?.app.machine);
     const machineLocked = useSelector(state => state?.app.machineLocked);
     const keyboardSide = useSelector(state => state?.app.keyboardSide);
+    const keyboardLayout = useSelector(state => state?.app.keyboardLayout);
     const joystick = useSelector(state => state?.app.joystick);
 
-    const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide, joystick);
+    const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
+        keyboardSide, keyboardLayout, joystick);
 
     return (
         <Deck
@@ -34,7 +38,8 @@ export default function Nav({compact = false} = {}) {
     );
 }
 
-function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide, joystick) {
+function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide,
+                      keyboardLayout, joystick) {
     const viewFullScreenMenuItem = {
         label: t('nav.fullScreen'),
         icon: 'pi pi-fw pi-window-maximize',
@@ -142,6 +147,28 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
         }
     };
 
+    // Which keyboard is drawn. It follows the machine unless the player says
+    // otherwise, which is worth being able to say: a machine can be running
+    // something its own keyboard does not suit — a Next in 48K mode wanting the
+    // rubber keys, or a 48K program being typed in with the Spectrum+'s
+    // dedicated EDIT and cursor keys.
+    const keyboardMenu = {
+        label: t('nav.keyboard', 'Keyboard'),
+        icon: 'pi pi-fw pi-th-large',
+        items: [
+            ['auto', t('nav.keyboardAuto', 'Match Machine')],
+            ['rubber', t('nav.keyboardRubber', 'Spectrum 48K')],
+            ['plus', t('nav.keyboardPlus', 'Spectrum 128K')],
+            ['next', t('nav.keyboardNext', 'ZX Spectrum Next')],
+        ].map(([value, label]) => ({
+            label,
+            icon: keyboardLayout === value ? 'pi pi-fw pi-check' : 'pi pi-fw',
+            command: () => {
+                dispatch(setKeyboardLayout(value));
+            }
+        }))
+    };
+
     // Which interface the gamepad drives. A game reads exactly one and there
     // is no way to detect which, so the player chooses. The labels name the
     // keys the keyboard-based schemes press, since that is how a player
@@ -167,6 +194,7 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
         loadFileButton,
         viewMenu,
         machineMenu,
+        keyboardMenu,
         joystickMenu,
         infoMenu,
         resetButton,

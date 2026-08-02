@@ -1,4 +1,4 @@
-import {layoutForMachine, layoutAspect} from "@zxplay/ui/keyboard";
+import {layoutForChoice, layoutAspect} from "@zxplay/ui/keyboard";
 
 // Pure, viewport-driven layout for the editor + emulator across orientations.
 //
@@ -70,17 +70,19 @@ export function hasKeystrOverride() {
  * Decide which keyboard is drawn, and the shape it draws at.
  *
  * Keys named by the "k" parameter are kept on every machine. Otherwise the
- * keyboard matches the machine: the 128K gets the Spectrum+ / toastrack
- * layout, the Next its own, and the 48K the rubber keys it has always had.
+ * user's own choice wins, and failing that the keyboard matches the machine:
+ * the 128K gets the Spectrum+ / toastrack layout, the Next its own, and the
+ * 48K the rubber keys it has always had.
  *
  * @param {Number|String} machine
+ * @param {String} [choice] the keyboard the user picked, 'auto' to follow the machine
  * @returns {{layout:(String|null), aspect:Number}}
  */
-export function resolveKeyboard(machine) {
+export function resolveKeyboard(machine, choice = 'auto') {
     if (hasKeystrOverride()) {
         return {layout: null, aspect: keyboardAspect(currentKeystr())};
     }
-    const layout = layoutForMachine(machine);
+    const layout = layoutForChoice(choice, machine);
     return {layout, aspect: layoutAspect(layout)};
 }
 

@@ -10,7 +10,12 @@ import {
 import { downloadProjectTap } from "../redux/eightbit/actions";
 import { getUserInfo } from "../redux/identity/actions";
 import { login, logout } from "../auth";
-import { resetEmulator, setMachine, setJoystick } from "../redux/app/actions";
+import {
+  resetEmulator,
+  setMachine,
+  setKeyboardLayout,
+  setJoystick,
+} from "../redux/app/actions";
 import { getLanguageLabel, isBasicLang } from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
 import Constants from "../constants";
@@ -31,6 +36,7 @@ export default function Nav() {
   const lang = useSelector((state) => state?.project.lang);
   const machine = useSelector((state) => state?.app.machine);
   const joystick = useSelector((state) => state?.app.joystick);
+  const keyboardLayout = useSelector((state) => state?.app.keyboardLayout);
   const machineLocked = useSelector((state) => state?.app.machineLocked);
 
   const model = getMenuItems(
@@ -43,6 +49,7 @@ export default function Nav() {
     emuVisible,
     machine,
     machineLocked,
+    keyboardLayout,
     joystick
   );
 
@@ -62,7 +69,7 @@ export default function Nav() {
   );
 }
 
-function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible, machine, machineLocked, joystick) {
+function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible, machine, machineLocked, keyboardLayout, joystick) {
   const sep = {
     separator: true,
   };
@@ -344,6 +351,28 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     ],
   };
 
+  // Which keyboard is drawn. It follows the machine you are building for
+  // unless you say otherwise, which is worth being able to say: the program
+  // running is not always suited by its target machine's keyboard — a Next
+  // program in 48K mode, or a 48K one you would rather type in with the
+  // Spectrum+'s dedicated EDIT and cursor keys.
+  const keyboardMenu = {
+    label: t("nav.keyboard", "Keyboard"),
+    icon: "pi pi-fw pi-th-large",
+    items: [
+      ["auto", t("nav.keyboardAuto", "Match Machine")],
+      ["rubber", t("nav.keyboardRubber", "Spectrum 48K")],
+      ["plus", t("nav.keyboardPlus", "Spectrum 128K")],
+      ["next", t("nav.keyboardNext", "ZX Spectrum Next")],
+    ].map(([value, label]) => ({
+      label,
+      icon: keyboardLayout === value ? "pi pi-fw pi-check" : "pi pi-fw",
+      command: () => {
+        dispatch(setKeyboardLayout(value));
+      },
+    })),
+  };
+
   // Which interface the gamepad drives. A game reads exactly one and there is
   // no way to detect which, so the user chooses. The labels name the keys the
   // keyboard-based schemes press, since that is how a game's own control
@@ -381,5 +410,5 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
-  return [projectMenu, viewMenu, machineMenu, joystickMenu, infoMenu, resetButton, loginButton];
+  return [projectMenu, viewMenu, machineMenu, keyboardMenu, joystickMenu, infoMenu, resetButton, loginButton];
 }

@@ -43,6 +43,7 @@ export default function ProjectPage({ projectId }) {
   const windowWidth = useSelector((state) => state?.window.width);
   const windowHeight = useSelector((state) => state?.window.height);
   const machine = useSelector((state) => state?.app.machine);
+  const keyboardLayout = useSelector((state) => state?.app.keyboardLayout);
   const debugActive = useSelector((state) => state?.debugger.active);
   // The dock (and the editor-column resize it forces) waits for the session
   // attach: `active` flips in the click's task and that paint must stay
@@ -93,7 +94,7 @@ export default function ProjectPage({ projectId }) {
   const mode = computeMode(windowWidth, windowHeight);
   // The 128K and the Next draw their own keyboards, a different shape from
   // the 48K rubber grid, so the machine feeds the layout maths.
-  const kbAspect = resolveKeyboard(machine).aspect;
+  const kbAspect = resolveKeyboard(machine, keyboardLayout).aspect;
   // Tab mode sizes the emulator to its box (fixing portrait clipping and
   // landscape overflow); split keeps the original 640px (2x) size.
   const emuW =

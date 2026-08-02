@@ -29,6 +29,7 @@ export default function App() {
     const height = useSelector(state => state?.window.height);
     const keyConfig = useSelector(state => state?.app.keyConfig);
     const machine = useSelector(state => state?.app.machine);
+    const keyboardLayout = useSelector(state => state?.app.keyboardLayout);
     const pathname = useSelector(state => state?.router.location.pathname);
     const className = clsx('pb-1', isMobile ? 'mobile' : 'desktop');
 
@@ -37,7 +38,9 @@ export default function App() {
     // The wrapper element is kept stable across this toggle (only its class and
     // the nav's presence change) so the routed tree - and the emulator's screen
     // DOM - is never remounted on rotation.
-    const mode = computeMode({width, height, kbAspect: resolveKeyboard(keyConfig, machine).aspect});
+    const mode = computeMode({
+        width, height, kbAspect: resolveKeyboard(keyConfig, machine, keyboardLayout).aspect,
+    });
     const sideHome = !err && pathname === '/' && mode === 'side';
 
     return (

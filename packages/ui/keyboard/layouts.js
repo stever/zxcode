@@ -159,6 +159,26 @@ export function layoutForMachine(machine) {
     return 'rubber';
 }
 
+// What the user can ask for: the keyboard the machine has ('auto'), or one
+// named outright. A machine can be running something its own keyboard does not
+// suit — a Next in 48K mode, a 128K program driven from BASIC — so the choice
+// is worth having (#214). 'auto' is the default and the usual answer.
+export const KEYBOARD_CHOICES = ['auto', 'rubber', 'plus', 'next'];
+
+/**
+ * The keyboard to draw, given what the user asked for and what machine is
+ * selected. An unknown choice falls back to the machine's own keyboard, so a
+ * stale saved preference cannot leave the app with no keyboard at all.
+ *
+ * @param {String} choice one of KEYBOARD_CHOICES
+ * @param {Number|String} machine 48, 128 or 'next'
+ * @returns {'rubber'|'plus'|'next'}
+ */
+export function layoutForChoice(choice, machine) {
+    if (choice && choice !== 'auto' && LAYOUTS[choice]) return choice;
+    return layoutForMachine(machine);
+}
+
 /**
  * Height / width of a layout drawn at a given width — the shape the app's
  * responsive layout needs before anything is rendered. The same for all three

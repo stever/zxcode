@@ -68,7 +68,14 @@ Pressing an on-screen key also hands your real keyboard to the emulator, just
 as clicking the screen does, so the two can be used together: press EDIT on
 screen and carry on typing.
 
-Switching machines switches the keyboard; nothing to set.
+Switching machines switches the keyboard; nothing to set. When that is not
+what you want, the **Keyboard** menu names all three outright and the choice
+sticks until you change it — useful when a machine is running something its
+own keyboard does not suit, such as a Next in 48K mode, or a 48K program you
+would rather drive with the Spectrum+'s dedicated EDIT and cursor keys. The
+keys are matrix positions, so any keyboard drives any machine: BREAK on the
+Next's keyboard is CAPS SHIFT and SPACE, which is BREAK on a 48K too. Your
+choice is remembered, along with the machine and the joystick.
 
 ### Tailoring the keyboard to a game
 

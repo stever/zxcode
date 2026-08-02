@@ -1,4 +1,4 @@
-import {layoutForMachine, layoutAspect} from "@zxplay/ui/keyboard";
+import {layoutForChoice, layoutAspect} from "@zxplay/ui/keyboard";
 
 // Pure, viewport-driven layout for the emulator + on-screen keyboard.
 //
@@ -43,18 +43,20 @@ export function parseKeyConfig(keystr) {
  *
  * A game that names its own keys (the "k" query parameter) keeps them on every
  * machine — a five-key play surface is the point, and it stays the same size on
- * a phone. Otherwise the keyboard matches the machine: the 48K's rubber keys,
- * the 128K's Spectrum+ / toastrack layout, or the Next's own.
+ * a phone, so it outranks both of the choices below. Otherwise the player's own
+ * choice wins, and failing that the keyboard matches the machine: the 48K's
+ * rubber keys, the 128K's Spectrum+ / toastrack layout, or the Next's own.
  *
  * @param {{keystr:String, aspect:Number, override:Boolean}} keyConfig
  * @param {Number|String} machine
+ * @param {String} [choice] the keyboard the player picked, 'auto' to follow the machine
  * @returns {{layout:(String|null), keystr:(String|null), aspect:Number}}
  */
-export function resolveKeyboard(keyConfig, machine) {
+export function resolveKeyboard(keyConfig, machine, choice = 'auto') {
     if (keyConfig.override) {
         return {layout: null, keystr: keyConfig.keystr, aspect: keyConfig.aspect};
     }
-    const layout = layoutForMachine(machine);
+    const layout = layoutForChoice(choice, machine);
     return {layout, keystr: null, aspect: layoutAspect(layout)};
 }
 

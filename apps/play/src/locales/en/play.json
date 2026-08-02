@@ -15,6 +15,11 @@
     "joystickSinclair1": "Sinclair 1 (keys 6-0)",
     "joystickSinclair2": "Sinclair 2 (keys 1-5)",
     "joystickCursor": "Cursor / Protek",
+    "keyboard": "Keyboard",
+    "keyboardAuto": "Match Machine",
+    "keyboardRubber": "Spectrum 48K",
+    "keyboardPlus": "Spectrum 128K",
+    "keyboardNext": "ZX Spectrum Next",
     "keyboardSide": "Keyboard Side",
     "keyboardSideLeft": "Left",
     "keyboardSideRight": "Right"

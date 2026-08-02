@@ -25,6 +25,7 @@ export default function HomePage() {
     const windowHeight = useSelector(state => state?.window.height);
     const userId = useSelector(state => state?.identity.userId);
     const machine = useSelector(state => state?.app.machine);
+    const keyboardLayout = useSelector(state => state?.app.keyboardLayout);
 
     // Both machines share one neutral BASIC sample, so the tab is just "BASIC".
     // The editor still highlights the machine's dialect and the run saga routes
@@ -36,7 +37,7 @@ export default function HomePage() {
     const mode = computeMode(windowWidth, windowHeight);
     // The 128K and the Next draw their own keyboards, a different shape
     // from the 48K rubber grid, so the machine feeds the layout maths.
-    const kbAspect = resolveKeyboard(machine).aspect;
+    const kbAspect = resolveKeyboard(machine, keyboardLayout).aspect;
     // The identity saga resolves userId to null when logged out; while it is
     // still undefined the notice is held back to avoid flashing it at users
     // who are about to be recognised as logged in.
