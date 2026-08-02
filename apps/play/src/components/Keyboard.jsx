@@ -2,7 +2,7 @@ import React, {useEffect} from "react";
 import PropTypes from "prop-types";
 import {ImageButton, Control, SingleWindow} from "../lib/canvasgui";
 import {
-    KEY_ACTIONS, LAYOUTS, PALETTES, baseKeyId, buildKeyboard, drawKeyboard, drawKeyPressed,
+    KEY_ACTIONS, LAYOUTS, PALETTE, baseKeyId, buildKeyboard, drawKeyboard, drawKeyPressed,
     heldKeys, keyRects, matrixKey,
 } from "@zxplay/ui/keyboard";
 
@@ -247,7 +247,7 @@ class MachineKey extends Control {
         this.board = board;
         this.boardW = width;
         this.boardH = height;
-        this.seam = PALETTES[layout.name].case;
+        this.seam = PALETTE.case;
         const win = parent.win;
 
         this.on_begin = this.on_enter = () => {
@@ -403,7 +403,7 @@ function layoutMachineKeyboard(win, width, layout, registerKey) {
         return canvas;
     });
 
-    win.bgColor = PALETTES[layout.name].case;
+    win.bgColor = PALETTE.case;
     win.setTargetSize(width, height);
     new KeyboardImage(win, board, width, height);
 

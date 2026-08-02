@@ -11,23 +11,15 @@
 
 import {GRAPHIC_QUADRANTS} from './legends';
 
-export const PALETTES = {
-    // Spectrum+ / 128K toastrack: grey keys, the pad darker than the shoulder.
-    plus: {
-        case: '#0e0e0f',
-        shoulderTop: '#54545a', shoulderBottom: '#3a3a3f',
-        padTop: '#1f1f23', padBottom: '#141417',
-        padEdge: 'rgba(255, 255, 255, 0.22)',
-        ink: '#f4f4f4',
-    },
-    // ZX Spectrum Next: glossy black keys, the pad lighter than the shoulder.
-    next: {
-        case: '#08080a',
-        shoulderTop: '#232328', shoulderBottom: '#141417',
-        padTop: '#43434a', padBottom: '#303036',
-        padEdge: 'rgba(255, 255, 255, 0.28)',
-        ink: '#f0f0f0',
-    },
+// One scheme for both machines: the ZX Spectrum Next's, which is glossy black
+// keys with a lighter pad set into them. The Spectrum+'s own keys are the other
+// way round — grey with a darker pad — but this reads better on screen and is
+// what the project owner asked both keyboards to use.
+export const PALETTE = {
+    case: '#08080a',
+    shoulderTop: '#232328', shoulderBottom: '#141417',
+    padTop: '#43434a', padBottom: '#303036',
+    ink: '#f0f0f0',
 };
 
 // Fractions of a key cell.
@@ -127,7 +119,7 @@ function drawGraphic(ctx, n, x, y, size, colour) {
  * @param {Object} opts
  * @param {Array<{x,y,w,h}>} opts.rects the key's rectangles, in pixels
  * @param {Object} opts.legend an entry from the machine's legend table
- * @param {Object} opts.palette an entry from PALETTES
+ * @param {Object} opts.palette the drawing colours (PALETTE)
  * @param {Number} opts.cell the grid pitch in pixels: {w, h}
  */
 export function drawKey(ctx, {rects, legend = {}, palette, cell}) {
@@ -214,15 +206,10 @@ export function drawKey(ctx, {rects, legend = {}, palette, cell}) {
     }
     ctx.fill();
 
-    // The moulding catches the light along its lower-left curve, and nowhere
-    // else: a stroke all round would read as an outline rather than a shape.
-    const corner = Math.min(padBottom.w / 2, ch * PAD.corner);
-    ctx.beginPath();
-    ctx.arc(padBottom.x + corner, padBottom.y + padBottom.h - corner, corner,
-        Math.PI * 1.02, Math.PI * 0.38, true);
-    ctx.strokeStyle = palette.padEdge;
-    ctx.lineWidth = Math.max(1, ch * 0.014);
-    ctx.stroke();
+    // No sheen along the pad's curve: the machines have one, but a stroked
+    // highlight has to stop somewhere, and at these sizes the end of it reads
+    // as a stray scratch. The pad's own tone against the shoulder is enough to
+    // say it is raised.
 
     drawLegends(ctx, legend, {face, pad: pad || padBottom, cw, ch, ink: palette.ink});
 }

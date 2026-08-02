@@ -4,5 +4,5 @@
 export {KEY_ACTIONS, matrixKey} from './keys';
 export {LAYOUTS, layoutForMachine, layoutAspect, baseKeyId, keyRects} from './layouts';
 export {legendsFor, GRAPHIC_QUADRANTS} from './legends';
-export {PALETTES} from './keycap';
+export {PALETTE} from './keycap';
 export {buildKeyboard, drawKeyboard, drawKeyPressed, heldKeys} from './render';

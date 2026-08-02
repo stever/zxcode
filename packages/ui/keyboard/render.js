@@ -6,7 +6,7 @@
 // rubber art uses, and it works here for the same reason: a real key travels
 // into its own shadow rather than changing shape.
 
-import {drawKey, PALETTES} from './keycap';
+import {drawKey, PALETTE} from './keycap';
 import {legendsFor} from './legends';
 import {baseKeyId, keyRects} from './layouts';
 
@@ -27,18 +27,17 @@ const SHADE = 'rgba(0, 0, 0, 0.3)';
 export function buildKeyboard(layout, width, height, createCanvas) {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
-    const palette = PALETTES[layout.name];
     const legends = legendsFor(layout.name);
     const cell = {w: width / layout.units, h: height / layout.rows};
 
-    ctx.fillStyle = palette.case;
+    ctx.fillStyle = PALETTE.case;
     ctx.fillRect(0, 0, width, height);
 
     for (const key of layout.keys) {
         const rects = keyRects(key).map((r) => ({
             x: r.x * width, y: r.y * height, w: r.w * width, h: r.h * height,
         }));
-        drawKey(ctx, {rects, legend: legends[baseKeyId(key.id)], palette, cell});
+        drawKey(ctx, {rects, legend: legends[baseKeyId(key.id)], palette: PALETTE, cell});
     }
     return canvas;
 }
