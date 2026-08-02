@@ -8,7 +8,12 @@
 //   keyword  on the fingertip pad, upper          the unshifted BASIC keyword
 //   sym      on the pad, right of the keyword     SYMBOL SHIFT — a word (STOP,
 //                                                 THEN, AND …) takes its own
-//                                                 line under the keyword
+//                                                 line under the keyword.
+//                                                 O, P, N and M print none:
+//                                                 their ; " , . have keys of
+//                                                 their own on these machines,
+//                                                 so only the 48K, which has
+//                                                 no such keys, prints them
 //   main     on the pad, large                    the character itself
 //
 // All of it prints in white; the machines use no other ink. The number keys
@@ -53,8 +58,8 @@ const LEGENDS = {
     Y: {main: 'Y', keyword: 'RETURN', sym: 'AND', ext: 'STR$', extSym: '['},
     U: {main: 'U', keyword: 'IF', sym: 'OR', ext: 'CHR$', extSym: ']'},
     I: {main: 'I', keyword: 'INPUT', sym: 'AT', ext: 'CODE', extSym: 'IN'},
-    O: {main: 'O', keyword: 'POKE', sym: ';', ext: 'PEEK', extSym: 'OUT'},
-    P: {main: 'P', keyword: 'PRINT', sym: '"', ext: 'TAB', extSym: '(c)'},
+    O: {main: 'O', keyword: 'POKE', ext: 'PEEK', extSym: 'OUT'},
+    P: {main: 'P', keyword: 'PRINT', ext: 'TAB', extSym: '(c)'},
 
     A: {main: 'A', keyword: 'NEW', sym: 'STOP', ext: 'READ', extSym: '~'},
     S: {main: 'S', keyword: 'SAVE', sym: 'NOT', ext: 'RESTR', extSym: '|'},
@@ -71,8 +76,8 @@ const LEGENDS = {
     C: {main: 'C', keyword: 'CONT', sym: '?', ext: 'LPRINT', extSym: 'PAPER'},
     V: {main: 'V', keyword: 'CLS', sym: '/', ext: 'LLIST', extSym: 'FLASH'},
     B: {main: 'B', keyword: 'BORDER', sym: '*', ext: 'BIN', extSym: 'BRIGHT'},
-    N: {main: 'N', keyword: 'NEXT', sym: ',', ext: 'INKEY$', extSym: 'OVER'},
-    M: {main: 'M', keyword: 'PAUSE', sym: '.', ext: 'PI', extSym: 'INVERS'},
+    N: {main: 'N', keyword: 'NEXT', ext: 'INKEY$', extSym: 'OVER'},
+    M: {main: 'M', keyword: 'PAUSE', ext: 'PI', extSym: 'INVERS'},
 
     ENTER: {label: 'ENTER'},
     CAPS: {label: 'CAPS SHIFT'},

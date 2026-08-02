@@ -247,13 +247,31 @@ describe('legends', () => {
     const plus = legendsFor('plus');
     const next = legendsFor('next');
 
+    // O, P, N and M are the four whose SYMBOL SHIFT characters got keys of
+    // their own on these machines, so they are not printed on the letter.
+    const DEDICATED_SYMBOL = ['O', 'P', 'N', 'M'];
+
     it('prints a keyword, a symbol and the letter on every letter key', () => {
         for (const id of MATRIX_KEYS.filter((k) => /^[A-Z]$/.test(k))) {
             expect(plus[id].main).toBe(id);
             expect(plus[id].keyword).toBeTruthy();
-            expect(plus[id].sym).toBeTruthy();
             expect(plus[id].ext).toBeTruthy();
             expect(plus[id].extSym).toBeTruthy();
+            if (!DEDICATED_SYMBOL.includes(id)) expect(plus[id].sym).toBeTruthy();
+        }
+    });
+
+    it("does not print ; \" , . on the letters that have keys for them", () => {
+        // The machines leave them off O, P, N and M because SEMI, QUOTE,
+        // COMMA and PERIOD are keys in their own right. Only the printing
+        // changes: SYMBOL SHIFT with the letter still types the character.
+        for (const id of DEDICATED_SYMBOL) {
+            expect(plus[id].sym).toBeUndefined();
+            expect(next[id].sym).toBeUndefined();
+        }
+        for (const [letter, key] of [['O', 'SEMI'], ['P', 'QUOTE'], ['N', 'COMMA'], ['M', 'PERIOD']]) {
+            expect(KEY_ACTIONS[key].matrix).toEqual([
+                ...KEY_ACTIONS.SYMBOL.matrix, ...KEY_ACTIONS[letter].matrix]);
         }
     });
 
