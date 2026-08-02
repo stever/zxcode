@@ -56,9 +56,11 @@ They press the same keys underneath as a real machine does: EDIT holds CAPS
 SHIFT and 1. The on-screen keys show what the machine sees, so a key you
 press lights up, and so does one the running program is holding down.
 
-The 128K and Next keyboards are photographs of those machines rather than
-drawings, so what you press is what the hardware looks like, down to the
-keyword printed on each key.
+The 128K and Next keyboards are drawn from photographs of the real machines —
+every key rectangle, every legend and the shape of the moulding transcribed
+from them — so what you press is what the hardware looks like, down to the
+keyword printed on each key, but crisp at any size. Both are laid out on the
+same grid, so switching between those two machines moves nothing on the page.
 
 Switching machines switches the keyboard; nothing to set.
 

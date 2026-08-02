@@ -3,7 +3,8 @@ import PropTypes from "prop-types";
 import {ImageButton, Control, SingleWindow} from "../lib/canvasgui";
 import {useSelector} from "react-redux";
 import {
-    KEY_ACTIONS, LAYOUTS, baseKeyId, drawKeyboard, drawKeyPressed, heldKeys, keyRects, matrixKey,
+    KEY_ACTIONS, LAYOUTS, PALETTES, baseKeyId, buildKeyboard, drawKeyboard, drawKeyPressed,
+    heldKeys, keyRects, matrixKey,
 } from "@zxplay/ui/keyboard";
 import {resolveKeyboard} from "../lib/layout";
 
@@ -11,10 +12,10 @@ Keyboard.propTypes = {
     width: PropTypes.number
 }
 
-// The machine keyboards are photographs, rendered at twice the nominal width:
-// the printed legends are small, and the extra resolution is what keeps them
-// readable once the canvas is scaled down to the layout's width.
-const PHOTO_SCALE = 2;
+// The machine keyboards are drawn at twice the nominal width: the printed
+// legends are small, and the extra resolution is what keeps them sharp once the
+// canvas is scaled down to the width the layout asked for.
+const KEYBOARD_SCALE = 2;
 
 export function Keyboard(props) {
     const width = props.width || 960;
@@ -27,7 +28,7 @@ export function Keyboard(props) {
     // Redraw at the current (responsive) width so a viewport/orientation change
     // keeps every key on-screen.
     useEffect(() => {
-        return renderKeyboard(layout ? width * PHOTO_SCALE : width, layout);
+        return renderKeyboard(layout ? width * KEYBOARD_SCALE : width, layout);
     }, [width, layout]);
 
     let style = {
@@ -203,12 +204,13 @@ class MyImageButton extends ImageButton {
     }
 }
 
-// The photograph of the machine's keyboard, behind the keys. It never takes a
-// pointer: the keys sit on top of it and do that.
+// The machine's keyboard, drawn once into an offscreen canvas and blitted
+// behind the keys. It never takes a pointer: the keys sit on top of it and do
+// that.
 class KeyboardImage extends Control {
-    constructor(parent, image, width, height) {
+    constructor(parent, board, width, height) {
         super(parent, 0, 0, width, height);
-        this.image = image;
+        this.board = board;
     }
 
     isPointerInside() {
@@ -216,16 +218,16 @@ class KeyboardImage extends Control {
     }
 
     onDraw(ctx) {
-        drawKeyboard(ctx, this.image, this.w, this.h);
+        drawKeyboard(ctx, this.board, this.w, this.h);
     }
 }
 
-// One key of a photographed keyboard. There is nothing to draw until it is
-// held — the photograph already shows it — and it hit-tests against the key's
-// own rectangles rather than its bounding box, or the notch of the L-shaped
-// ENTER would steal the corner of the key beside it.
-class PhotoKey extends Control {
-    constructor(parent, layout, key, image, width, height, codes) {
+// One key of a machine keyboard. There is nothing to draw until it is held —
+// the drawn keyboard behind it already shows the key — and it hit-tests against
+// the key's own rectangles rather than its bounding box, or the notch of the
+// L-shaped ENTER would steal the corner of the key beside it.
+class MachineKey extends Control {
+    constructor(parent, layout, key, board, width, height, codes) {
         const rects = keyRects(key);
         const left = Math.min(...rects.map((r) => r.x)) * width;
         const top = Math.min(...rects.map((r) => r.y)) * height;
@@ -234,10 +236,10 @@ class PhotoKey extends Control {
         super(parent, left, top, right - left, bottom - top);
 
         this.rects = rects;
-        this.image = image;
+        this.board = board;
         this.boardW = width;
         this.boardH = height;
-        this.seam = layout.seam;
+        this.seam = PALETTES[layout.name].case;
         const win = parent.win;
 
         this.on_begin = this.on_enter = () => {
@@ -260,7 +262,7 @@ class PhotoKey extends Control {
 
     onDraw(ctx) {
         if (!this.pressed) return;
-        drawKeyPressed(ctx, this.image, {
+        drawKeyPressed(ctx, this.board, {
             rects: this.rects,
             width: this.boardW,
             height: this.boardH,
@@ -378,19 +380,24 @@ function layoutRubberKeyboard(win, width, registerKey) {
 }
 
 // A machine's own keyboard: the Spectrum+ / 128K toastrack or the Next. The
-// photograph goes down once and each key is an invisible control over the key
-// it can see, so an idle keyboard costs one drawImage.
+// keyboard is drawn once into an offscreen canvas and each key is an invisible
+// control over the key it can see, so an idle keyboard costs one drawImage.
 function layoutMachineKeyboard(win, width, layout, registerKey) {
     const height = Math.round(width * layout.aspect);
-    const image = win.imagemgr.imageForPath(layout.image);
+    const board = buildKeyboard(layout, width, height, (w, h) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        return canvas;
+    });
 
-    win.bgColor = layout.seam;
+    win.bgColor = PALETTES[layout.name].case;
     win.setTargetSize(width, height);
-    new KeyboardImage(win, image, width, height);
+    new KeyboardImage(win, board, width, height);
 
     for (const key of layout.keys) {
         const action = KEY_ACTIONS[baseKeyId(key.id)];
-        const btn = new PhotoKey(win, layout, key, image, width, height, action.codes);
+        const btn = new MachineKey(win, layout, key, board, width, height, action.codes);
         registerKey(btn, action.matrix);
     }
 }

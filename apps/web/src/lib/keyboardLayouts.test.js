@@ -1,11 +1,12 @@
 // The machine keyboard tables are shared data (packages/ui/keyboard) with no
 // canvas involved, so the things that would go wrong silently — a key whose
-// rectangle overlaps its neighbour or falls outside the photograph, an action
-// no layout entry resolves to, a matrix position that does not match the
+// rectangle overlaps its neighbour or falls off the keyboard, a legend or an
+// action no layout entry resolves to, a matrix position that does not match the
 // engine, or a single press lighting several keys — are checked here.
 
 import {
-    KEY_ACTIONS, LAYOUTS, baseKeyId, heldKeys, keyRects, layoutAspect, layoutForMachine, matrixKey,
+    KEY_ACTIONS, LAYOUTS, baseKeyId, heldKeys, keyRects, layoutAspect, layoutForMachine,
+    legendsFor, matrixKey,
 } from "@zxplay/ui/keyboard";
 
 const layouts = Object.entries(LAYOUTS);
@@ -51,9 +52,22 @@ describe.each(layouts)('%s layout', (name, layout) => {
         }
     });
 
-    it('resolves every key to an action', () => {
+    it('resolves every key to an action and a legend', () => {
+        const legends = legendsFor(name);
         for (const key of layout.keys) {
             expect(KEY_ACTIONS[baseKeyId(key.id)]).toBeDefined();
+            expect(legends[baseKeyId(key.id)]).toBeDefined();
+        }
+    });
+
+    it('lays every key on a quarter of a key width', () => {
+        // Both machines measure that way, and it is what lets one grid serve
+        // both — so a key off the quarter is a transcription slip.
+        for (const key of layout.keys) {
+            for (const r of keyRects(key)) {
+                expect((r.x * layout.units * 4) % 1).toBeCloseTo(0, 6);
+                expect((r.w * layout.units * 4) % 1).toBeCloseTo(0, 6);
+            }
         }
     });
 
@@ -81,7 +95,7 @@ describe.each(layouts)('%s layout', (name, layout) => {
         }
     });
 
-    it('keeps every key inside the photograph', () => {
+    it('keeps every key inside the keyboard', () => {
         for (const cell of cells) {
             expect(cell.x).toBeGreaterThanOrEqual(0);
             expect(cell.y).toBeGreaterThanOrEqual(0);
@@ -90,17 +104,21 @@ describe.each(layouts)('%s layout', (name, layout) => {
         }
     });
 
-    it('covers the whole photograph', () => {
-        // Every part of the picture is a key: a gap would be a dead spot the
-        // user can see but not press.
+    it('covers the whole keyboard', () => {
+        // Every part of it is a key: a gap would be a dead spot the user can
+        // see but not press. Each row must fill the width, too.
         const right = Math.max(...cells.map((c) => c.x + c.w));
         const bottom = Math.max(...cells.map((c) => c.y + c.h));
-        expect(right).toBeCloseTo(1, 3);
-        expect(bottom).toBeCloseTo(1, 3);
+        expect(right).toBeCloseTo(1, 6);
+        expect(bottom).toBeCloseTo(1, 6);
+        for (let row = 0; row < layout.rows; row++) {
+            const width = cells.filter((c) => Math.abs(c.y - row / layout.rows) < 1e-6)
+                .reduce((total, c) => total + c.w, 0);
+            expect(width).toBeCloseTo(1, 6);
+        }
     });
 
-    it('names the photograph and the shape it draws at', () => {
-        expect(layout.image).toMatch(/^\/keys\/.*\.webp$/);
+    it('draws at the shape the app lays out for', () => {
         expect(layoutAspect(name)).toBe(layout.aspect);
         expect(layout.aspect).toBeGreaterThan(0.3);
         expect(layout.aspect).toBeLessThan(0.5);
@@ -206,6 +224,57 @@ describe('which keys light up', () => {
 
     it('lights nothing when nothing is down', () => {
         expect(lit(board, down())).toEqual([]);
+    });
+});
+
+describe('both machines draw at one size', () => {
+    it('gives the two layouts the same grid and the same aspect', () => {
+        // #212: switching machine must not move anything on the page.
+        expect(LAYOUTS.plus.units).toBe(LAYOUTS.next.units);
+        expect(LAYOUTS.plus.rows).toBe(LAYOUTS.next.rows);
+        expect(layoutAspect('plus')).toBe(layoutAspect('next'));
+    });
+});
+
+describe('legends', () => {
+    const plus = legendsFor('plus');
+    const next = legendsFor('next');
+
+    it('prints a keyword, a symbol and the letter on every letter key', () => {
+        for (const id of MATRIX_KEYS.filter((k) => /^[A-Z]$/.test(k))) {
+            expect(plus[id].main).toBe(id);
+            expect(plus[id].keyword).toBeTruthy();
+            expect(plus[id].sym).toBeTruthy();
+            expect(plus[id].ext).toBeTruthy();
+            expect(plus[id].extSym).toBeTruthy();
+        }
+    });
+
+    it('prints a block graphic on keys 1-8 and none on 9 or 0', () => {
+        for (const digit of ['1', '2', '3', '4', '5', '6', '7', '8']) {
+            expect(plus[digit].graphic).toBe(Number(digit));
+        }
+        expect(plus['9'].graphic).toBeUndefined();
+        expect(plus['0'].graphic).toBeUndefined();
+    });
+
+    it('names every dedicated key', () => {
+        for (const id of DEDICATED) {
+            expect(plus[id].label || plus[id].main).toBeTruthy();
+        }
+    });
+
+    it('gives the Next the wording it actually prints', () => {
+        // The Next had room for words the Spectrum+ abbreviated.
+        expect(plus['3'].ext).toBe('MGNTA');
+        expect(next['3'].ext).toBe('MAGENTA');
+        expect(plus.M.extSym).toBe('INVERS');
+        expect(next.M.extSym).toBe('INVERSE');
+    });
+
+    it('leaves the rest of the table shared', () => {
+        expect(next.Q).toEqual(plus.Q);
+        expect(next.SPACE).toEqual(plus.SPACE);
     });
 });
 

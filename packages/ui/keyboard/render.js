@@ -1,26 +1,58 @@
-// Drawing a photographed keyboard onto a canvas.
+// Drawing a machine keyboard onto a canvas.
 //
-// The picture IS the keyboard, so an idle key costs nothing to draw: the whole
-// photograph goes down once, and only a key that is actually held gets redrawn.
-// A held key is its own pixels slid down into the seam below it and shaded —
-// the same trick the 48K's rubber art uses, and it works here for the same
-// reason: a real key travels into its own shadow rather than changing shape.
+// The whole keyboard is drawn ONCE into an offscreen canvas, which the app then
+// blits; only a key that is actually held gets redrawn. A held key is its own
+// pixels slid down into the seam below it and shaded — the same trick the 48K's
+// rubber art uses, and it works here for the same reason: a real key travels
+// into its own shadow rather than changing shape.
+
+import {drawKey, PALETTES} from './keycap';
+import {legendsFor} from './legends';
+import {baseKeyId, keyRects} from './layouts';
 
 // How far a held key travels, as a fraction of the keyboard's height.
 const SINK = 0.008;
 // How much darker a held key sits.
-const SHADE = 'rgba(0, 0, 0, 0.28)';
+const SHADE = 'rgba(0, 0, 0, 0.3)';
 
 /**
- * Draw the whole keyboard.
+ * Draw a whole keyboard into an offscreen canvas.
+ *
+ * @param {Object} layout an entry from LAYOUTS
+ * @param {Number} width in pixels
+ * @param {Number} height in pixels
+ * @param {Function} createCanvas makes a blank canvas of a given size
+ * @returns {HTMLCanvasElement}
+ */
+export function buildKeyboard(layout, width, height, createCanvas) {
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    const palette = PALETTES[layout.name];
+    const legends = legendsFor(layout.name);
+    const cell = {w: width / layout.units, h: height / layout.rows};
+
+    ctx.fillStyle = palette.case;
+    ctx.fillRect(0, 0, width, height);
+
+    for (const key of layout.keys) {
+        const rects = keyRects(key).map((r) => ({
+            x: r.x * width, y: r.y * height, w: r.w * width, h: r.h * height,
+        }));
+        drawKey(ctx, {rects, legend: legends[baseKeyId(key.id)], palette, cell});
+    }
+    return canvas;
+}
+
+/**
+ * Draw the keyboard.
  * @param {CanvasRenderingContext2D} ctx
- * @param {HTMLImageElement} image the layout's photograph
+ * @param {HTMLCanvasElement} board the canvas buildKeyboard returned
  * @param {Number} width canvas width, in pixels
  * @param {Number} height canvas height, in pixels
  */
-export function drawKeyboard(ctx, image, width, height) {
-    if (!image || !image.naturalWidth) return; // still loading
-    ctx.drawImage(image, 0, 0, width, height);
+export function drawKeyboard(ctx, board, width, height) {
+    if (!board) return;
+    ctx.drawImage(board, 0, 0, width, height);
 }
 
 // The parts of a rectangle's top edge that are actually exposed — the stretches
@@ -44,17 +76,17 @@ function exposedTop(rect, rects) {
  * Redraw one key as held down.
  *
  * @param {CanvasRenderingContext2D} ctx
- * @param {HTMLImageElement} image the layout's photograph
+ * @param {HTMLCanvasElement} board the canvas buildKeyboard returned
  * @param {Object} opts
- * @param {Array<{x,y,w,h}>} opts.rects the key's rectangles, in fractions of the image
+ * @param {Array<{x,y,w,h}>} opts.rects the key's rectangles, in fractions of the keyboard
  * @param {Number} opts.width canvas width, in pixels
  * @param {Number} opts.height canvas height, in pixels
  * @param {String} opts.seam colour of the gap between keys
  */
-export function drawKeyPressed(ctx, image, {rects, width, height, seam}) {
-    if (!image || !image.naturalWidth) return;
-    const iw = image.naturalWidth;
-    const ih = image.naturalHeight;
+export function drawKeyPressed(ctx, board, {rects, width, height, seam}) {
+    if (!board) return;
+    const bw = board.width;
+    const bh = board.height;
     const sink = Math.max(1, height * SINK);
 
     const x0 = Math.min(...rects.map((r) => r.x));
@@ -73,7 +105,7 @@ export function drawKeyPressed(ctx, image, {rects, width, height, seam}) {
 
     // The key itself, one step down and in one piece; its own bottom edge is
     // clipped away, which is exactly what travel looks like from straight on.
-    ctx.drawImage(image, x0 * iw, y0 * ih, (x1 - x0) * iw, (y1 - y0) * ih,
+    ctx.drawImage(board, x0 * bw, y0 * bh, (x1 - x0) * bw, (y1 - y0) * bh,
         x0 * width, y0 * height + sink, (x1 - x0) * width, (y1 - y0) * height);
 
     // The gaps it has just vacated. Drawn after the key, because the step down
