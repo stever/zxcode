@@ -43,9 +43,16 @@ export function Keyboard(props) {
     }
 
     return (
-        // preventDefault on mousedown keeps a click on the virtual keys from
-        // blurring the emulator canvas (focus-scoped keyboard capture).
-        <div id="guiparent" onMouseDown={(e) => e.preventDefault()} style={{
+        // Pressing a virtual key hands the keyboard to the emulator, exactly as
+        // clicking the screen does — the two get used together, and it would be
+        // confusing for a key you just pressed on screen to leave the physical
+        // keyboard typing into the editor. preventDefault on mousedown
+        // suppresses the default focus move that would blur the canvas again
+        // straight after. Focus is taken on pointerdown so a touch gets it at
+        // the same moment as a click (the compatibility mousedown arrives on
+        // release).
+        <div id="guiparent" onPointerDown={focusEmulator}
+             onMouseDown={(e) => e.preventDefault()} style={{
             width: `${width}px`,
             margin: 0,
             backgroundColor: "#444",
@@ -58,6 +65,18 @@ export function Keyboard(props) {
             />
         </div>
     )
+}
+
+// The emulator's display, which is what holds keyboard focus: GoEmulator makes
+// the canvas focusable and only traps keys while it has focus.
+const emulatorScreen = () => document.querySelector('#jsspeccy-screen canvas');
+
+// Give the emulator the keyboard, as a click on its screen would. No-op before
+// the emulator has been loaded, or if keyboard capture is switched off (the
+// canvas is only focusable when it traps keys).
+function focusEmulator() {
+    const screen = emulatorScreen();
+    if (screen) screen.focus({preventScroll: true});
 }
 
 /**
@@ -75,8 +94,7 @@ function simulateKey(keyCode, type) {
     // The KeyboardHandler listens on the emulator canvas (keyboard capture
     // is focus-scoped); a synthetic dispatch at the canvas reaches it
     // without the canvas needing focus.
-    const screen = document.querySelector('#jsspeccy-screen canvas');
-    (screen || document).dispatchEvent(event);
+    (emulatorScreen() || document).dispatchEvent(event);
 }
 
 // Press (and release) every code a key stands for. Single-code keys are the
@@ -132,14 +150,25 @@ class MachineKey extends Control {
         this.legend = legend;
         const win = parent.win;
 
+        // A press arrives as 'begin' AND 'enter', a release as 'leave' AND
+        // 'end' (and a pointer dragged off the key leaves before it ends), so
+        // every path is wired up and the key itself remembers whether it is
+        // down — otherwise one press sent the machine two keydowns.
+        this.held = false;
+        const press = (down) => {
+            if (this.held === down) return;
+            this.held = down;
+            pressKey(codes, down);
+        };
+
         this.on_begin = this.on_enter = () => {
             win.pointerKey = this;
-            pressKey(codes, true);
+            press(true);
         }
 
         this.on_end = this.on_leave = () => {
             if (win.pointerKey === this) win.pointerKey = null;
-            pressKey(codes, false);
+            press(false);
         }
     }
 

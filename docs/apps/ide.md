@@ -94,6 +94,12 @@ the machine you are building for: the 48K's rubber keys, the 128K's Spectrum+
 EDIT, DELETE, GRAPH, EXTEND MODE, TRUE/INV VIDEO, BREAK and cursor keys that
 the 128K menus and the NextZXOS Browser expect.
 
+The emulator only takes your real keyboard while it has focus, so typing goes
+to the editor until you ask for it — and pressing an on-screen key asks for
+it, exactly as clicking the screen does. So the two can be used together:
+press EDIT on screen, then carry on typing on your own keyboard. Clicking
+back into the editor hands it back.
+
 ## Sharing your work
 
 Projects are private by default and can be made public. A public project gets

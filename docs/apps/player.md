@@ -64,6 +64,10 @@ keyword printed on each key, but crisp at any size and nothing to download.
 All three draw into the same box, so switching machine moves nothing on the
 page.
 
+Pressing an on-screen key also hands your real keyboard to the emulator, just
+as clicking the screen does, so the two can be used together: press EDIT on
+screen and carry on typing.
+
 Switching machines switches the keyboard; nothing to set.
 
 ### Tailoring the keyboard to a game
