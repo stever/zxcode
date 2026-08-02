@@ -77,11 +77,11 @@ export function hasKeystrOverride() {
  * @returns {{layout:(String|null), aspect:Number}}
  */
 export function resolveKeyboard(machine) {
-    const layout = hasKeystrOverride() ? null : layoutForMachine(machine);
-    return {
-        layout,
-        aspect: layout ? layoutAspect(layout) : keyboardAspect(currentKeystr()),
-    };
+    if (hasKeystrOverride()) {
+        return {layout: null, aspect: keyboardAspect(currentKeystr())};
+    }
+    const layout = layoutForMachine(machine);
+    return {layout, aspect: layoutAspect(layout)};
 }
 
 /**

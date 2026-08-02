@@ -1,5 +1,6 @@
-// Physical key layouts for the machines whose keyboards are not the 48K's
-// 40 rubber keys: the ZX Spectrum+ / 128K toastrack, and the ZX Spectrum Next.
+// Physical key layouts for the three machines: the 48K's forty rubber keys,
+// and the fifty-eight of the ZX Spectrum+ / 128K toastrack and the ZX Spectrum
+// Next.
 //
 // Both machines lay their 58 keys on the SAME grid — 13.5 key widths across,
 // five rows down — and every key is a whole or a quarter of a key width. That
@@ -70,10 +71,75 @@ function build(rows) {
     return keys;
 }
 
+// The 48K: forty rubber keys, ten to a row, four rows — the grid whose shape
+// every keyboard now draws into.
+const RUBBER_ROWS = [
+    DIGITS,
+    TOP,
+    [...HOME, 'ENTER'],
+    ['CAPS', ...BOTTOM, 'SYMBOL', 'SPACE'],
+];
+const RUBBER_UNITS = 10;
+const RUBBER_GRID_ROWS = 4;
+
+function buildGrid(rows, units, rowCount) {
+    const keys = [];
+    rows.forEach((row, r) => {
+        row.forEach((id, i) => {
+            keys.push({id, rects: [{x: i / units, y: r / rowCount, w: 1 / units, h: 1 / rowCount}]});
+        });
+    });
+    return keys;
+}
+
 export const LAYOUTS = {
-    plus: {name: 'plus', aspect: ASPECT, units: UNITS, rows: ROWS, keys: build(PLUS_ROWS)},
-    next: {name: 'next', aspect: ASPECT, units: UNITS, rows: ROWS, keys: build(NEXT_ROWS)},
+    plus: {name: 'plus', style: 'plastic', aspect: ASPECT, units: UNITS, rows: ROWS,
+        keys: build(PLUS_ROWS)},
+    next: {name: 'next', style: 'plastic', aspect: ASPECT, units: UNITS, rows: ROWS,
+        keys: build(NEXT_ROWS)},
+    rubber: {name: 'rubber', style: 'rubber', aspect: RUBBER_GRID_ROWS / RUBBER_UNITS,
+        units: RUBBER_UNITS, rows: RUBBER_GRID_ROWS, rainbow: true,
+        keys: buildGrid(RUBBER_ROWS, RUBBER_UNITS, RUBBER_GRID_ROWS)},
 };
+
+// The characters a game's "k" key string may name, mapped to key ids. A dash
+// holds a place without drawing a key.
+const KEYSTR_KEYS = {
+    e: 'ENTER', c: 'CAPS', s: 'SYMBOL', _: 'SPACE',
+    ...Object.fromEntries([...'1234567890QWERTYUIOPASDFGHJKLZXCVBNM'].map((k) => [k, k])),
+};
+
+/**
+ * A layout for the keys a game named with the "k" query parameter: the same
+ * rubber keys, in whatever rows it asked for. Fewer keys in a row means bigger
+ * keys, which is the point of naming them.
+ *
+ * @param {String} keystr comma-separated rows of key characters
+ * @returns {Object} a layout, or null when the string names no keys
+ */
+export function layoutFromKeystr(keystr) {
+    const rows = String(keystr || '').split(',').filter((row) => row.length > 0)
+        .map((row) => row.slice(0, 10));
+    if (!rows.length) return null;
+
+    // Each row's keys are square, so a row of n keys is 1/n of the width tall.
+    const heights = rows.map((row) => 1 / row.length);
+    const total = heights.reduce((a, b) => a + b, 0);
+
+    const keys = [];
+    let y = 0;
+    rows.forEach((row, r) => {
+        const h = heights[r] / total;
+        [...row].forEach((ch, i) => {
+            const id = KEYSTR_KEYS[ch];
+            if (id) {
+                keys.push({id, rects: [{x: i / row.length, y, w: 1 / row.length, h}]});
+            }
+        });
+        y += h;
+    });
+    return {name: 'rubber', style: 'rubber', aspect: total, units: 10, rows: rows.length, keys};
+}
 
 // The second CAPS/SYMBOL SHIFT keys act as (and light with) the first; their
 // layout ids carry a suffix so a layout can name both.
@@ -83,22 +149,21 @@ export const baseKeyId = (id) => (id === 'CAPS2' ? 'CAPS' : id === 'SYMBOL2' ? '
 export const keyRects = (key) => key.rects;
 
 /**
- * The keyboard layout a machine's on-screen keyboard should use, or null when
- * the machine keeps the 48K's rubber-key art.
+ * The keyboard layout a machine's on-screen keyboard should use.
  * @param {Number|String} machine 48, 128 or 'next'
- * @returns {'plus'|'next'|null}
+ * @returns {'rubber'|'plus'|'next'}
  */
 export function layoutForMachine(machine) {
     if (machine === 'next') return 'next';
     if (machine === 128 || machine === '128') return 'plus';
-    return null;
+    return 'rubber';
 }
 
 /**
  * Height / width of a layout drawn at a given width — the shape the app's
- * responsive layout needs before anything is rendered. The same for both
+ * responsive layout needs before anything is rendered. The same for all three
  * machines, so switching between them moves nothing on the page.
- * @param {'plus'|'next'} name
+ * @param {'rubber'|'plus'|'next'} name
  * @returns {Number}
  */
 export function layoutAspect(name) {

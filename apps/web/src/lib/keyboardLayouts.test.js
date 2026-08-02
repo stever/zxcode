@@ -6,10 +6,13 @@
 
 import {
     KEY_ACTIONS, LAYOUTS, baseKeyId, heldKeys, keyRects, layoutAspect, layoutForMachine,
-    legendsFor, matrixKey,
+    layoutFromKeystr, legendsFor, matrixKey,
 } from "@zxplay/ui/keyboard";
 import {DEFAULT_KEYSTR, keyboardAspect} from "./layout";
 
+// The two 58-key machines. The 48K's rubber keyboard is a different beast and
+// is checked on its own below.
+const machines = [['plus', LAYOUTS.plus], ['next', LAYOUTS.next]];
 const layouts = Object.entries(LAYOUTS);
 
 // The 40 keys of the Spectrum matrix.
@@ -32,7 +35,7 @@ const overlaps = (a, b) => (
     && a.y < b.y + b.h - 1e-6 && b.y < a.y + a.h - 1e-6
 );
 
-describe.each(layouts)('%s layout', (name, layout) => {
+describe.each(machines)('%s layout', (name, layout) => {
     const cells = layout.keys.flatMap((key) => keyRects(key).map((r) => ({...r, id: key.id})));
 
     it('carries all 58 keys of the machine', () => {
@@ -228,6 +231,82 @@ describe('which keys light up', () => {
     });
 });
 
+describe.each(layouts)('%s layout, whatever the machine', (name, layout) => {
+    const cells = layout.keys.flatMap((key) => keyRects(key).map((r) => ({...r, id: key.id})));
+
+    it('resolves every key to an action and a legend', () => {
+        const legends = legendsFor(name);
+        for (const key of layout.keys) {
+            expect(KEY_ACTIONS[baseKeyId(key.id)]).toBeDefined();
+            expect(legends[baseKeyId(key.id)]).toBeDefined();
+        }
+    });
+
+    it('does not overlap keys, and covers the whole keyboard', () => {
+        for (let i = 0; i < cells.length; i++) {
+            for (let j = i + 1; j < cells.length; j++) {
+                if (cells[i].id === cells[j].id) continue;
+                expect(`${cells[i].id}/${cells[j].id}: ${overlaps(cells[i], cells[j])}`)
+                    .toBe(`${cells[i].id}/${cells[j].id}: false`);
+            }
+        }
+        expect(Math.max(...cells.map((c) => c.x + c.w))).toBeCloseTo(1, 6);
+        expect(Math.max(...cells.map((c) => c.y + c.h))).toBeCloseTo(1, 6);
+    });
+});
+
+describe('rubber layout', () => {
+    const layout = LAYOUTS.rubber;
+
+    it('carries the 48K\'s forty keys, ten to a row', () => {
+        expect(layout.keys).toHaveLength(40);
+        expect(layout.units).toBe(10);
+        expect(layout.rows).toBe(4);
+        for (const id of MATRIX_KEYS) expect(layout.keys.map((k) => k.id)).toContain(id);
+    });
+
+    it('has no dedicated keys — that machine has none', () => {
+        const ids = layout.keys.map((key) => key.id);
+        for (const id of DEDICATED) expect(ids).not.toContain(id);
+    });
+
+    it('gives every key one square cell', () => {
+        for (const key of layout.keys) {
+            expect(key.rects).toHaveLength(1);
+            expect(key.rects[0].w).toBeCloseTo(0.1, 6);
+            expect(key.rects[0].h).toBeCloseTo(0.25, 6);
+        }
+    });
+});
+
+describe('layoutFromKeystr', () => {
+    it('lays out the keys a game named, and nothing else', () => {
+        const layout = layoutFromKeystr('OPeZ');
+        expect(layout.keys.map((k) => k.id)).toEqual(['O', 'P', 'ENTER', 'Z']);
+        expect(layout.style).toBe('rubber');
+        expect(layout.aspect).toBeCloseTo(1 / 4, 6);
+    });
+
+    it('gives a row of four keys bigger keys than a row of ten', () => {
+        expect(layoutFromKeystr('OPeZ').keys[0].rects[0].w).toBeCloseTo(0.25, 6);
+        expect(layoutFromKeystr('1234567890').keys[0].rects[0].w).toBeCloseTo(0.1, 6);
+    });
+
+    it('matches the full rubber keyboard when it names those keys', () => {
+        const layout = layoutFromKeystr('1234567890,QWERTYUIOP,ASDFGHJKLe,cZXCVBNMs_');
+        expect(layout.keys).toHaveLength(40);
+        expect(layout.aspect).toBeCloseTo(LAYOUTS.rubber.aspect, 6);
+    });
+
+    it('skips a dash, which holds a place without drawing a key', () => {
+        expect(layoutFromKeystr('-Q-').keys.map((k) => k.id)).toEqual(['Q']);
+    });
+
+    it('gives nothing back for an empty string', () => {
+        expect(layoutFromKeystr('')).toBeNull();
+    });
+});
+
 describe('every keyboard draws at one size', () => {
     it('gives the two layouts the same grid and the same aspect', () => {
         // #212: switching machine must not move anything on the page.
@@ -237,9 +316,10 @@ describe('every keyboard draws at one size', () => {
     });
 
     it('draws at the same shape as the 48K rubber keyboard', () => {
-        // Which is the box all three have to share, so the 48K's four rows of
-        // ten square keys set it.
+        // Which is the box all three share, so the 48K's four rows of ten
+        // square keys set it.
         expect(layoutAspect('plus')).toBe(keyboardAspect(DEFAULT_KEYSTR));
+        expect(layoutAspect('rubber')).toBe(keyboardAspect(DEFAULT_KEYSTR));
     });
 });
 
@@ -313,8 +393,8 @@ describe('layoutForMachine', () => {
         expect(layoutForMachine('next')).toBe('next');
     });
 
-    it('leaves the 48K on its rubber keys', () => {
-        expect(layoutForMachine(48)).toBeNull();
-        expect(layoutForMachine(undefined)).toBeNull();
+    it('gives the 48K its rubber keys', () => {
+        expect(layoutForMachine(48)).toBe('rubber');
+        expect(layoutForMachine(undefined)).toBe('rubber');
     });
 });

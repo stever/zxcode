@@ -43,19 +43,18 @@ export function parseKeyConfig(keystr) {
  *
  * A game that names its own keys (the "k" query parameter) keeps them on every
  * machine — a five-key play surface is the point, and it stays the same size on
- * a phone. Otherwise the keyboard matches the machine: the 128K gets the
- * Spectrum+ / toastrack layout, the Next its own, and the 48K the rubber keys
- * it has always had.
+ * a phone. Otherwise the keyboard matches the machine: the 48K's rubber keys,
+ * the 128K's Spectrum+ / toastrack layout, or the Next's own.
  *
  * @param {{keystr:String, aspect:Number, override:Boolean}} keyConfig
  * @param {Number|String} machine
  * @returns {{layout:(String|null), keystr:(String|null), aspect:Number}}
  */
 export function resolveKeyboard(keyConfig, machine) {
-    const layout = keyConfig.override ? null : layoutForMachine(machine);
-    if (!layout) {
+    if (keyConfig.override) {
         return {layout: null, keystr: keyConfig.keystr, aspect: keyConfig.aspect};
     }
+    const layout = layoutForMachine(machine);
     return {layout, keystr: null, aspect: layoutAspect(layout)};
 }
 

@@ -7,6 +7,7 @@
 // into its own shadow rather than changing shape.
 
 import {drawKey, PALETTE} from './keycap';
+import {drawRainbow, drawRubberKey, RUBBER_PALETTE} from './rubberkey';
 import {legendsFor} from './legends';
 import {baseKeyId, keyRects} from './layouts';
 
@@ -28,16 +29,27 @@ export function buildKeyboard(layout, width, height, createCanvas) {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
     const legends = legendsFor(layout.name);
+    const rubber = layout.style === 'rubber';
+    const palette = rubber ? RUBBER_PALETTE : PALETTE;
     const cell = {w: width / layout.units, h: height / layout.rows};
 
-    ctx.fillStyle = PALETTE.case;
+    ctx.fillStyle = palette.case;
     ctx.fillRect(0, 0, width, height);
+    if (layout.rainbow) {
+        drawRainbow(ctx, {cols: layout.units, rows: layout.rows, width, height});
+    }
 
     for (const key of layout.keys) {
         const rects = keyRects(key).map((r) => ({
             x: r.x * width, y: r.y * height, w: r.w * width, h: r.h * height,
         }));
-        drawKey(ctx, {rects, legend: legends[baseKeyId(key.id)], palette: PALETTE, cell});
+        const legend = legends[baseKeyId(key.id)];
+        if (rubber) {
+            // Every rubber key is one square cell, so the cell IS the key.
+            drawRubberKey(ctx, {rect: rects[0], legend, palette});
+        } else {
+            drawKey(ctx, {rects, legend, palette, cell});
+        }
     }
     return canvas;
 }

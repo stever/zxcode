@@ -56,11 +56,13 @@ They press the same keys underneath as a real machine does: EDIT holds CAPS
 SHIFT and 1. The on-screen keys show what the machine sees, so a key you
 press lights up, and so does one the running program is holding down.
 
-The 128K and Next keyboards are drawn from photographs of the real machines —
-every key rectangle, every legend and the shape of the moulding transcribed
-from them — so what you press is what the hardware looks like, down to the
-keyword printed on each key, but crisp at any size. Both are laid out on the
-same grid, so switching between those two machines moves nothing on the page.
+All three are drawn rather than pictured — every key rectangle, every legend,
+the shape of each moulding and the colours transcribed from a reference, the
+128K and Next from photographs of the real machines and the 48K from the key
+art it replaces. So what you press is what the hardware looks like, down to the
+keyword printed on each key, but crisp at any size and nothing to download.
+All three draw into the same box, so switching machine moves nothing on the
+page.
 
 Switching machines switches the keyboard; nothing to set.
 
@@ -69,8 +71,9 @@ Switching machines switches the keyboard; nothing to set.
 Most games use four or five keys. Showing a full keyboard on a phone makes
 all of them small. The `k` parameter replaces the on-screen keyboard with just
 the keys your game uses, and the layout resizes to match — fewer keys means
-bigger keys. Keys you name this way are kept on every machine, so a game's
-play surface does not change size when the machine does.
+bigger keys. Keys you name this way are the 48K's rubber keys, and they are
+kept on every machine, so a game's play surface does not change size when the
+machine does.
 
 The value is comma-separated rows of key characters. Letters and digits are
 themselves; four characters are special:
