@@ -242,14 +242,14 @@ func (c *Compositor) ComposeWideTilemapRow(tilemapY int, dst []byte) {
 	}
 	var scan, below [2 * FullWidth]byte // 640 pixels = 80 tiles × 8px
 	c.tilemap.RenderScanlineWithBelow(tilemapY, scan[:], below[:])
-	tmTransparentNibble := c.tilemapTrans
+	textmode := c.tilemap.Textmode()
 	n := len(dst) / 4
 	if n > len(scan) {
 		n = len(scan)
 	}
 	for x := 0; x < n; x++ {
 		idx := scan[x]
-		if idx&0x0F == tmTransparentNibble {
+		if c.tmTransparent(tilemapPal, idx, textmode) {
 			continue
 		}
 		// Per-pixel tm_below (tilemap.vhd:388): dst already holds the
@@ -278,6 +278,40 @@ func (c *Compositor) ComposeWideTilemapRow(tilemapY int, dst []byte) {
 // the raw index (0 != $13) wrongly painted Layer 2 opaque over the level.
 func (c *Compositor) l2Transparent(l2Pal *palette.Palette, idx byte) bool {
 	return byte(l2Pal.Get(idx)>>1) == c.transparency
+}
+
+// tmTransparent reports whether a tilemap pixel at palette index idx is
+// transparent, for the painters that resolve the tilemap directly
+// (Mix's own arms carry the same rule — see below).
+//
+// The two tile modes derive it DIFFERENTLY, and the split is the whole
+// point (tilemap.vhd:426-429):
+//
+//	pixel_en_standard_s <= pixel_en_s and (video_data(3:0) /= transp_colour_i)
+//	pixel_en_f <= (pixel_en_standard_s and not pixel_textmode_s)
+//	           or (pixel_en_s              and     pixel_textmode_s)
+//
+// A standard 4bpp tile compares its palette index's low nibble against
+// NR$4C. A TEXT-MODE pixel (NR$6B bit 3) BYPASSES that comparison
+// entirely — pixel_en_f takes the bare clip-window enable — because in
+// text mode the index's low bits are the attribute's palette pair, not
+// a tile colour, so an index whose nibble happens to equal NR$4C is
+// ordinary opaque text. Text mode's transparency is instead the mixer's
+// colour compare against the GLOBAL transparency colour NR$14
+// (zxnext.vhd:7108: tm_transparent <= not tm_pixel_en or (tm_pixel_textmode
+// and tm_rgb(8:1) = transparent) or not tm_en) — the same rule Mix applies.
+//
+// Applying the NR$4C test in text mode is what garbled NextZXOS's
+// 80-column viewers (#215): NextGuide and the Browser's text pages set
+// NR$4C = $08 and write attribute $08 (paper = palette 8, ink = 9), so
+// every PAPER pixel of a heading went transparent and the ULA — which
+// shares bank 5 with the tilemap the viewer just wrote there — bled
+// through as black-on-white noise.
+func (c *Compositor) tmTransparent(tmPal *palette.Palette, idx byte, textmode bool) bool {
+	if textmode {
+		return byte(tmPal.Get(idx)>>1) == c.transparency
+	}
+	return idx&0x0F == c.tilemapTrans
 }
 
 // ComposeWideLayer2Row overlays the Layer 2 hi-res row (320 or 640 px,
@@ -368,13 +402,13 @@ func (c *Compositor) ComposeBorderRow(tilemapY int, dst []byte, xScale int, isIn
 	// unmodelled exotic (treated as opaque). With tm_on_top set every
 	// pixel has below=0 and paints — incl. palette[0] for nibble-0
 	// pixels, which the testcard's uniform black frame relies on.
-	tmTransparentNibble := c.tilemapTrans
+	textmode := c.tilemap.Textmode()
 	for x := 0; x < FullWidth; x++ {
 		if !isInBorderArea(x) {
 			continue
 		}
 		idx := scan[x]
-		if idx&0x0F == tmTransparentNibble {
+		if c.tmTransparent(tilemapPal, idx, textmode) {
 			continue
 		}
 		if below[x] != 0 {
@@ -652,9 +686,10 @@ func (c *Compositor) composeTilemapOverlayRow(frameY int, dst []byte, xScale int
 		return
 	}
 	scan, below := c.tilemapRow(frameY)
+	textmode := c.tilemap.Textmode()
 	for x := 0; x < FullWidth; x++ {
 		idx := scan[x]
-		if (idx & 0x0F) == c.tilemapTrans {
+		if c.tmTransparent(tilemapPal, idx, textmode) {
 			continue
 		}
 		if below[x] != 0 && !c.ulaOutputDisabled && !c.capturedULATransparent(frameY, x) {
@@ -1316,7 +1351,7 @@ func (c *Compositor) paintTM(x int, tmPal *palette.Palette, ulaTrans bool, pix *
 		return
 	}
 	idx := r.tmScan[x]
-	if idx&0x0F == c.tilemapTrans {
+	if c.tmTransparent(tmPal, idx, r.tmTextmode) {
 		return
 	}
 	if r.tmBelow[x] != 0 && !ulaTrans {
@@ -1478,11 +1513,14 @@ func (c *Compositor) composePixelResolved(x int, ula [4]byte, mode PriorityMode,
 			idx := r.tmScan[x]
 			in.TMEn = true
 			in.TMRGB = tmPal.Get(idx)
-			// Opacity is the NR$4C nibble alone (tilemap.vhd:427);
-			// the ULA-vs-TM ordering is the per-pixel below bit
-			// (tilemap.vhd:388), which Mix consumes like the FPGA's
-			// ulatm arbitration (zxnext.vhd:7116/7139+).
-			in.TMPixelEn = (idx & 0x0F) != c.tilemapTrans
+			// pixel_en: the NR$4C nibble test for standard tiles,
+			// bypassed for text-mode pixels (tilemap.vhd:426-429 —
+			// Mix's TMTextmode arm supplies their NR$14 colour
+			// compare instead; see tmTransparent). The ULA-vs-TM
+			// ordering is the per-pixel below bit (tilemap.vhd:388),
+			// which Mix consumes like the FPGA's ulatm arbitration
+			// (zxnext.vhd:7116/7139+).
+			in.TMPixelEn = r.tmTextmode || (idx&0x0F) != c.tilemapTrans
 			in.TMBelow = r.tmBelow[x] != 0
 			in.TMTextmode = r.tmTextmode
 		}

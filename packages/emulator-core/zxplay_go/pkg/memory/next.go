@@ -260,7 +260,12 @@ func (m *Memory) SetROMBankExtended(val byte) {
 	// when the classic paging ports are locked (ZX48 personality).
 	merged := (m.port1FFD &^ 0x07) | new1FFD
 	if merged != m.port1FFD {
-		m.pageMemoryPlus3Apply(merged)
+		// port_memory_ram_change_dly = NOT(nr_8e_we AND NOT bit 3)
+		// (zxnext.vhd:3814): with bit 3 clear this write re-selects
+		// the ROM but must NOT reload MMU6/7 from the 7FFD bank —
+		// NextZXOS's `NEXTREG $8E,$00 ; RET` trampolines return on a
+		// stack that lives at $C000 in an MMU-overridden bank.
+		m.pageMemoryPlus3ApplyRAM(merged, val&0x08 != 0)
 	}
 }
 

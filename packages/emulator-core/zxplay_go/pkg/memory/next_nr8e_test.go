@@ -391,3 +391,57 @@ func TestROMMappingNR8E_Read(t *testing.T) {
 		})
 	}
 }
+
+// TestSetROMBankExtended_Bit3ClearKeepsMMU67 pins the FPGA's
+// port_memory_ram_change_dly gate (zxnext.vhd:3814):
+//
+//	port_memory_ram_change_dly <= not (nr_8e_we and not nr_wr_dat(3));
+//
+// which is the only condition on the MMU6/MMU7 reload from the 7FFD
+// bank (zxnext.vhd:4677-4681). So an NR$8E write with bit 3 CLEAR
+// re-selects the ROM and leaves $C000-$FFFF exactly as the MMU
+// registers left it, while bit 3 SET reloads both slots from the
+// (newly written) 7FFD bank, clearing their overrides.
+//
+// #215: NextZXOS's 64/85/128-column viewers reach their print driver
+// through a RAM trampoline `NEXTREG $8E,$00 ; RET`, having pushed the
+// return address on a stack that lives at $C000 in an MMU-overridden
+// bank. Re-paging there swapped the stack out from under the RET, which
+// popped $FFFF and reset the machine — ".more crashes on a .md file".
+func TestSetROMBankExtended_Bit3ClearKeepsMMU67(t *testing.T) {
+	m := newNextMem(t)
+
+	// Put a distinctive pair of 8K pages at $C000-$FFFF via the MMU,
+	// and a 7FFD bank that differs from them.
+	// $3B: bit 3 set (bits 6:4 = 3 → 7FFD bank 3) and bits 1:0 set, so
+	// the following $00 genuinely changes port_1FFD — the write that
+	// used to drag MMU6/7 along with it.
+	m.SetROMBankExtended(0x3B)
+	m.SetMMU(6, 0x22)
+	m.SetMMU(7, 0x23)
+
+	// bit 3 CLEAR: ROM-only change, MMU6/7 must survive.
+	m.SetROMBankExtended(0x00)
+	for _, c := range []struct {
+		slot byte
+		want byte
+	}{{6, 0x22}, {7, 0x23}} {
+		if got := m.GetMMU(c.slot); got != c.want {
+			t.Errorf("NR$8E=$00: MMU%d = $%02X, want $%02X (bit 3 clear must not re-page $C000)",
+				c.slot, got, c.want)
+		}
+		if !m.IsMMUOverridden(c.slot) {
+			t.Errorf("NR$8E=$00: MMU%d override cleared; bit 3 clear must not reload it", c.slot)
+		}
+	}
+
+	// bit 3 SET: the reload happens — both slots follow the new 7FFD
+	// bank (bits 6:4 = 1 → bank 1 → 8K pages 2 and 3).
+	m.SetROMBankExtended(0x18)
+	if got := m.GetMMU(6); got != 0x02 {
+		t.Errorf("NR$8E=$18: MMU6 = $%02X, want $02 (bit 3 set reloads from the 7FFD bank)", got)
+	}
+	if got := m.GetMMU(7); got != 0x03 {
+		t.Errorf("NR$8E=$18: MMU7 = $%02X, want $03", got)
+	}
+}

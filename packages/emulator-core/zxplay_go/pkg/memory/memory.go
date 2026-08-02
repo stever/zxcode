@@ -2623,6 +2623,32 @@ func (m *Memory) PageMemoryPlus3(val byte) {
 // port_1ffd_reg unconditionally, so NR$8E can re-page a machine
 // whose classic 7FFD port is locked (e.g. the ZX48 personality).
 func (m *Memory) pageMemoryPlus3Apply(val byte) {
+	m.pageMemoryPlus3ApplyRAM(val, true)
+}
+
+// pageMemoryPlus3ApplyRAM is pageMemoryPlus3Apply with the FPGA's
+// port_memory_ram_change_dly signal made explicit. Every ordinary
+// paging-port write asserts it, so ramChange is true for all of them;
+// the ONE exception is a NextReg $8E write with bit 3 clear
+// (zxnext.vhd:3814):
+//
+//	port_memory_ram_change_dly <= not (nr_8e_we and not nr_wr_dat(3));
+//
+// and the signal gates exactly one thing — the MMU6/MMU7 reload from
+// the 7FFD bank (zxnext.vhd:4677-4681):
+//
+//	elsif port_1ffd_special_old = '1' or port_memory_ram_change_dly = '1' then
+//	   MMU6 <= port_7ffd_bank & '0';
+//	   MMU7 <= port_7ffd_bank & '1';
+//
+// i.e. NR$8E bit 3 clear changes the ROM WITHOUT re-paging $C000-$FFFF.
+// NextZXOS's RAM-resident trampolines depend on that: the 64/85/128
+// column viewers reach their print driver through `NEXTREG $8E,$00 ;
+// RET`, having pushed the return address onto a stack that lives in an
+// MMU-overridden bank at $C000 (#215). Re-paging there swapped the
+// stack out from under the RET, which then popped $FFFF and reset the
+// machine — the ".more crashes on a .md file" report.
+func (m *Memory) pageMemoryPlus3ApplyRAM(val byte, ramChange bool) {
 	if m.PagingFrozen {
 		// When frozen, only update port1FFD for ROM selection purposes.
 		m.port1FFD = val
@@ -2691,15 +2717,19 @@ func (m *Memory) pageMemoryPlus3Apply(val byte) {
 			m.memoryPageWriteMap[3] = ramPage
 			m.syncMMUFromPage(1)
 			m.syncMMUFromPage(2)
+			// port_1ffd_special_old: leaving special paging reloads
+			// MMU6/7 whatever port_memory_ram_change_dly says.
+			ramChange = true
 		}
 		// zxnext.vhd:4677-4681: unlike MMU2-5, MMU6/7 reload from
-		// port_7ffd_bank on EVERY relevant paging-port write
-		// (port_memory_ram_change_dly is true for any ordinary
-		// $1FFD write, not just the special-exit transition) — the
+		// port_7ffd_bank on EVERY relevant paging-port write — the
 		// same rule PageMemory/SetDFFD apply for their own port
-		// writes. So this call is unconditional here too, not
-		// nested inside the transition-only block above.
-		m.syncMMUFromPage(3)
+		// writes — so this sits outside the transition-only block
+		// above. ramChange carries the one case that suppresses it
+		// (NR$8E with bit 3 clear); see pageMemoryPlus3ApplyRAM.
+		if ramChange {
+			m.syncMMUFromPage(3)
+		}
 	}
 
 	// Update ROM selection when 0x1FFD changes (bit 2 is high bit of ROM index)

@@ -223,6 +223,28 @@ FPGA source, and the ESP UART moved to its real ports.
 
 ### Fixed
 
+- **NextZXOS's 80-column text viewers crashed or drew garbage (#215).**
+  Opening a `.md` file from the NextZXOS Browser reset the machine, and
+  the Guide's pages came out with the text overprinted by black-on-white
+  noise. Two independent faults, both settled against the FPGA source:
+  - `.more -64/-85/-128` (the Browser's own handler for text files)
+    reaches its print driver through a RAM trampoline
+    `NEXTREG $8E,$00 ; RET`, returning on a stack that lives at `$C000`
+    in an MMU-overridden bank. We re-paged `$C000` from the 7FFD bank on
+    every NR$8E write, so the `RET` popped `$FFFF` and the machine reset.
+    `port_memory_ram_change_dly = NOT(nr_8e_we AND NOT bit 3)`
+    (`zxnext.vhd:3814`) is the sole gate on that MMU6/7 reload
+    (`zxnext.vhd:4677-4681`): bit 3 clear changes the ROM and nothing
+    else.
+  - The tilemap applied the NR$4C transparency-index test to TEXT-MODE
+    pixels. `pixel_en_f` takes the bare clip enable for those and
+    `pixel_en_standard_s` (which carries the NR$4C compare) only for
+    standard 4bpp tiles (`tilemap.vhd:426-429`); text mode's
+    transparency is the mixer's colour compare against the global NR$14
+    (`zxnext.vhd:7108`). The viewers set NR$4C = `$08` and write
+    attribute `$08` — paper = palette 8, ink = 9 — so every paper pixel
+    went transparent and the ULA, which shares bank 5 with the tilemap
+    those viewers had just written there, showed through.
 - **The CRT filter drew a diagonal seam corner to corner across the
   picture.** The filter always built a fixed 2× buffer, leaving the GPU to
   stretch it onto whatever the window actually was — 256 Next rows doubled

@@ -370,22 +370,23 @@ func TestComposeBorderRow_ActivePathTouchesDst(t *testing.T) {
 }
 
 // TestComposeWideTilemapRow_NR4CTransparency verifies the 80-column wide
-// path honours the live NR$4C transparency nibble. NextGuide's intro
-// text has pixels whose palette index low-nibble is $F; with the
-// hardcoded $0F default they were wrongly transparent (the ULA bled
-// through). With the real NR$4C=$08 they must be opaque.
+// path honours the LIVE NR$4C transparency nibble rather than the
+// hardcoded $0F default: a standard-tile pixel of nibble $F is
+// transparent under the default and opaque once NR$4C moves to $08.
+// (Text-mode pixels take neither — they bypass NR$4C entirely; see
+// TestTextmodeBypassesNR4C.)
 func TestComposeWideTilemapRow_NR4CTransparency(t *testing.T) {
 	br := &fakeBankReader{}
 	bank := make([]byte, 16384)
 	bank[0] = 0x01    // cell 0 → tile 1
-	bank[1] = 0x0E    // attr $0E → textmode fg index = ($0E|1) = $0F
-	bank[0x08] = 0x80 // tile 1 textmode row 0: pixel 0 = foreground
+	bank[1] = 0x00    // attr: palette offset 0, no below bit
+	bank[0x20] = 0xFF // tile 1, 4bpp row 0: pixels 0,1 = nibble $F
 	br.banks[5] = bank
 	tm := tilemap.New(br)
 	tm.SetEnabled(true)
 	tm.SetTileMapBase(0x00)
 	tm.SetTilesBase(0x00)
-	tm.SetControl(0x40 | 0x08 | 0x01) // 80-col + textmode + on_top (attrs)
+	tm.SetControl(0x40 | 0x01) // 80-col + on_top (per-tile attrs)
 
 	pal := palette.NewBank()
 	pal.Select(palette.PaletteTilemapFirst)
@@ -752,5 +753,89 @@ func TestComposeSpriteBorderRow(t *testing.T) {
 	// A pixel the sprite does not cover stays untouched (0,0,0).
 	if dst[200*4+0] != 0 || dst[200*4+1] != 0 {
 		t.Errorf("uncovered border px @ X200 was painted")
+	}
+}
+
+// TestTextmodeBypassesNR4C pins tilemap.vhd:426-429 — a TEXT-MODE
+// tilemap pixel does NOT compare its palette index's low nibble
+// against NR$4C:
+//
+//	pixel_en_f <= (pixel_en_standard_s and not pixel_textmode_s)
+//	           or (pixel_en_s              and     pixel_textmode_s)
+//
+// Only standard 4bpp tiles take pixel_en_standard_s (the NR$4C test).
+// Text mode's transparency is the mixer's colour compare against the
+// GLOBAL transparency colour NR$14 instead (zxnext.vhd:7108).
+//
+// #215: NextZXOS's 80-column viewers (NextGuide, the Browser's text
+// pages) set NR$4C = $08 and write attribute $08 — paper = palette 8,
+// ink = palette 9. Applying the NR$4C test made every PAPER pixel of
+// a heading transparent, and the ULA (which shares bank 5 with the
+// tilemap those viewers had just written there) bled through as
+// black-on-white noise.
+func TestTextmodeBypassesNR4C(t *testing.T) {
+	br := &fakeBankReader{}
+	bank := make([]byte, 16384)
+	bank[0] = 0x01    // cell 0 → tile 1
+	bank[1] = 0x08    // attr $08 → paper = index $08, ink = index $09
+	bank[0x08] = 0x40 // tile 1 textmode row 0: pixel 0 = paper, pixel 1 = ink
+	br.banks[5] = bank
+	tm := tilemap.New(br)
+	tm.SetEnabled(true)
+	tm.SetTileMapBase(0x00)
+	tm.SetTilesBase(0x00)
+	tm.SetControl(0x40 | 0x08 | 0x01) // 80-col + textmode + on_top (attrs)
+
+	pal := palette.NewBank()
+	pal.Select(palette.PaletteTilemapFirst)
+	pal.Active().Set(0x08, 0b0_0100_1001) // paper = a dark grey, NOT NR$14
+	pal.Active().Set(0x09, 0b0_0001_1101) // ink   = green
+	pal.Select(0)
+	c := New(pal, nil)
+	c.SetTilemap(tm)
+	if !c.TilemapIs80Col() {
+		t.Skip("TilemapIs80Col false (palette wiring); cannot exercise wide path")
+	}
+	c.SetTilemapTransparency(0x08) // the viewers' NR$4C
+	c.SetTransparency(0x00)        // NR$14 = black
+
+	render := func(px int) byte {
+		dst := make([]byte, 2*FullWidth*4)
+		for i := range dst {
+			dst[i] = 0x11 // sentinel base (the doubled lower layers)
+		}
+		c.ComposeWideTilemapRow(0, dst)
+		return dst[px*4]
+	}
+	// Paper pixel: index $08, low nibble == NR$4C — opaque anyway,
+	// because text mode never consults NR$4C.
+	if got := render(0); got == 0x11 {
+		t.Error("textmode paper pixel (index $08 == NR$4C) left transparent, want painted")
+	}
+	// Ink pixel: index $09, opaque under either rule.
+	if got := render(1); got == 0x11 {
+		t.Error("textmode ink pixel (index $09) left transparent, want painted")
+	}
+	// Text mode's OWN transparency rule: an index whose COLOUR is the
+	// NR$14 transparency colour drops out (zxnext.vhd:7108).
+	pal.Select(palette.PaletteTilemapFirst)
+	pal.Active().Set(0x08, 0x000) // paper now == NR$14 (black)
+	pal.Select(0)
+	if got := render(0); got != 0x11 {
+		t.Errorf("textmode paper at the NR$14 colour painted ($%02X), want transparent", got)
+	}
+
+	// A STANDARD (non-textmode) tile still applies the NR$4C nibble test.
+	tm.SetControl(0x40 | 0x01) // drop textmode
+	pal.Select(palette.PaletteTilemapFirst)
+	pal.Active().Set(0x08, 0b0_0100_1001)
+	pal.Select(0)
+	stdBank := make([]byte, 16384)
+	stdBank[0] = 0x01      // tile 1
+	stdBank[1] = 0x00      // attr: palette offset 0
+	stdBank[0x20+0] = 0x88 // tile 1, 4bpp row 0: pixels 0,1 = nibble 8
+	br.banks[5] = stdBank
+	if got := render(0); got != 0x11 {
+		t.Errorf("standard-tile pixel with nibble $08 == NR$4C painted ($%02X), want transparent", got)
 	}
 }

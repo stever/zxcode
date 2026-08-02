@@ -78,8 +78,12 @@ drift. Highlights:
   timing, config-mode transitions, bootrom un-mask), `WireReset` (NR$02:
   typed soft/hard reset, see boot chain below), `applyTBBLUEFWBootDefaults`
   (the register state the real firmware leaves behind).
-- Memory: `WireMMU` (NR$50-$57), `WireROMBank` (NR$8E), `WireAltROM`
-  (NR$8C), `WireConfigModeRAMPage` (NR$04).
+- Memory: `WireMMU` (NR$50-$57), `WireROMBank` (NR$8E — a write with
+  bit 3 CLEAR re-selects the ROM WITHOUT reloading MMU6/7 from the 7FFD
+  bank, the `port_memory_ram_change_dly` gate at `zxnext.vhd:3814`;
+  NextZXOS's RAM trampolines return on a stack at $C000 that the reload
+  would page away), `WireAltROM` (NR$8C), `WireConfigModeRAMPage`
+  (NR$04).
 - CPU: `WireCPUSpeed` (NR$07 turbo), `WireContentionDisable` (NR$08).
 - Interrupts: `WireInterruptControl` (NR$C0 incl. stackless NMI),
   `WireInterruptEnable0/2` (NR$C4/$C6), `WireLineInterrupt` (NR$22/$23).
@@ -336,7 +340,10 @@ shape, zxnext.vhd:6543-6552). The pieces:
   NR$15 priority order (SLU/LSU/SUL/LUS/USL/ULS plus two additive blend
   modes), global transparency NR$14 (sprite transparency NR$4B lives in
   the sprite ENGINE — see above), tilemap
-  transparency nibble NR$4C, the SUL per-pixel stencil, Layer 2
+  transparency nibble NR$4C — for STANDARD 4bpp tiles only; a text-mode
+  pixel (NR$6B bit 3) bypasses that test and takes the NR$14 colour
+  compare instead (`tilemap.vhd:426-429`, `zxnext.vhd:7108`; the
+  `tmTransparent` helper and Mix's `TMTextmode` arm) — the SUL per-pixel stencil, Layer 2
   priority-bit promotion — an opaque priority-bit L2 pixel outranks
   EVERYTHING, sprites included, in every mode whose FPGA ladder tests
   layer2_priority (all but LSU/LUS; #195 Head Over Heels' isometric

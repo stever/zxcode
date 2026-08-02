@@ -417,12 +417,31 @@ Pinned since (base/Copper + base/DMA conformance work):
   (a below pixel yields to an OPAQUE ULA pixel only). Replaces the
   global on-top/nibble-0 approximation, which was INVERTED for
   attr0=0 tiles with on_top off (the FPGA puts those above the ULA);
-  opacity is the NR$4C nibble alone (tilemap.vhd:427 — nibble 0 is
-  opaque). `TestTMBelowPerTileAttrBit` / `TestTMBelowOnTopOverrides` /
-  `TestTMBelow512ModeForcesBelow` (pkg/next/compositor), all pinned
-  goldens unchanged. Residue: the wide overlay/80-col passes skip
-  below pixels (no ULA pixel to arbitrate against there) —
-  known-gaps blend/wide rows.
+  opacity of a STANDARD tile is the NR$4C nibble alone
+  (tilemap.vhd:427 — nibble 0 is opaque). `TestTMBelowPerTileAttrBit` /
+  `TestTMBelowOnTopOverrides` / `TestTMBelow512ModeForcesBelow`
+  (pkg/next/compositor), all pinned goldens unchanged. Residue: the
+  wide overlay/80-col passes skip below pixels (no ULA pixel to
+  arbitrate against there) — known-gaps blend/wide rows.
+- ✅ Tilemap TEXT-MODE opacity (#215): a text-mode pixel (NR$6B bit 3)
+  does NOT take the NR$4C nibble test — pixel_en_f selects the bare
+  clip-window enable for it and pixel_en_standard_s (which carries the
+  NR$4C compare) only for standard tiles (tilemap.vhd:426-429). Its
+  transparency is the mixer's colour compare against the GLOBAL
+  NR$14 instead (zxnext.vhd:7108, the Mix TMTextmode arm). Applying
+  NR$4C in text mode garbled NextZXOS's 80-column viewers, which set
+  NR$4C=$08 and write attribute $08 (paper = palette 8, ink = 9): every
+  paper pixel went transparent and the ULA — sharing bank 5 with the
+  tilemap those viewers had just written there — bled through.
+  `TestTextmodeBypassesNR4C` (pkg/next/compositor).
+- ✅ NR$8E port_memory_ram_change_dly (#215): a NextReg $8E write with
+  bit 3 CLEAR re-selects the ROM WITHOUT reloading MMU6/MMU7 from the
+  7FFD bank — port_memory_ram_change_dly = NOT(nr_8e_we AND NOT bit 3)
+  (zxnext.vhd:3814) is the sole gate on that reload
+  (zxnext.vhd:4677-4681). NextZXOS's RAM trampolines
+  (`NEXTREG $8E,$00 ; RET`) return on a stack at $C000 in an
+  MMU-overridden bank; re-paging there popped $FFFF and reset the
+  machine. `TestSetROMBankExtended_Bit3ClearKeepsMMU67` (pkg/memory).
 - ✅ Wide-frame geometry (r51, #171): sprites, tilemap and wide Layer 2
   all render in the FPGA's ONE 320×256 frame — the same whc/wvc
   counters feed all three blocks (zxnext.vhd:4208/4337/4389 ←
