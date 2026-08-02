@@ -90,6 +90,62 @@ function drawGraphic(ctx, n, x, y, size, ink, casing) {
     }
 }
 
+// How far a pressed rubber key travels — into the space its own shadow
+// occupied — and how much darker it sits there.
+const SINK = 0.024;
+const SHADE = 'rgba(0, 0, 0, 0.22)';
+
+const capRect = (rect) => ({
+    x: rect.x + rect.w * CAP.x, y: rect.y + rect.h * CAP.y,
+    w: rect.w * CAP.w, h: rect.h * CAP.h,
+});
+
+// The cap itself, and the legends printed on it. `sink` slides the whole thing
+// down; a sunk key has no shadow, because it is sitting in it.
+function drawCap(ctx, {rect, legend, palette, sink = 0}) {
+    const {h} = rect;
+    const cap = capRect(rect);
+    cap.y += sink;
+    const radius = Math.min(h * CAP.radius, cap.h / 2);
+
+    const fill = ctx.createLinearGradient(0, cap.y, 0, cap.y + cap.h);
+    fill.addColorStop(0, palette.capTop);
+    fill.addColorStop(1, palette.capBottom);
+
+    ctx.save();
+    if (!sink) {
+        ctx.shadowColor = palette.shadow;
+        ctx.shadowBlur = h * 0.035;
+        ctx.shadowOffsetY = h * 0.028;
+    }
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(cap.x, cap.y, cap.w, cap.h, radius)
+        : ctx.rect(cap.x, cap.y, cap.w, cap.h);
+    ctx.fill();
+    ctx.restore();
+
+    // A hairline along the top of the rubber, where it catches the light.
+    if (!sink) {
+        ctx.strokeStyle = palette.edge;
+        ctx.lineWidth = Math.max(1, h * 0.008);
+        ctx.beginPath();
+        ctx.moveTo(cap.x + radius, cap.y + ctx.lineWidth);
+        ctx.lineTo(cap.x + cap.w - radius, cap.y + ctx.lineWidth);
+        ctx.stroke();
+    }
+
+    drawCapLegends(ctx, legend, {rect, cap, palette, sink});
+
+    if (sink) {
+        ctx.fillStyle = SHADE;
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(cap.x, cap.y, cap.w, cap.h, radius)
+            : ctx.rect(cap.x, cap.y, cap.w, cap.h);
+        ctx.fill();
+    }
+}
+
 /**
  * Draw one rubber key.
  *
@@ -100,48 +156,46 @@ function drawGraphic(ctx, n, x, y, size, ink, casing) {
  * @param {Object} opts.palette RUBBER_PALETTE
  */
 export function drawRubberKey(ctx, {rect, legend = {}, palette}) {
-    const {x, y, w, h} = rect;
-    const cap = {
-        x: x + w * CAP.x, y: y + h * CAP.y, w: w * CAP.w, h: h * CAP.h,
-    };
-    const radius = Math.min(h * CAP.radius, cap.h / 2);
-
-    const fill = ctx.createLinearGradient(0, cap.y, 0, cap.y + cap.h);
-    fill.addColorStop(0, palette.capTop);
-    fill.addColorStop(1, palette.capBottom);
-
-    ctx.save();
-    ctx.shadowColor = palette.shadow;
-    ctx.shadowBlur = h * 0.035;
-    ctx.shadowOffsetY = h * 0.028;
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(cap.x, cap.y, cap.w, cap.h, radius)
-        : ctx.rect(cap.x, cap.y, cap.w, cap.h);
-    ctx.fill();
-    ctx.restore();
-
-    // A hairline along the top of the rubber, where it catches the light.
-    ctx.strokeStyle = palette.edge;
-    ctx.lineWidth = Math.max(1, h * 0.008);
-    ctx.beginPath();
-    ctx.moveTo(cap.x + radius, cap.y + ctx.lineWidth);
-    ctx.lineTo(cap.x + cap.w - radius, cap.y + ctx.lineWidth);
-    ctx.stroke();
-
-    drawLegends(ctx, legend, {rect, cap, palette});
+    drawCap(ctx, {rect, legend, palette});
+    drawCaseLegends(ctx, legend, {rect, palette});
 }
 
-function drawLegends(ctx, legend, {rect, cap, palette}) {
-    const {x, y, w, h} = rect;
-    const ink = palette.ink;
+/**
+ * Redraw one rubber key as held down: only the cap travels, into the space its
+ * shadow occupied. The words printed on the CASE stay where they are, because
+ * on the machine they are not on the key at all.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Object} opts as for drawRubberKey
+ */
+export function drawRubberKeyPressed(ctx, {rect, legend = {}, palette}) {
+    const cap = capRect(rect);
+    const margin = rect.h * 0.07; // enough to take the shadow with it
 
-    // The case words: green above (or the white CAPS SHIFT function on the
-    // number keys), red below.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cap.x - margin, cap.y - margin, cap.w + margin * 2, cap.h + margin * 2);
+    ctx.clip();
+    ctx.fillStyle = palette.case;
+    ctx.fillRect(cap.x - margin, cap.y - margin, cap.w + margin * 2, cap.h + margin * 2);
+    drawCap(ctx, {rect, legend, palette, sink: rect.h * SINK});
+    ctx.restore();
+}
+
+// The words printed on the case: green above (or the white CAPS SHIFT function
+// on the number keys), red below.
+function drawCaseLegends(ctx, legend, {rect, palette}) {
+    const {x, y, w, h} = rect;
     label(ctx, legend.caps || legend.ext, x + w * EXT_X, y + h * EXT_Y, h * CASE_TEXT,
-        legend.caps ? ink : palette.green, 'left', w * 0.8);
+        legend.caps ? palette.ink : palette.green, 'left', w * 0.8);
     label(ctx, legend.extSym, x + w * EXT_X, y + h * EXT_SYM_Y, h * CASE_TEXT,
         palette.sym, 'left', w * 0.8);
+}
+
+function drawCapLegends(ctx, legend, {rect, cap, palette, sink = 0}) {
+    const {x, w, h} = rect;
+    const y = rect.y + sink;
+    const ink = palette.ink;
 
     // A named key puts its name on the cap, over one or two lines. BREAK SPACE
     // sets the second line larger; SYMBOL SHIFT prints in red.

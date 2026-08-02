@@ -7,7 +7,7 @@
 // into its own shadow rather than changing shape.
 
 import {drawKey, PALETTE} from './keycap';
-import {drawRainbow, drawRubberKey, RUBBER_PALETTE} from './rubberkey';
+import {drawRainbow, drawRubberKey, drawRubberKeyPressed, RUBBER_PALETTE} from './rubberkey';
 import {legendsFor} from './legends';
 import {baseKeyId, keyRects} from './layouts';
 
@@ -94,8 +94,20 @@ function exposedTop(rect, rects) {
  * @param {Number} opts.height canvas height, in pixels
  * @param {String} opts.seam colour of the gap between keys
  */
-export function drawKeyPressed(ctx, board, {rects, width, height, seam}) {
+export function drawKeyPressed(ctx, board, {rects, width, height, seam, layout, legend}) {
     if (!board) return;
+
+    // A rubber key is a different movement from a moulding: only the cap
+    // travels, so it is redrawn rather than slid out of the picture.
+    if (layout && layout.style === 'rubber') {
+        const r = rects[0];
+        drawRubberKeyPressed(ctx, {
+            rect: {x: r.x * width, y: r.y * height, w: r.w * width, h: r.h * height},
+            legend,
+            palette: RUBBER_PALETTE,
+        });
+        return;
+    }
     const bw = board.width;
     const bh = board.height;
     const sink = Math.max(1, height * SINK);

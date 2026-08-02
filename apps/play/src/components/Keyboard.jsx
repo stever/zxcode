@@ -3,7 +3,7 @@ import PropTypes from "prop-types";
 import {Control, SingleWindow} from "../lib/canvasgui";
 import {
     KEY_ACTIONS, LAYOUTS, PALETTE, RUBBER_PALETTE, baseKeyId, buildKeyboard, drawKeyboard,
-    drawKeyPressed, heldKeys, keyRects, layoutFromKeystr, matrixKey,
+    drawKeyPressed, heldKeys, keyRects, layoutFromKeystr, legendsFor, matrixKey,
 } from "@zxplay/ui/keyboard";
 
 Keyboard.propTypes = {
@@ -122,7 +122,7 @@ class KeyboardImage extends Control {
 // rectangles rather than its bounding box, or the notch of the L-shaped ENTER
 // would steal the corner of the key beside it.
 class MachineKey extends Control {
-    constructor(parent, layout, key, board, width, height, codes) {
+    constructor(parent, layout, key, board, width, height, codes, legend) {
         const rects = keyRects(key);
         const left = Math.min(...rects.map((r) => r.x)) * width;
         const top = Math.min(...rects.map((r) => r.y)) * height;
@@ -135,6 +135,8 @@ class MachineKey extends Control {
         this.boardW = width;
         this.boardH = height;
         this.seam = paletteFor(layout).case;
+        this.layout = layout;
+        this.legend = legend;
         const win = parent.win;
 
         this.on_begin = this.on_enter = () => {
@@ -162,6 +164,8 @@ class MachineKey extends Control {
             width: this.boardW,
             height: this.boardH,
             seam: this.seam,
+            layout: this.layout,
+            legend: this.legend,
         });
     }
 }
@@ -246,9 +250,12 @@ function layoutKeyboard(win, width, keystr, layoutName, registerKey) {
     win.setTargetSize(width, height);
     new KeyboardImage(win, board, width, height);
 
+    const legends = legendsFor(layout.name);
     for (const key of layout.keys) {
-        const action = KEY_ACTIONS[baseKeyId(key.id)];
-        const btn = new MachineKey(win, layout, key, board, width, height, action.codes);
+        const id = baseKeyId(key.id);
+        const action = KEY_ACTIONS[id];
+        const btn = new MachineKey(win, layout, key, board, width, height, action.codes,
+            legends[id]);
         registerKey(btn, action.matrix);
     }
 }

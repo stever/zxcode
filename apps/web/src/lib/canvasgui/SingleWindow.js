@@ -125,6 +125,11 @@ export class SingleWindow extends Group {
     // this on teardown (e.g. a React effect cleanup) so the instance and its
     // detached canvas can be collected and stop responding to window events.
     destroy() {
+        // The pointer listeners sit on the canvas, which outlives this window.
+        if (this._pehandler) {
+            this._pehandler.destroy();
+            this._pehandler = null;
+        }
         window.removeEventListener('load', this._loadListener);
         if (this._resizeListener) {
             window.removeEventListener('resize', this._resizeListener);

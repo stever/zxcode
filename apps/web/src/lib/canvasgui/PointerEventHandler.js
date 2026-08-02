@@ -2,43 +2,26 @@ export class PointerEventHandler {
     constructor(element) {
         this.element = element;
 
-        const that = this;
-
-        this.element.addEventListener('mousedown', function (e) {
-            that._onMouseDown(e);
-        });
-
-        this.element.addEventListener('mousemove', function (e) {
-            that._onMouseMove(e);
-        });
-
-        this.element.addEventListener('mouseup', function (e) {
-            that._onMouseUp(e);
-        });
-
-        this.element.addEventListener('mouseout', function (e) {
-            that._onMouseOut(e);
-        });
-
-        this.element.addEventListener('touchstart', function (e) {
-            that._onTouchStart(e);
-        });
-
-        this.element.addEventListener('touchmove', function (e) {
-            that._onTouchMove(e);
-        });
-
-        this.element.addEventListener('touchend', function (e) {
-            that._onTouchEnd(e);
-        });
-
-        this.element.addEventListener('touchleave', function (e) {
-            that._onTouchLeave(e);
-        });
-
-        this.element.addEventListener('touchcancel', function (e) {
-            that._onTouchCancel(e);
-        });
+        // Keep every listener so destroy() can take them off again. The host
+        // re-creates its window whenever the keyboard changes — a different
+        // machine, a new size — but React hands back the SAME canvas, so a
+        // handler left attached would keep answering clicks for a keyboard
+        // that is no longer on screen, pressing whatever key used to be under
+        // the pointer as well as the one that is.
+        this._listeners = [
+            ['mousedown', (e) => this._onMouseDown(e)],
+            ['mousemove', (e) => this._onMouseMove(e)],
+            ['mouseup', (e) => this._onMouseUp(e)],
+            ['mouseout', (e) => this._onMouseOut(e)],
+            ['touchstart', (e) => this._onTouchStart(e)],
+            ['touchmove', (e) => this._onTouchMove(e)],
+            ['touchend', (e) => this._onTouchEnd(e)],
+            ['touchleave', (e) => this._onTouchLeave(e)],
+            ['touchcancel', (e) => this._onTouchCancel(e)],
+        ];
+        for (const [type, fn] of this._listeners) {
+            this.element.addEventListener(type, fn);
+        }
 
         this.pointerActive = {};
 
@@ -57,6 +40,15 @@ export class PointerEventHandler {
 
     addEventListener(listener) {
         this.listeners.push(listener);
+    }
+
+    // Take every listener off the element again.
+    destroy() {
+        for (const [type, fn] of this._listeners) {
+            this.element.removeEventListener(type, fn);
+        }
+        this._listeners = [];
+        this.listeners = [];
     }
 
     _notifyEvent(e, type, pointerId) {
@@ -167,8 +159,8 @@ export class PointerEventHandler {
 
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
-            if (!this.pointerActive[touch.identifier]) return;
-            this.pointerActive[touch.identifier] = true;
+            if (!this.pointerActive[touch.identifier]) continue;
+            this.pointerActive[touch.identifier] = false;
             this._notifyEvent(touch, this.tend, touch.identifier);
         }
     }
@@ -181,8 +173,8 @@ export class PointerEventHandler {
 
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
-            if (!this.pointerActive[touch.identifier]) return;
-            this.pointerActive[touch.identifier] = true;
+            if (!this.pointerActive[touch.identifier]) continue;
+            this.pointerActive[touch.identifier] = false;
             this._notifyEvent(touch, this.tend, touch.identifier);
         }
     }
@@ -195,8 +187,8 @@ export class PointerEventHandler {
 
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
-            if (!this.pointerActive[touch.identifier]) return;
-            this.pointerActive[touch.identifier] = true;
+            if (!this.pointerActive[touch.identifier]) continue;
+            this.pointerActive[touch.identifier] = false;
             this._notifyEvent(touch, this.tend, touch.identifier);
         }
     }
