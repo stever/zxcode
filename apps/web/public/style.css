@@ -216,15 +216,21 @@ code {
 /* The slot above the emulator (the project's title, the home page's demo
    notice). It mirrors the editor's tab strip beside it: --zx-title-slot is that
    strip's measured height, and the margin below matches the strip's own (see
-   .p-tabview-nav above). Getting BOTH from it is what puts the title on the
-   same line as the file tabs and starts the emulator on the same line as the
-   editor — a slot of any fixed height can only ever manage one of the two.
-   The fallback is what the strip measures at the default font. */
+   .p-tabview-nav above). Taking BOTH from the strip is what starts the emulator
+   on the same line as the editor, whatever the theme's font does to the strip;
+   a slot of any fixed height gets that right only by luck. The fallback is what
+   the strip measures at the default font.
+
+   Its contents sit at the BOTTOM of it rather than centred, which is where they
+   sat before the slot was measured: the title names the emulator under it, and
+   reads as belonging to it from there. Centring would instead line it up with
+   the file tabs, which is a coincidence of the two headers now being the same
+   height rather than a relationship worth drawing. */
 .zx-title-slot,
 .zx-title-slot-min {
     margin-bottom: 8px;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
 }
 
 .zx-title-slot {

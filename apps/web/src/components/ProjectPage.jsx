@@ -234,7 +234,9 @@ export default function ProjectPage({ projectId }) {
                 )}
                 style={{ width: `${emuW}px` }}
               >
-                <div className="zx-title-slot pl-1 flex align-items-center justify-content-between">
+                {/* The slot sets its own display and alignment (style.css): the
+                    title sits on the bottom edge, above the emulator it names. */}
+                <div className="zx-title-slot pl-1 justify-content-between">
                   <h3 className="m-0">
                     {title ? t("home.projectLabel", { title }) : ""}
                   </h3>
