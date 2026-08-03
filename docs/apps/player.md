@@ -3,7 +3,8 @@
 [zxplay.org](https://zxplay.org) is a ZX Spectrum player built for phones as
 much as for desktops: the screen and an on-screen Spectrum keyboard lay
 themselves out to fit whatever viewport you open it in, stacked in portrait
-and side by side in landscape.
+and side by side in landscape. Turn the keyboard off and the screen takes
+its room.
 
 It runs the same emulation core as everything else in this project, compiled
 to WebAssembly — 48K, 128K and a Spectrum Next that cold-boots real NextZXOS.
@@ -76,6 +77,21 @@ would rather drive with the Spectrum+'s dedicated EDIT and cursor keys. The
 keys are matrix positions, so any keyboard drives any machine: BREAK on the
 Next's keyboard is CAPS SHIFT and SPACE, which is BREAK on a 48K too. Your
 choice is remembered, along with the machine and the joystick.
+
+### No keyboard, and a bigger screen
+
+The same menu offers **No Keyboard**, for playing with a real keyboard in
+front of you. The screen then takes the room the keyboard had rather than
+leaving it blank: it is no longer held to twice the Spectrum's own size, and
+grows until it meets the window. On a 1920x1080 desktop that is a screen about
+1250 pixels wide instead of 640. In landscape, where the screen already uses
+the full height, the keyboard simply goes. Only View > Keyboard Side has
+nothing left to say, so it steps out of the menu.
+
+Nothing else changes: clicking the screen still hands it your keyboard, and
+your choice is remembered like the rest. A game that names its own keys with
+the `k` parameter (below) still draws them — those are its controls, and on a
+phone they may be the only ones — so the choice comes back with the next game.
 
 ### Tailoring the keyboard to a game
 

@@ -159,22 +159,33 @@ export function layoutForMachine(machine) {
     return 'rubber';
 }
 
-// What the user can ask for: the keyboard the machine has ('auto'), or one
-// named outright. A machine can be running something its own keyboard does not
-// suit — a Next in 48K mode, a 128K program driven from BASIC — so the choice
-// is worth having (#214). 'auto' is the default and the usual answer.
-export const KEYBOARD_CHOICES = ['auto', 'rubber', 'plus', 'next'];
+// No keyboard at all: the one choice that names no layout, because there is
+// nothing to draw. Deliberately absent from LAYOUTS — it is the absence of one
+// — and the apps give the space it frees to the emulator's screen instead.
+export const KEYBOARD_NONE = 'none';
+
+// What the user can ask for: the keyboard the machine has ('auto'), one named
+// outright, or none. A machine can be running something its own keyboard does
+// not suit — a Next in 48K mode, a 128K program driven from BASIC — so the
+// choice is worth having (#214), and someone with a real keyboard in front of
+// them would rather have the screen than a drawn one. 'auto' is the default and
+// the usual answer.
+export const KEYBOARD_CHOICES = ['auto', KEYBOARD_NONE, 'rubber', 'plus', 'next'];
 
 /**
  * The keyboard to draw, given what the user asked for and what machine is
  * selected. An unknown choice falls back to the machine's own keyboard, so a
- * stale saved preference cannot leave the app with no keyboard at all.
+ * stale saved preference cannot leave the app with no keyboard by accident —
+ * only by asking for none.
  *
  * @param {String} choice one of KEYBOARD_CHOICES
  * @param {Number|String} machine 48, 128 or 'next'
- * @returns {'rubber'|'plus'|'next'}
+ * @returns {'rubber'|'plus'|'next'|'none'}
  */
 export function layoutForChoice(choice, machine) {
+    // Before the LAYOUTS guard below, which would otherwise read "none" as a
+    // stale name and hand back the machine's own keyboard.
+    if (choice === KEYBOARD_NONE) return KEYBOARD_NONE;
     if (choice && choice !== 'auto' && LAYOUTS[choice]) return choice;
     return layoutForMachine(machine);
 }

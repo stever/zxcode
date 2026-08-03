@@ -6,7 +6,8 @@ import {loadEmulator, setZoom} from "../redux/jsspeccy/actions";
 
 Emulator.propTypes = {
     zoom: PropTypes.number,
-    width: PropTypes.number
+    width: PropTypes.number,
+    hideKeyboard: PropTypes.bool
 }
 
 export function Emulator(props) {
@@ -14,6 +15,7 @@ export function Emulator(props) {
 
     const zoom = props.zoom || 3;
     const width = props.width || zoom * 320;
+    const hideKeyboard = !!props.hideKeyboard;
 
     useEffect(() => {
         const elem = document.getElementById('jsspeccy-screen');
@@ -27,9 +29,11 @@ export function Emulator(props) {
     }, [width]);
 
     return (
+        // The keyboard is the second child, so leaving it out does not move the
+        // screen div the emulator's canvas is imperatively appended into.
         <div className="emulator-frame">
             <div id="jsspeccy-screen"/>
-            <Keyboard width={width}/>
+            {!hideKeyboard && <Keyboard width={width}/>}
         </div>
     )
 }

@@ -3,8 +3,8 @@
 // plumbing — see apps/*/src/components/Keyboard.jsx.
 export {KEY_ACTIONS, matrixKey} from './keys';
 export {
-    LAYOUTS, KEYBOARD_CHOICES, layoutForMachine, layoutForChoice, layoutAspect, layoutFromKeystr,
-    baseKeyId, keyRects,
+    LAYOUTS, KEYBOARD_CHOICES, KEYBOARD_NONE, layoutForMachine, layoutForChoice, layoutAspect,
+    layoutFromKeystr, baseKeyId, keyRects,
 } from './layouts';
 export {legendsFor, GRAPHIC_QUADRANTS} from './legends';
 export {PALETTE} from './keycap';

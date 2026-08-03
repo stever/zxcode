@@ -13,7 +13,8 @@ Emulator.propTypes = {
     colW: PropTypes.number,
     side: PropTypes.oneOf(['left', 'right']),
     keystr: PropTypes.string,
-    kbLayout: PropTypes.oneOf(['rubber', 'plus', 'next'])
+    kbLayout: PropTypes.oneOf(['rubber', 'plus', 'next']),
+    kbHidden: PropTypes.bool
 }
 
 export function Emulator(props) {
@@ -25,7 +26,7 @@ export function Emulator(props) {
         dispatch(loadEmulator(elem));
     }, []);
 
-    const {mode, height, kbW, kbH, colW, side, keystr, kbLayout} = props;
+    const {mode, height, kbW, kbH, colW, side, keystr, kbLayout, kbHidden} = props;
     const isSide = mode === 'side';
 
     // The emulator's screen DOM is appended into #jsspeccy-screen once
@@ -34,9 +35,13 @@ export function Emulator(props) {
     // difference makes React repurpose or drop the screen div on a mode flip,
     // taking the imperatively-attached canvas with it (#190: rotating a phone
     // to landscape blanked the screen for good).
+    // With no keyboard asked for, the wrapper divs stay exactly as they are and
+    // only the innermost slot empties, so the screen div keeps its place.
     const screen = <div id="jsspeccy-screen" style={{flex: '0 0 auto'}}/>;
-    const keyboard = <Keyboard cssWidth={kbW} cssHeight={kbH} keystr={keystr} layout={kbLayout}
-                               rounded={!isSide && !isMobile}/>;
+    const keyboard = kbHidden ? null : (
+        <Keyboard cssWidth={kbW} cssHeight={kbH} keystr={keystr} layout={kbLayout}
+                  rounded={!isSide && !isMobile}/>
+    );
 
     return (
         <div

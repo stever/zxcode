@@ -100,11 +100,20 @@ mode, or a 48K one you would rather type into with the dedicated EDIT and
 cursor keys. The keys are matrix positions, so any keyboard drives any
 machine, and the choice is remembered.
 
+**No Keyboard** is also on that menu, for when you are working with your own
+keyboard and would rather have the screen. The emulator then takes the room
+the keyboard had: beside the editor it grows as far as the window's height
+allows while leaving the editor half the page, and in the tabbed layout it
+grows into the whole tab. On a 1920x1080 screen the emulator goes from 640 to
+960 pixels wide; on a narrower window it stays where it was, since there was
+never any room to give it.
+
 The emulator only takes your real keyboard while it has focus, so typing goes
 to the editor until you ask for it — and pressing an on-screen key asks for
 it, exactly as clicking the screen does. So the two can be used together:
 press EDIT on screen, then carry on typing on your own keyboard. Clicking
-back into the editor hands it back.
+back into the editor hands it back. With no keyboard drawn, clicking the
+screen is how you hand your keyboard over.
 
 ## Sharing your work
 

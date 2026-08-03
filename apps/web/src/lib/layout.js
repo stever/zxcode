@@ -1,13 +1,26 @@
-import {layoutForChoice, layoutAspect} from "@zxplay/ui/keyboard";
+import {layoutForChoice, layoutAspect, KEYBOARD_NONE} from "@zxplay/ui/keyboard";
 
 // Pure, viewport-driven layout for the editor + emulator across orientations.
 //
-// The emulator stacks a 4:3 screen above the on-screen keyboard, so its total
+// The emulator stacks the screen above the on-screen keyboard, so its total
 // height at a given width W is W * (SCREEN_ASPECT + kbAspect). That lets us size
 // the emulator to fit whatever box it has, instead of pinning a fixed 640px.
 
-const SCREEN_ASPECT = 240 / 320; // 0.75, screen height / width
+// Screen aspect is 5:4: the zxplay_go engine composites every machine into a
+// fixed 640x512 display box, and UIController sizes the on-screen element from
+// the canvas's real shape, so the maths has to assume the same ratio. (It read
+// 240/320 = 0.75 — the Spectrum's own screen without border — which sized the
+// emulator about 6% shorter than it draws, and so overflowed its box.)
+const SCREEN_ASPECT = 512 / 640; // 0.8, screen height / width
 const MAX_EMU_W = 640; // never larger than the original 2x size
+
+// Split mode's emulator column. It is the original 2x size while a keyboard is
+// drawn; with none, the screen grows into the height the keyboard had, which
+// means width, which comes out of the editor beside it — so it is bounded to
+// leave the editor half the page, and never shrinks below what it always was.
+const SPLIT_EMU_W = MAX_EMU_W;
+const SPLIT_CHROME = 110; // nav + the header slot above the emulator
+const MIN_EDITOR_FRACTION = 0.5;
 
 // Split (editor beside emulator) only makes sense with enough width for a
 // usable editor AND enough height for a usable emulator; otherwise we tab
@@ -74,16 +87,21 @@ export function hasKeystrOverride() {
  * the 128K gets the Spectrum+ / toastrack layout, the Next its own, and the
  * 48K the rubber keys it has always had.
  *
+ * "hidden" is what the pages branch on, not the layout: a null layout already
+ * means "the k= keys are drawn instead", which is the opposite of no keyboard.
+ * "aspect" is the height actually given to a keyboard, so it is 0 when there is
+ * none — the emulator's own box is what grows into it.
+ *
  * @param {Number|String} machine
  * @param {String} [choice] the keyboard the user picked, 'auto' to follow the machine
- * @returns {{layout:(String|null), aspect:Number}}
+ * @returns {{layout:(String|null), hidden:Boolean, aspect:Number}}
  */
 export function resolveKeyboard(machine, choice = 'auto') {
     if (hasKeystrOverride()) {
-        return {layout: null, aspect: keyboardAspect(currentKeystr())};
+        return {layout: null, hidden: false, aspect: keyboardAspect(currentKeystr())};
     }
     const layout = layoutForChoice(choice, machine);
-    return {layout, aspect: layoutAspect(layout)};
+    return {layout, hidden: layout === KEYBOARD_NONE, aspect: layoutAspect(layout)};
 }
 
 /**
@@ -113,14 +131,31 @@ export function fitEmulatorWidth({availW, availH, kbAspect, maxW = MAX_EMU_W}) {
  * Emulator width for tab mode: the screen + keyboard centred in the tab, sized
  * to fit the viewport width and the height left under the nav and tab strip.
  * extraChrome adds page-specific chrome above the tabs (e.g. the logged-out
- * demo notice on the home page), estimated by the caller.
- * @param {{width:Number, height:Number, kbAspect:Number, extraChrome?:Number}} params
+ * demo notice on the home page), estimated by the caller. maxW lifts the 2x cap
+ * when there is no keyboard, so the screen takes the space it would have had.
+ * @param {{width:Number, height:Number, kbAspect:Number, extraChrome?:Number, maxW?:Number}} params
  * @returns {Number}
  */
-export function tabEmulatorWidth({width, height, kbAspect, extraChrome = 0}) {
+export function tabEmulatorWidth({width, height, kbAspect, extraChrome = 0, maxW = MAX_EMU_W}) {
     return fitEmulatorWidth({
         availW: width,
         availH: Math.max(0, height - TAB_CHROME - extraChrome),
         kbAspect,
+        maxW,
     });
+}
+
+/**
+ * Emulator width for split mode (editor beside emulator). With a keyboard it is
+ * the original 2x size, as it always was. With none, the screen grows to use the
+ * height the keyboard had — bounded so the editor keeps half the page, and never
+ * below the size it would have had anyway.
+ * @param {{width:Number, height:Number, hidden?:Boolean, extraChrome?:Number}} params
+ * @returns {Number}
+ */
+export function splitEmulatorWidth({width, height, hidden = false, extraChrome = 0}) {
+    if (!hidden) return SPLIT_EMU_W;
+    const byHeight = Math.max(0, height - SPLIT_CHROME - extraChrome) / SCREEN_ASPECT;
+    const byWidth = width * (1 - MIN_EDITOR_FRACTION);
+    return Math.round(Math.max(SPLIT_EMU_W, Math.min(byHeight, byWidth)));
 }

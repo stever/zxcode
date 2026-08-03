@@ -22,8 +22,14 @@ import { sep } from "../constants";
 import {
   computeMode,
   resolveKeyboard,
+  splitEmulatorWidth,
   tabEmulatorWidth,
 } from "../lib/layout";
+
+// The toolbar spans the page beneath both split-mode columns, so its height
+// comes out of the emulator's box when the emulator is sized to the viewport
+// (only with no keyboard; at 640px it always fitted). An estimate is enough.
+const TOOLBAR_CHROME = 60;
 
 export default function ProjectPage({ projectId }) {
   const { t } = useTranslation();
@@ -93,14 +99,29 @@ export default function ProjectPage({ projectId }) {
 
   const mode = computeMode(windowWidth, windowHeight);
   // The 128K and the Next draw their own keyboards, a different shape from
-  // the 48K rubber grid, so the machine feeds the layout maths.
-  const kbAspect = resolveKeyboard(machine, keyboardLayout).aspect;
+  // the 48K rubber grid, so the machine feeds the layout maths. Asking for no
+  // keyboard gives its space to the screen rather than leaving it blank.
+  const { aspect: kbAspect, hidden: kbHidden } = resolveKeyboard(
+    machine,
+    keyboardLayout
+  );
   // Tab mode sizes the emulator to its box (fixing portrait clipping and
-  // landscape overflow); split keeps the original 640px (2x) size.
+  // landscape overflow); split keeps the original 640px (2x) size. With no
+  // keyboard the 2x cap goes in both: the screen takes the space instead.
   const emuW =
     mode === "tab"
-      ? tabEmulatorWidth({ width: windowWidth, height: windowHeight, kbAspect })
-      : 640;
+      ? tabEmulatorWidth({
+          width: windowWidth,
+          height: windowHeight,
+          kbAspect,
+          maxW: kbHidden ? Infinity : undefined,
+        })
+      : splitEmulatorWidth({
+          width: windowWidth,
+          height: windowHeight,
+          hidden: kbHidden,
+          extraChrome: TOOLBAR_CHROME,
+        });
   const zoom = emuW / 320;
   const editorTitle = getLanguageLabel(lang);
   const className = mode === "tab" ? "" : "mx-2 mb-1";
@@ -117,7 +138,7 @@ export default function ProjectPage({ projectId }) {
             {[
               <TabPanel key="emulator" header={t("home.tabEmulator")}>
                 <div className="flex justify-content-center">
-                  <Emulator zoom={zoom} width={emuW} />
+                  <Emulator zoom={zoom} width={emuW} hideKeyboard={kbHidden} />
                 </div>
               </TabPanel>,
               <TabPanel key="editor" header={editorTitle}>
@@ -162,7 +183,7 @@ export default function ProjectPage({ projectId }) {
                   </h3>
                   {effectiveId && <StarButton projectId={effectiveId} />}
                 </div>
-                <Emulator zoom={zoom} width={emuW} />
+                <Emulator zoom={zoom} width={emuW} hideKeyboard={kbHidden} />
               </div>
             </div>
             {/* Toolbar spans the full page width, beneath both columns. */}

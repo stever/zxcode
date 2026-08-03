@@ -5,8 +5,8 @@
 // engine, or a single press lighting several keys — are checked here.
 
 import {
-    KEY_ACTIONS, KEYBOARD_CHOICES, LAYOUTS, baseKeyId, heldKeys, keyRects, layoutAspect,
-    layoutForChoice, layoutForMachine, layoutFromKeystr, legendsFor, matrixKey,
+    KEY_ACTIONS, KEYBOARD_CHOICES, KEYBOARD_NONE, LAYOUTS, baseKeyId, heldKeys, keyRects,
+    layoutAspect, layoutForChoice, layoutForMachine, layoutFromKeystr, legendsFor, matrixKey,
 } from "@zxplay/ui/keyboard";
 import {DEFAULT_KEYSTR, keyboardAspect, resolveKeyboard} from "./layout";
 
@@ -401,9 +401,12 @@ describe('layoutForMachine', () => {
 // #214: the keyboard follows the machine, but a machine can be running
 // something its own keyboard does not suit, so the user can name one.
 describe('choosing a keyboard', () => {
-    it('offers every layout, plus following the machine', () => {
+    it('offers every layout, plus following the machine and having none', () => {
         expect(KEYBOARD_CHOICES[0]).toBe('auto');
-        expect([...KEYBOARD_CHOICES].slice(1).sort()).toEqual(Object.keys(LAYOUTS).sort());
+        expect([...KEYBOARD_CHOICES].slice(1).sort())
+            .toEqual([KEYBOARD_NONE, ...Object.keys(LAYOUTS)].sort());
+        // "none" is the absence of a keyboard, not a fourth one to draw.
+        expect(LAYOUTS[KEYBOARD_NONE]).toBeUndefined();
     });
 
     it('follows the machine when nothing is chosen', () => {
@@ -436,5 +439,42 @@ describe('choosing a keyboard', () => {
         expect(resolveKeyboard('next', 'rubber').layout).toBe('rubber');
         // Every keyboard draws in the same box, so choosing one moves nothing.
         expect(resolveKeyboard(48, 'next').aspect).toBe(resolveKeyboard(48).aspect);
+    });
+
+    // Asking for no keyboard is the one choice the machine cannot answer for.
+    it('draws no keyboard when none is asked for, on any machine', () => {
+        for (const machine of [48, 128, 'next', undefined]) {
+            expect(layoutForChoice(KEYBOARD_NONE, machine)).toBe(KEYBOARD_NONE);
+        }
+        // Nothing drawn takes no height, which is what gives the screen the room.
+        expect(layoutAspect(KEYBOARD_NONE)).toBe(0);
+    });
+
+    it('tells the page it is hidden rather than naming a layout', () => {
+        // A null layout already means "the k= keys are drawn instead", so the
+        // pages branch on the flag, never on the name.
+        for (const machine of [48, 128, 'next']) {
+            const resolved = resolveKeyboard(machine, KEYBOARD_NONE);
+            expect(resolved.hidden).toBe(true);
+            expect(resolved.aspect).toBe(0);
+        }
+        for (const choice of ['auto', 'rubber', 'plus', 'next']) {
+            expect(resolveKeyboard(48, choice).hidden).toBe(false);
+        }
+    });
+
+    // A game's named keys may be a phone's only controls, so they outrank a
+    // saved "no keyboard" exactly as they outrank a pinned one.
+    it('keeps a game\'s named keys even when no keyboard is chosen', () => {
+        const url = window.location.href;
+        try {
+            window.history.pushState({}, '', '/?k=OPeZ');
+            const resolved = resolveKeyboard(48, KEYBOARD_NONE);
+            expect(resolved.hidden).toBe(false);
+            expect(resolved.layout).toBeNull();
+            expect(resolved.aspect).toBe(keyboardAspect('OPeZ'));
+        } finally {
+            window.history.pushState({}, '', url);
+        }
     });
 });

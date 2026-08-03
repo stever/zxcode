@@ -11,7 +11,7 @@ import {reset} from "../redux/jsspeccy/actions";
 import {showToastsForErrorItems} from "../errors";
 import {selectHasUnsavedChanges} from "../redux/project/selectors";
 import {useTranslation, Trans} from "@zxplay/i18n";
-import {computeMode, resolveKeyboard, tabEmulatorWidth} from "../lib/layout";
+import {computeMode, resolveKeyboard, splitEmulatorWidth, tabEmulatorWidth} from "../lib/layout";
 import {login} from "../auth";
 
 export default function HomePage() {
@@ -36,8 +36,9 @@ export default function HomePage() {
 
     const mode = computeMode(windowWidth, windowHeight);
     // The 128K and the Next draw their own keyboards, a different shape
-    // from the 48K rubber grid, so the machine feeds the layout maths.
-    const kbAspect = resolveKeyboard(machine, keyboardLayout).aspect;
+    // from the 48K rubber grid, so the machine feeds the layout maths. Asking
+    // for no keyboard gives its space to the screen rather than leaving it.
+    const {aspect: kbAspect, hidden: kbHidden} = resolveKeyboard(machine, keyboardLayout);
     // The identity saga resolves userId to null when logged out; while it is
     // still undefined the notice is held back to avoid flashing it at users
     // who are about to be recognised as logged in.
@@ -50,10 +51,14 @@ export default function HomePage() {
         ? (windowWidth >= 520 ? 84 : 116)
         : 0;
     // Tab mode sizes the emulator to its box (fixing portrait clipping and
-    // landscape overflow); split keeps the original 640px (2x) size.
+    // landscape overflow); split keeps the original 640px (2x) size. With no
+    // keyboard the 2x cap goes in both: the screen takes the space instead.
     const emuW = mode === 'tab'
-        ? tabEmulatorWidth({width: windowWidth, height: windowHeight, kbAspect, extraChrome: noticeChrome})
-        : 640;
+        ? tabEmulatorWidth({
+            width: windowWidth, height: windowHeight, kbAspect,
+            extraChrome: noticeChrome, maxW: kbHidden ? Infinity : undefined,
+        })
+        : splitEmulatorWidth({width: windowWidth, height: windowHeight, hidden: kbHidden});
     const zoom = emuW / 320;
 
     useEffect(() => {
@@ -106,7 +111,7 @@ export default function HomePage() {
                         onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
                         <TabPanel header={t("home.tabEmulator")}>
                             <div className="flex justify-content-center">
-                                <Emulator zoom={zoom} width={emuW}/>
+                                <Emulator zoom={zoom} width={emuW} hideKeyboard={kbHidden}/>
                             </div>
                         </TabPanel>
                         <TabPanel header={basicTabHeader}>
@@ -145,7 +150,7 @@ export default function HomePage() {
                                     </div>
                                 )}
                             </div>
-                            <Emulator zoom={zoom} width={emuW}/>
+                            <Emulator zoom={zoom} width={emuW} hideKeyboard={kbHidden}/>
                         </div>
                     </div>
                 )}

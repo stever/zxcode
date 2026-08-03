@@ -42,14 +42,22 @@ describe("keyboard layout preference", () => {
 
     it("persists a new choice", () => {
         const reducer = freshReducer();
-        for (const choice of ["rubber", "plus", "next", "auto"]) {
+        for (const choice of ["rubber", "plus", "next", "none", "auto"]) {
             expect(stateAfter(reducer, setKeyboardLayout(choice)).keyboardLayout).toBe(choice);
             expect(localStorage.getItem("keyboardLayout")).toBe(choice);
         }
     });
 
-    // The value names a layout table. An unknown name would draw no keyboard
-    // at all, so it never reaches state.
+    // Wanting no keyboard at all is a choice like any other, and one worth
+    // remembering: the screen takes the room it frees.
+    it("remembers wanting no keyboard", () => {
+        localStorage.setItem("keyboardLayout", "none");
+        const reducer = freshReducer();
+        expect(stateAfter(reducer, {type: "@@INIT"}).keyboardLayout).toBe("none");
+    });
+
+    // The value names a layout table, or "none". An unknown name would draw no
+    // keyboard by accident rather than by asking, so it never reaches state.
     it("ignores a name no keyboard answers to", () => {
         const reducer = freshReducer();
         const before = stateAfter(reducer, {type: "@@INIT"}).keyboardLayout;

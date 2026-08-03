@@ -20,6 +20,7 @@
     "keyboardRubber": "Spectrum 48K",
     "keyboardPlus": "Spectrum 128K",
     "keyboardNext": "ZX Spectrum Next",
+    "keyboardNone": "No Keyboard",
     "keyboardSide": "Keyboard Side",
     "keyboardSideLeft": "Left",
     "keyboardSideRight": "Right"

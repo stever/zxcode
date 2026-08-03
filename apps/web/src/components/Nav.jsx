@@ -355,7 +355,8 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   // unless you say otherwise, which is worth being able to say: the program
   // running is not always suited by its target machine's keyboard — a Next
   // program in 48K mode, or a 48K one you would rather type in with the
-  // Spectrum+'s dedicated EDIT and cursor keys.
+  // Spectrum+'s dedicated EDIT and cursor keys. Or none of them: while you are
+  // debugging with your own keyboard, the drawn one is only taking screen.
   const keyboardMenu = {
     label: t("nav.keyboard", "Keyboard"),
     icon: "pi pi-fw pi-th-large",
@@ -364,6 +365,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
       ["rubber", t("nav.keyboardRubber", "Spectrum 48K")],
       ["plus", t("nav.keyboardPlus", "Spectrum 128K")],
       ["next", t("nav.keyboardNext", "ZX Spectrum Next")],
+      ["none", t("nav.keyboardNone", "No Keyboard")],
     ].map(([value, label]) => ({
       label,
       icon: keyboardLayout === value ? "pi pi-fw pi-check" : "pi pi-fw",

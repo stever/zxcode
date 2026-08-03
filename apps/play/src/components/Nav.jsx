@@ -7,6 +7,7 @@ import {
     resetEmulator, setMachine, setKeyboardSide, setKeyboardLayout, setJoystick,
 } from "../redux/app/actions";
 import {useTranslation} from "@zxplay/i18n";
+import {resolveKeyboard} from "../lib/layout";
 
 export default function Nav({compact = false} = {}) {
     const dispatch = useDispatch();
@@ -23,10 +24,15 @@ export default function Nav({compact = false} = {}) {
     const machineLocked = useSelector(state => state?.app.machineLocked);
     const keyboardSide = useSelector(state => state?.app.keyboardSide);
     const keyboardLayout = useSelector(state => state?.app.keyboardLayout);
+    const keyConfig = useSelector(state => state?.app.keyConfig);
     const joystick = useSelector(state => state?.app.joystick);
 
+    // Which side the keyboard sits on only means something while one is drawn —
+    // and a game's own named keys are drawn whatever the player chose.
+    const keyboardDrawn = !resolveKeyboard(keyConfig, machine, keyboardLayout).hidden;
+
     const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
-        keyboardSide, keyboardLayout, joystick);
+        keyboardSide, keyboardDrawn, keyboardLayout, joystick);
 
     return (
         <Deck
@@ -39,7 +45,7 @@ export default function Nav({compact = false} = {}) {
 }
 
 function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide,
-                      keyboardLayout, joystick) {
+                      keyboardDrawn, keyboardLayout, joystick) {
     const viewFullScreenMenuItem = {
         label: t('nav.fullScreen'),
         icon: 'pi pi-fw pi-window-maximize',
@@ -73,7 +79,9 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
     const viewMenu = {
         label: t('nav.view'),
         icon: 'pi pi-fw pi-eye',
-        items: [viewFullScreenMenuItem, keyboardSideMenuItem]
+        items: keyboardDrawn
+            ? [viewFullScreenMenuItem, keyboardSideMenuItem]
+            : [viewFullScreenMenuItem]
     };
 
     const infoMenu = {
@@ -151,7 +159,8 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
     // otherwise, which is worth being able to say: a machine can be running
     // something its own keyboard does not suit — a Next in 48K mode wanting the
     // rubber keys, or a 48K program being typed in with the Spectrum+'s
-    // dedicated EDIT and cursor keys.
+    // dedicated EDIT and cursor keys. Or none of them: with a real keyboard in
+    // front of you the drawn one is a third of the height the screen could have.
     const keyboardMenu = {
         label: t('nav.keyboard', 'Keyboard'),
         icon: 'pi pi-fw pi-th-large',
@@ -160,6 +169,7 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
             ['rubber', t('nav.keyboardRubber', 'Spectrum 48K')],
             ['plus', t('nav.keyboardPlus', 'Spectrum 128K')],
             ['next', t('nav.keyboardNext', 'ZX Spectrum Next')],
+            ['none', t('nav.keyboardNone', 'No Keyboard')],
         ].map(([value, label]) => ({
             label,
             icon: keyboardLayout === value ? 'pi pi-fw pi-check' : 'pi pi-fw',
