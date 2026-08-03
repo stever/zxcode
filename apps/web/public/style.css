@@ -214,16 +214,27 @@ code {
 }
 
 /* The slot above the emulator (the project's title, the home page's demo
-   notice). Its height is part of the layout arithmetic, so it comes from
-   --zx-title-slot rather than being pinned here; the notice may grow it. */
-.zx-title-slot {
-    height: var(--zx-title-slot, 40px) !important;
+   notice). It mirrors the editor's tab strip beside it: --zx-title-slot is that
+   strip's measured height, and the margin below matches the strip's own (see
+   .p-tabview-nav above). Getting BOTH from it is what puts the title on the
+   same line as the file tabs and starts the emulator on the same line as the
+   editor — a slot of any fixed height can only ever manage one of the two.
+   The fallback is what the strip measures at the default font. */
+.zx-title-slot,
+.zx-title-slot-min {
+    margin-bottom: 8px;
     display: flex;
     align-items: center;
 }
 
+.zx-title-slot {
+    height: var(--zx-title-slot, 49px) !important;
+}
+
+/* The home page's notice may need more than one line; it grows the slot rather
+   than overlapping the emulator under it. */
 .zx-title-slot-min {
-    min-height: var(--zx-title-slot, 40px) !important;
+    min-height: var(--zx-title-slot, 49px) !important;
 }
 
 .max-width-1024 {

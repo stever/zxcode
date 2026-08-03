@@ -68,6 +68,27 @@ export function useElementHeight(ref) {
 }
 
 /**
+ * The box height of the first descendant matching `selector`, margins excluded
+ * so the caller can mirror the margin itself.
+ *
+ * This is how the emulator's header slot is kept the same height as the editor's
+ * tab strip beside it: matching them by construction is what puts the project's
+ * title on the same line as the file tabs AND starts the two columns' content on
+ * the same line, which a constant of either height can only ever get one of.
+ *
+ * @param {Object} rootRef
+ * @param {String} selector
+ * @returns {Number}
+ */
+export function useDescendantHeight(rootRef, selector) {
+    return useMeasure(() => {
+        const element = rootRef.current?.querySelector(selector);
+        if (!element) return null;
+        return Math.round(element.getBoundingClientRect().height);
+    });
+}
+
+/**
  * Everything in `containerSel` that is NOT the element matched by `targetSel`:
  * the tab strip above the editor, and below it the home page's Run button and
  * divider, or the project page's toolbar. Measuring the difference rather than

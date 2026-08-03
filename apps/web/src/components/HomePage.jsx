@@ -15,7 +15,7 @@ import {
     computeMode, editorHeight, emulatorBottom, panelHeight, resolveKeyboard,
     splitEmulator, SPLIT_EMU_CHROME, tabEmulator,
 } from "../lib/layout";
-import {useChromeAround, useElementTop} from "../lib/usePageMetrics";
+import {useChromeAround, useDescendantHeight, useElementTop} from "../lib/usePageMetrics";
 import {login} from "../auth";
 
 export default function HomePage() {
@@ -47,6 +47,8 @@ export default function HomePage() {
     const emuTop = useElementTop(emuRef);
     const editorColTop = useElementTop(editorColRef);
     const editorChrome = useChromeAround(editorColRef, '.p-tabview', '.CodeMirror');
+    // The emulator's header slot is the editor's tab strip, mirrored.
+    const headerH = useDescendantHeight(editorColRef, '.p-tabview-nav');
 
     const mode = computeMode(windowWidth, windowHeight);
     // The 128K and the Next draw their own keyboards, a different shape
@@ -77,7 +79,10 @@ export default function HomePage() {
     const editorH = editorHeight({columnH, chrome: editorChrome});
     const zoom = emuW / 320;
     // The heights the stylesheets read (see ProjectPage).
-    const heights = {'--zx-editor-h': `${editorH}px`};
+    const heights = {
+        '--zx-editor-h': `${editorH}px`,
+        ...(headerH ? {'--zx-title-slot': `${headerH}px`} : {}),
+    };
 
     useEffect(() => {
         // Keep the project's unsaved draft so navigating home and back doesn't
@@ -158,13 +163,13 @@ export default function HomePage() {
                                 </TabPanel>
                             </TabView>
                         </div>
-                        <div className="col-fixed p-0 pt-1" style={{width: `${emuW}px`}}>
+                        <div className="col-fixed p-0" style={{width: `${emuW}px`}}>
                             {/* Header slot above the emulator; the project page
-                                shows the project title here. The min-height
-                                keeps the emulator aligned with the editor pane
-                                when the banner fits in two lines; translations
-                                that wrap to three grow the slot rather than
-                                overlap the emulator. */}
+                                shows the project title here. Its floor is the
+                                editor's tab strip beside it, so the two columns
+                                start their content on the same line; a notice
+                                that wraps to another line grows the slot rather
+                                than overlapping the emulator. */}
                             <div className="zx-title-slot-min">
                                 {demoNotice && (
                                     <div className="demo-notice">

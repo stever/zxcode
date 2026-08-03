@@ -30,6 +30,7 @@ import {
 } from "../lib/layout";
 import {
   useChromeAround,
+  useDescendantHeight,
   useElementHeight,
   useElementTop,
 } from "../lib/usePageMetrics";
@@ -80,6 +81,8 @@ export default function ProjectPage({ projectId }) {
   const emuTop = useElementTop(emuRef);
   const editorColTop = useElementTop(editorColRef);
   const editorChrome = useChromeAround(editorColRef, ".p-tabview", ".CodeMirror");
+  // The emulator's header slot is the editor's tab strip, mirrored.
+  const headerH = useDescendantHeight(editorColRef, ".p-tabview-nav");
 
   useEffect(() => {
     dispatch(loadProject(effectiveId));
@@ -160,6 +163,7 @@ export default function ProjectPage({ projectId }) {
     "--zx-editor-h": `${editorH}px`,
     "--zx-dock-h": `${dockH}px`,
     "--zx-dock-pane-h": `${paneH}px`,
+    ...(headerH ? { "--zx-title-slot": `${headerH}px` } : {}),
   };
 
   return (
@@ -225,7 +229,7 @@ export default function ProjectPage({ projectId }) {
               </div>
               <div
                 className={clsx(
-                  "col-fixed p-0 pt-1",
+                  "col-fixed p-0",
                   debugPausedRing && "debug-paused-ring"
                 )}
                 style={{ width: `${emuW}px` }}
