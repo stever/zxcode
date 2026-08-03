@@ -198,8 +198,11 @@
     text-overflow: ellipsis;
 }
 
+/* The panes scroll internally, so they are what gives up height when the
+   window is short — see --zx-dock-pane-h in lib/layout.js, which clamps it
+   between "still shows something" and the 252px it has always been. */
 .debug-pane-body {
-    height: 252px;
+    height: var(--zx-dock-pane-h, 252px);
     overflow: auto;
     padding: 2px 0;
 }
@@ -723,18 +726,16 @@
 }
 
 /* While a session is active the editor gives up height to the dock so the
-   editor column stays level with the (untouched) emulator column:
-   408 (editor) + 8 (dock margin) + 354 (dock) = 770 = the emulator frame.
-   The dock's 354 = 2 border + 39 transport + 31 registers + 30 pane head
-   + 252 pane body (border-box, so its 2px paddings are inside). */
-.desktop .debug-session .CodeMirror {
-    height: 408px !important;
-    max-height: 408px !important;
-}
+   editor column stays level with the (untouched) emulator column. The split
+   is computed in lib/layout.js and published as --zx-editor-h, which the base
+   .desktop .CodeMirror rule already reads: the page hands down the with-dock
+   value, so there is nothing to override here. On a 1080p desktop it resolves
+   to the 408px this rule used to hard-code, against a 354px dock (2 border +
+   39 transport + 31 registers + 30 pane head + 252 pane body).
 
-/* The dock pins to the column's bottom edge: the grid stretches the editor
+   The dock pins to the column's bottom edge: the grid stretches the editor
    column to the emulator column's height, and the auto margin soaks up the
-   slack regardless of what sits above — the 408px editor, or the shorter
+   slack regardless of what sits above — the editor, or the shorter
    binary-asset panel, which must NOT resize when a session starts. flex:
    none stops the children compressing when a narrow window wraps the dock's
    panes and the content outgrows the emulator column (the row grows
@@ -750,7 +751,22 @@
     margin-bottom: 8px;
 }
 
+/* The height the page worked out for it, and not a pixel more. A narrow editor
+   column wraps .debug-panes onto a second row, which used to make the dock
+   twice as tall as its panes and push the whole page into scrolling; now the
+   wrapped rows scroll inside the dock, which is the one thing on the page that
+   can afford to. */
 .desktop .debug-session > .debug-dock {
     flex: none;
     margin-top: auto;
+    max-height: var(--zx-dock-h, none);
+    overflow: auto;
+}
+
+/* Tab mode gives the dock a whole tab, and none of the rules above apply
+   there, so it used to render at its natural height and push the page down.
+   Bound it to the tab for the same reason. */
+.mobile .debug-dock {
+    max-height: var(--zx-dock-h, none);
+    overflow: auto;
 }

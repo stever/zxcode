@@ -13,7 +13,9 @@ import {
   deleteFile,
   renameFile,
   setActiveFile,
+  setSelectedTabIndex,
 } from "../redux/project/actions";
+import {stripActiveIndex, stripLayout, stripTarget} from "../lib/projectTabs";
 import { selectFiles } from "../redux/project/selectors";
 import {
   getLanguageLabel,
@@ -40,7 +42,21 @@ import { useTranslation } from "@zxplay/i18n";
 // only) for adding or uploading files. Each panel hosts the editor bound to
 // that file via the store's activeFileId (renderActiveOnly keeps a single
 // CodeMirror instance alive).
-export function ProjectFileTabView() {
+//
+// Tab mode merges the page's own tabs into this one strip rather than stacking
+// a second strip above it (see lib/projectTabs.js): leadingTabs carries the
+// emulator, trailingTabs the debugger, and panelFooter the toolbar that sits
+// under the editor there. Split mode passes none of them, and every expression
+// below collapses to the file strip exactly as it was.
+//
+// Each outer tab is {key, tabIndex, header, content}, where tabIndex is the
+// project.selectedTabIndex value that selects it.
+export function ProjectFileTabView({
+  leadingTabs = [],
+  trailingTabs = [],
+  fileTabIndex = null,
+  panelFooter = null,
+}) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const toast = useRef(null);
@@ -69,7 +85,17 @@ export function ProjectFileTabView() {
     languageSupportsProjectFiles(lang) &&
     files.length < MAX_PROJECT_FILES;
   const activeFileIndex = files.findIndex((f) => f.id === activeFileId);
-  const activeIndex = activeFileIndex < 0 ? 0 : activeFileIndex + 1;
+  const region = useSelector((state) => state?.project.selectedTabIndex);
+  const stripArgs = {
+    layout: stripLayout({
+      leadingCount: leadingTabs.length,
+      fileCount: files.length,
+      hasAdd: canAdd,
+    }),
+    leading: leadingTabs,
+    trailing: trailingTabs,
+  };
+  const activeIndex = stripActiveIndex({...stripArgs, region, activeFileIndex});
 
   // PrimeReact recomputes the scroll-arrow visibility only inside its own
   // scroll handler (and the forward arrow starts enabled), so adding,
@@ -77,9 +103,11 @@ export function ProjectFileTabView() {
   // arrows, e.g. a right arrow lingering after enough tabs were removed
   // that nothing overflows. Nudge the handler with a synthetic scroll
   // whenever the tab set or the layout width changes.
-  const tabSetKey = files
-    .map((f) => joinProjectFilePath(f.folder, f.name))
-    .join("\n");
+  const tabSetKey = [
+    ...leadingTabs.map((tab) => tab.key),
+    ...files.map((f) => joinProjectFilePath(f.folder, f.name)),
+    ...trailingTabs.map((tab) => tab.key),
+  ].join("\n");
   useEffect(() => {
     const nav = tabViewRef.current
       ?.getElement()
@@ -286,23 +314,50 @@ export function ProjectFileTabView() {
         scrollable
         activeIndex={activeIndex}
         onTabChange={(e) => {
-          // Ignore the "+" pseudo-tab (guards keyboard navigation).
-          if (e.index > files.length) return;
-          dispatch(setActiveFile(e.index === 0 ? null : files[e.index - 1].id));
+          const target = stripTarget({...stripArgs, index: e.index});
+          // The "+" pseudo-tab never activates (this guards keyboard nav).
+          if (target.kind === "add") return;
+          if (target.kind === "region") {
+            dispatch(setSelectedTabIndex(target.region));
+            return;
+          }
+          dispatch(
+            setActiveFile(
+              target.fileIndex < 0 ? null : files[target.fileIndex].id
+            )
+          );
+          // Only when the REGION changes: setting it pauses the emulator, so
+          // dispatching it on every file-tab click would stop the machine
+          // whenever you switch source files.
+          if (fileTabIndex !== null && region !== fileTabIndex) {
+            dispatch(setSelectedTabIndex(fileTabIndex));
+          }
         }}
       >
         {[
+          ...leadingTabs.map((tab) => (
+            <TabPanel key={tab.key} header={tab.header}>
+              {tab.content}
+            </TabPanel>
+          )),
           <TabPanel key="main" header={getLanguageLabel(lang)}>
             <ProjectEditor />
+            {panelFooter}
           </TabPanel>,
           ...files.map((file) => (
             <TabPanel key={file.id} headerTemplate={fileHeaderTemplate(file)}>
               <ProjectEditor />
+              {panelFooter}
             </TabPanel>
           )),
           ...(canAdd
             ? [<TabPanel key="add" headerTemplate={addHeaderTemplate} />]
             : []),
+          ...trailingTabs.map((tab) => (
+            <TabPanel key={tab.key} header={tab.header}>
+              {tab.content}
+            </TabPanel>
+          )),
         ]}
       </TabView>
       {canAdd && (

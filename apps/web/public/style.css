@@ -142,11 +142,14 @@ code {
 }
 
 .desktop .CodeMirror {
-    /* Match the fixed-size emulator frame on the right:
-       screen (zoom 2 = 512px) + keyboard (256px) + 2px frame border = 770px. */
+    /* Levelled with the emulator frame on the right. The height is computed
+       from the viewport in lib/layout.js and published as --zx-editor-h, so
+       the editor gives up height with everything else in a short window
+       instead of forcing the page to scroll. The fallback is what a 1080p
+       desktop resolves to, i.e. the 770px this rule used to hard-code. */
     box-sizing: border-box;
-    height: 770px !important;
-    max-height: 770px !important;
+    height: var(--zx-editor-h, 770px) !important;
+    max-height: var(--zx-editor-h, 770px) !important;
     border: 1px solid #5B5B5B;
     border-radius: 5px;
 }
@@ -171,7 +174,11 @@ code {
 }
 
 .mobile .CodeMirror {
-    height: calc(100vh - 152px) !important;
+    /* Was calc(100vh - 152px), a constant tuned before the file tabs added a
+       second strip and never updated, so the editor overran the viewport by
+       however much the guess was wrong. --zx-editor-h counts the real chrome,
+       the toolbar under the editor included. */
+    height: var(--zx-editor-h, calc(100dvh - 152px)) !important;
     border: 0 !important;
 }
 
@@ -206,12 +213,17 @@ code {
     padding: 0 !important;
 }
 
-.height-53 {
-    height: 53px !important;
+/* The slot above the emulator (the project's title, the home page's demo
+   notice). Its height is part of the layout arithmetic, so it comes from
+   --zx-title-slot rather than being pinned here; the notice may grow it. */
+.zx-title-slot {
+    height: var(--zx-title-slot, 40px) !important;
+    display: flex;
+    align-items: center;
 }
 
-.min-height-53 {
-    min-height: 53px !important;
+.zx-title-slot-min {
+    min-height: var(--zx-title-slot, 40px) !important;
 }
 
 .max-width-1024 {

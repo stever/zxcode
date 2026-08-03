@@ -87,6 +87,24 @@ paused line is highlighted in your source. All ten languages support this to
 some degree; see [Debugging in the browser](ide-debugging.html) for what each
 one can do and how it works.
 
+## Fitting the window
+
+The page sizes itself to the window rather than scrolling. In a window with
+room for both, the editor sits beside the emulator and the emulator is drawn
+at its original 2x size; in a smaller one the screen shrinks to whatever
+height is left, so the editor, the emulator, the debugger's dock and the
+buttons under them all stay on screen together. Below roughly 992x600 the
+page switches to tabs — emulator, your files, and the debugger while a session
+is open — all on one strip, with the panel filling the rest of the page.
+
+When the debugger is open in a short window, its panes give up height before
+the editor does, since they scroll on their own; in a narrow one they wrap
+onto a second row and the dock scrolls rather than pushing the page down. The
+menu bar collapses to a single button at whatever width its own items stop
+fitting on one line, which differs by language.
+
+## The keyboard
+
 The emulator has the on-screen Spectrum keyboard available, so you can drive
 programs that expect specific keys on a machine with no such keys. It matches
 the machine you are building for: the 48K's rubber keys, the 128K's Spectrum+
@@ -104,9 +122,10 @@ machine, and the choice is remembered.
 keyboard and would rather have the screen. The emulator then takes the room
 the keyboard had: beside the editor it grows as far as the window's height
 allows while leaving the editor half the page, and in the tabbed layout it
-grows into the whole tab. On a 1920x1080 screen the emulator goes from 640 to
-960 pixels wide; on a narrower window it stays where it was, since there was
-never any room to give it.
+grows into the whole tab. The drawn keyboard is about a third of the
+emulator's height, so this is also the answer when the window is small and you
+want as much screen as it can give you — on a 1366x768 laptop the screen goes
+from roughly 500 to 680 pixels wide.
 
 The emulator only takes your real keyboard while it has focus, so typing goes
 to the editor until you ask for it — and pressing an on-screen key asks for

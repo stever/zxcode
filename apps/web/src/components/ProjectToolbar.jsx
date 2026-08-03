@@ -27,7 +27,11 @@ import { useTranslation } from "@zxplay/i18n";
 // The action bar beneath the editor/emulator. It is rendered full page width
 // (outside the editor column) so the controls span the whole page rather than
 // being trapped in the code column — see ProjectPage's split layout.
-export function ProjectToolbar() {
+//
+// rootRef measures the bar itself rather than a wrapper: it wraps to a second
+// row at narrow widths, and the height it takes is height the panels above it
+// have to give up (its own margin included, hence the bar and not a parent).
+export function ProjectToolbar({ rootRef = null }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const renameInputReference = useRef(null);
@@ -96,7 +100,7 @@ export function ProjectToolbar() {
 
   return (
     <>
-      <div className="editor-toolbar mt-2">
+      <div className="editor-toolbar mt-2" ref={rootRef}>
         <div className="editor-toolbar-group">
           <Button
             label={t("actions.play")}
