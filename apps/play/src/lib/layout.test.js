@@ -144,3 +144,77 @@ describe("computeLayout with no keyboard", () => {
         expect(layout.screenH).toBe(0);
     });
 });
+
+// Pixel perfect draws the screen only at a whole scale of the display, so no
+// Spectrum pixel is wider than its neighbour. It may only ever give space back:
+// rounding UP would overflow the box the fit had already settled.
+describe("computeLayout with pixel perfect", () => {
+    const perfect = (box) => computeLayout({...box, pixelPerfect: true});
+    const fitted = (box) => computeLayout({...box, pixelPerfect: false});
+
+    // Every viewport the layout is checked at elsewhere, in both modes and with
+    // and without a keyboard: the screen is always a whole number of steps.
+    it.each([
+        [1920, 1080], [1440, 900], [1366, 768], [1280, 800],
+        [900, 400], [844, 390], [390, 844], [1024, 768],
+    ])("lands on a whole scale at %ix%i", (width, height) => {
+        for (const hidden of [false, true]) {
+            const {screenW} = perfect({
+                width, height, navHeight: 48, kbAspect: KB_ASPECT, hidden,
+            });
+            if (screenW >= 320) expect(screenW % 320).toBe(0);
+            expect(screenW % 1).toBe(0);
+        }
+    });
+
+    it("never asks for more room than fitting would have", () => {
+        for (const [width, height] of [[1920, 1080], [1366, 768], [900, 400], [390, 844]]) {
+            for (const hidden of [false, true]) {
+                const box = {width, height, navHeight: 48, kbAspect: KB_ASPECT, hidden};
+                expect(perfect(box).screenW).toBeLessThanOrEqual(fitted(box).screenW);
+                expect(perfect(box).screenH).toBeLessThanOrEqual(fitted(box).screenH);
+            }
+        }
+    });
+
+    // 1250 wide (3.906 steps) was the reported case: some pixels 4 across and
+    // some 3. It comes back as a flat 3x.
+    it("takes the stacked screen with no keyboard down to a whole 3x", () => {
+        const box = {width: 1920, height: 1080, navHeight: 48, kbAspect: KB_ASPECT, hidden: true};
+        expect(fitted(box).screenW).toBeGreaterThan(960);
+        expect(perfect(box).screenW).toBe(960);
+        expect(perfect(box).screenH).toBe(768);
+    });
+
+    // Below one whole step there is nothing to drop to, and a screen shrunk to
+    // nothing would be worse than uneven pixels - so the fit is kept.
+    it("keeps the fitted size when even 1x will not fit", () => {
+        const box = {width: 260, height: 500, navHeight: 48, kbAspect: KB_ASPECT};
+        expect(perfect(box).screenW).toBe(fitted(box).screenW);
+        expect(perfect(box).screenW).toBeLessThan(320);
+    });
+
+    // Side by side the width the screen gives up goes to the column beside it,
+    // so the keyboard and the compact nav are never squeezed by this.
+    it("hands the width it gives up to the keyboard column", () => {
+        const box = {width: 900, height: 400, navHeight: 48, kbAspect: KB_ASPECT};
+        expect(computeMode(box)).toBe('side');
+        expect(perfect(box).colW).toBeGreaterThan(fitted(box).colW);
+        expect(perfect(box).screenW + perfect(box).colW).toBe(900);
+    });
+
+    // With a keyboard the two are one column, so it follows the screen's width.
+    it("keeps the keyboard the screen's width", () => {
+        const box = {width: 390, height: 844, navHeight: 48, kbAspect: KB_ASPECT};
+        const {screenW, kbW} = perfect(box);
+        expect(screenW).toBe(320);
+        expect(kbW).toBe(320);
+    });
+
+    it("changes nothing when it is off", () => {
+        for (const [width, height] of [[1920, 1080], [900, 400], [390, 844]]) {
+            const box = {width, height, navHeight: 48, kbAspect: KB_ASPECT, hidden: true};
+            expect(computeLayout(box)).toEqual(fitted(box));
+        }
+    });
+});

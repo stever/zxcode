@@ -235,3 +235,56 @@ describe("split versus tab", () => {
         expect(computeMode(1920, 599)).toBe("tab");
     });
 });
+
+// Pixel perfect draws the screen only at a whole scale of the display, so no
+// Spectrum pixel is wider than its neighbour. It may only give space back:
+// rounding UP would overflow the box the fit had already settled.
+describe("pixel perfect", () => {
+    it.each(BOXES.map(b => [b.width, b.height, b.top]))(
+        "lands on a whole scale at %ix%i", (width, height, top) => {
+            const availH = panelHeight({viewportH: height, top});
+            for (const hidden of [false, true]) {
+                const kbAspect = hidden ? 0 : KB_ASPECT;
+                for (const size of [
+                    tabEmulator({width, availH, kbAspect, hidden, pixelPerfect: true}),
+                    splitEmulator({width, availH, kbAspect, hidden, pixelPerfect: true}),
+                ]) {
+                    // 256 is the split floor, which outranks it: below one whole
+                    // step there is nothing to drop to anyway.
+                    if (size.emuW >= 320) expect(size.emuW % 320).toBe(0);
+                }
+            }
+        });
+
+    it("never asks for more room than fitting would have", () => {
+        for (const {width, height, top} of BOXES) {
+            const availH = panelHeight({viewportH: height, top});
+            for (const hidden of [false, true]) {
+                const kbAspect = hidden ? 0 : KB_ASPECT;
+                const box = {width, availH, kbAspect, hidden};
+                expect(tabEmulator({...box, pixelPerfect: true}).emuW)
+                    .toBeLessThanOrEqual(tabEmulator(box).emuW);
+                expect(splitEmulator({...box, pixelPerfect: true}).emuH)
+                    .toBeLessThanOrEqual(splitEmulator(box).emuH);
+            }
+        }
+    });
+
+    // The 2x column the desktop already draws is a whole scale, so the common
+    // case is untouched by turning this on.
+    it("leaves the 2x desktop column exactly where it was", () => {
+        const box = {width: 1920, availH: 900, kbAspect: KB_ASPECT};
+        expect(splitEmulator({...box, pixelPerfect: true}).emuW).toBe(640);
+        expect(splitEmulator(box).emuW).toBe(640);
+    });
+
+    it("keeps the fitted size when even 1x will not fit", () => {
+        const box = {width: 300, availH: 200, kbAspect: KB_ASPECT};
+        expect(tabEmulator({...box, pixelPerfect: true}).emuW).toBe(tabEmulator(box).emuW);
+    });
+
+    it("changes nothing when it is off", () => {
+        const box = {width: 1440, availH: 700, kbAspect: 0, hidden: true};
+        expect(tabEmulator({...box, pixelPerfect: false})).toEqual(tabEmulator(box));
+    });
+});

@@ -14,6 +14,7 @@ import {
   resetEmulator,
   setMachine,
   setKeyboardLayout,
+  setPixelPerfect,
   setJoystick,
 } from "../redux/app/actions";
 import { getLanguageLabel, isBasicLang } from "../lib/lang";
@@ -37,6 +38,7 @@ export default function Nav() {
   const machine = useSelector((state) => state?.app.machine);
   const joystick = useSelector((state) => state?.app.joystick);
   const keyboardLayout = useSelector((state) => state?.app.keyboardLayout);
+  const pixelPerfect = useSelector((state) => state?.app.pixelPerfect);
   const machineLocked = useSelector((state) => state?.app.machineLocked);
 
   const model = getMenuItems(
@@ -50,6 +52,7 @@ export default function Nav() {
     machine,
     machineLocked,
     keyboardLayout,
+    pixelPerfect,
     joystick
   );
 
@@ -69,7 +72,7 @@ export default function Nav() {
   );
 }
 
-function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible, machine, machineLocked, keyboardLayout, joystick) {
+function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible, machine, machineLocked, keyboardLayout, pixelPerfect, joystick) {
   const sep = {
     separator: true,
   };
@@ -267,6 +270,17 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
+  // Draws the screen only at a whole scale of the display, so no Spectrum
+  // pixel is wider than its neighbour. It costs whatever is left over, so it
+  // is a checkable choice rather than the default.
+  const pixelPerfectMenuItem = {
+    label: t("nav.pixelPerfect"),
+    icon: pixelPerfect ? "pi pi-fw pi-check" : "pi pi-fw",
+    command: () => {
+      dispatch(setPixelPerfect(!pixelPerfect));
+    },
+  };
+
   const viewMenu = {
     label: t("nav.view"),
     icon: "pi pi-fw pi-eye",
@@ -274,6 +288,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   };
 
   viewMenu.items.push(viewFullScreenMenuItem);
+  viewMenu.items.push(pixelPerfectMenuItem);
   viewMenu.items.push(sep);
   viewMenu.items.push(feedMenuItem);
   viewMenu.items.push(publicProfilesMenuItem);

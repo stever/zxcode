@@ -103,6 +103,14 @@ onto a second row and the dock scrolls rather than pushing the page down. The
 menu bar collapses to a single button at whatever width its own items stop
 fitting on one line, which differs by language.
 
+Sizing the emulator to the space usually leaves it on a fractional multiple of
+the Spectrum's own size, so with the pixels drawn hard-edged some come out a
+pixel wider than others. **View > Pixel Perfect** rounds it down to a whole
+multiple — 1x, 2x, 3x — so every pixel is the same size, at the cost of the
+space left over, which goes to the editor. It is off by default and remembered
+when set. Where not even 1x would fit the emulator keeps filling its space
+instead, since there is no whole step left to drop to.
+
 ## The keyboard
 
 The emulator has the on-screen Spectrum keyboard available, so you can drive

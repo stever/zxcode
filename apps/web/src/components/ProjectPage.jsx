@@ -54,6 +54,7 @@ export default function ProjectPage({ projectId }) {
   const windowHeight = useSelector((state) => state?.window.height);
   const machine = useSelector((state) => state?.app.machine);
   const keyboardLayout = useSelector((state) => state?.app.keyboardLayout);
+  const pixelPerfect = useSelector((state) => state?.app.pixelPerfect);
   const debugActive = useSelector((state) => state?.debugger.active);
   // The dock (and the editor-column resize it forces) waits for the session
   // attach: `active` flips in the click's task and that paint must stay
@@ -132,7 +133,7 @@ export default function ProjectPage({ projectId }) {
     top: emuTop,
     reserveBelow: isTab ? 0 : toolbarH + SPLIT_EMU_CHROME,
   });
-  const box = { availH: emuAvailH, kbAspect, hidden: kbHidden, width: windowWidth };
+  const box = { availH: emuAvailH, kbAspect, hidden: kbHidden, width: windowWidth, pixelPerfect };
   const { emuW, emuH } = isTab ? tabEmulator(box) : splitEmulator(box);
   // The editor column is levelled with the emulator column beside it, which is
   // what the fixed 770px CodeMirror used to do by construction; in tab mode its

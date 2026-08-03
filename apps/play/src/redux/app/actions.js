@@ -9,6 +9,7 @@ export const actionTypes = {
     machineChanged: 'app/machineChanged',
     setKeyboardSide: 'app/setKeyboardSide',
     setKeyboardLayout: 'app/setKeyboardLayout',
+    setPixelPerfect: 'app/setPixelPerfect',
     setJoystick: 'app/setJoystick',
     joystickChanged: 'app/joystickChanged',
 };
@@ -45,6 +46,14 @@ export const setKeyboardSide = (side) => ({
 export const setKeyboardLayout = (layout) => ({
     type: actionTypes.setKeyboardLayout,
     layout
+})
+
+// Draw the screen only at a whole scale of the display, so every Spectrum pixel
+// is the same size. Off by default: it costs whatever the space left over is,
+// and how much that matters against uneven pixels is a matter of taste.
+export const setPixelPerfect = (pixelPerfect) => ({
+    type: actionTypes.setPixelPerfect,
+    pixelPerfect
 })
 
 // Which joystick interface the host gamepad drives. Games read exactly one

@@ -8,6 +8,7 @@ export const actionTypes = {
     toggleLineNumbers: 'app/toggleLineNumbers',
     toggleBreakpointGutter: 'app/toggleBreakpointGutter',
     setKeyboardLayout: 'app/setKeyboardLayout',
+    setPixelPerfect: 'app/setPixelPerfect',
     setMachine: 'app/setMachine',
     machineChanged: 'app/machineChanged',
     setJoystick: 'app/setJoystick',
@@ -56,6 +57,14 @@ export const toggleBreakpointGutter = (enabled) => ({
 export const setKeyboardLayout = (layout) => ({
     type: actionTypes.setKeyboardLayout,
     layout
+});
+
+// Draw the screen only at a whole scale of the display, so every Spectrum pixel
+// is the same size. Off by default: it costs whatever the space left over is,
+// and how much that matters against uneven pixels is a matter of taste.
+export const setPixelPerfect = (pixelPerfect) => ({
+    type: actionTypes.setPixelPerfect,
+    pixelPerfect
 });
 
 export const setMachine = (machine) => ({

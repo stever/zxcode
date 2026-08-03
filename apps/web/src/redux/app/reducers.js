@@ -34,6 +34,7 @@ const loadBreakpointGutter = () => {
 
 const MACHINE_KEY = 'machine';
 const KEYBOARD_LAYOUT_KEY = 'keyboardLayout';
+const PIXEL_PERFECT_KEY = 'pixelPerfect';
 const JOYSTICK_KEY = 'joystick';
 
 // Joystick interfaces the host gamepad can drive. A game reads exactly one
@@ -51,6 +52,18 @@ const loadKeyboardLayout = () => {
         console.error('Failed to load keyboard layout preference:', e);
     }
     return 'auto';
+};
+
+// Draw the screen only at a whole scale of the display. Off unless it was
+// turned on: filling the space beside the editor is the better default, and
+// this trades some of that space for pixels that are all the same size.
+const loadPixelPerfect = () => {
+    try {
+        return localStorage.getItem(PIXEL_PERFECT_KEY) === 'true';
+    } catch (e) {
+        console.error('Failed to load pixel perfect preference:', e);
+    }
+    return false;
 };
 
 const loadJoystick = () => {
@@ -105,6 +118,7 @@ const initialState = {
     machine: machineState.machine,
     machineLocked: machineState.machineLocked,
     keyboardLayout: loadKeyboardLayout(),
+    pixelPerfect: loadPixelPerfect(),
     joystick: loadJoystick()
 };
 
@@ -180,6 +194,19 @@ function setKeyboardLayout(state, action) {
     }
 }
 
+function setPixelPerfect(state, action) {
+    const pixelPerfect = !!action.pixelPerfect;
+    try {
+        localStorage.setItem(PIXEL_PERFECT_KEY, String(pixelPerfect));
+    } catch (e) {
+        console.error('Failed to save pixel perfect preference:', e);
+    }
+    return {
+        ...state,
+        pixelPerfect
+    }
+}
+
 function setJoystick(state, action) {
     if (!JOYSTICK_TYPES.includes(action.joystick)) return state;
     try {
@@ -201,6 +228,7 @@ const actionsMap = {
     [actionTypes.setMachine]: setMachine,
     [actionTypes.machineChanged]: setMachine,
     [actionTypes.setKeyboardLayout]: setKeyboardLayout,
+    [actionTypes.setPixelPerfect]: setPixelPerfect,
     [actionTypes.setJoystick]: setJoystick,
     [actionTypes.joystickChanged]: setJoystick,
 };

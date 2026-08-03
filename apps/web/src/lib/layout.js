@@ -1,4 +1,5 @@
 import {layoutForChoice, layoutAspect, KEYBOARD_NONE} from "@zxplay/ui/keyboard";
+import {snapToWholeScale} from "@zxplay/ui/display";
 
 // Pure, viewport-driven layout for the editor + emulator across orientations.
 //
@@ -196,19 +197,25 @@ export function editorHeight({columnH, chrome, dockH = 0}) {
  * editor, at the price of a page that scrolls. Tab mode has no floor — the
  * panel is the whole page there, so fitting it is always the right answer.
  *
+ * `pixelPerfect` rounds the result DOWN to a whole scale of the display, so
+ * every Spectrum pixel is drawn the same size. It is applied to the fitted
+ * width, so it can only give space back — never overflow the box.
+ *
  * @param {{availW:Number, availH:Number, kbAspect:Number, hidden?:Boolean,
- *          floor?:Number}} params
+ *          floor?:Number, pixelPerfect?:Boolean}} params
  * @returns {{emuW:Number, emuH:Number}}
  */
-export function emulatorSize({availW, availH, kbAspect, hidden = false, floor = 0}) {
+export function emulatorSize({availW, availH, kbAspect, hidden = false, floor = 0,
+                              pixelPerfect = false}) {
     // With no keyboard under it the screen takes the space the keyboard had, so
     // the 2x cap is what would stop it using the box it has been given.
-    const emuW = Math.max(floor, fitEmulatorWidth({
+    const fitted = fitEmulatorWidth({
         availW,
         availH,
         kbAspect,
         maxW: hidden ? Infinity : MAX_EMU_W,
-    }));
+    });
+    const emuW = Math.max(floor, pixelPerfect ? snapToWholeScale(fitted) : fitted);
     return {emuW, emuH: Math.round(emuW * (SCREEN_ASPECT + kbAspect))};
 }
 
@@ -221,13 +228,14 @@ export function emulatorSize({availW, availH, kbAspect, hidden = false, floor = 
  * @param {{width:Number, availH:Number, kbAspect:Number, hidden?:Boolean}} params
  * @returns {{emuW:Number, emuH:Number}}
  */
-export function splitEmulator({width, availH, kbAspect, hidden = false}) {
+export function splitEmulator({width, availH, kbAspect, hidden = false, pixelPerfect = false}) {
     return emulatorSize({
         availW: width * (1 - MIN_EDITOR_FRACTION),
         availH,
         kbAspect,
         hidden,
         floor: MIN_EMU_W,
+        pixelPerfect,
     });
 }
 
@@ -247,6 +255,6 @@ export function emulatorBottom({emuTop, emuH}) {
  * @param {{width:Number, availH:Number, kbAspect:Number, hidden?:Boolean}} params
  * @returns {{emuW:Number, emuH:Number}}
  */
-export function tabEmulator({width, availH, kbAspect, hidden = false}) {
-    return emulatorSize({availW: width, availH, kbAspect, hidden});
+export function tabEmulator({width, availH, kbAspect, hidden = false, pixelPerfect = false}) {
+    return emulatorSize({availW: width, availH, kbAspect, hidden, pixelPerfect});
 }

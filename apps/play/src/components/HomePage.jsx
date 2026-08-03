@@ -16,6 +16,7 @@ export default function HomePage() {
     const keyboardSide = useSelector(state => state?.app.keyboardSide);
     const machine = useSelector(state => state?.app.machine);
     const keyboardLayout = useSelector(state => state?.app.keyboardLayout);
+    const pixelPerfect = useSelector(state => state?.app.pixelPerfect);
 
     const [navHeight, setNavHeight] = useState(0);
 
@@ -37,10 +38,12 @@ export default function HomePage() {
         navHeight,
         kbAspect: keyboard.aspect,
         hidden: keyboard.hidden,
-        side: keyboardSide
+        side: keyboardSide,
+        pixelPerfect
     });
 
-    // Size the emulator screen to match the computed layout (fractional zoom).
+    // Size the emulator screen to match the computed layout. The zoom is a whole
+    // number exactly when the layout snapped the width to one.
     useEffect(() => {
         if (layout.screenW > 0) {
             dispatch(setZoom(layout.screenW / 320));

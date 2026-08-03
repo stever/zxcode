@@ -4,7 +4,8 @@ import {useNavigate} from "react-router-dom";
 import {Nav as Deck} from "@zxplay/ui";
 import {viewFullScreen, showOpenFileDialog} from "../redux/jsspeccy/actions";
 import {
-    resetEmulator, setMachine, setKeyboardSide, setKeyboardLayout, setJoystick,
+    resetEmulator, setMachine, setKeyboardSide, setKeyboardLayout, setPixelPerfect,
+    setJoystick,
 } from "../redux/app/actions";
 import {useTranslation} from "@zxplay/i18n";
 import {resolveKeyboard} from "../lib/layout";
@@ -25,6 +26,7 @@ export default function Nav({compact = false} = {}) {
     const keyboardSide = useSelector(state => state?.app.keyboardSide);
     const keyboardLayout = useSelector(state => state?.app.keyboardLayout);
     const keyConfig = useSelector(state => state?.app.keyConfig);
+    const pixelPerfect = useSelector(state => state?.app.pixelPerfect);
     const joystick = useSelector(state => state?.app.joystick);
 
     // Which side the keyboard sits on only means something while one is drawn —
@@ -32,7 +34,7 @@ export default function Nav({compact = false} = {}) {
     const keyboardDrawn = !resolveKeyboard(keyConfig, machine, keyboardLayout).hidden;
 
     const model = getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
-        keyboardSide, keyboardDrawn, keyboardLayout, joystick);
+        keyboardSide, keyboardDrawn, keyboardLayout, pixelPerfect, joystick);
 
     return (
         <Deck
@@ -45,7 +47,7 @@ export default function Nav({compact = false} = {}) {
 }
 
 function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked, keyboardSide,
-                      keyboardDrawn, keyboardLayout, joystick) {
+                      keyboardDrawn, keyboardLayout, pixelPerfect, joystick) {
     const viewFullScreenMenuItem = {
         label: t('nav.fullScreen'),
         icon: 'pi pi-fw pi-window-maximize',
@@ -76,12 +78,23 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
         ]
     };
 
+    // Draws the screen only at a whole scale of the display, so no Spectrum
+    // pixel is wider than its neighbour. It costs whatever is left over, so it
+    // is a checkable choice rather than the default.
+    const pixelPerfectMenuItem = {
+        label: t('nav.pixelPerfect'),
+        icon: pixelPerfect ? 'pi pi-fw pi-check' : 'pi pi-fw',
+        command: () => {
+            dispatch(setPixelPerfect(!pixelPerfect));
+        }
+    };
+
     const viewMenu = {
         label: t('nav.view'),
         icon: 'pi pi-fw pi-eye',
         items: keyboardDrawn
-            ? [viewFullScreenMenuItem, keyboardSideMenuItem]
-            : [viewFullScreenMenuItem]
+            ? [viewFullScreenMenuItem, pixelPerfectMenuItem, keyboardSideMenuItem]
+            : [viewFullScreenMenuItem, pixelPerfectMenuItem]
     };
 
     const infoMenu = {

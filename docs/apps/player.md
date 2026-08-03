@@ -93,6 +93,27 @@ your choice is remembered like the rest. A game that names its own keys with
 the `k` parameter (below) still draws them — those are its controls, and on a
 phone they may be the only ones — so the choice comes back with the next game.
 
+### Pixel perfect
+
+Filling the window means the screen is usually not a whole multiple of the
+Spectrum's own size, and the pixels are drawn hard-edged rather than smoothed.
+At 1250 pixels wide, for instance, each Spectrum pixel wants to be 3.9 across,
+so some are drawn 4 and some 3 — a faint unevenness across the picture, most
+visible on dithered artwork and single-pixel detail.
+
+**View > Pixel Perfect** rounds the screen down to a whole multiple instead —
+1x, 2x, 3x and so on — so every pixel is exactly the same size. It is off by
+default, because it costs whatever is left over: that 1250-pixel screen becomes
+960, and on a phone in landscape it can be the difference between 488 and 320.
+The window decides which is the better trade, so it is a switch rather than a
+rule, and it is remembered like the rest.
+
+Two cases where it does nothing. A screen already on a whole multiple — a
+desktop showing the usual 2x — does not move. And where not even 1x would fit,
+on a very narrow window, the screen keeps filling the space: there is no whole
+step left to drop to, and a screen shrunk below the Spectrum's own resolution
+would be a worse answer than uneven pixels.
+
 ### Tailoring the keyboard to a game
 
 Most games use four or five keys. Showing a full keyboard on a phone makes

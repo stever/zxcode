@@ -1,4 +1,5 @@
 import {layoutForChoice, layoutForMachine, layoutAspect, KEYBOARD_NONE} from "@zxplay/ui/keyboard";
+import {snapToWholeScale} from "@zxplay/ui/display";
 
 // Pure, viewport-driven layout for the emulator + on-screen keyboard.
 //
@@ -117,22 +118,27 @@ export function computeMode({width, height, kbAspect}) {
  * the 2x cap into the height left under the nav. Side by side it is already the
  * full height, so there the keyboard simply goes.
  *
- * @param {{width:Number, height:Number, navHeight?:Number, kbAspect:Number, hidden?:Boolean, side?:('left'|'right')}} params
+ * pixelPerfect rounds the screen DOWN to a whole scale of the display, so every
+ * Spectrum pixel is drawn the same size. It is applied last, to whatever width
+ * the fit arrived at, so it can only ever give space back — never overflow.
+ *
+ * @param {{width:Number, height:Number, navHeight?:Number, kbAspect:Number, hidden?:Boolean, side?:('left'|'right'), pixelPerfect?:Boolean}} params
  * @returns {{mode:('stacked'|'side'), screenW:Number, screenH:Number, kbW:Number, kbH:Number, colW:Number, side:String}}
  */
 export function computeLayout({width, height, navHeight = 0, kbAspect, hidden = false,
-                               side = 'right'}) {
+                               side = 'right', pixelPerfect = false}) {
     const availW = Math.max(0, width);
     const mode = computeMode({width, height, kbAspect});
+    const fit = (w) => (pixelPerfect ? snapToWholeScale(w) : w);
 
     if (mode === 'stacked') {
         // With a keyboard, computeMode has already decided the stack fits the
         // height, so width (capped) is what sizes the screen. With none, the
         // height left under the nav is the other bound, and the cap goes.
         const byHeight = Math.max(0, height - navHeight - STACK_CHROME) / SCREEN_ASPECT;
-        const screenW = hidden
+        const screenW = fit(hidden
             ? Math.min(availW, byHeight)
-            : Math.min(availW, MAX_SCREEN_W);
+            : Math.min(availW, MAX_SCREEN_W));
         const screenH = screenW * SCREEN_ASPECT;
         return {
             mode,
@@ -149,14 +155,16 @@ export function computeLayout({width, height, navHeight = 0, kbAspect, hidden = 
     // remaining width on the opposite side. With no keyboard the column keeps its
     // width and only the keyboard goes: the screen already has the whole height,
     // so it has no use for more width, and the compact nav needs the column.
-    let screenH = height;
-    let screenW = screenH / SCREEN_ASPECT;
+    let screenW = height / SCREEN_ASPECT;
 
     const maxScreenW = availW - MIN_KB_W;
     if (screenW > maxScreenW) {
         screenW = Math.max(0, maxScreenW);
-        screenH = screenW * SCREEN_ASPECT;
     }
+    // Whatever the height and the keyboard's reserve allowed, rounded down to a
+    // whole scale. The width it gives back goes to the column beside it.
+    screenW = fit(screenW);
+    const screenH = screenW * SCREEN_ASPECT;
 
     const colW = availW - screenW;
     const kbAreaH = Math.max(0, height - navHeight);

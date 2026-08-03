@@ -30,6 +30,7 @@ export default function HomePage() {
     const userId = useSelector(state => state?.identity.userId);
     const machine = useSelector(state => state?.app.machine);
     const keyboardLayout = useSelector(state => state?.app.keyboardLayout);
+    const pixelPerfect = useSelector(state => state?.app.pixelPerfect);
 
     // Both machines share one neutral BASIC sample, so the tab is just "BASIC".
     // The editor still highlights the machine's dialect and the run saga routes
@@ -66,7 +67,7 @@ export default function HomePage() {
         top: emuTop,
         reserveBelow: isTab ? 0 : SPLIT_EMU_CHROME,
     });
-    const box = {availH: emuAvailH, kbAspect, hidden: kbHidden, width: windowWidth};
+    const box = {availH: emuAvailH, kbAspect, hidden: kbHidden, width: windowWidth, pixelPerfect};
     const {emuW, emuH} = isTab ? tabEmulator(box) : splitEmulator(box);
     // Level with the emulator column beside it; in tab mode its panel simply
     // runs to the bottom of the page.
