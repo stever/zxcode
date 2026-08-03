@@ -6,15 +6,24 @@
         encode zstd gzip
 
         # /dist assets have content-hashed filenames (bundle) or a content-hash
-        # ?v query (wasm etc.); /next assets are ?v-versioned via the asset
-        # manifest. Both change URL whenever content changes — cache them hard.
-        @immutable path /dist/* /next/*
+        # ?v query (wasm etc.), so they change URL whenever content changes —
+        # cache them hard.
+        @immutable path /dist/*
         header @immutable Cache-Control "public, max-age=31536000, immutable"
 
-        # Everything else (index.html, /style.css, /assets, asset-manifest.json)
-        # must revalidate so clients always pick up the current asset URLs.
+        # Everything else must revalidate so clients always pick up the
+        # current asset URLs: index.html, /style.css, /assets,
+        # asset-manifest.json — and /next, which despite the manifest is NOT
+        # versioned in practice. Its manifest entries are written at
+        # image-build time from public/next, but the assets that matter (the
+        # card, its zip, the ROMs) are licensed content staged onto the DEPLOY
+        # HOST afterwards and bind-mounted in, so they are absent when the
+        # manifest is built and assetUrl() falls back to a bare path. Cached
+        # hard, that path pinned one card in every browser that had ever booted
+        # the Next, and restaging the host reached nobody. ETag keeps the
+        # revalidation a 304 for the 2.7 MB zip.
         @revalidate {
-            not path /dist/* /next/*
+            not path /dist/*
         }
         header @revalidate Cache-Control "no-cache"
 
