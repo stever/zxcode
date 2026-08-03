@@ -85,8 +85,10 @@ front of you. The screen then takes the room the keyboard had rather than
 leaving it blank: it is no longer held to twice the Spectrum's own size, and
 grows until it meets the window. On a 1920x1080 desktop that is a screen about
 1250 pixels wide instead of 640. In landscape, where the screen already uses
-the full height, the keyboard simply goes. Only View > Keyboard Side has
-nothing left to say, so it steps out of the menu.
+the full height, the keyboard simply goes: the screen has no use for the width
+it frees, so the column shrinks to the menu button that shares it and the two
+are centred together rather than left at opposite edges. Only View > Keyboard
+Side has nothing left to say, so it steps out of the menu.
 
 Nothing else changes: clicking the screen still hands it your keyboard, and
 your choice is remembered like the rest. A game that names its own keys with

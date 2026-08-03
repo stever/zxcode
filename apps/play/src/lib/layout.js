@@ -12,7 +12,10 @@ import {snapToWholeScale} from "@zxplay/ui/display";
 // at a given width, matching renderKeyboard's per-row sizing.
 
 const MAX_SCREEN_W = 640; // cap so the screen isn't huge on wide desktops
-const MIN_KB_W = 160; // keep the keyboard (and the nav under it) usable side by side
+// The narrowest the side-by-side column may be. It is the compact nav's own
+// width (measured at 173px), not the keyboard's: with no keyboard drawn the nav
+// is all the column holds, and it is what the screen must leave room for.
+const MIN_COL_W = 176;
 const NAV_ESTIMATE = 48; // nominal nav height used only for the mode decision
 
 // Everything between the nav and the bottom of the page that is not the screen
@@ -151,30 +154,40 @@ export function computeLayout({width, height, navHeight = 0, kbAspect, hidden = 
         };
     }
 
-    // Side-by-side: screen fills the full height; nav + keyboard share the
-    // remaining width on the opposite side. With no keyboard the column keeps its
-    // width and only the keyboard goes: the screen already has the whole height,
-    // so it has no use for more width, and the compact nav needs the column.
+    // Side-by-side: the screen fills the full height; the nav and the keyboard
+    // share a column beside it. The screen has no use for more WIDTH here — it
+    // is bounded by the height at a fixed 5:4 — so any width neither of them
+    // wants is left as margin and the pair is centred (the shell's flex row
+    // does the centring; this only has to stop the column swallowing it).
     let screenW = height / SCREEN_ASPECT;
 
-    const maxScreenW = availW - MIN_KB_W;
+    const maxScreenW = availW - MIN_COL_W;
     if (screenW > maxScreenW) {
         screenW = Math.max(0, maxScreenW);
     }
-    // Whatever the height and the keyboard's reserve allowed, rounded down to a
-    // whole scale. The width it gives back goes to the column beside it.
-    screenW = fit(screenW);
+    // Down, not nearest: the column is measured from this width, so rounding a
+    // half pixel UP puts the pair one wider than the viewport and raises a
+    // horizontal scrollbar for the whole page (844x390 did exactly that).
+    screenW = Math.floor(fit(screenW));
     const screenH = screenW * SCREEN_ASPECT;
 
-    const colW = availW - screenW;
     const kbAreaH = Math.max(0, height - navHeight);
 
-    let kbW = hidden ? 0 : colW;
+    // The keyboard is never wider than the screen it belongs to: they are one
+    // machine, and a keyboard dwarfing its own display reads as a fault. It
+    // used to take every pixel the screen did not, so a wide window (or a
+    // screen held to a whole scale) grew it far past the screen — 1760 wide
+    // against a 640 screen at 2560x760.
+    let kbW = hidden ? 0 : Math.min(Math.max(0, availW - screenW), screenW);
     let kbH = kbW * kbAspect;
     if (kbH > kbAreaH) {
         kbH = kbAreaH;
         kbW = kbAspect ? kbH / kbAspect : kbW;
     }
+
+    // The column is the keyboard's, but never narrower than the compact nav
+    // that shares it. What is left over after both is margin.
+    const colW = Math.min(Math.max(0, availW - screenW), Math.max(MIN_COL_W, kbW));
 
     return {
         mode,

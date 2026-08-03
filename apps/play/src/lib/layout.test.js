@@ -114,8 +114,9 @@ describe("computeLayout with no keyboard", () => {
 
     // Landscape stays side-by-side, so the screen keeps the full height rather
     // than losing the nav's worth of it to a stack. The screen already has every
-    // pixel of height there, so the keyboard simply goes and the column - which
-    // the compact nav still needs - keeps its width.
+    // pixel of height there, so it cannot use the width the keyboard frees: the
+    // column shrinks to the compact nav that still lives in it, and what neither
+    // wants is left as margin for the shell to centre the pair in.
     it("keeps the full height in landscape and only drops the keyboard", () => {
         const withKeys = computeLayout({width: 800, height: 400, navHeight: 48,
             kbAspect: KB_ASPECT});
@@ -123,7 +124,8 @@ describe("computeLayout with no keyboard", () => {
         expect(without.mode).toBe('side');
         expect(without.screenH).toBe(400);
         expect(without.screenW).toBe(withKeys.screenW);
-        expect(without.colW).toBe(withKeys.colW);
+        expect(without.colW).toBeLessThan(withKeys.colW);
+        expect(without.colW).toBe(176); // the nav's own width, and no more
         // Nothing may be left for a keyboard that is not there.
         expect(without.kbW).toBe(0);
         expect(without.kbH).toBe(0);
@@ -194,13 +196,28 @@ describe("computeLayout with pixel perfect", () => {
         expect(perfect(box).screenW).toBeLessThan(320);
     });
 
-    // Side by side the width the screen gives up goes to the column beside it,
-    // so the keyboard and the compact nav are never squeezed by this.
-    it("hands the width it gives up to the keyboard column", () => {
+    // Side by side the width the screen gives up is NOT poured into the column:
+    // the screen is bounded by the height, so neither of them wants it, and it
+    // is left over for the shell to centre the pair in. Pouring it in gave a
+    // 614px keyboard beside a 640px screen, and with no keyboard drawn a void
+    // where the column should be.
+    it("leaves the width it gives up as margin, not column", () => {
         const box = {width: 900, height: 400, navHeight: 48, kbAspect: KB_ASPECT};
         expect(computeMode(box)).toBe('side');
-        expect(perfect(box).colW).toBeGreaterThan(fitted(box).colW);
-        expect(perfect(box).screenW + perfect(box).colW).toBe(900);
+        expect(perfect(box).screenW + perfect(box).colW).toBeLessThan(900);
+        expect(perfect(box).colW).toBeLessThanOrEqual(perfect(box).screenW);
+    });
+
+    // One machine: a keyboard wider than its own display reads as a fault. The
+    // column used to take every pixel the screen did not, which on a wide window
+    // grew it far past the screen.
+    it("never draws the keyboard wider than the screen", () => {
+        for (const [width, height] of [[2560, 760], [1920, 700], [1254, 760], [900, 400]]) {
+            const box = {width, height, navHeight: 48, kbAspect: KB_ASPECT};
+            for (const l of [fitted(box), perfect(box)]) {
+                expect(l.kbW).toBeLessThanOrEqual(l.screenW);
+            }
+        }
     });
 
     // With a keyboard the two are one column, so it follows the screen's width.
