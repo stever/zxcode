@@ -256,18 +256,53 @@ describe("pixel perfect", () => {
             }
         });
 
-    it("never asks for more room than fitting would have", () => {
+    // The screen may end up WIDER than the plain fit, because the keyboard
+    // gives up height to buy it a whole scale. What must never grow is the
+    // total: the box it was measured into is still the box.
+    it("never asks for more height than the box it was given", () => {
         for (const {width, height, top} of BOXES) {
             const availH = panelHeight({viewportH: height, top});
             for (const hidden of [false, true]) {
                 const kbAspect = hidden ? 0 : KB_ASPECT;
-                const box = {width, availH, kbAspect, hidden};
-                expect(tabEmulator({...box, pixelPerfect: true}).emuW)
-                    .toBeLessThanOrEqual(tabEmulator(box).emuW);
-                expect(splitEmulator({...box, pixelPerfect: true}).emuH)
-                    .toBeLessThanOrEqual(splitEmulator(box).emuH);
+                const box = {width, availH, kbAspect, hidden, pixelPerfect: true};
+                for (const size of [tabEmulator(box), splitEmulator(box)]) {
+                    if (size.emuW > 256) expect(size.emuH).toBeLessThanOrEqual(availH);
+                    expect(size.kbW).toBeLessThanOrEqual(size.emuW);
+                }
             }
         }
+    });
+
+    // The keyboard has no pixel grid of its own, so it is what pays for the
+    // screen's whole scale. 8px short of 2x used to cost the screen half its
+    // width; now it costs the keyboard a few percent of its own.
+    it("narrows the keyboard rather than halving the screen", () => {
+        // 1440x940 measured: the fit lands on 632, just under 2x.
+        const availH = 759;
+        const plain = splitEmulator({width: 1440, availH, kbAspect: KB_ASPECT});
+        const perfect = splitEmulator({width: 1440, availH, kbAspect: KB_ASPECT,
+            pixelPerfect: true});
+        expect(plain.emuW).toBe(632);
+        expect(perfect.emuW).toBe(640);
+        expect(perfect.kbW).toBeGreaterThan(0.9 * perfect.emuW);
+        expect(perfect.emuH).toBeLessThanOrEqual(availH);
+    });
+
+    // Past the point where the keyboard would stop reading as one, the smaller
+    // whole scale is the better answer.
+    it("falls back to the smaller scale before the keyboard gets silly", () => {
+        const tight = splitEmulator({width: 1440, availH: 600, kbAspect: KB_ASPECT,
+            pixelPerfect: true});
+        expect(tight.emuW).toBe(320);
+        expect(tight.kbW).toBe(320);
+    });
+
+    // With no keyboard there is nothing to trade, so it is a plain round down.
+    it("keeps the keyboard the screen's width when there is room for both", () => {
+        const roomy = splitEmulator({width: 1920, availH: 900, kbAspect: KB_ASPECT,
+            pixelPerfect: true});
+        expect(roomy.emuW).toBe(640);
+        expect(roomy.kbW).toBe(640);
     });
 
     // The 2x column the desktop already draws is a whole scale, so the common
@@ -278,9 +313,13 @@ describe("pixel perfect", () => {
         expect(splitEmulator(box).emuW).toBe(640);
     });
 
+    // Below one whole scale, narrowing the keyboard buys nothing — the screen
+    // would still be off the grid — so the box is simply filled as usual.
     it("keeps the fitted size when even 1x will not fit", () => {
         const box = {width: 300, availH: 200, kbAspect: KB_ASPECT};
-        expect(tabEmulator({...box, pixelPerfect: true}).emuW).toBe(tabEmulator(box).emuW);
+        const perfect = tabEmulator({...box, pixelPerfect: true});
+        expect(perfect.emuW).toBe(tabEmulator(box).emuW);
+        expect(perfect.kbW).toBe(perfect.emuW);
     });
 
     it("changes nothing when it is off", () => {

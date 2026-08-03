@@ -105,11 +105,20 @@ fitting on one line, which differs by language.
 
 Sizing the emulator to the space usually leaves it on a fractional multiple of
 the Spectrum's own size, so with the pixels drawn hard-edged some come out a
-pixel wider than others. **View > Pixel Perfect** rounds it down to a whole
-multiple — 1x, 2x, 3x — so every pixel is the same size, at the cost of the
-space left over, which goes to the editor. It is off by default and remembered
-when set. Where not even 1x would fit the emulator keeps filling its space
-instead, since there is no whole step left to drop to.
+pixel wider than others. **View > Pixel Perfect** rounds the screen down to a
+whole multiple — 1x, 2x, 3x — so every pixel is the same size, at the cost of
+the space left over, which goes to the editor. It is off by default and
+remembered when set.
+
+The whole multiples are far apart, so where the screen lands just under one it
+is the on-screen keyboard that gives way rather than the screen: the keyboard
+has no pixel grid to keep, and is simply drawn a little narrower and centred
+under the screen. A window a few pixels short of a 2x screen therefore keeps
+2x with a keyboard at around 95% of its width, instead of dropping to 1x. Once
+the keyboard would have to shrink below about three-fifths of the screen it
+stops looking like part of the same machine, and the smaller whole multiple is
+used after all. `Keyboard > None` sidesteps the trade entirely, and is the way
+to hold a large whole multiple in a short window.
 
 ## The keyboard
 

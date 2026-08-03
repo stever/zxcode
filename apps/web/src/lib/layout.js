@@ -1,5 +1,5 @@
 import {layoutForChoice, layoutAspect, KEYBOARD_NONE} from "@zxplay/ui/keyboard";
-import {snapToWholeScale} from "@zxplay/ui/display";
+import {PIXEL_UNIT, snapToWholeScale} from "@zxplay/ui/display";
 
 // Pure, viewport-driven layout for the editor + emulator across orientations.
 //
@@ -33,6 +33,12 @@ export const SPLIT_EMU_CHROME = 6; // mb-1 (4) + the frame's top and bottom bord
 const FRAME_BORDER = 2;
 
 const MIN_EDITOR_FRACTION = 0.5;
+
+// How narrow the on-screen keyboard may get, as a fraction of the screen above
+// it, when pixel-perfect scaling buys the screen a whole scale out of the
+// keyboard's height. Narrower than this and it stops reading as part of the
+// same machine, and the smaller whole scale is the better answer.
+const MIN_KB_FRACTION = 0.6;
 
 // Split (editor beside emulator) only makes sense with enough width for a
 // usable editor AND enough height for a usable emulator; otherwise we tab
@@ -197,26 +203,61 @@ export function editorHeight({columnH, chrome, dockH = 0}) {
  * editor, at the price of a page that scrolls. Tab mode has no floor — the
  * panel is the whole page there, so fitting it is always the right answer.
  *
- * `pixelPerfect` rounds the result DOWN to a whole scale of the display, so
- * every Spectrum pixel is drawn the same size. It is applied to the fitted
- * width, so it can only give space back — never overflow the box.
+ * `pixelPerfect` rounds the SCREEN down to a whole scale of the display, so
+ * every Spectrum pixel is drawn the same size. It never asks for more room than
+ * the box has.
+ *
+ * `kbW` is the width the keyboard is drawn at. It is the screen's width in
+ * every ordinary case, and narrower only where pixel-perfect scaling had to buy
+ * the screen a whole scale out of the keyboard's height — see below.
  *
  * @param {{availW:Number, availH:Number, kbAspect:Number, hidden?:Boolean,
  *          floor?:Number, pixelPerfect?:Boolean}} params
- * @returns {{emuW:Number, emuH:Number}}
+ * @returns {{emuW:Number, kbW:Number, emuH:Number}}
  */
 export function emulatorSize({availW, availH, kbAspect, hidden = false, floor = 0,
                               pixelPerfect = false}) {
     // With no keyboard under it the screen takes the space the keyboard had, so
     // the 2x cap is what would stop it using the box it has been given.
-    const fitted = fitEmulatorWidth({
-        availW,
-        availH,
-        kbAspect,
-        maxW: hidden ? Infinity : MAX_EMU_W,
-    });
-    const emuW = Math.max(floor, pixelPerfect ? snapToWholeScale(fitted) : fitted);
-    return {emuW, emuH: Math.round(emuW * (SCREEN_ASPECT + kbAspect))};
+    const maxW = hidden ? Infinity : MAX_EMU_W;
+    const fitted = fitEmulatorWidth({availW, availH, kbAspect, maxW});
+
+    if (!pixelPerfect) {
+        const emuW = Math.max(floor, fitted);
+        return {emuW, kbW: emuW, emuH: Math.round(emuW * (SCREEN_ASPECT + kbAspect))};
+    }
+    if (kbAspect <= 0) {
+        // Nothing under the screen to trade against: the fit simply rounds down.
+        const emuW = Math.max(floor, snapToWholeScale(fitted));
+        return {emuW, kbW: 0, emuH: Math.round(emuW * SCREEN_ASPECT)};
+    }
+
+    // The screen must land on a whole scale; the keyboard need not follow it,
+    // having no pixel grid of its own — it is drawn to whatever box it is
+    // given. So the keyboard's height is what buys the screen its scale: ask
+    // what would fit with the keyboard at its narrowest, round THAT down to a
+    // whole scale, and hand the keyboard whatever height is then left over.
+    //
+    // Without this the screen pays instead, and it pays in whole scales: a
+    // window 8px short of 2x dropped the screen from 640 to 320, because 1x is
+    // the only whole scale under 2x. Now the keyboard gives up those 8px and
+    // the screen stays at 640 — at 96% of its width, which is not visible.
+    const relaxed = snapToWholeScale(
+        fitEmulatorWidth({availW, availH, kbAspect: kbAspect * MIN_KB_FRACTION, maxW}));
+    if (relaxed < PIXEL_UNIT) {
+        // No whole scale fits even with the keyboard at its narrowest, so
+        // narrowing it buys the screen nothing — it would still be off the grid.
+        // Fall back to filling the box, keyboard matching the screen.
+        const emuW = Math.max(floor, fitted);
+        return {emuW, kbW: emuW, emuH: Math.round(emuW * (SCREEN_ASPECT + kbAspect))};
+    }
+    const emuW = Math.max(floor, relaxed);
+    const screenH = emuW * SCREEN_ASPECT;
+    // Never wider than the screen (the ordinary case, when there is room), and
+    // never taller than the height left under it.
+    const kbW = Math.max(0,
+        Math.min(emuW, Math.floor(Math.max(0, availH - screenH) / kbAspect)));
+    return {emuW, kbW, emuH: Math.round(screenH + kbW * kbAspect)};
 }
 
 /**

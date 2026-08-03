@@ -70,7 +70,7 @@ export default function HomePage() {
         reserveBelow: isTab ? 0 : SPLIT_EMU_CHROME,
     });
     const box = {availH: emuAvailH, kbAspect, hidden: kbHidden, width: windowWidth, pixelPerfect};
-    const {emuW, emuH} = isTab ? tabEmulator(box) : splitEmulator(box);
+    const {emuW, kbW, emuH} = isTab ? tabEmulator(box) : splitEmulator(box);
     // Level with the emulator column beside it; in tab mode its panel simply
     // runs to the bottom of the page.
     const columnH = isTab
@@ -137,7 +137,7 @@ export default function HomePage() {
                         onTabChange={(e) => dispatch(setSelectedTabIndex(e.index))}>
                         <TabPanel header={t("home.tabEmulator")}>
                             <div className="flex justify-content-center" ref={emuRef}>
-                                <Emulator zoom={zoom} width={emuW} hideKeyboard={kbHidden}/>
+                                <Emulator zoom={zoom} width={emuW} keyboardWidth={kbW} hideKeyboard={kbHidden}/>
                             </div>
                         </TabPanel>
                         <TabPanel header={basicTabHeader}>
@@ -178,7 +178,7 @@ export default function HomePage() {
                                 )}
                             </div>
                             <div ref={emuRef}>
-                                <Emulator zoom={zoom} width={emuW} hideKeyboard={kbHidden}/>
+                                <Emulator zoom={zoom} width={emuW} keyboardWidth={kbW} hideKeyboard={kbHidden}/>
                             </div>
                         </div>
                     </div>

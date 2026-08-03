@@ -137,7 +137,7 @@ export default function ProjectPage({ projectId }) {
     reserveBelow: isTab ? 0 : toolbarH + SPLIT_EMU_CHROME,
   });
   const box = { availH: emuAvailH, kbAspect, hidden: kbHidden, width: windowWidth, pixelPerfect };
-  const { emuW, emuH } = isTab ? tabEmulator(box) : splitEmulator(box);
+  const { emuW, kbW, emuH } = isTab ? tabEmulator(box) : splitEmulator(box);
   // The editor column is levelled with the emulator column beside it, which is
   // what the fixed 770px CodeMirror used to do by construction; in tab mode its
   // panel simply runs to the bottom of the page.
@@ -189,7 +189,8 @@ export default function ProjectPage({ projectId }) {
                 header: t("home.tabEmulator"),
                 content: (
                   <div className="flex justify-content-center" ref={emuRef}>
-                    <Emulator zoom={zoom} width={emuW} hideKeyboard={kbHidden} />
+                    <Emulator zoom={zoom} width={emuW} keyboardWidth={kbW}
+                              hideKeyboard={kbHidden} />
                   </div>
                 ),
               },
@@ -243,7 +244,8 @@ export default function ProjectPage({ projectId }) {
                   {effectiveId && <StarButton projectId={effectiveId} />}
                 </div>
                 <div ref={emuRef}>
-                  <Emulator zoom={zoom} width={emuW} hideKeyboard={kbHidden} />
+                  <Emulator zoom={zoom} width={emuW} keyboardWidth={kbW}
+                              hideKeyboard={kbHidden} />
                 </div>
               </div>
             </div>

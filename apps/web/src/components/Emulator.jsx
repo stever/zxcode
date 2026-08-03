@@ -7,6 +7,7 @@ import {loadEmulator, setZoom} from "../redux/jsspeccy/actions";
 Emulator.propTypes = {
     zoom: PropTypes.number,
     width: PropTypes.number,
+    keyboardWidth: PropTypes.number,
     hideKeyboard: PropTypes.bool
 }
 
@@ -15,6 +16,11 @@ export function Emulator(props) {
 
     const zoom = props.zoom || 3;
     const width = props.width || zoom * 320;
+    // The keyboard is the screen's width except where pixel-perfect scaling
+    // bought the screen a whole scale out of the keyboard's height, which
+    // leaves it a little narrower and centred under the screen (see
+    // emulatorSize in lib/layout.js).
+    const keyboardWidth = props.keyboardWidth || width;
     const hideKeyboard = !!props.hideKeyboard;
 
     useEffect(() => {
@@ -33,7 +39,7 @@ export function Emulator(props) {
         // screen div the emulator's canvas is imperatively appended into.
         <div className="emulator-frame">
             <div id="jsspeccy-screen"/>
-            {!hideKeyboard && <Keyboard width={width}/>}
+            {!hideKeyboard && <Keyboard width={keyboardWidth}/>}
         </div>
     )
 }

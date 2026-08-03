@@ -56,7 +56,10 @@ export function Keyboard(props) {
         <div id="guiparent" onPointerDown={focusEmulator}
              onMouseDown={(e) => e.preventDefault()} style={{
             width: `${width}px`,
-            margin: 0,
+            // Centred: pixel-perfect scaling can leave the keyboard narrower
+            // than the screen above it, and off to one side it would read as a
+            // mistake rather than as a keyboard fitted to the room left.
+            margin: '0 auto',
             backgroundColor: "#444",
             padding: 0,
         }}>
