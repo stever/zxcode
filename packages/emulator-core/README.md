@@ -68,7 +68,10 @@ The staged card is BUILT FROM the official distro card by
 24.11 — big self-streaming games like Atic Atac and TX-1696 need it)
 and its prepped system tree, with the per-title-licensed payload
 removed and the filesystem REBUILT fresh (~2.6 MB zipped, ~8 MB
-resident in the sparse card). The rebuild matters twice over: freed
+resident in the sparse card). The system tree keeps the five
+`docs/guides/*.gde` manuals NextZXOS opens from its own "Guide" menu
+options (`KEEP_FILES` in that script); the rest of `docs/` goes with the
+payload. The rebuild matters twice over: freed
 clusters would otherwise keep the payload bytes (zip bloat) and leave
 free space fragmented — self-streaming games raw-stream their own .nex
 and die with "FILE FRAGMENTATION ERROR" unless the card's free space

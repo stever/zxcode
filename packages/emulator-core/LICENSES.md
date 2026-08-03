@@ -104,6 +104,14 @@ Basis per component, for a staged copy that IS served (dev / self-host):
 - **NextZXOS / NextBASIC system files** (`/nextzxos`, `/sys`) — closed-source
   components carried by the umbrella grant's free-distribution terms, served as
   exact, unmodified copies.
+- **The five NextZXOS guides** (`/docs/guides/NextZXOS.gde`, `Browser.gde`,
+  `Command Line.gde`, `NextBASIC.gde`, `Calculator.gde`) — Garry Lancaster's
+  manuals for the system components above, carried on the same basis and as
+  exact, unmodified copies. They are on the card because NextZXOS opens them
+  itself: each is the target of a "Guide" option in the menus (paths baked
+  into `enNextZX.rom` / `enAltZX.rom`), so without them those options can only
+  show "Error opening file". The REST of `/docs` — third-party application
+  manuals, hardware schematics — stays off the card.
 
 The "entirety" question. The Next License's "usage on hardware other than
 intended" bullet asks for the distribution "in its entirety", but the same
@@ -129,9 +137,10 @@ Rules for any deployment that serves a staged copy (self-hosting):
   Next License hangs on.
 - Ship the bare bootable system only. `scripts/trim-distro-card.sh` (run by
   the stage script) rebuilds the SD image with the NextZXOS system files only
-  (per-title extras and the QL core removed). Never add the distribution's
-  bundled games, demos or third-party tools: each is licensed per-title by its
-  own author.
+  (per-title extras and the QL core removed), plus the five NextZXOS guides
+  its own menus open (`KEEP_FILES` in that script). Never add the
+  distribution's bundled games, demos or third-party tools: each is licensed
+  per-title by its own author.
 - Retain attribution: NextZXOS (c) Garry Lancaster / SpecNext Ltd; Spectrum
   ROMs (c) Amstrad plc. (NextZXOS itself displays this on boot.)
 - "ZX Spectrum Next" is a trademark of others. Name any public deployment

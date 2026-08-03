@@ -245,6 +245,20 @@ FPGA source, and the ESP UART moved to its real ports.
     attribute `$08` — paper = palette 8, ink = 9 — so every paper pixel
     went transparent and the ULA, which shares bank 5 with the tilemap
     those viewers had just written there, showed through.
+- **Every "Guide" option on the staged card showed "Error opening
+  file".** With the viewers fixed, the pages rendered correctly and had
+  nothing to show: `scripts/trim-distro-card.sh` keeps an allow-list of
+  root entries, and `docs/` — the per-title-licensed payload's
+  neighbour — was not on it. But NextZXOS opens five of those documents
+  itself, by paths baked into `enNextZX.rom` / `enAltZX.rom`: the main
+  menu's Guide (`NextZXOS.gde`), the Browser's `G` (`Browser.gde`), and
+  EDIT → Guide in the Command Line, NextBASIC and the Calculator. The
+  script now carries a `KEEP_FILES` list holding exactly those five, so
+  the options open the manuals they name; the rest of `docs/`
+  (third-party application manuals, hardware schematics) still goes with
+  the payload. They are Garry Lancaster's manuals for the system files
+  the card already ships, carried as exact unmodified copies on the same
+  basis — see `LICENSES.md`.
 - **The CRT filter drew a diagonal seam corner to corner across the
   picture.** The filter always built a fixed 2× buffer, leaving the GPU to
   stretch it onto whatever the window actually was — 256 Next rows doubled

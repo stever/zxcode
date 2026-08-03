@@ -11,9 +11,10 @@
 #      (delete the first-boot welcome pager, seed config.ini) via
 #      TestPrepDistroCard_OfficialImage — staged images mount untouched,
 #      so the prep must be baked in.
-#   2. KEEP only the system tree (see KEEP below); everything else on the
-#      card (apps/demos/docs/extras/games/src) is per-title licensed and
-#      never distributed by this project.
+#   2. KEEP only the system tree (see KEEP below), plus the handful of
+#      individual files the system itself opens from elsewhere (KEEP_FILES);
+#      the rest of the card (apps/demos/docs/extras/games/src) is per-title
+#      licensed and never distributed by this project.
 #   3. REBUILD the filesystem fresh (mformat + mcopy) instead of deleting
 #      in place — for three reasons:
 #      - deletions leave the payload bytes in freed clusters (a ~50 MB
@@ -46,6 +47,25 @@ trap 'rm -rf "$TMP"' EXIT
 # copy per The Next License; home/tmp are part of the OS card layout.
 KEEP=(dot home LICENSE.md machines nextzxos README.md sys TBBLUE.FW TBBLUE.TBU tmp)
 
+# Individual files rescued from otherwise-excluded folders, at their card
+# path. docs/ as a whole stays off (third-party application manuals, 16 MB
+# of hardware schematics), but the NextZXOS menus offer a "Guide" option in
+# five places and each opens one of these by a path baked into the ROM:
+# main menu -> G (NextZXOS), Browser -> G, and EDIT -> Guide within the
+# Command Line, NextBASIC and the Calculator. Without the files those five
+# options can only ever show "Error opening file". Each is Garry
+# Lancaster's own manual for a NextZXOS component this card ships, carried
+# — like /nextzxos and /sys — as an exact unmodified copy under the same
+# umbrella grant.
+# Add a file here only when something on the card is shown to need it.
+KEEP_FILES=(
+  "docs/guides/NextZXOS.gde"
+  "docs/guides/Browser.gde"
+  "docs/guides/Command Line.gde"
+  "docs/guides/NextBASIC.gde"
+  "docs/guides/Calculator.gde"
+)
+
 echo "1/4 prep (welcome pager + config.ini) ..."
 (cd "$ZXGO" && ZX_GO_DISTRO_IMG="$SRC" ZX_GO_DISTRO_IMG_OUT="$TMP/prepped.img" \
     go test -count=1 -run TestPrepDistroCard_OfficialImage ./cmd/zxplay_go/ >/dev/null)
@@ -64,6 +84,11 @@ echo "2/4 extract system tree ..."
 mkdir "$TMP/tree"
 for e in "${KEEP[@]}"; do
   mcopy -i "$TMP/prepped.img@@$((SRC_START * 512))" -s -p -m "::/$e" "$TMP/tree/"
+done
+for f in "${KEEP_FILES[@]}"; do
+  mkdir -p "$TMP/tree/$(dirname "$f")"
+  mcopy -i "$TMP/prepped.img@@$((SRC_START * 512))" -p -m "::/$f" "$TMP/tree/$f"
+  echo "  kept $f"
 done
 
 # machines/ stays for the Next system files, but the Sinclair QL core + ROMs
@@ -92,8 +117,10 @@ with open(path, 'wb') as f:
     f.truncate(tot * 512)
 EOF
 mformat -i "$TMP/out.img@@$((P_START * 512))" -F -c 8 -R 32 -T "$P_SIZE" -h 255 -s 63 -H "$P_START" ::
-for e in "${KEEP[@]}"; do
-  mcopy -i "$TMP/out.img@@$((P_START * 512))" -s -p -m "$TMP/tree/$e" ::/
+# Everything extracted above, whether a KEEP tree or the parent folder of a
+# KEEP_FILES entry.
+for e in "$TMP/tree"/*; do
+  mcopy -i "$TMP/out.img@@$((P_START * 512))" -s -p -m "$e" ::/
 done
 mdir -i "$TMP/out.img@@$((P_START * 512))" :: | tail -2
 
