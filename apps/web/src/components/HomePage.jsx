@@ -15,7 +15,9 @@ import {
     computeMode, editorHeight, emulatorBottom, panelHeight, resolveKeyboard,
     splitEmulator, SPLIT_EMU_CHROME, tabEmulator,
 } from "../lib/layout";
-import {useChromeAround, useDescendantHeight, useElementTop} from "../lib/usePageMetrics";
+import {
+    useChromeAround, useDescendantHeight, useElementTop, useGapBelow,
+} from "../lib/usePageMetrics";
 import {login} from "../auth";
 
 export default function HomePage() {
@@ -47,6 +49,12 @@ export default function HomePage() {
     const emuTop = useElementTop(emuRef);
     const editorColTop = useElementTop(editorColRef);
     const editorChrome = useChromeAround(editorColRef, '.p-tabview', '.CodeMirror');
+    // The Run button and the line-numbers toggle under the editor. Split mode
+    // spends them differently from the tab strip above it: they sit under the
+    // emulator column beside them, so the PAGE reserves their height and the
+    // text area keeps its own — which is what puts its bottom edge on the
+    // keyboard's. Counted as the editor's chrome they ended it 53px short.
+    const belowEditor = useGapBelow(editorColRef, '.p-tabview', '.CodeMirror');
     // The emulator's header slot is the editor's tab strip, mirrored.
     const headerH = useDescendantHeight(editorColRef, '.p-tabview-nav');
 
@@ -67,7 +75,7 @@ export default function HomePage() {
     const emuAvailH = panelHeight({
         viewportH: windowHeight,
         top: emuTop,
-        reserveBelow: isTab ? 0 : SPLIT_EMU_CHROME,
+        reserveBelow: isTab ? 0 : SPLIT_EMU_CHROME + belowEditor,
     });
     const box = {availH: emuAvailH, kbAspect, hidden: kbHidden, width: windowWidth, pixelPerfect};
     const {emuW, kbW, emuH} = isTab ? tabEmulator(box) : splitEmulator(box);
@@ -76,7 +84,12 @@ export default function HomePage() {
     const columnH = isTab
         ? panelHeight({viewportH: windowHeight, top: editorColTop})
         : emulatorBottom({emuTop, emuH}) - editorColTop;
-    const editorH = editorHeight({columnH, chrome: editorChrome});
+    // In tab mode the panel holds the lot, so all of the chrome is the
+    // editor's; in split mode what sits below it has been reserved above.
+    const editorH = editorHeight({
+        columnH,
+        chrome: isTab ? editorChrome : Math.max(0, editorChrome - belowEditor),
+    });
     const zoom = emuW / 320;
     // The heights the stylesheets read (see ProjectPage).
     const heights = {

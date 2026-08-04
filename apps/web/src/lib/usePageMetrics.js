@@ -89,6 +89,35 @@ export function useDescendantHeight(rootRef, selector) {
 }
 
 /**
+ * The part of `containerSel` that sits BELOW the element matched by
+ * `targetSel` — on the home page, the Run button and the line-numbers toggle
+ * under the editor.
+ *
+ * The page needs this separately from the chrome as a whole because the two are
+ * spent differently: what is ABOVE the editor comes out of the editor's own
+ * height, while what is below sits under the emulator column beside it and has
+ * to be reserved from the page instead. Counting it as the editor's made the
+ * text area end short of the keyboard.
+ *
+ * Like useChromeAround, this does not move when the target is resized, so it is
+ * safe to feed back in.
+ *
+ * @param {Object} rootRef
+ * @param {String} containerSel
+ * @param {String} targetSel
+ * @returns {Number}
+ */
+export function useGapBelow(rootRef, containerSel, targetSel) {
+    return useMeasure(() => {
+        const container = rootRef.current?.querySelector(containerSel);
+        const target = container?.querySelector(targetSel);
+        if (!container || !target) return null;
+        return Math.round(
+            container.getBoundingClientRect().bottom - target.getBoundingClientRect().bottom);
+    });
+}
+
+/**
  * Everything in `containerSel` that is NOT the element matched by `targetSel`:
  * the tab strip above the editor, and below it the home page's Run button and
  * divider, or the project page's toolbar. Measuring the difference rather than
