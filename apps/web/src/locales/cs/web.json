@@ -260,6 +260,11 @@
     "projectRunError": "Spuštění projektu - Chyba",
     "projectRunMessage": "Spuštění projektu - Zpráva",
     "lineMsg": "Řádek {{line}}: {{msg}}",
+    "buildOutput": "Výstup sestavení",
+    "buildErrors": "Chyby: {{n}}",
+    "buildWarnings": "Varování: {{n}}",
+    "showBuildOutput": "Zobrazit výstup sestavení",
+    "hideWarnings": "Skrýt varování ({{n}})",
     "renderProblem": "Při vykreslování tohoto obsahu došlo k problému."
   }
 }

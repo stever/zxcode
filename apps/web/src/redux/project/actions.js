@@ -21,6 +21,8 @@ export const actionTypes = {
     renameProject: 'project/renameProject',
     setProjectTitle: 'project/setProjectTitle',
     setErrorItems: 'project/setErrorItems',
+    setBuildOutput: 'project/setBuildOutput',
+    setBuildOutputVisible: 'project/setBuildOutputVisible',
     downloadProjectZip: 'project/downloadProjectZip',
 };
 
@@ -156,6 +158,20 @@ function toErrorItems(value) {
 export const setErrorItems = (errorItems) => ({
     type: actionTypes.setErrorItems,
     errorItems: toErrorItems(errorItems)
+});
+
+// The last build's full classified output ([{severity, text, line?, path?}],
+// lib/buildDiagnostics.js) — unlike errorItems it is NOT cleared once the
+// toasts have shown, so the build-output dialog can present it for as long as
+// the failure is the latest result. Cleared when the next compile starts.
+export const setBuildOutput = (units) => ({
+    type: actionTypes.setBuildOutput,
+    units
+});
+
+export const setBuildOutputVisible = (visible) => ({
+    type: actionTypes.setBuildOutputVisible,
+    visible
 });
 
 export const downloadProjectZip = () => ({

@@ -24,7 +24,7 @@ import {
     setFollowTapAction
 } from "./actions";
 import {loadTap} from "../jsspeccy/actions";
-import {setErrorItems, setSelectedTabIndex} from "../project/actions";
+import {setBuildOutput, setErrorItems, setSelectedTabIndex} from "../project/actions";
 import {sourceMapLoaded, sourceMapCleared} from "../debugger/actions";
 import {parseSld} from "../../lib/debugger/sld";
 import {parseBasicMap} from "../../lib/debugger/basicMap";
@@ -216,6 +216,9 @@ function* handleDownloadProjectTapActions(_) {
 }
 
 function* handleGetProjectTapActions(_) {
+    // A new compile retires the previous failure's build output (and closes
+    // the dialog if it was showing it).
+    yield put(setBuildOutput(undefined));
     const userId = yield select((state) => state.identity.userId);
     const lang = yield select((state) => state.project.lang);
     const code = yield select((state) => state.project.code);

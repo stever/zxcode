@@ -1,8 +1,11 @@
 import React from "react";
+import {Button} from "primereact/button";
 import {error} from "./redux/error/actions";
+import {setBuildOutput, setBuildOutputVisible} from "./redux/project/actions";
 import {store} from "./redux/store";
 import {dashboardUnlock} from "./dashboard_lock";
 import {i18n} from "@zxplay/i18n";
+import {processErrorItems, buildToastPlan} from "./lib/buildDiagnostics";
 
 export function handleError(title, data) {
     dashboardUnlock();
@@ -58,23 +61,95 @@ function getRequestError(e) {
     }
 }
 
+// Surface a failed build: errors as individual toasts (deduplicated and
+// capped), warnings and stdout chatter folded into one summary toast whose
+// button opens the build-output dialog with the complete classified output
+// (#217 — a wall of warnings must not bury the errors). The full output is
+// published to state.project.buildOutput here, whether or not a toast host is
+// mounted, so the dialog always has the whole story.
 export function showToastsForErrorItems(errorItems, toast) {
     console.log('[build-errors] showToastsForErrorItems', {
         count: errorItems?.length,
         hasToast: Boolean(toast?.current),
         items: errorItems
     });
-    if (errorItems && errorItems.length > 0 && toast.current) {
-        const toasts = [];
+    if (!errorItems || errorItems.length === 0) return;
 
+    const units = processErrorItems(errorItems);
+    store.dispatch(setBuildOutput(units));
+
+    if (!toast?.current) return;
+
+    const plan = buildToastPlan(units);
+    const toasts = [];
+
+    if (plan.legacy) {
+        // Nothing in the output is recognisably an error — show everything,
+        // exactly as before, rather than gamble on the classifier.
         for (let i = 0; i < errorItems.length; i++) {
             const item = errorItems[i];
             const t = getBuildErrorToast(item);
             if (t) toasts.push(t);
         }
-
-        toast.current.show(toasts);
+    } else {
+        for (const unit of plan.errorToasts) {
+            toasts.push(getErrorUnitToast(unit));
+        }
+        if (plan.summary) {
+            toasts.push(getBuildSummaryToast(plan.summary));
+        }
     }
+
+    toast.current.show(toasts);
+}
+
+function getErrorUnitToast(unit) {
+    let msg = unit.text;
+
+    // Cosmetic: the toast header already announces an error.
+    for (const prefix of ['ERROR: ', 'error: ']) {
+        if (msg.startsWith(prefix)) {
+            msg = msg.substr(prefix.length);
+            break;
+        }
+    }
+
+    if (unit.line) {
+        msg = i18n.t('errors.lineMsg', {line: unit.line, msg});
+    }
+    if (unit.count > 1) {
+        msg = `${msg} (×${unit.count})`;
+    }
+
+    return {
+        severity: 'error',
+        sticky: true,
+        content: getBuildErrorToastContent(msg, true)
+    };
+}
+
+function getBuildSummaryToast(summary) {
+    return {
+        severity: 'warn',
+        sticky: true,
+        content: (
+            <div className="p-toast-message-text">
+                <span className="p-toast-summary">
+                    {i18n.t('errors.buildOutput')}
+                </span>
+                <div className="p-toast-detail">
+                    {i18n.t('errors.buildErrors', {n: summary.errors})}
+                    {' · '}
+                    {i18n.t('errors.buildWarnings', {n: summary.warnings})}
+                </div>
+                <Button
+                    label={i18n.t('errors.showBuildOutput')}
+                    className="p-button-sm mt-2"
+                    onClick={() => store.dispatch(setBuildOutputVisible(true))}
+                />
+            </div>
+        )
+    };
 }
 
 function getBuildErrorToast(item) {

@@ -260,6 +260,11 @@
     "projectRunError": "Execução do projeto - Erro",
     "projectRunMessage": "Execução do projeto - Mensagem",
     "lineMsg": "Linha {{line}}: {{msg}}",
+    "buildOutput": "Saída da compilação",
+    "buildErrors": "Erros: {{n}}",
+    "buildWarnings": "Avisos: {{n}}",
+    "showBuildOutput": "Mostrar saída da compilação",
+    "hideWarnings": "Ocultar avisos ({{n}})",
     "renderProblem": "Ocorreu um problema ao renderizar este conteúdo."
   }
 }

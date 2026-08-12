@@ -722,6 +722,39 @@ code {
     width: 50vw;
 }
 
+/* Build-output dialog (#217): the last failed build's complete compiler
+   output. Palette matches the debugger dock's console (debugger.css) so
+   compiler output reads like the rest of the tooling. */
+.build-output-dialog {
+    width: 70vw;
+    max-width: 900px;
+}
+
+.build-output-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.build-output-body {
+    background: #2c2c2c;   /* mbo editor background */
+    color: #ffffec;        /* mbo foreground */
+    border: 1px solid #5B5B5B;
+    border-radius: 5px;
+    font-family: monospace;
+    font-size: 13px;
+    padding: 8px 10px;
+    max-height: 60vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.build-output-line.error { color: #ff6161; }
+.build-output-line.warning { color: #ffb928; }  /* mbo keyword amber */
+.build-output-line.info { color: #95958a; }     /* mbo comment grey */
+
 .profile-header {
     display: flex;
     gap: 20px;

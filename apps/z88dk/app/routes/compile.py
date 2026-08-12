@@ -343,6 +343,37 @@ def sanitize_compiler_output(output: str, c_filename: str) -> str:
     return cleaned.strip()
 
 
+# Diagnostics returned to the client are bounded (they travel as a GraphQL
+# error message and end up in the IDE's build-output view). A plain tail
+# truncation loses whatever comes last — and zcc emits its warnings as it
+# meets them, so a warning-heavy build could push the actual error lines
+# past the cap and the user saw only warnings (#217).
+DIAGNOSTICS_LIMIT = 2000
+_ERROR_LINE = re.compile(r'(^|\W)errors?(\W|$)', re.IGNORECASE)
+
+
+def clamp_diagnostics(output: str, limit: int = DIAGNOSTICS_LIMIT) -> str:
+    """Bound the diagnostic block without losing the error lines. Output that
+    fits is passed through untouched (the client does its own presentation);
+    over the limit, the lines naming an error are kept in full and the rest
+    is dropped with a note saying how much."""
+    if len(output) <= limit:
+        return output
+
+    lines = output.splitlines()
+    error_lines = [line for line in lines if _ERROR_LINE.search(line)]
+    if error_lines:
+        omitted = len(lines) - len(error_lines)
+        kept = "\n".join(error_lines)
+        if omitted:
+            kept += f"\n... ({omitted} lines of warnings/other output omitted)"
+        if len(kept) <= limit:
+            return kept
+        return kept[:limit] + "\n... (truncated)"
+
+    return output[:limit] + "\n... (truncated)"
+
+
 @compile_endpoint.post("/", response_model=CompileResult)
 def handle_compile_request(
         args: RequestArgs,
@@ -383,8 +414,8 @@ def handle_compile_request(
             )
 
         if not os.path.exists(tap_filename):
-            detail = sanitize_compiler_output(
-                (stderr or b'').decode(errors='replace'), c_filename)[:2000]
+            detail = clamp_diagnostics(sanitize_compiler_output(
+                (stderr or b'').decode(errors='replace'), c_filename))
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=detail or 'Compilation failed')

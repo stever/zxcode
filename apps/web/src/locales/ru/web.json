@@ -260,6 +260,11 @@
     "projectRunError": "Запуск проекта — Ошибка",
     "projectRunMessage": "Запуск проекта — Сообщение",
     "lineMsg": "Строка {{line}}: {{msg}}",
+    "buildOutput": "Вывод сборки",
+    "buildErrors": "Ошибки: {{n}}",
+    "buildWarnings": "Предупреждения: {{n}}",
+    "showBuildOutput": "Показать вывод сборки",
+    "hideWarnings": "Скрыть предупреждения ({{n}})",
     "renderProblem": "При отображении этого содержимого возникла проблема."
   }
 }

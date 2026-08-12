@@ -8,6 +8,7 @@ import { Emulator } from "./Emulator";
 import { ProjectFileTabView } from "./ProjectFileTabView";
 import { ProjectToolbar } from "./ProjectToolbar";
 import { DebuggerDock } from "./debugger/DebuggerDock";
+import BuildOutputDialog from "./BuildOutputDialog";
 import StarButton from "./StarButton";
 import {
   loadProject,
@@ -169,6 +170,7 @@ export default function ProjectPage({ projectId }) {
   return (
     <Titled title={(s) => `${title} ${sep} ${t("nav.project")} ${sep} ${s}`}>
       <Toast ref={toast} />
+      <BuildOutputDialog />
       {/* In tab mode the page IS the editor's column, so it carries the ref the
           editor is measured against; split mode puts it on the column itself. */}
       <div

@@ -87,6 +87,17 @@ paused line is highlighted in your source. All ten languages support this to
 some degree; see [Debugging in the browser](ide-debugging.html) for what each
 one can do and how it works.
 
+### When the compile fails
+
+Errors pop up as individual notifications (deduplicated, and capped at a
+handful so a broken build can't bury the screen). Warnings and the
+compiler's other output don't get notifications of their own: they are
+counted in a single summary notification, whose **Show build output**
+button opens the full compiler output in a dialog — every line in its
+original order, colour-coded by severity, with a checkbox to hide the
+warning lines when a warning-happy toolchain (z88dk especially) is
+drowning out what actually failed.
+
 ## Fitting the window
 
 The page sizes itself to the window rather than scrolling. In a window with

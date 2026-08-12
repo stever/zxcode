@@ -353,6 +353,11 @@
     "projectRunError": "Project Run - Error",
     "projectRunMessage": "Project Run - Message",
     "lineMsg": "Line {{line}}: {{msg}}",
+    "buildOutput": "Build output",
+    "buildErrors": "Errors: {{n}}",
+    "buildWarnings": "Warnings: {{n}}",
+    "showBuildOutput": "Show build output",
+    "hideWarnings": "Hide warnings ({{n}})",
     "renderProblem": "There was a problem in rendering this content."
   },
   "debug": {

@@ -260,6 +260,11 @@
     "projectRunError": "Uruchomienie projektu - Błąd",
     "projectRunMessage": "Uruchomienie projektu - Komunikat",
     "lineMsg": "Wiersz {{line}}: {{msg}}",
+    "buildOutput": "Wynik kompilacji",
+    "buildErrors": "Błędy: {{n}}",
+    "buildWarnings": "Ostrzeżenia: {{n}}",
+    "showBuildOutput": "Pokaż wynik kompilacji",
+    "hideWarnings": "Ukryj ostrzeżenia ({{n}})",
     "renderProblem": "Wystąpił problem podczas wyświetlania tej zawartości."
   }
 }

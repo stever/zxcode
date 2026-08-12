@@ -3,7 +3,7 @@ import getPasmoTap from "pasmo";
 import getBasicProgram from "../../lib/nextbas";
 import {actionTypes, setSelectedTabIndex} from "./actions";
 import {loadTap, pause} from "../jsspeccy/actions";
-import {setErrorItems} from "../project/actions";
+import {setBuildOutput, setErrorItems} from "../project/actions";
 import {handleException} from "../../errors";
 import {dashboardUnlock} from "../../dashboard_lock";
 
@@ -36,6 +36,7 @@ function* handleSetSelectedTabIndexActions(_) {
 
 function* handleRunAssemblyActions(_) {
     try {
+        yield put(setBuildOutput(undefined));
         const code = yield select((state) => state.demo.asmCode);
         const tap = yield call(getPasmoTap, code);
         yield put(loadTap(tap));
@@ -52,6 +53,7 @@ function* handleRunAssemblyActions(_) {
 
 function* handleRunSinclairBasicActions(_) {
     try {
+        yield put(setBuildOutput(undefined));
         const code = yield select((state) => state.demo.sinclairBasicCode);
         const machine = yield select((state) => state.app.machine);
         console.log(`[demo-basic] run requested machine=${machine} codeLength=${code?.length}`);

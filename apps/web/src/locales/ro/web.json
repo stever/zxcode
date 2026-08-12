@@ -260,6 +260,11 @@
     "projectRunError": "Rularea proiectului - Eroare",
     "projectRunMessage": "Rularea proiectului - Mesaj",
     "lineMsg": "Linia {{line}}: {{msg}}",
+    "buildOutput": "Rezultatul compilării",
+    "buildErrors": "Erori: {{n}}",
+    "buildWarnings": "Avertismente: {{n}}",
+    "showBuildOutput": "Afișează rezultatul compilării",
+    "hideWarnings": "Ascunde avertismentele ({{n}})",
     "renderProblem": "A apărut o problemă la afișarea acestui conținut."
   }
 }

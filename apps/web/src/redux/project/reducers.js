@@ -18,6 +18,11 @@ const initialState = {
     // null selects the main source file.
     activeFileId: null,
     errorItems: undefined,
+    // Last failed build's classified output for the build-output dialog:
+    // [{severity, text, line?, path?}] or undefined. Survives the toast
+    // display (errorItems does not); replaced/cleared per compile.
+    buildOutput: undefined,
+    buildOutputVisible: false,
     isPublic: false,
     slug: undefined,
     ownerSlug: undefined,
@@ -115,6 +120,23 @@ function setErrorItems(state, action) {
     };
 }
 
+function setBuildOutput(state, action) {
+    return {
+        ...state,
+        buildOutput: action.units,
+        // A cleared output takes the dialog down with it; new output does not
+        // fling the dialog open (the summary toast's button does that).
+        buildOutputVisible: action.units ? state.buildOutputVisible : false,
+    };
+}
+
+function setBuildOutputVisible(state, action) {
+    return {
+        ...state,
+        buildOutputVisible: action.visible,
+    };
+}
+
 function setProjectTitle(state, action) {
     return {
         ...state,
@@ -200,6 +222,8 @@ const actionsMap = {
     [actionTypes.setCode]: setCode,
     [actionTypes.setSavedCode]: setSavedCode,
     [actionTypes.setErrorItems]: setErrorItems,
+    [actionTypes.setBuildOutput]: setBuildOutput,
+    [actionTypes.setBuildOutputVisible]: setBuildOutputVisible,
     [actionTypes.setProjectTitle]: setProjectTitle,
     [actionTypes.setActiveFile]: setActiveFile,
     [actionTypes.setFileContent]: setFileContent,

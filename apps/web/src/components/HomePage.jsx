@@ -5,6 +5,7 @@ import {Toast} from "primereact/toast";
 import {DemoSinclairBasicEditor} from "./DemoSinclairBasicEditor";
 import {DemoAssemblyEditor} from "./DemoAssemblyEditor";
 import {Emulator} from "./Emulator";
+import BuildOutputDialog from "./BuildOutputDialog";
 import {setSelectedTabIndex} from "../redux/demo/actions";
 import {reset as resetProject, setErrorItems} from "../redux/project/actions";
 import {reset} from "../redux/jsspeccy/actions";
@@ -135,6 +136,7 @@ export default function HomePage() {
     return (
         <>
             <Toast ref={toast}/>
+            <BuildOutputDialog/>
             {/* In tab mode the page IS the editor's column, so it carries the
                 ref the editor is measured against; split mode puts it on the
                 column itself. */}
