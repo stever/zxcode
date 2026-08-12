@@ -16,6 +16,7 @@ const SECTIONS = [
       ["pause", "halt at the next instruction"],
       ["step", "one instruction (interrupts delivered as on real hardware)"],
       ["step-over", "run a CALL/RST to the instruction after it"],
+      ["step-line [over]", "run to the next mapped source line (the Step Over button when a compile's map is live); `over` skips lines inside called functions"],
       ["cont-until EXPR", "run until the expression holds, e.g. cont-until a=$41"],
     ],
   },

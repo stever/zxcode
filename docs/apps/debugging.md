@@ -93,6 +93,27 @@ The important detail: that check runs at the **end** of a line's statements.
 A hit means "line N *just executed*", not "line N is about to execute". Every
 other language is the other way round.
 
+## Stepping by source line
+
+The **Step Over** button steps by source line in every language with a live
+map. For the BASICs that has always been its meaning (next interpreted line,
+next Boriel line check). For the compiled languages — sjasmplus, Pascal,
+z88dk C, SDCC, zmac, Pasmo — the IDE uploads the map's line addresses to
+the engine and Step Over runs to the next mapped line, wherever it is: the
+next line in the same file, the first line of a function you call (if that
+function is in your mapped code — headers included), or the caller's next
+line when you step past a return. Calls into ROM or library runtime are
+unmapped and run through transparently. A tight one-line loop re-pauses on
+the same line rather than hanging.
+
+Two refinements from the console: `step-line over` adds a stack-depth guard
+so calls into your own mapped functions are run through rather than entered
+(C/Pascal-style step-over — note it also skips lines inside `push`/`pop`
+regions in assembly, which is why the button does not use it), and plain
+`step` remains the one-instruction step for when you want the machine-level
+view. Without a live map (before the first compile, or after an edit), Step
+Over falls back to the instruction-level `step-over`.
+
 ## The command console
 
 Anything the panels do, the console can do, plus a good deal they cannot.
@@ -101,7 +122,7 @@ The commands below are the browser-relevant subset; the desktop
 commands work there.
 
 **Running** — `continue`, `pause`, `step`, `step-over`,
-`cont-until EXPR` (e.g. `cont-until a=$41`).
+`step-line [over]`, `cont-until EXPR` (e.g. `cont-until a=$41`).
 
 **Breakpoints** — `set-breakpoint $ADDR` with optional `bank=N` /
 `any-bank`, an `if EXPR` guard, and `do "cmd; cmd"` actions on hit;

@@ -43,6 +43,15 @@ export function createRealSession(handle) {
     // Label addresses pushed into the engine's symbol table (`sym`), so a
     // map change can retract them before pushing the replacement set.
     let pushedLabelAddrs = [];
+    // Whether an address map's line anchors are uploaded to the engine
+    // (`step-line-anchors`) — the set behind `step-line`, the source-line
+    // step for the address-map languages. Cleared before every re-push:
+    // stale anchors would name arbitrary addresses of the next binary.
+    let pushedAnchors = false;
+    // Engine command lines are split on whitespace with no practical limit
+    // in the wasm bridge, but keep uploads comfortably chunked (~1.5KB a
+    // line) rather than one multi-KB command.
+    const ANCHOR_CHUNK = 256;
 
     // The whole 64K address space as the CPU sees it (MMU paging and the
     // divMMC overlay resolved). One 64K copy per snapshot is nothing next
@@ -158,6 +167,21 @@ export function createRealSession(handle) {
                 dbg.resume();
                 return { running: true };
             }
+            // Address-map languages (sjasmplus, Pasta80, z88dk, sdcc,
+            // zmac, pasmo): run to the next mapped source line via the
+            // uploaded anchors. Same semantics as basic-step — the halt
+            // fires on any next line, including a mapped callee's first
+            // line (`step-line over` in the console keeps to the current
+            // frame). Falls back to instruction step-over if the engine
+            // has no anchors (an empty map, or an engine predating the
+            // command).
+            if (sourceMap && !sourceMap.kind && pushedAnchors) {
+                const lineResponse = dbg.cmd("step-line");
+                if (lineResponse.startsWith("OK step-line")) {
+                    dbg.resume();
+                    return { running: true };
+                }
+            }
             const response = dbg.cmd("step-over");
             if (response.startsWith("OK step-over running")) {
                 // Call-like instruction: the one-shot is armed; run frames
@@ -267,6 +291,21 @@ export function createRealSession(handle) {
                     pushedLabelAddrs.push(addr);
                 }
             }
+            // Line anchors for `step-line` (address maps only — the BASIC
+            // kinds step by their own mechanisms). Chunked so no single
+            // command line carries thousands of addresses.
+            if (pushedAnchors) {
+                dbg.cmd("step-line-anchors clear");
+                pushedAnchors = false;
+            }
+            if (map && !map.kind && map.addrToLoc.size > 0) {
+                const addrs = [...map.addrToLoc.keys()];
+                for (let i = 0; i < addrs.length; i += ANCHOR_CHUNK) {
+                    dbg.cmd("step-line-anchors " + addrs
+                        .slice(i, i + ANCHOR_CHUNK).map(hex).join(" "));
+                }
+                pushedAnchors = true;
+            }
         },
 
         async sendCommand(text) {
@@ -303,6 +342,11 @@ export function createRealSession(handle) {
                 dbg.cmd("linecall-anchor off");
                 armedLineCalls = [];
                 pushedAnchor = undefined;
+                // The step-line anchor set is package-level in the engine
+                // too; a successor session re-pushes its own.
+                dbg.cmd("step-line off");
+                dbg.cmd("step-line-anchors clear");
+                pushedAnchors = false;
                 dbg.cmd("continue");
                 dbg.detach();
                 handle.start();

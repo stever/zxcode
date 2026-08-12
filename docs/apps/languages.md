@@ -133,6 +133,10 @@ disassembly, address breakpoints. What varies is whether the IDE can map
 toolchain can be persuaded to emit. [Debugging in the
 browser](ide-debugging.html) explains the mechanisms; this is the summary:
 
+Every language with a map also gets source-line **stepping**: Step Over
+runs to the next mapped line (see [Debugging in the
+browser](ide-debugging.html)).
+
 | Language | Source-line breakpoints | How |
 | --- | :---: | --- |
 | sjasmplus | ✓ | SLD line→address map — exact. |

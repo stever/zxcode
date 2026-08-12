@@ -57,7 +57,7 @@ const PROGRAM = [
 ];
 
 const HELP =
-    "OK pause continue step step-over get-registers get-stack backtrace " +
+    "OK pause continue step step-over step-line get-registers get-stack backtrace " +
     "history hexdump read-memory write-memory set-breakpoint clear-breakpoint " +
     "list-breakpoints disassemble get-mmu get-divmmc nr-panel sprite-list " +
     "palette-dump watch-mem watch-read watch-port tp tt-on tt-rewind ... " +

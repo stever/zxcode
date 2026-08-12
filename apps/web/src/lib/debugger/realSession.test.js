@@ -211,6 +211,7 @@ describe("realSession NextBASIC breakpoints", () => {
         expect(cmds).toEqual([
             "clear-basic-bp", "basic-step off",
             "clear-linecall-bp", "linecall-anchor off",
+            "step-line off", "step-line-anchors clear",
             "continue",
         ]);
     });
@@ -293,5 +294,101 @@ describe("realSession Boriel linecall breakpoints", () => {
         const snap = session.snapshot("breakpoint");
         expect(snap.pausedLine).toBe(3);
         expect(snap.pausedFile).toBe("lib/util.bas");
+    });
+});
+
+// Source-line stepping for address-map languages: the map's anchor
+// addresses upload to the engine (`step-line-anchors`) and stepOver
+// prefers `step-line` (run to the next mapped line) over the
+// instruction-level `step-over`.
+describe("realSession source-line stepping (address maps)", () => {
+    // The default fake answers "OK" to everything, which stepOver must
+    // read as "engine can't step-line" — this fake speaks the command.
+    function fakeHandleWithStepLine() {
+        const f = fakeHandle();
+        const dbg = f.handle.debug;
+        const base = dbg.cmd;
+        dbg.cmd = (line) => {
+            base(line);
+            return line === "step-line" ? "OK step-line armed" : "OK";
+        };
+        return f;
+    }
+
+    test("an address map's anchors upload on push and clear on withdrawal", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        cmds.length = 0;
+        session.setSourceMap(parseSld(SLD));
+        expect(cmds).toContain("step-line-anchors $8000 $8010");
+        cmds.length = 0;
+        session.setSourceMap(null);
+        expect(cmds).toContain("step-line-anchors clear");
+    });
+
+    test("a re-push clears the previous set before uploading the new one", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        session.setSourceMap(parseSld(SLD));
+        cmds.length = 0;
+        session.setSourceMap(parseSld(MULTI_SLD));
+        const clearAt = cmds.indexOf("step-line-anchors clear");
+        const pushAt = cmds.findIndex((c) => c.startsWith("step-line-anchors $"));
+        expect(clearAt).toBeGreaterThanOrEqual(0);
+        expect(pushAt).toBeGreaterThan(clearAt);
+    });
+
+    test("a large map uploads in chunks", () => {
+        const addrToLoc = new Map();
+        for (let i = 0; i < 600; i++) {
+            addrToLoc.set(0x8000 + i, {file: null, line: i + 1});
+        }
+        const bigMap = {byFile: new Map(), addrToLoc, labels: new Map()};
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        cmds.length = 0;
+        session.setSourceMap(bigMap);
+        const pushes = cmds.filter((c) => c.startsWith("step-line-anchors $"));
+        expect(pushes.length).toBe(3); // 600 anchors at 256 per command
+        expect(pushes.join(" ").match(/\$/g).length).toBe(600);
+    });
+
+    test("stepOver arms step-line and runs when anchors are up", () => {
+        const {handle, cmds} = fakeHandleWithStepLine();
+        const session = createRealSession(handle);
+        session.setSourceMap(parseSld(SLD));
+        cmds.length = 0;
+        expect(session.stepOver()).toEqual({running: true});
+        expect(cmds).toEqual(["step-line"]);
+    });
+
+    test("stepOver falls back to step-over when the engine declines", () => {
+        // Default fake: every command answers a bare "OK", the shape an
+        // engine predating step-line (or with no anchors) produces.
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        session.setSourceMap(parseSld(SLD));
+        cmds.length = 0;
+        session.stepOver();
+        expect(cmds).toEqual(["step-line", "step-over"]);
+    });
+
+    test("without a map, stepOver never tries step-line", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        cmds.length = 0;
+        session.stepOver();
+        expect(cmds).toEqual(["step-over"]);
+    });
+
+    test("BASIC-kind maps keep their own stepping and upload no anchors", () => {
+        const {handle, cmds} = fakeHandle();
+        const session = createRealSession(handle);
+        cmds.length = 0;
+        session.setSourceMap(parseBasicMap(BASIC_SRC));
+        expect(cmds.some((c) => c.startsWith("step-line-anchors $"))).toBe(false);
+        cmds.length = 0;
+        expect(session.stepOver()).toEqual({running: true});
+        expect(cmds).toEqual(["basic-step"]);
     });
 });

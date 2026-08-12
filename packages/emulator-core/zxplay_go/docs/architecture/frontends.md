@@ -229,6 +229,15 @@ Source-level breakpoints for the zxcode IDE:
   CHECK_BREAK runtime call PC with the line number in HL
   (`linecall-anchor`, re-sent per build), checked from
   `BreakpointCheck`.
+- Address-map languages — sjasmplus, Pasta80, z88dk C, sdcc, zmac,
+  pasmo (`stepline_cmd.go`): the IDE uploads its line→address map as an
+  anchor set (`step-line-anchors`, chunked, re-sent per build), and
+  `step-line` arms a one-shot halt at the next anchor the PC reaches —
+  the source-line step. Fires on any next mapped line (`basic-step`
+  parity; unmapped ROM/library calls run through); `step-line over`
+  adds an SP guard to run through mapped callees. Arming while paused
+  steps one instruction first so the run always makes progress.
+  Checked from `BreakpointCheck`, one atomic load while disarmed.
 
 Other notable tooling: time-travel ring (CPU + visible 64K per snap;
 Next upper state is a catalogued phase-2 gap), provenance/xref/callgraph
