@@ -5,7 +5,7 @@ ZX Play is three things built on one emulation core:
 - **[zxplay.org](https://zxplay.org)** — a mobile-friendly ZX Spectrum player.
   Open a program and play it, on a phone or a desktop.
 - **[code.zxplay.org](https://code.zxplay.org)** — a browser IDE for Spectrum
-  and Spectrum Next development. Ten toolchains compile in the browser or on
+  and Spectrum Next development. Eleven toolchains compile in the browser or on
   the server, and the result runs immediately in an emulator that sits beside
   the editor, with source-line breakpoints.
 - **[zxplay_go](emulator.html)** — the emulator itself: a Go emulator for the

@@ -57,6 +57,11 @@ jobs:
           - context: ./apps/pasta80/
             dockerfile: ./apps/pasta80/Dockerfile
             image: ghcr.io/stever/zxcode-api-pasta80
+          # zenv Forth compile API. New package; GHCR links it to this repo
+          # automatically on first push.
+          - context: ./apps/zenv/
+            dockerfile: ./apps/zenv/Dockerfile
+            image: ghcr.io/stever/zxcode-api-zenv
           - context: ./
             dockerfile: ./apps/gif-service/Dockerfile
             image: ghcr.io/stever/zxcode-gif-service

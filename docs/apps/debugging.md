@@ -30,7 +30,8 @@ Click the gutter next to a line in your source and the IDE arms a breakpoint
 for it. When execution reaches that line, the machine halts and the line is
 highlighted in your editor.
 
-This works in all ten languages, but it works by three genuinely different
+This works in every language except zenv Forth (whose words are compiled
+at runtime, leaving nothing to map). It works by three genuinely different
 mechanisms, and the difference shows up in what "reaching a line" means.
 
 ### Address maps — the compiled languages

@@ -154,6 +154,14 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
+  const newForth = {
+    label: getLanguageLabel("forth"),
+    command: () => {
+      dispatch(pause());
+      navigate("/new/forth");
+    },
+  };
+
   const newSdcc = {
     label: getLanguageLabel("sdcc"),
     command: () => {
@@ -175,6 +183,7 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   newProjectItems.push(newSjasmplus);
   if (Constants.enableZ88dk) newProjectItems.push(newZ88dk);
   newProjectItems.push(newPascal);
+  newProjectItems.push(newForth);
   newProjectItems.push(otherMenu);
 
   const projectMenu = {

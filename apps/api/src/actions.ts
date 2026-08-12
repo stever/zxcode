@@ -17,6 +17,7 @@ const ACTIONS: Record<string, ActionDefinition> = {
         url: process.env.SJASMPLUS_URL ?? "http://sjasmplus/compile/",
     },
     compilePascal: { url: process.env.PASTA80_URL ?? "http://pasta80/compile/" },
+    compileForth: { url: process.env.ZENV_URL ?? "http://zenv/compile/" },
 };
 
 const TIMEOUT_MS = parseInt(process.env.ACTION_TIMEOUT_MS ?? "120000", 10);

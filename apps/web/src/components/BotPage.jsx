@@ -79,6 +79,7 @@ export default function BotPage() {
                     <li><code>#c</code> — C (z88dk)</li>
                     <li><code>#sdcc</code> — C (SDCC)</li>
                     <li><code>#pascal</code> — Pascal (PASTA/80)</li>
+                    <li><code>#forth</code> — Forth (zenv)</li>
                 </ul>
                 <ExampleToot>
                     {'@bot@zxplay.org #pascal #next\n' +

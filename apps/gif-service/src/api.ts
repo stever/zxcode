@@ -177,6 +177,7 @@ const ACTION_MUTATIONS = {
     compileC: `mutation ($src: String!, $files: [ProjectFileInput!]) { compileC(code: $src, files: $files) { base64_encoded } }`,
     compileSjasmplus: `mutation ($src: String!, $files: [ProjectFileInput!]) { compileSjasmplus(code: $src, files: $files) { base64_encoded } }`,
     compilePascal: `mutation ($src: String!, $machine: String, $files: [ProjectFileInput!]) { compilePascal(code: $src, machine: $machine, files: $files) { base64_encoded } }`,
+    compileForth: `mutation ($src: String!) { compileForth(code: $src) { base64_encoded } }`,
 } as const;
 
 /**
@@ -195,11 +196,15 @@ export async function compileViaAction(
 ): Promise<Uint8Array> {
     const query = ACTION_MUTATIONS[action];
     try {
-        // Only pass $machine when given — the other mutations don't declare
-        // it, and an undeclared variable is a GraphQL error.
+        // Only pass the variables the mutation declares — the others don't
+        // take $machine (or, for compileForth, $files), and an undeclared
+        // variable is a GraphQL error.
+        const variables: Record<string, unknown> = { src: code };
+        if (query.includes('$files')) variables.files = files;
+        if (machine !== undefined) variables.machine = machine;
         const data = await gql<Record<string, { base64_encoded: string } | null>>(
             query,
-            machine === undefined ? { src: code, files } : { src: code, machine, files },
+            variables,
         );
         const result = data[action];
         if (!result?.base64_encoded) {

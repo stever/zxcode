@@ -45,7 +45,7 @@ function toToolInputs(files: ProjectFileRecord[]): Record<string, Uint8Array | s
  *
  * In-process WASM: basic (zmakebas), bas2tap, asm (pasmo --tapbas loader).
  * In-process JS: nextbas (txt2bas — the consolidated Sinclair/NextBASIC).
- * Via the api compile mutations: zxbasic (Boriel), c (z88dk), sjasmplus, pascal.
+ * Via the api compile mutations: zxbasic (Boriel), c (z88dk), sjasmplus, pascal, forth (zenv).
  *
  * `machine` ('48' | '128' | 'next') is only consulted by languages whose
  * codegen depends on the target — currently pascal (Pasta80). `files` are the
@@ -102,6 +102,11 @@ export async function compileProject(
             // Pasta80 Turbo Pascal; compiled for the machine the render will
             // boot so the linked runtime matches.
             return Buffer.from(await compileViaAction('compilePascal', code, machine ?? '48', files));
+        case 'forth':
+            // zenv Forth: the program embedded into the zenv image; no
+            // machine or files (the image is a 48K program, and zenv has
+            // no file words).
+            return Buffer.from(await compileViaAction('compileForth', code));
         case 'zmac':
             return inProcess(async () => {
                 const { runTool } = await import('./wasm-tools.js');

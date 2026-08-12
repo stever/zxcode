@@ -10,6 +10,7 @@ export function getLanguageLabel(lang) {
     nextbas: "Sinclair/NextBASIC",
     bas2tap: "bas2tap",
     c: "z88dk C",
+    forth: "zenv Forth",
     pascal: "Pasta80 Pascal",
     sdcc: "SDCC",
     sjasmplus: "sjasmplus",
@@ -43,6 +44,7 @@ const MAIN_FILE_EXTENSIONS = {
   c: "c",
   sdcc: "c",
   pascal: "pas",
+  forth: "f",
 };
 
 export function mainFileName(lang) {
@@ -55,8 +57,9 @@ export function mainFileName(lang) {
 // it keeps the add-file UI (on 48/128 there is nowhere to deliver them).
 // zmakebas and bas2tap have no include mechanism and their TAPs carry only
 // the tokenised program, so extra files would be dead weight — the add-file
-// UI is hidden for them.
-const NO_PROJECT_FILE_LANGS = new Set(["basic", "bas2tap"]);
+// UI is hidden for them. zenv Forth has no file words either: the program
+// is embedded into the zenv image and runs from the interpreter.
+const NO_PROJECT_FILE_LANGS = new Set(["basic", "bas2tap", "forth"]);
 
 export function languageSupportsProjectFiles(lang) {
   return !NO_PROJECT_FILE_LANGS.has(lang);
@@ -155,6 +158,7 @@ export function projectFilePathError(path, existingPaths = []) {
 // else is kept as a base64 binary asset (INCBIN data etc.).
 const TEXT_FILE_EXTENSIONS = new Set([
   "asm", "inc", "bas", "c", "h", "pas", "txt", "z80", "def", "cfg", "lua",
+  "f", "fs", "4th", "zf",
 ]);
 
 export function isTextFileName(name) {
@@ -173,6 +177,7 @@ const LANGUAGE_MODES = {
   nextbas: "text/x-nextbas",
   c: "text/x-z88dk-csrc",
   sdcc: "text/x-z88dk-csrc",
+  forth: "text/x-forth",
   pascal: "text/x-pasta80",
   sjasmplus: "text/x-sjasmplus",
   zmac: "text/x-pasmo",
@@ -208,6 +213,11 @@ export function editorMode(lang, fileName = null) {
       return "text/x-z88dk-csrc";
     case "pas":
       return "text/x-pasta80";
+    case "f":
+    case "fs":
+    case "4th":
+    case "zf":
+      return "text/x-forth";
     case "bas":
       // In a non-BASIC project a .bas file is an SD-card program for the
       // Next; NextBASIC is the dialect that runs there.

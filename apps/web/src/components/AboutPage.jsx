@@ -104,6 +104,13 @@ export default function AboutPage() {
                         <a href="https://github.com/pleumann/pasta80/blob/master/LICENSE.txt" target="_blank">LICENSE.txt</a>.
                     </li>
                     <li>
+                        <a href="https://github.com/Veltas/zenv" target="_blank">zenv</a> by
+                        Christopher Leonard — the Forth environment for the ZX Spectrum,
+                        assembled by sjasmplus with the project's program embedded. Licensed
+                        under terms of The MIT License - see{' '}
+                        <a href="https://github.com/Veltas/zenv/blob/master/COPYING.txt" target="_blank">COPYING.txt</a>.
+                    </li>
+                    <li>
                         <a href="https://github.com/remy/txt2bas" target="_blank">txt2bas</a> by Remy Sharp,
                         the in-browser NextBASIC tokeniser. Licensed under terms of{' '}
                         <a href="https://github.com/remy/txt2bas/blob/main/package.json" target="_blank">The MIT License</a>.

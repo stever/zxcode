@@ -19,7 +19,7 @@
     },
     {
       "title": "Writing code — code.zxplay.org",
-      "intro": "The browser IDE: projects, ten toolchains, and a source-line debugger that runs against the real emulator.",
+      "intro": "The browser IDE: projects, eleven toolchains, and a source-line debugger that runs against the real emulator.",
       "pages": [
         {
           "page": "ide.html",
@@ -31,7 +31,7 @@
           "page": "languages.html",
           "title": "Languages and toolchains",
           "source": "docs/apps/languages.md",
-          "summary": "All ten languages, what each targets, and what each supports in the debugger."
+          "summary": "All eleven languages, what each targets, and what each supports in the debugger."
         },
         {
           "page": "ide-debugging.html",

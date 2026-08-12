@@ -154,6 +154,7 @@ attach("Mutation", {
     compileC: makeActionResolver("compileC") as Resolver,
     compileSjasmplus: makeActionResolver("compileSjasmplus") as Resolver,
     compilePascal: makeActionResolver("compilePascal") as Resolver,
+    compileForth: makeActionResolver("compileForth") as Resolver,
 });
 
 attach("Subscription", {

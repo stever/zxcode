@@ -5,7 +5,7 @@ development environment that runs entirely in a browser. You write code on
 the left, and the emulator that runs it sits on the right — the same
 emulation core that runs on the desktop, compiled to WebAssembly.
 
-Nothing to install, and nothing to configure. Ten toolchains are already
+Nothing to install, and nothing to configure. Eleven toolchains are already
 there.
 
 ## Signing in
@@ -83,7 +83,7 @@ loader.
 **Debug** does the same but with the debugger dock open — registers,
 disassembly, memory, paging, and a console. You can set breakpoints by
 clicking the editor gutter on any line the compiler could map, and the
-paused line is highlighted in your source. All ten languages support this to
+paused line is highlighted in your source. The languages support this to
 some degree; see [Debugging in the browser](ide-debugging.html) for what each
 one can do and how it works.
 

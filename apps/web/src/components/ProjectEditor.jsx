@@ -27,6 +27,7 @@ import {
   languageSupportsSourceDebug,
 } from "../lib/lang";
 import { useTranslation } from "@zxplay/i18n";
+import "codemirror/mode/forth/forth";
 import "../lib/syntax/pasmo";
 import "../lib/syntax/pasta80";
 import "../lib/syntax/sjasmplus";

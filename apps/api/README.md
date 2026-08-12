@@ -54,7 +54,7 @@ query over websocket.
 - `DATABASE_URL` — Postgres connection string.
 - `ADMIN_SECRET` — admin header secret.
 - `JWT_SECRET`, `JWT_AUDIENCE` (default `hasura`), `JWT_ISSUER` (default `zxplay`).
-- `ZXBASIC_URL`, `Z88DK_URL`, `SJASMPLUS_URL`, `PASTA80_URL` — compile action
+- `ZXBASIC_URL`, `Z88DK_URL`, `SJASMPLUS_URL`, `PASTA80_URL`, `ZENV_URL` — compile action
   handlers (default to the compose service names).
 - `PORT` (default 8080), `ACTION_TIMEOUT_MS` (default 120000).
 

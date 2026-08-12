@@ -10,6 +10,7 @@ import {getZXBasicTap} from "./zxbasicCompile";
 import {getZ88dkTap} from "./z88dkCompile";
 import {getSjasmplusTap} from "./sjasmplusCompile";
 import {getPascalTap} from "./pascalCompile";
+import {getForthTap} from "./forthCompile";
 import {harvestPasmoSourceMap} from "./pasmoDebugCompile";
 import {toActionFiles, toWorkerUpdates, toSdFiles, sdFileNameErrors} from "./compileFiles";
 import {store} from "../store";
@@ -446,6 +447,25 @@ function* handleGetProjectTapActions(_) {
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
                     console.error('[pasta80] dispatching setErrorItems', errorItems);
+                    yield put(setErrorItems(errorItems));
+                } finally {
+                    dashboardUnlock();
+                }
+                break;
+            case 'forth':
+                // zenv Forth — the user's program embedded into the zenv
+                // image, evaluated line by line at boot before the
+                // interactive ok prompt. No source map: zenv compiles words
+                // at runtime, so there is no build-time line→address map
+                // (forth is not in SOURCE_MAP_LANGS — the map was already
+                // cleared above). Forth errors surface at runtime on the
+                // Spectrum screen, like BASIC.
+                try {
+                    const forthTap = yield call(getForthTap, code, userId);
+                    yield put(followTapAction(forthTap));
+                    yield put(setFollowTapAction(undefined));
+                } catch (errorItems) {
+                    console.error('[zenv] dispatching setErrorItems', errorItems);
                     yield put(setErrorItems(errorItems));
                 } finally {
                     dashboardUnlock();

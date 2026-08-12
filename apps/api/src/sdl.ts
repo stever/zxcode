@@ -754,6 +754,7 @@ type Mutation {
   compileC(code: String!, files: [ProjectFileInput!]): CompileResult
   compileSjasmplus(code: String!, files: [ProjectFileInput!]): CompileResult
   compilePascal(code: String!, machine: String, files: [ProjectFileInput!]): CompileResult
+  compileForth(code: String!): CompileResult
 }
 
 type Subscription {

@@ -175,6 +175,15 @@ export default function App() {
               />
               <Route
                 exact
+                path="/new/forth"
+                element={
+                  <MaxWidth>
+                    <NewProjectPage type="forth" />
+                  </MaxWidth>
+                }
+              />
+              <Route
+                exact
                 path="/new/sjasmplus"
                 element={
                   <MaxWidth>

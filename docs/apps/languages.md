@@ -1,6 +1,6 @@
 # Languages and toolchains
 
-[code.zxplay.org](https://code.zxplay.org) ships ten toolchains. You pick one
+[code.zxplay.org](https://code.zxplay.org) ships eleven toolchains. You pick one
 when you create a project, at `/new/<language>`, and it fixes the language
 for that project — but **not** the target machine: every project can switch
 between 48K, 128K and Spectrum Next freely.
@@ -10,7 +10,7 @@ so compiling costs nothing but your own CPU and works with no round trip.
 The rest run as services on the server. You do not have to care which,
 except that the in-browser ones keep working if the network hiccups.
 
-## The ten
+## The eleven
 
 | Language | Project | Main file | Compiles | Extra files |
 | --- | --- | --- | --- | :---: |
@@ -20,6 +20,7 @@ except that the in-browser ones keep working if the network hiccups.
 | **z88dk C** | `/new/c` | `program.c` | Server | ✓ |
 | **SDCC** — C | `/new/sdcc` | `program.c` | In browser (worker) | ✓ |
 | **Pasta80 Pascal** | `/new/pascal` | `program.pas` | Server | ✓ |
+| **zenv Forth** | `/new/forth` | `program.f` | Server | — |
 | **Boriel ZX BASIC** — compiled | `/new/zxbasic` | `program.bas` | Server | ✓ |
 | **Sinclair / NextBASIC** — interpreted | `/new/nextbas` | `program.bas` | In browser (txt2bas) | ✓ |
 | **zmakebas** — Sinclair BASIC | `/new/basic` | `program.bas` | In browser | — |
@@ -66,6 +67,19 @@ already carries per-file listings, so it needs no service at all.
 **Pasta80** compiles Pascal to Z80 through sjasmplus, and marks each Pascal
 line in the listing it produces. That map also covers assembly files you
 link in with `{$l}`, so breakpoints work inside those too.
+
+## Forth
+
+**zenv Forth** builds on [zenv](https://github.com/Veltas/zenv), the Forth
+environment for the ZX Spectrum, assembled by sjasmplus with your program
+embedded into the image. On boot the program is evaluated line by line and
+you land at the interactive `ok` prompt with your words defined — so a
+Forth project is both a program and a live Forth console to keep exploring
+in. Forth errors surface at runtime on the Spectrum screen, like BASIC;
+the only compile-time error is a program too large for the image. There
+are no extra project files (zenv has no file words) and no source-line
+debugging (words are compiled at runtime, so there is no build-time
+address map — the machine-level debugger works as everywhere).
 
 ## BASIC
 
@@ -147,8 +161,10 @@ browser](ide-debugging.html)).
 | Pasmo | ✓ | A second, best-effort debug build with injected labels. The map is discarded unless that build is byte-identical to the real one. |
 | Boriel ZX BASIC | ✓ | Compiled with `--enable-break`; a hit means "line N *just executed*". |
 | Sinclair/NextBASIC, zmakebas, bas2tap | ✓ | The engine watches the interpreter's own `PPC` variable — no dependence on ROM addresses, so it works identically on every machine including the Next. |
+| zenv Forth | — | Words are compiled at runtime by zenv's interpreter, so there is no build-time map; the machine-level debugger works as everywhere. |
 
-The practical upshot: **you get source-line breakpoints in all ten**. Only
+The practical upshot: **you get source-line breakpoints in all of them
+except zenv Forth** (whose words only exist at runtime). Only
 the precision differs, and only in the two cases noted above.
 
 ## Under the hood
