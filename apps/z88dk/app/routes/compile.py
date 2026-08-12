@@ -13,7 +13,8 @@ from pydantic import BaseModel, Field, field_validator
 from uuid import UUID
 
 # Bound a compile so a hostile/pathological C program can't pin the container.
-# Kept under gif-service's 20s upstream timeout so the caller gets a clean error.
+# Must stay under gif-service's GRAPHQL_TIMEOUT_MS (default 20s) so the caller
+# gets a clean error; a deployment raising COMPILE_TIMEOUT must raise that too.
 COMPILE_TIMEOUT = int(os.environ.get("COMPILE_TIMEOUT", "15"))
 MAX_INPUT_SIZE = 64 * 1024  # 64KB of C source is ample for this use
 
