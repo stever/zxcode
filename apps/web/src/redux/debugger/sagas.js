@@ -13,6 +13,7 @@ import {
 import {actionTypes as jsspeccyActionTypes} from "../jsspeccy/actions";
 import {actionTypes as appActionTypes} from "../app/actions";
 import {actionTypes as projectActionTypes, setActiveFile} from "../project/actions";
+import {joinProjectFilePath} from "../../lib/lang";
 import {getJsspeccy} from "../jsspeccy/handle";
 import {createDebugSession} from "../../lib/debugger/mockSession";
 import {createRealSession} from "../../lib/debugger/realSession";
@@ -76,19 +77,29 @@ export function* watchForPausedFileFollow() {
     yield takeEvery(actionTypes.debugSnapshot, handlePausedFileFollow);
 }
 
+// NOT exported: store.js runs every export of a sagas module as a root
+// saga (see collectSagas). Tests reach it through the watcher's takeEvery
+// effect.
 function* handlePausedFileFollow(action) {
     const s = action.snapshot;
     if (!s || s.pausedLine === null || s.pausedLine === undefined) return;
     const pausedFile = s.pausedFile ?? null;
     const files = yield select((state) => state?.project.files ?? []);
     const activeFileId = yield select((state) => state?.project.activeFileId ?? null);
-    const activeName = files.find((f) => f.id === activeFileId)?.name ?? null;
+    // The map keys files by their full folder/name path — the same identity
+    // the editor and breakpoints use — so a bare-name comparison would miss
+    // (or mismatch) any file living in a folder.
+    const activeFile = files.find((f) => f.id === activeFileId) ?? null;
+    const activeName = activeFile
+        ? joinProjectFilePath(activeFile.folder, activeFile.name)
+        : null;
     if (activeName === pausedFile) return;
     if (pausedFile === null) {
         yield put(setActiveFile(null));
         return;
     }
-    const target = files.find((f) => f.name === pausedFile && !f.isBinary);
+    const target = files.find((f) =>
+        !f.isBinary && joinProjectFilePath(f.folder, f.name) === pausedFile);
     if (target) {
         yield put(setActiveFile(target.id));
     }

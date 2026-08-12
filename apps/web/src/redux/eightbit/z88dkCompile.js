@@ -16,8 +16,9 @@ const COMPILE_MUTATION = gql`
 
 // Compile C via the z88dk service and return {tap, debug}: the TAP bytes
 // plus the service's debugger line map ({kind: "z88dk", files: {"<file>":
-// [[line, addr], ...]}} parsed from the JSON it sends in CompileResult.sld;
-// null when the service produced none). On failure it throws an array of
+// [[line, addr], ...]}, labels: {"<symbol>": addr}} parsed from the JSON
+// it sends in CompileResult.sld; null when the service produced none). On
+// failure it throws an array of
 // build-error items ({type: 'err', text}) - the same shape the other
 // in-browser compilers reject with - so the saga surfaces them as
 // build-error toasts rather than the full-page error banner that gqlFetch

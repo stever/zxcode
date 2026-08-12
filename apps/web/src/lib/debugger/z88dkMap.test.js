@@ -29,6 +29,31 @@ describe("buildZ88dkMap", () => {
         expect(buildZ88dkMap({kind: "z88dk", files: {"": [[0, 0x8000], [1, 0x10000]]}})).toBeNull();
     });
 
+    test("parses the optional labels object, skipping invalid entries", () => {
+        const map = buildZ88dkMap({
+            ...DEBUG,
+            labels: {
+                _main: 0x9380,
+                _add2: 0x9364,
+                loop_top: 0x9370,
+                bad_addr: 0x10000,
+                not_int: "9000",
+                "": 0x9000,
+            },
+        });
+        expect([...map.labels.entries()]).toEqual([
+            ["_main", 0x9380],
+            ["_add2", 0x9364],
+            ["loop_top", 0x9370],
+        ]);
+    });
+
+    test("tolerates a missing or malformed labels field (old service)", () => {
+        expect(buildZ88dkMap(DEBUG).labels.size).toBe(0);
+        expect(buildZ88dkMap({...DEBUG, labels: [[1, 2]]}).labels.size).toBe(0);
+        expect(buildZ88dkMap({...DEBUG, labels: null}).labels.size).toBe(0);
+    });
+
     test("interops with the sld helpers the reducer and session use", () => {
         const map = buildZ88dkMap(DEBUG);
         expect(snapLine(map, 6, null)).toBe(11);

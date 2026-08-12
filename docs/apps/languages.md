@@ -52,7 +52,11 @@ For all three, `.asm` project files are syntax-highlighted as sjasmplus.
 The `sdcc_iy` build attributes generated code to source lines exactly; the
 classic-library `sccz80` build can attribute a call to a neighbouring line,
 so its breakpoints carry ±1 line of fuzz. That is a property of the compiler
-output, not of the debugger.
+output, not of the debugger. Breakpoints work in project headers you
+`#include` (C code in a `.h` is as breakable as `program.c`) and on the
+individual instructions of inline `__asm`/`#asm` blocks, and the compile
+also feeds the program's function and asm-label symbols to the debugger's
+disassembly and backtrace.
 
 **SDCC** compiles in the browser via the 8-bit worker. Its build result
 already carries per-file listings, so it needs no service at all.
@@ -133,7 +137,7 @@ browser](ide-debugging.html) explains the mechanisms; this is the summary:
 | --- | :---: | --- |
 | sjasmplus | ✓ | SLD line→address map — exact. |
 | Pasta80 Pascal | ✓ | Compiler listing; also covers `{$l}`-linked asm files. |
-| z88dk C | ✓ | Link map + listing; exact on `sdcc_iy`, ±1 line on `sccz80`. |
+| z88dk C | ✓ | Link map + listing; covers headers and inline asm; exact on `sdcc_iy`, ±1 line on `sccz80`. |
 | SDCC | ✓ | Worker build listings, keyed by `.rst` markers. |
 | zmac | ✓ | Worker build listings, keyed by listing banners. |
 | Pasmo | ✓ | A second, best-effort debug build with injected labels. The map is discarded unless that build is byte-identical to the real one. |

@@ -166,9 +166,12 @@ class CompileResult(BaseModel):
     # Debugger line map, riding the CompileResult.sld field the Hasura action
     # type already declares (SLD text for sjasmplus, JSON for zxbasic and
     # pasta80; JSON here): {"kind": "z88dk", "files": {"<file>": [[line,
-    # addr], ...]}} where the "" key is the main source (program.c) and other
-    # keys are staged project files by their relative path. Null when the
-    # debug-info phase fails — the compile itself still succeeds without it.
+    # addr], ...]}, "labels": {"<symbol>": addr}} where the "" file key is
+    # the main source (program.c) and other keys are staged project files by
+    # their relative path; labels are the user module's code symbols (linked
+    # absolute addresses) for the engine's sym table, omitted when empty.
+    # Null when the debug-info phase fails — the compile itself still
+    # succeeds without it.
     sld: Optional[str] = None
 
 
@@ -212,13 +215,24 @@ def zcc_args(source: str) -> list:
 # module base, where base comes from any user-module symbol the .map and
 # the listing share (e.g. _main: map $9380, listing offset 001c -> base
 # $9364). Marker files that are neither the main source nor a staged
-# project file (system headers) are dropped.
+# project file (system headers) are dropped; zcc is handed a relative
+# program.c so markers for staged headers come out relative, and
+# workdir-prefixed absolute spellings are folded back defensively.
+#
+# Inline assembly differs per dialect: sccz80 emits a C_LINE per asm source
+# line inside #asm...#endasm, so those rows map like any C line. zsdcc
+# emits a single marker citing the __endasm line BEFORE the block's rows,
+# each of which echoes its (whitespace-reformatted) source text — those
+# rows are attributed to their own source lines by matching the echoed
+# text against the block's source, with a monotonic cursor so repeated
+# instructions map in order. Blank/comment source lines emit no rows; a
+# row whose text matches nothing (e.g. a macro expansion) stays unmapped.
 # ---------------------------------------------------------------------------
 
-# z80asm derives the module name from the source path: 'program_c' for a
-# relative program.c, 'X_tmp_..._program_c' when zcc was handed an absolute
-# path (as the endpoint does). Match by suffix — the 'program' stem is
-# reserved for the main source, so nothing else can end this way.
+# z80asm derives the module name from the source path: 'program_c' for the
+# relative program.c the endpoint passes ('X_tmp_..._program_c' for an
+# absolute path). Match by suffix — the 'program' stem is reserved for the
+# main source, so nothing else can end this way.
 USER_MODULE_SUFFIX = 'program_c'
 MAP_SYMBOL_RE = re.compile(
     r'^(\w+)\s+= \$([0-9A-Fa-f]{1,4}) ; addr, (?:public|local), , (\S+), (\S+),')
@@ -226,6 +240,19 @@ LIS_OFFSET_RE = re.compile(r'^\s*\d*\s+([0-9a-f]{4})\s+[0-9a-f]{2}')
 LIS_LABEL_RE = re.compile(r'^\s*\d*\s+\.?(\w+):?\s*$')
 LIS_SDCC_MARKER_RE = re.compile(r'^\s*\d*\s+;([^\s:][^:]*):(\d+):')
 LIS_CLINE_RE = re.compile(r'^\s*\d*\s+C_LINE\s+(\d+),"([^"]+)"')
+# An offset row with its echoed source text (the trailing column after the
+# byte pairs) — used to attribute zsdcc inline-asm rows to source lines.
+LIS_ROW_TEXT_RE = re.compile(r'^\s*\d*\s+([0-9a-f]{4})\s+(?:[0-9a-f]{2})+\s+(\S.*)$')
+# Inline-assembly block delimiters as they appear in the C source.
+ASM_START_RE = re.compile(r'^\s*(?:__asm|#asm)\b')
+ASM_END_RE = re.compile(r'^\s*(?:__endasm|#endasm)\b')
+
+
+def _asm_text_key(text: str) -> str:
+    """Whitespace-free, case-folded form for matching a listing row's echoed
+    asm text against a source line: zsdcc re-tokenises whitespace (spaces
+    become tabs, comma spacing may shift) but preserves the token text."""
+    return ''.join(text.split()).casefold()
 
 
 def parse_map_symbols(map_path: str) -> dict:
@@ -240,11 +267,20 @@ def parse_map_symbols(map_path: str) -> dict:
     return symbols
 
 
-def normalise_marker_file(raw: str, staged: set) -> Optional[str]:
+def normalise_marker_file(raw: str, staged: set, workdir: str = '') -> Optional[str]:
     """The project-file key for a marker's file reference, or None to drop.
     '' = the main source; staged files key by their relative path."""
     # sccz80 suffixes scope onto the file ("c.c::main::0::1"): strip it.
     name = raw.split('::', 1)[0].strip()
+    # zcc is handed a relative program.c so markers normally come out
+    # relative, but fold workdir-prefixed absolute spellings back to their
+    # staged relative path in case a toolchain version absolutises them.
+    # Absolute paths outside the workdir (system headers, preprocessor
+    # temp files) fall through and drop on the staged-membership check.
+    if workdir and os.path.isabs(name):
+        rel = os.path.relpath(name, workdir)
+        if not rel.startswith('..'):
+            name = rel
     if name in ('program.c', './program.c') or name.endswith('/program.c'):
         return ''
     if name.startswith('./'):
@@ -252,7 +288,8 @@ def normalise_marker_file(raw: str, staged: set) -> Optional[str]:
     return name if name in staged else None
 
 
-def parse_listing_line_map(lis_path: str, staged: set) -> tuple:
+def parse_listing_line_map(lis_path: str, staged: set, sources: dict = None,
+                           workdir: str = '') -> tuple:
     """({file_key: {line: offset}}, {symbol: offset}) from a .lis.
 
     Offsets are module-relative; the caller rebases them with the map. The
@@ -260,11 +297,22 @@ def parse_listing_line_map(lis_path: str, staged: set) -> tuple:
     it; first-wins per (file, line), so a line maps to where its code
     starts. Labels are collected alongside so the caller can anchor the
     module base.
+
+    sources ({file_key: source text}) enables inline-assembly attribution:
+    when a marker cites a __endasm/#endasm line, the block's echoed rows
+    are matched against the source lines between the opener and closer so
+    each instruction maps to its own line (zsdcc emits exactly one marker
+    per block, before the rows; sccz80 marks asm lines individually, so
+    its windows close on the next marker without consuming anything).
+    Without sources the whole block maps to the marker line as before.
     """
     lines = {}
     labels = {}
     pending = None        # (file_key, line) awaiting a code row
     pending_labels = []   # label names awaiting their offset
+    src_lines = {k: v.splitlines() for k, v in (sources or {}).items()}
+    asm_window = None     # (file_key, endasm line) of an open inline-asm block
+    asm_cursor = 0        # next candidate source line within the window
     with open(lis_path, errors='replace') as f:
         for row in f:
             m = LIS_SDCC_MARKER_RE.match(row) or LIS_CLINE_RE.match(row)
@@ -273,8 +321,23 @@ def parse_listing_line_map(lis_path: str, staged: set) -> tuple:
                 raw_file, line = ((m.group(1), m.group(2))
                                   if m.re is LIS_SDCC_MARKER_RE
                                   else (m.group(2), m.group(1)))
-                key = normalise_marker_file(raw_file, staged)
-                pending = (key, int(line)) if key is not None else None
+                key = normalise_marker_file(raw_file, staged, workdir)
+                asm_window = None  # any marker ends the previous block
+                pending = None
+                if key is not None:
+                    line_no = int(line)
+                    src = src_lines.get(key)
+                    if src is not None and line_no > len(src):
+                        # sccz80 can emit a C_LINE past the file's EOF
+                        # after an #asm block; a ghost line must not map.
+                        continue
+                    pending = (key, line_no)
+                    if src is not None and ASM_END_RE.match(src[line_no - 1]):
+                        for start in range(line_no - 1, 0, -1):
+                            if ASM_START_RE.match(src[start - 1]):
+                                asm_window = (key, line_no)
+                                asm_cursor = start + 1
+                                break
                 continue
             lm = LIS_LABEL_RE.match(row)
             if lm:
@@ -287,6 +350,23 @@ def parse_listing_line_map(lis_path: str, staged: set) -> tuple:
             for name in pending_labels:
                 labels.setdefault(name, offset)
             pending_labels = []
+            if asm_window is not None:
+                key, end_line = asm_window
+                tm = LIS_ROW_TEXT_RE.match(row)
+                text = _asm_text_key(tm.group(2)) if tm else ''
+                if text:
+                    src = src_lines[key]
+                    # Monotonic cursor: repeated identical instructions
+                    # match in source order; an unmatched row (e.g. a
+                    # macro expansion) leaves the cursor alone and simply
+                    # stays unmapped.
+                    for ln in range(asm_cursor, end_line):
+                        if _asm_text_key(src[ln - 1]) == text:
+                            # setdefault: an asm row can never steal a C
+                            # line's first-wins slot.
+                            lines.setdefault(key, {}).setdefault(ln, offset)
+                            asm_cursor = ln + 1
+                            break
             if pending is not None:
                 key, line = pending
                 lines.setdefault(key, {}).setdefault(line, offset)
@@ -294,14 +374,16 @@ def parse_listing_line_map(lis_path: str, staged: set) -> tuple:
     return lines, labels
 
 
-def build_debug_info(workdir: str, staged: set) -> Optional[str]:
+def build_debug_info(workdir: str, staged: set,
+                     sources: dict = None) -> Optional[str]:
     """The debugger line-map JSON from the --list/-m artifacts, or None.
     Best-effort by design: any failure here only costs the debug map,
-    never the compile."""
+    never the compile. sources ({file_key: text}) feeds the inline-asm
+    line attribution — see parse_listing_line_map."""
     try:
         symbols = parse_map_symbols(os.path.join(workdir, 'program.map'))
         lines, labels = parse_listing_line_map(
-            os.path.join(workdir, 'program.c.lis'), staged)
+            os.path.join(workdir, 'program.c.lis'), staged, sources, workdir)
         # Anchor the module base on a symbol both artifacts know. Verify
         # with a second when available: a disagreement means the listing
         # and map came from different layouts, and wrong addresses are
@@ -318,7 +400,12 @@ def build_debug_info(workdir: str, staged: set) -> Optional[str]:
         files = {k: v for k, v in files.items() if v}
         if not files:
             return None
-        return json.dumps({'kind': 'z88dk', 'files': files})
+        payload = {'kind': 'z88dk', 'files': files}
+        # User-module code symbols (functions, asm labels) are already
+        # absolute — the engine annotates disassembly/backtrace with them.
+        if symbols:
+            payload['labels'] = symbols
+        return json.dumps(payload)
     except Exception as e:
         print(f"debug-info generation failed (compile unaffected): {e}")
         return None
@@ -393,8 +480,11 @@ def handle_compile_request(
         stage_project_files(path, args.input.files)
         # Compile in its own process group so a timeout can kill zcc and every
         # child it spawned (sdcc etc.), not just the parent.
+        # The source and output are passed RELATIVE (cwd is the workdir):
+        # that makes the listing's markers for staged headers come out as
+        # their staged relative paths, which is what the debug map keys by.
         proc = subprocess.Popen(
-            [*zcc_args(args.input.code), c_filename, '-o', out_filename],
+            [*zcc_args(args.input.code), 'program.c', '-o', 'program'],
             cwd=path,  # the temp dir (/tmp tmpfs), so any CWD-relative
                        # intermediate zcc drops lands there, not the read-only
                        # image layer
@@ -423,9 +513,12 @@ def handle_compile_request(
         with open(tap_filename, 'rb') as f:
             base64_encoded = base64.b64encode(f.read()).decode()
         staged_names = {pf.name for pf in args.input.files or []}
+        sources = {'': args.input.code}
+        sources.update({pf.name: pf.content
+                        for pf in args.input.files or [] if not pf.is_binary})
         return CompileResult(
             base64_encoded=base64_encoded,
-            sld=build_debug_info(path, staged_names))
+            sld=build_debug_info(path, staged_names, sources))
 
     finally:
         # Clean up the per-request directory: source, staged files, the tape,

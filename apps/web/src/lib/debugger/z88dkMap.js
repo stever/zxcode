@@ -2,10 +2,14 @@
 // sld.js (sjasmplus), basicMap.js (interpreted BASICs), lineCallMap.js
 // (Boriel) and pasta80Map.js. The z88dk service parses the compiler's
 // listing + link map into per-file line→address entries ({kind: "z88dk",
-// files: {"<file>": [[line, addr], ...]}} — see apps/z88dk
-// build_debug_info); the "" key is the main source and other keys are
-// project files by relative path, matching the debugger's breakpoint file
-// keying (null = main, folder/name otherwise).
+// files: {"<file>": [[line, addr], ...]}, labels: {"<sym>": addr}} — see
+// apps/z88dk build_debug_info); the "" key is the main source and other
+// keys are project files by relative path, matching the debugger's
+// breakpoint file keying (null = main, folder/name otherwise). The
+// optional labels object carries the user module's code symbols
+// (functions, inline-asm labels) at their linked absolute addresses —
+// realSession pushes them into the engine's sym table so disassembly and
+// backtrace read annotated, like sjasmplus projects.
 //
 // These are plain Z80 program addresses, so the returned map is a straight
 // ADDRESS map like parseSld's (no `kind`): breakpoints arm as ordinary
@@ -45,12 +49,20 @@ export function buildZ88dkMap(debug) {
     for (const [addr, loc] of addrToLoc) {
         if (loc.file === null) addrToLine.set(addr, loc.line);
     }
+    const labels = new Map();
+    if (debug.labels && typeof debug.labels === "object" && !Array.isArray(debug.labels)) {
+        for (const [name, addr] of Object.entries(debug.labels)) {
+            if (!name) continue;
+            if (!Number.isInteger(addr) || addr < 0 || addr > 0xFFFF) continue;
+            if (!labels.has(name)) labels.set(name, addr);
+        }
+    }
     return {
         byFile,
         addrToLoc,
         lineToAddr: main.lineToAddr,
         addrToLine,
         mappedLines: main.mappedLines,
-        labels: new Map(),
+        labels,
     };
 }

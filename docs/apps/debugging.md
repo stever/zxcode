@@ -46,7 +46,14 @@ Where the map comes from varies:
   the most exact of the lot.
 - **Pasta80** and **z88dk** produce compiler listings that the services parse
   into a map. Pasta80's covers assembly files linked in with `{$l}` as well,
-  so you can break inside those.
+  so you can break inside those. z88dk's covers project headers you
+  `#include` — C code in a `.h` file is as breakable as the main source —
+  and the individual instructions of inline `__asm`/`#asm` blocks, in the
+  main source or a header. (The `__asm` opener line itself carries no code;
+  a breakpoint there snaps to the block's first instruction. A header
+  inlined at several call sites maps its lines to the first one.) The map
+  also carries the program's function and asm-label symbols, so the
+  debugger's disassembly and backtrace read annotated.
 - **SDCC** and **zmac** compile in a browser worker whose build result
   already carries per-file listings — no service involved.
 - **Pasmo** has no listing output at all. After your real compile, the IDE
