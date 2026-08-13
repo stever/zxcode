@@ -1,5 +1,5 @@
 diff --git a/src/zenv.asm b/src/zenv.asm
-index ad3d0e4..eb10dda 100644
+index ad3d0e4..a79500f 100644
 --- a/src/zenv.asm
 +++ b/src/zenv.asm
 @@ -1485,7 +1485,8 @@ main:
@@ -12,10 +12,38 @@ index ad3d0e4..eb10dda 100644
  	; ABORT ; -? ALLOT
  	DX abort
  
-@@ -5133,6 +5134,8 @@ key_down:      EQU 0x13 ; ASCII DC3
+@@ -5133,6 +5134,36 @@ key_down:      EQU 0x13 ; ASCII DC3
  key_right:     EQU 0x14 ; ASCII DC4
  key_caps_lock: EQU 0x1C ; ASCII File separator
  
++
++; zxcode IDE source-line debugging (#223). user_mark reports a source
++; line to the emulator debugger's linecall anchor: TOS is cached in HL,
++; so at the anchor M1 the line number is in HL, and the POP performs the
++; drop. user_line is the state-smart wrapper the generated user_boot
++; runs before each source line: while interpreting, report the line now;
++; while compiling, compile `n user_mark` into the current definition so
++; the report happens when (and each time) the word executes.
++user_mark:
++user_mark_anchor:
++	POP HL
++	JP next
++
++user_line:
++	CALL colon_code
++	DX state
++	DX fetch
++	DX if_raw
++	DB .interp-$-1
++	DX literal
++	DX literal_raw
++	DW user_mark
++	DX compile_comma
++	DX exit
++.interp:
++	DX user_mark
++	DX exit
++
 +	INCLUDE "user.asm"
 +
  h_init:

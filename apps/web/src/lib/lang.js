@@ -236,7 +236,9 @@ export function editorMode(lang, fileName = null) {
 // (lib/debugger/basicMap.js), armed through the engine's PPC-watching
 // basic-bp; zxbasic (Boriel, compiled) maps file lines through the
 // --enable-break per-line runtime call (lib/debugger/lineCallMap.js),
-// armed through the engine's linecall breakpoints; pascal (Pasta80) and c
+// armed through the engine's linecall breakpoints — forth (zenv) works
+// the same way via the per-line marker its service embeds; pascal
+// (Pasta80) and c
 // (z88dk) map file lines to addresses via listings their services parse
 // (lib/debugger/pasta80Map.js, z88dkMap.js), the in-browser worker
 // toolchains sdcc and zmac via the worker's own listings
@@ -246,7 +248,7 @@ export function editorMode(lang, fileName = null) {
 // first.
 const SOURCE_DEBUG_LANGS = new Set(
     ["asm", "sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal",
-     "c", "sdcc", "zmac"]);
+     "c", "sdcc", "zmac", "forth"]);
 
 export function languageSupportsSourceDebug(lang) {
   return SOURCE_DEBUG_LANGS.has(lang);

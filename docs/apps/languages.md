@@ -77,9 +77,13 @@ you land at the interactive `ok` prompt with your words defined — so a
 Forth project is both a program and a live Forth console to keep exploring
 in. Forth errors surface at runtime on the Spectrum screen, like BASIC;
 the only compile-time error is a program too large for the image. There
-are no extra project files (zenv has no file words) and no source-line
-debugging (words are compiled at runtime, so there is no build-time
-address map — the machine-level debugger works as everywhere).
+are no extra project files (zenv has no file words).
+
+Source-line debugging works the Boriel way: the embedded program carries
+a tiny per-line runtime marker, so gutter breakpoints and Step Over work
+even though words are compiled at runtime — including lines inside your
+colon definitions, each time they execute. Words typed interactively at
+the `ok` prompt have no line numbers and stay unmapped.
 
 ## BASIC
 
@@ -161,11 +165,10 @@ browser](ide-debugging.html)).
 | Pasmo | ✓ | A second, best-effort debug build with injected labels. The map is discarded unless that build is byte-identical to the real one. |
 | Boriel ZX BASIC | ✓ | Compiled with `--enable-break`; a hit means "line N *just executed*". |
 | Sinclair/NextBASIC, zmakebas, bas2tap | ✓ | The engine watches the interpreter's own `PPC` variable — no dependence on ROM addresses, so it works identically on every machine including the Next. |
-| zenv Forth | — | Words are compiled at runtime by zenv's interpreter, so there is no build-time map; the machine-level debugger works as everywhere. |
+| zenv Forth | ✓ | Per-line runtime marker embedded with the program (Boriel's mechanism, but firing *before* the line); prompt-defined words are unmapped. |
 
-The practical upshot: **you get source-line breakpoints in all of them
-except zenv Forth** (whose words only exist at runtime). Only
-the precision differs, and only in the two cases noted above.
+The practical upshot: **you get source-line breakpoints in all eleven**.
+Only the precision differs, and only in the cases noted above.
 
 ## Under the hood
 

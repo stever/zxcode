@@ -20,6 +20,12 @@
 //
 // Semantics note baked into the toolchain: the check runs at the END of a
 // line's statements, so a breakpoint on line N pauses after N executes.
+//
+// zenv Forth reuses this builder and mechanism: its service embeds a
+// per-line marker into the program (payload {kind: "forth", anchor,
+// lines: [...]} — the legacy single-file shape below) with one
+// difference: the marker fires BEFORE its line runs, like the address-map
+// languages, not after.
 
 // buildLineCallMap(debug) -> null | map (parseSld shape + kind/anchor).
 // `debug` is the parsed service payload; null/invalid input returns null.

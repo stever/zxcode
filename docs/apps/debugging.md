@@ -30,8 +30,7 @@ Click the gutter next to a line in your source and the IDE arms a breakpoint
 for it. When execution reaches that line, the machine halts and the line is
 highlighted in your editor.
 
-This works in every language except zenv Forth (whose words are compiled
-at runtime, leaving nothing to map). It works by three genuinely different
+This works in all eleven languages, but by three genuinely different
 mechanisms, and the difference shows up in what "reaching a line" means.
 
 ### Address maps — the compiled languages
@@ -93,6 +92,20 @@ The engine anchors on that check's address and halts on armed line numbers.
 The important detail: that check runs at the **end** of a line's statements.
 A hit means "line N *just executed*", not "line N is about to execute". Every
 other language is the other way round.
+
+### zenv Forth
+
+Forth words are compiled at runtime by zenv itself, so there is no
+build-time address map — instead Forth borrows Boriel's mechanism. The
+service embeds a tiny marker with each source line: at the top level it
+reports the line as the boot evaluator reaches it, and inside a colon
+definition it is compiled into the word, reporting the line each time the
+word executes. Unlike Boriel's check, the marker fires **before** its
+line. Two consequences: breakpoints work inside your definitions at
+runtime (a line inside a loop body fires every iteration), and words
+defined interactively at the `ok` prompt have no line numbers, so they
+cannot take source-line breakpoints — the machine-level debugger still
+covers them.
 
 ## Stepping by source line
 

@@ -11,7 +11,11 @@ import base64
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.routes.compile import generate_user_asm, PROGRAM_TOO_LARGE
+from app.routes.compile import (
+    build_debug_info,
+    generate_user_asm,
+    PROGRAM_TOO_LARGE,
+)
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -37,10 +41,35 @@ def compile_request(code):
 def test_generator_evaluates_each_line():
     asm = generate_user_asm(": A 1 ;\n: B 2 ;\nA B")
     assert asm.count("DX evaluate") == 3
-    assert "\nuser_line_0:" in asm and "\nuser_line_2:" in asm
+    assert "\nuser_line_1:" in asm and "\nuser_line_3:" in asm
     # The boot word ends before the data blobs (match the label
     # definitions at line starts, not the boot word's references).
-    assert asm.index("DX exit") < asm.index("\nuser_line_0:")
+    assert asm.index("DX exit") < asm.index("\nuser_line_1:")
+
+
+def test_generator_emits_debug_markers_with_source_line_numbers():
+    # Line numbers survive blank-line gaps: the marker before each
+    # evaluation carries the 1-based SOURCE line, feeding the debugger.
+    asm = generate_user_asm(": A 1 ;\n\n: B 2 ;")
+    assert asm.count("DX user_line") == 2
+    assert "DW 1: DX user_line" in asm
+    assert "DW 3: DX user_line" in asm
+    # Marker precedes its line's evaluate triplet.
+    assert asm.index("DW 1: DX user_line") < asm.index("DW user_line_1:")
+
+
+def test_build_debug_info_parses_anchor_and_lines(tmp_path):
+    (tmp_path / 'program.sym').write_text(
+        "next: EQU 0x00008123\n"
+        "user_mark_anchor: EQU 0x00009CC5\n"
+        "user_line: EQU 0x00009CC9\n")
+    import json
+    info = json.loads(build_debug_info(str(tmp_path), ": A 1 ;\n\nA"))
+    assert info == {'kind': 'forth', 'anchor': 0x9CC5, 'lines': [1, 3]}
+    # Missing sym file or anchor -> no map, never an exception.
+    assert build_debug_info(str(tmp_path / 'nowhere'), "A") is None
+    (tmp_path / 'program.sym').write_text("next: EQU 0x00008123\n")
+    assert build_debug_info(str(tmp_path), "A") is None
 
 
 def test_generator_drops_blank_lines_and_normalises_whitespace():
@@ -84,8 +113,12 @@ def test_compile_returns_tap():
     # SAVETAP output: a BASIC loader header block leads the tape.
     assert len(tap) > 8000
     assert tap[0] == 0x13 and tap[1] == 0x00
-    # No debug map for runtime-compiled Forth.
-    assert payload.get('sld') is None
+    # The debug map: the marker anchor plus every non-blank line.
+    import json
+    info = json.loads(payload['sld'])
+    assert info['kind'] == 'forth'
+    assert 0x8000 <= info['anchor'] <= 0xFFFF
+    assert info['lines'] == [1, 2, 3, 4]
 
 
 def test_compile_is_deterministic():

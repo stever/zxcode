@@ -59,9 +59,37 @@ describe("getForthTap error surfacing", () => {
         const b64 = Buffer.from("\x13\x00\x00zenv").toString("base64");
         axios.post.mockResolvedValue({data: {data: {compileForth: {base64_encoded: b64}}}});
 
-        const tap = await getForthTap(": DEMO 5 . ;\nDEMO", null);
-        expect(tap.length).toBeGreaterThan(0);
+        const result = await getForthTap(": DEMO 5 . ;\nDEMO", null);
+        expect(result.tap.length).toBeGreaterThan(0);
+        expect(result.debug).toBeNull();
         const [, body] = axios.post.mock.calls[0];
         expect(body.variables).toEqual({code: ": DEMO 5 . ;\nDEMO"});
+    });
+
+    test("parses the service's linecall debug map from sld", async () => {
+        const b64 = Buffer.from("tap").toString("base64");
+        const sld = JSON.stringify({kind: "forth", anchor: 0x9CC5, lines: [1, 3, 5]});
+        axios.post.mockResolvedValue({data: {data: {compileForth: {base64_encoded: b64, sld}}}});
+
+        const result = await getForthTap(": A 1 ;", null);
+        expect(result.debug).toEqual({kind: "forth", anchor: 0x9CC5, lines: [1, 3, 5]});
+    });
+
+    test("a malformed debug map is ignored, never fatal", async () => {
+        const b64 = Buffer.from("tap").toString("base64");
+        axios.post.mockResolvedValue({data: {data: {compileForth: {base64_encoded: b64, sld: "{nope"}}}});
+
+        const result = await getForthTap(": A 1 ;", null);
+        expect(result.tap.length).toBeGreaterThan(0);
+        expect(result.debug).toBeNull();
+    });
+
+    test("a foreign or shapeless map is rejected", async () => {
+        const b64 = Buffer.from("tap").toString("base64");
+        const sld = JSON.stringify({kind: "zxbasic", anchor: 0x9333, lines: [2]});
+        axios.post.mockResolvedValue({data: {data: {compileForth: {base64_encoded: b64, sld}}}});
+
+        const result = await getForthTap(": A 1 ;", null);
+        expect(result.debug).toBeNull();
     });
 });

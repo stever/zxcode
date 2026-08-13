@@ -39,13 +39,13 @@ import {dashboardUnlock} from "../../dashboard_lock";
 
 // Languages whose compile branch publishes a debugger source map itself:
 // sjasmplus reloads its SLD, the interpreted BASICs their line maps,
-// zxbasic its linecall map and pascal its listing-derived address map from
-// their compile services; asm (pasmo) harvests its map from a second
-// label-injected debug build. Every other toolchain clears the map when it
-// replaces the program.
+// zxbasic and forth their linecall maps, and pascal its listing-derived
+// address map from their compile services; asm (pasmo) harvests its map
+// from a second label-injected debug build. Every other toolchain clears
+// the map when it replaces the program.
 const SOURCE_MAP_LANGS = new Set(
     ["asm", "sjasmplus", "nextbas", "basic", "bas2tap", "zxbasic", "pascal",
-     "c", "sdcc", "zmac"]);
+     "c", "sdcc", "zmac", "forth"]);
 
 // The main-source text the last sdcc/zmac worker build was posted with, so
 // the async result can flag its map stale when the editor moved on while
@@ -455,14 +455,25 @@ function* handleGetProjectTapActions(_) {
             case 'forth':
                 // zenv Forth — the user's program embedded into the zenv
                 // image, evaluated line by line at boot before the
-                // interactive ok prompt. No source map: zenv compiles words
-                // at runtime, so there is no build-time line→address map
-                // (forth is not in SOURCE_MAP_LANGS — the map was already
-                // cleared above). Forth errors surface at runtime on the
-                // Spectrum screen, like BASIC.
+                // interactive ok prompt. zenv compiles words at runtime, so
+                // there is no line→address map; instead the image carries a
+                // per-line runtime marker (Boriel-style) and the service
+                // reports its anchor plus the breakable lines as a linecall
+                // map. Unlike Boriel's end-of-line check, the marker fires
+                // BEFORE the line. A failed compile keeps the previous map,
+                // like the other map-publishing branches.
                 try {
-                    const forthTap = yield call(getForthTap, code, userId);
-                    yield put(followTapAction(forthTap));
+                    const forthResult = yield call(getForthTap, code, userId);
+                    const forthMap = buildLineCallMap(forthResult.debug);
+                    if (forthMap) {
+                        // Stale on arrival when the editor moved on while
+                        // the compile was in flight (no extra files here).
+                        const codeNow = yield select((state) => state.project.code);
+                        yield put(sourceMapLoaded(forthMap, codeNow !== code));
+                    } else {
+                        yield put(sourceMapCleared());
+                    }
+                    yield put(followTapAction(forthResult.tap));
                     yield put(setFollowTapAction(undefined));
                 } catch (errorItems) {
                     console.error('[zenv] dispatching setErrorItems', errorItems);

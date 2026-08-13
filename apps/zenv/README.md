@@ -26,6 +26,17 @@ user-facing compile error is an oversized program (the build wrapper's
 `ASSERT` keeps the image below the zenv workspace at `$FB00`, with
 dictionary headroom).
 
+For the IDE debugger, each line's evaluation is preceded by a state-smart
+marker (`user_line` in the patch): while interpreting it reports the line
+at a fixed anchor immediately, and while compiling it compiles
+`n user_mark` into the current definition, so lines inside colon words
+report at runtime each time the word executes — the same per-line runtime
+check Boriel's `--enable-break` makes, feeding the emulator's linecall
+breakpoint/step machinery. The anchor's address is parsed from the
+sjasmplus symbol output and returned with the breakable-line set as JSON
+in `CompileResult.sld` ({"kind": "forth", "anchor": addr, "lines":
+[...]}).
+
 ## Development
 
 ```bash
