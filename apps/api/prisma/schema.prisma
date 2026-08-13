@@ -52,6 +52,8 @@ model project {
   display_order Int?      @default(0)
   machine       String    @default("48")
   folder_id     String?   @db.Uuid
+  // "About this program": owner-written instructions/commentary (markdown).
+  instructions  String    @default("")
 
   // Hasura exposed this relationship twice ("owner" and "user"); Prisma
   // allows one relation per FK, so the engine aliases both GraphQL names here.

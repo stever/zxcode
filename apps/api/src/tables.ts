@@ -130,6 +130,7 @@ const PROJECT_COLUMNS = [
     "display_order",
     "machine",
     "folder_id",
+    "instructions",
 ] as const;
 
 const projectSelectPublic: SelectRule = {
@@ -319,13 +320,13 @@ export const tables: Record<string, TableConfig> = {
                 // folder_id is safe to accept: the composite FK
                 // (folder_id, owner_user_id) only matches the caller's own
                 // folders once the owner preset is applied.
-                columns: ["code", "lang", "machine", "title", "slug", "is_public", "folder_id", "files"],
+                columns: ["code", "lang", "machine", "title", "slug", "is_public", "folder_id", "instructions", "files"],
                 presets: (s) => ({ owner_user_id: me(s) }),
             },
         },
         update: {
             "zxplay-user": {
-                columns: ["code", "display_order", "machine", "title", "is_public", "slug", "folder_id"],
+                columns: ["code", "display_order", "machine", "title", "is_public", "slug", "folder_id", "instructions"],
                 filter: (s) => ({ owner_user_id: me(s) }),
             },
         },

@@ -18,6 +18,7 @@ import { openDebugger, closeDebugger } from "../redux/debugger/actions";
 import { dashboardLock } from "../dashboard_lock";
 import { showLoading } from "../dashboard_loading";
 import clsx from "clsx";
+import ProjectAbout from "./ProjectAbout";
 import ProjectVisibilityToggle from "./ProjectVisibilityToggle";
 import ProjectMachineToggle from "./ProjectMachineToggle";
 import LineNumbersToggle from "./LineNumbersToggle";
@@ -125,6 +126,10 @@ export function ProjectToolbar({ rootRef = null }) {
               dispatch(debugActive ? closeDebugger() : openDebugger());
             }}
           />
+
+          {/* "About this program": edit for the owner, read for everyone
+              else once there is something to read. */}
+          <ProjectAbout />
 
           {/* Show Save, Rename, Delete only for owner */}
           {isOwner && (

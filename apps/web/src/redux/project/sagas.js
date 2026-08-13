@@ -10,6 +10,7 @@ import {
     setSavedCode,
     setSelectedTabIndex,
     setProjectTitle,
+    setProjectSlug,
     setErrorItems,
     markFilesSaved,
     receiveAddedFile,
@@ -160,7 +161,11 @@ function* handleCreateNewProjectActions(action) {
         const currentUserSlug = yield select((state) => state.identity.userSlug);
         const currentUserName = yield select((state) => state.identity.greetingName);
 
-        yield put(receiveLoadedProject(id, action.title, action.lang, '', false, projectSlug, currentUserSlug, currentUserId, currentUserName, true));
+        // The machine must match what the insert just wrote: omitting it
+        // would reset state.project.machine to the default '48', and the
+        // machine toggle's persist logic would then skip writes until the
+        // next full load.
+        yield put(receiveLoadedProject(id, action.title, action.lang, '', false, projectSlug, currentUserSlug, currentUserId, currentUserName, true, String(machine)));
 
         // For newly created projects, use the UUID URL to avoid race conditions
         // The project might not be immediately queryable through the slug-based nested query
@@ -196,6 +201,7 @@ function* handleLoadProjectActions(action) {
                     is_public
                     slug
                     owner_user_id
+                    instructions
                     user {
                         slug
                         greeting_name
@@ -250,7 +256,8 @@ function* handleLoadProjectActions(action) {
             ownerName,
             ownerProfileIsPublic,
             machine,
-            proj.files || []
+            proj.files || [],
+            proj.instructions || ''
         ));
 
         // Boot the emulator to the machine the project targets, so a Next
@@ -543,15 +550,10 @@ function* handleRenameProjectActions(action) {
             const response = yield call(gqlFetch, userId, query, variables);
             console.assert(response?.data?.update_project_by_pk?.project_id, response);
 
+            // setProjectTitle is the whole store update: a synthetic
+            // receiveLoadedProject here would reset machine, files and
+            // instructions to the action creator's defaults.
             yield put(setProjectTitle(action.title));
-            const lang = yield select((state) => state.project.lang);
-            const code = yield select((state) => state.project.code);
-            const isPublic = yield select((state) => state.project.isPublic);
-            const ownerId = yield select((state) => state.project.ownerId);
-            const ownerSlug = yield select((state) => state.project.ownerSlug);
-            const ownerName = yield select((state) => state.project.ownerName);
-            const ownerProfileIsPublic = yield select((state) => state.project.ownerProfileIsPublic);
-            yield put(receiveLoadedProject(projectId, action.title, lang, code, isPublic, currentSlug, ownerSlug, ownerId, ownerName, ownerProfileIsPublic));
             return;
         }
 
@@ -615,18 +617,12 @@ function* handleRenameProjectActions(action) {
         // noinspection JSUnresolvedVariable
         console.assert(response?.data?.update_project_by_pk?.project_id, response);
 
+        // Rename touches only title and slug: targeted actions rather than a
+        // synthetic receiveLoadedProject, whose omitted arguments would reset
+        // machine, files and instructions to defaults until the next load.
         const newSlug = response?.data?.update_project_by_pk?.slug;
         yield put(setProjectTitle(action.title));
-
-        // Update project with new slug
-        const lang = yield select((state) => state.project.lang);
-        const code = yield select((state) => state.project.code);
-        const isPublic = yield select((state) => state.project.isPublic);
-        const ownerId = yield select((state) => state.project.ownerId);
-        const ownerSlug = yield select((state) => state.project.ownerSlug);
-        const ownerName = yield select((state) => state.project.ownerName);
-        const ownerProfileIsPublic = yield select((state) => state.project.ownerProfileIsPublic);
-        yield put(receiveLoadedProject(projectId, action.title, lang, code, isPublic, newSlug, ownerSlug, ownerId, ownerName, ownerProfileIsPublic));
+        yield put(setProjectSlug(newSlug));
 
         // If the slug changed, update the URL
         if (newSlug !== currentSlug) {

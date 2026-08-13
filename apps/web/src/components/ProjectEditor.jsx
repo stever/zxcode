@@ -143,11 +143,14 @@ export function ProjectEditor() {
 
   // External edits to the main source (e.g. BASIC line renumbering) land in
   // the store without passing through the editor; mirror them into the
-  // buffer. Editor-originated changes are already equal by the time this
-  // runs, so only genuine external rewrites get here. setValue is filtered
+  // buffer. Editor-originated changes short-circuit on the ref onChange
+  // stamps (same string object — no per-keystroke re-serialisation), so
+  // only genuine external rewrites get to setValue. setValue is filtered
   // out of onChange but IS recorded in the undo history, so Ctrl+Z reverts
   // the external edit (and that undo propagates back to the store).
+  const editorEmittedCodeRef = useRef(null);
   useEffect(() => {
+    if (code === editorEmittedCodeRef.current) return;
     const cm = cmRef.current?.getCodeMirror();
     if (!cm || activeIsBinary || activeFileId !== null) return;
     if (cm.getValue() !== (code || "")) {
@@ -291,11 +294,13 @@ export function ProjectEditor() {
           options={options}
           onChange={(cm, _) => {
             const fileId = activeFileIdRef.current;
-            dispatch(
-              fileId === null
-                ? setCode(cm.getValue())
-                : setFileContent(fileId, cm.getValue())
-            );
+            const value = cm.getValue();
+            if (fileId === null) {
+              editorEmittedCodeRef.current = value;
+              dispatch(setCode(value));
+            } else {
+              dispatch(setFileContent(fileId, value));
+            }
           }}
         />
       </div>

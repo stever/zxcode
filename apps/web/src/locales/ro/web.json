@@ -267,5 +267,11 @@
     "showBuildOutput": "Afișează rezultatul compilării",
     "hideWarnings": "Ascunde avertismentele ({{n}})",
     "renderProblem": "A apărut o problemă la afișarea acestui conținut."
+  },
+  "projectAbout": {
+    "button": "Despre",
+    "title": "Despre acest program",
+    "placeholder": "Ce face, cum se rulează, ce taste se folosesc…",
+    "hint": "Instrucțiuni și note vizibile oricui vede acest proiect. Se acceptă Markdown."
   }
 }

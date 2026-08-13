@@ -267,5 +267,11 @@
     "showBuildOutput": "Pokaż wynik kompilacji",
     "hideWarnings": "Ukryj ostrzeżenia ({{n}})",
     "renderProblem": "Wystąpił problem podczas wyświetlania tej zawartości."
+  },
+  "projectAbout": {
+    "button": "O programie",
+    "title": "O tym programie",
+    "placeholder": "Co robi, jak go uruchomić, jakich klawiszy użyć…",
+    "hint": "Instrukcje i notatki widoczne dla każdego oglądającego projekt. Działa Markdown."
   }
 }

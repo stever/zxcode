@@ -20,11 +20,13 @@ export const actionTypes = {
     deleteProject: 'project/deleteProject',
     renameProject: 'project/renameProject',
     setProjectTitle: 'project/setProjectTitle',
+    setProjectSlug: 'project/setProjectSlug',
     setErrorItems: 'project/setErrorItems',
     setBuildOutput: 'project/setBuildOutput',
     setBuildOutputVisible: 'project/setBuildOutputVisible',
     downloadProjectZip: 'project/downloadProjectZip',
     renumberBasic: 'project/renumberBasic',
+    setProjectInstructions: 'project/setProjectInstructions',
 };
 
 export const reset = () => ({
@@ -47,9 +49,9 @@ export const loadProject = (id, ownerSlug = null) => ({
     ownerSlug
 });
 
-export const receiveLoadedProject = (id, title, lang, code, isPublic = false, slug = null, ownerSlug = null, ownerId = null, ownerName = null, ownerProfileIsPublic = false, machine = '48', files = []) => ({
+export const receiveLoadedProject = (id, title, lang, code, isPublic = false, slug = null, ownerSlug = null, ownerId = null, ownerName = null, ownerProfileIsPublic = false, machine = '48', files = [], instructions = '') => ({
     type: actionTypes.receiveLoadedProject,
-    id, title, lang, code, isPublic, slug, ownerSlug, ownerId, ownerName, ownerProfileIsPublic, machine, files
+    id, title, lang, code, isPublic, slug, ownerSlug, ownerId, ownerName, ownerProfileIsPublic, machine, files, instructions
 });
 
 export const setCode = (code) => ({
@@ -144,6 +146,11 @@ export const setProjectTitle = (title) => ({
     title
 });
 
+export const setProjectSlug = (slug) => ({
+    type: actionTypes.setProjectSlug,
+    slug
+});
+
 // The saga catches pass through whatever the compiler threw: the in-browser
 // compilers (pasmo, zmakebas, bas2tap) reject with arrays of build-error
 // items, but others (txt2bas) throw raw Errors. Normalise here so
@@ -177,6 +184,14 @@ export const setBuildOutputVisible = (visible) => ({
 
 export const downloadProjectZip = () => ({
     type: actionTypes.downloadProjectZip
+});
+
+// The saved "About this program" text (instructions/commentary, markdown).
+// Dispatched after the About dialog's own mutation succeeds — the field
+// saves independently of the code draft.
+export const setProjectInstructions = (instructions) => ({
+    type: actionTypes.setProjectInstructions,
+    instructions
 });
 
 // Renumber the main source's BASIC lines (interpreted dialects only) —

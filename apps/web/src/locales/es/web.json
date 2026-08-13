@@ -267,5 +267,11 @@
     "showBuildOutput": "Mostrar salida de compilación",
     "hideWarnings": "Ocultar avisos ({{n}})",
     "renderProblem": "Hubo un problema al mostrar este contenido."
+  },
+  "projectAbout": {
+    "button": "Acerca de",
+    "title": "Acerca de este programa",
+    "placeholder": "Qué hace, cómo ejecutarlo, qué teclas usar…",
+    "hint": "Instrucciones y notas visibles para cualquiera que vea este proyecto. Se admite Markdown."
   }
 }

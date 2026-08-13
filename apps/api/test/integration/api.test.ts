@@ -431,7 +431,7 @@ describe("zxplay-user reads", () => {
         const result = await data(
             `query ($project_id: uuid!) {
                 project_by_pk(project_id: $project_id) {
-                    title lang code machine is_public slug owner_user_id
+                    title lang code machine is_public slug owner_user_id instructions
                     user { slug greeting_name profile_is_public }
                     files(order_by: [{folder: asc}, {name: asc}]) { file_id name folder content is_binary }
                 }
@@ -721,6 +721,37 @@ describe("zxplay-user mutations", () => {
             { project_id: copyId },
             { token: bob.token },
         );
+    });
+
+    it("owner writes instructions; readers see them, others cannot write", async () => {
+        // The About-dialog mutation (ProjectAbout.jsx).
+        const updated = await data(
+            `mutation ($project_id: uuid!, $instructions: String!) {
+                update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {instructions: $instructions}) { project_id }
+            }`,
+            { project_id: alicePublicProjectId, instructions: "# How to play\nPress **Q** to start." },
+            { token: alice.token },
+        );
+        expect(updated.update_project_by_pk).not.toBeNull();
+
+        // Anonymous readers of a public project get the field.
+        const anon = await data(
+            `query ($project_id: uuid!) { project_by_pk(project_id: $project_id) { instructions } }`,
+            { project_id: alicePublicProjectId },
+            {},
+        );
+        expect((anon.project_by_pk as { instructions: string }).instructions)
+            .toContain("How to play");
+
+        // A non-owner cannot write it.
+        const denied = await data(
+            `mutation ($project_id: uuid!, $instructions: String!) {
+                update_project_by_pk(pk_columns: {project_id: $project_id}, _set: {instructions: $instructions}) { project_id }
+            }`,
+            { project_id: alicePublicProjectId, instructions: "graffiti" },
+            { token: bob.token },
+        );
+        expect(denied.update_project_by_pk).toBeNull();
     });
 
     it("cannot update or delete someone else's project", async () => {

@@ -29,7 +29,10 @@ const initialState = {
     ownerId: undefined,
     ownerName: undefined,
     ownerProfileIsPublic: false,
-    machine: '48'
+    machine: '48',
+    // "About this program" (markdown): saved value only — the About dialog
+    // edits a local draft and writes back through its own mutation.
+    instructions: ''
 };
 
 function filesDirty(state) {
@@ -95,7 +98,22 @@ function receiveLoadedProject(state, action) {
         ownerId: action.ownerId,
         ownerName: action.ownerName,
         ownerProfileIsPublic: action.ownerProfileIsPublic,
-        machine: action.machine
+        machine: action.machine,
+        instructions: action.instructions || ''
+    };
+}
+
+function setProjectSlug(state, action) {
+    return {
+        ...state,
+        slug: action.slug,
+    };
+}
+
+function setProjectInstructions(state, action) {
+    return {
+        ...state,
+        instructions: action.instructions,
     };
 }
 
@@ -225,6 +243,8 @@ const actionsMap = {
     [actionTypes.setBuildOutput]: setBuildOutput,
     [actionTypes.setBuildOutputVisible]: setBuildOutputVisible,
     [actionTypes.setProjectTitle]: setProjectTitle,
+    [actionTypes.setProjectSlug]: setProjectSlug,
+    [actionTypes.setProjectInstructions]: setProjectInstructions,
     [actionTypes.setActiveFile]: setActiveFile,
     [actionTypes.setFileContent]: setFileContent,
     [actionTypes.markFilesSaved]: markFilesSaved,

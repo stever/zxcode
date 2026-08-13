@@ -36,6 +36,7 @@ export default function Nav() {
   const userId = useSelector((state) => state?.identity.userId);
   const userSlug = useSelector((state) => state?.identity.userSlug);
   const lang = useSelector((state) => state?.project.lang);
+  const activeFileId = useSelector((state) => state?.project.activeFileId);
   const machine = useSelector((state) => state?.app.machine);
   const joystick = useSelector((state) => state?.app.joystick);
   const keyboardLayout = useSelector((state) => state?.app.keyboardLayout);
@@ -54,7 +55,8 @@ export default function Nav() {
     machineLocked,
     keyboardLayout,
     pixelPerfect,
-    joystick
+    joystick,
+    activeFileId
   );
 
   const isMobile = useSelector((state) => state?.window.isMobile);
@@ -73,7 +75,7 @@ export default function Nav() {
   );
 }
 
-function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible, machine, machineLocked, keyboardLayout, pixelPerfect, joystick) {
+function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible, machine, machineLocked, keyboardLayout, pixelPerfect, joystick, activeFileId) {
   const sep = {
     separator: true,
   };
@@ -224,12 +226,16 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
       },
       // Renumbering only means something in the dialects the ROM
       // interpreter runs (numbered lines); Boriel is compiled and jumps by
-      // label, so the entry hides rather than sits disabled.
+      // label, so the entry hides rather than sits disabled. It IS disabled
+      // while a project-file tab is showing: the rewrite targets the main
+      // source, and applying it off-screen would be invisible and land
+      // outside the visible buffer's undo history.
       ...(isBasicLang(lang)
         ? [
             {
               label: t("nav.renumber"),
               icon: "pi pi-fw pi-sort-numeric-down",
+              disabled: activeFileId !== null,
               command: () => {
                 dispatch(renumberBasic());
               },

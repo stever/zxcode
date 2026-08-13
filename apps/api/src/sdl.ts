@@ -175,6 +175,7 @@ type project {
   display_order: Int
   machine: String!
   folder_id: uuid
+  instructions: String!
   owner: user
   user: user
   folder: project_folder
@@ -200,6 +201,7 @@ input project_bool_exp {
   display_order: Int_comparison_exp
   machine: String_comparison_exp
   folder_id: uuid_comparison_exp
+  instructions: String_comparison_exp
   owner: user_bool_exp
   user: user_bool_exp
   folder: project_folder_bool_exp
@@ -247,6 +249,7 @@ input project_set_input {
   is_public: Boolean
   slug: String
   folder_id: uuid
+  instructions: String
 }
 
 input project_insert_input {
@@ -257,6 +260,7 @@ input project_insert_input {
   machine: String
   is_public: Boolean
   folder_id: uuid
+  instructions: String
   files: project_file_arr_rel_insert_input
 }
 

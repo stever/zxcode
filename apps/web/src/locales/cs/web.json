@@ -267,5 +267,11 @@
     "showBuildOutput": "Zobrazit výstup sestavení",
     "hideWarnings": "Skrýt varování ({{n}})",
     "renderProblem": "Při vykreslování tohoto obsahu došlo k problému."
+  },
+  "projectAbout": {
+    "button": "O programu",
+    "title": "O tomto programu",
+    "placeholder": "Co dělá, jak jej spustit, které klávesy použít…",
+    "hint": "Pokyny a poznámky viditelné každému, kdo si projekt prohlíží. Funguje Markdown."
   }
 }

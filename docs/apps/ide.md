@@ -182,6 +182,13 @@ a stable URL of the form `/u/<your-slug>/<project-slug>`, which anyone can
 open, run and read the source of — no account needed on their side. Other
 people can star it, and profiles list what a user has published.
 
+**About** on the project toolbar is the program's own page of notes: as the
+owner you get a text box for instructions and commentary — what it does, how
+to run it, the keys to press — and everyone else viewing the project gets the
+same button showing your text rendered as markdown, whenever there is
+something to read. It saves on its own, independent of the source code's
+Save button.
+
 **Download ZIP** gives you the whole project as files, in the same folder
 layout the IDE shows and the Next's SD card uses. Unzipped onto a real Next's
 card, the relative paths your program loads still resolve.

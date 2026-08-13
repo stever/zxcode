@@ -404,5 +404,11 @@
     "lineBpsStale": "The source changed since the last compile, so line breakpoints are disarmed. Play to rebuild and re-arm them.",
     "panelNoData": "No data yet — the panel refreshes when the machine pauses (breakpoint, step, or Pause).",
     "enableHistory": "Enable instruction history"
+  },
+  "projectAbout": {
+    "button": "About",
+    "title": "About this program",
+    "placeholder": "What it does, how to run it, the keys to press…",
+    "hint": "Instructions and notes shown to anyone viewing this project. Markdown works."
   }
 }
