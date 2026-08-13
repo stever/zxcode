@@ -149,12 +149,19 @@
     // Submenu panels dropping from the bar: match the header tone, round the
     // corners to fit the rest of the UI, and shrink items slightly so they
     // relate to the bar without touching the (smaller) menu titles.
+    // Panels size to their longest item instead of the theme's fixed 12.5rem
+    // (kept as the minimum), so a long label — "Renumber BASIC Lines", longer
+    // still in some locales — stays on one row. The collapsed/mobile modes
+    // keep their full-width inline panels: those rules carry an extra class
+    // (or the theme's own root-list qualifier) and win on specificity.
     .p-submenu-list {
         background: var(--zx-surface);
         border: 1px solid var(--zx-line-2);
         border-radius: 8px;
         padding: 0.25rem;
-        .p-menuitem-text { font-size: 0.9rem; }
+        width: max-content;
+        min-width: 12.5rem;
+        .p-menuitem-text { font-size: 0.9rem; white-space: nowrap; }
     }
 
     .zx-deck-end { display: flex; align-items: center; gap: 0.5rem; margin-right: 1rem; }
