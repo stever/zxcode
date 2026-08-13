@@ -21,7 +21,9 @@ need one to create and save your own.
 
 Pick a language and go to `/new/<language>` — the language list and what each
 one targets is on [Languages and toolchains](languages.html). The choice
-fixes the language for that project.
+fixes the language for that project. In the menu bar, **Project → New
+Project** presents the same choice grouped by language family — BASIC,
+Assembly, C, Pascal, Forth — with the toolchains inside each group.
 
 It does **not** fix the machine. Every project carries a target-machine
 toggle — **48K**, **128K** or **Next** — that you can change at any time. The

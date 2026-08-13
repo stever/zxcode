@@ -113,9 +113,8 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
   };
 
   // One consolidated BASIC (#110): "Sinclair/NextBASIC" (lang nextbas) is
-  // txt2bas-tokenised for every machine, so there is a single headline entry
-  // instead of the old machine-dependent zmakebas/NextBASIC pair. zmakebas
-  // and bas2tap live on under Other as standalone classic tokenisers with
+  // txt2bas-tokenised for every machine, so it heads the BASIC group;
+  // zmakebas and bas2tap follow it as standalone classic tokenisers with
   // their own source conventions.
   const newBasic = {
     label: getLanguageLabel("nextbas"),
@@ -173,21 +172,36 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
     },
   };
 
-  const otherMenu = { label: t("nav.other"), items: [] };
-  otherMenu.items.push(newZmakebas);
-  otherMenu.items.push(newBas2Tap);
-  otherMenu.items.push(newZmac);
-  otherMenu.items.push(newSdcc);
-
-  const newProjectItems = [];
-  newProjectItems.push(newBasic);
-  if (Constants.enableBoriel) newProjectItems.push(newBoriel);
-  newProjectItems.push(newPasmo);
-  newProjectItems.push(newSjasmplus);
-  if (Constants.enableZ88dk) newProjectItems.push(newZ88dk);
-  newProjectItems.push(newPascal);
-  newProjectItems.push(newForth);
-  newProjectItems.push(otherMenu);
+  // The eleven toolchains grouped by language family (#221), so choosing a
+  // language reads as "what do I want to write" before "which toolchain".
+  // BASIC and C are proper names in every locale; Assembly translates.
+  const newProjectItems = [
+    {
+      label: t("nav.langBasic"),
+      items: [
+        newBasic,
+        ...(Constants.enableBoriel ? [newBoriel] : []),
+        newZmakebas,
+        newBas2Tap,
+      ],
+    },
+    {
+      label: t("nav.langAssembly"),
+      items: [newPasmo, newSjasmplus, newZmac],
+    },
+    {
+      label: t("nav.langC"),
+      items: [...(Constants.enableZ88dk ? [newZ88dk] : []), newSdcc],
+    },
+    {
+      label: t("nav.langPascal"),
+      items: [newPascal],
+    },
+    {
+      label: t("nav.langForth"),
+      items: [newForth],
+    },
+  ];
 
   const projectMenu = {
     label: t("nav.project"),
