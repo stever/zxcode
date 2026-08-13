@@ -6,9 +6,11 @@ import {
     actionTypes,
     reset,
     receiveLoadedProject,
+    setCode,
     setSavedCode,
     setSelectedTabIndex,
     setProjectTitle,
+    setErrorItems,
     markFilesSaved,
     receiveAddedFile,
     receiveRenamedFile,
@@ -19,6 +21,8 @@ import {setMachine} from "../app/actions";
 import {handleException} from "../../errors";
 import {generateSlug} from "../../utils/slug";
 import {buildProjectZip} from "./projectZip";
+import {isBasicLang} from "../../lib/lang";
+import {renumberBasicSource} from "../../lib/basicRenumber";
 
 // -----------------------------------------------------------------------------
 // Action watchers
@@ -72,6 +76,11 @@ export function* watchForDeleteFileActions() {
 // noinspection JSUnusedGlobalSymbols
 export function* watchForDownloadProjectZipActions() {
     yield takeLatest(actionTypes.downloadProjectZip, handleDownloadProjectZipActions);
+}
+
+// noinspection JSUnusedGlobalSymbols
+export function* watchForRenumberBasicActions() {
+    yield takeLatest(actionTypes.renumberBasic, handleRenumberBasicActions);
 }
 
 // -----------------------------------------------------------------------------
@@ -430,6 +439,30 @@ function* handleDownloadProjectZipActions(_) {
         link.click();
     } catch (e) {
         handleException(e);
+    }
+}
+
+// Renumber the main source's BASIC lines in the store draft. The editor
+// mirrors the store (ProjectEditor pushes external code edits into its
+// buffer), Ctrl+Z undoes it there, and saving stays the user's explicit
+// act. Failures surface through the same toast path as build errors.
+function* handleRenumberBasicActions(_) {
+    const lang = yield select((state) => state.project.lang);
+    if (!isBasicLang(lang)) return;
+    const code = yield select((state) => state.project.code);
+    const result = renumberBasicSource(code, {
+        // zmakebas sources continue lines with a trailing backslash;
+        // txt2bas sources may carry an #autostart line-number directive.
+        continuations: lang === 'basic',
+        autostartDirective: lang === 'nextbas',
+    });
+    if (result.error) {
+        // standalone: toast only — never displace the last build's output.
+        yield put(setErrorItems([{type: 'err', text: result.error, standalone: true}]));
+        return;
+    }
+    if (result.code !== code) {
+        yield put(setCode(result.code));
     }
 }
 

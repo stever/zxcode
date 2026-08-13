@@ -76,7 +76,12 @@ export function showToastsForErrorItems(errorItems, toast) {
     if (!errorItems || errorItems.length === 0) return;
 
     const units = processErrorItems(errorItems);
-    store.dispatch(setBuildOutput(units));
+    // Standalone items (e.g. a failed renumber) are toast-only: they must
+    // not replace the last build's output, which the dialog preserves for
+    // as long as that failure is the latest compile result (#217).
+    if (!errorItems.every((item) => item?.standalone)) {
+        store.dispatch(setBuildOutput(units));
+    }
 
     if (!toast?.current) return;
 

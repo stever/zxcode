@@ -41,6 +41,19 @@ highlighted as assembly, because that is what it is. Extensions that do not
 imply a syntax (`.inc`, `.txt`, `.def`) keep the project's own mode, so
 Pascal-style `{$i file.inc}` includes still read as Pascal.
 
+### Renumbering BASIC lines
+
+In the line-numbered BASIC dialects (Sinclair/NextBASIC, zmakebas and
+bas2tap), **Project → Renumber BASIC Lines** renumbers the program to 10,
+20, 30… — tightening the step automatically when the program wouldn't fit
+under 9999 — and rewrites the line references after `GO TO`, `GO SUB`,
+`RUN`, `RESTORE`, `LIST`, `LLIST` and `SAVE … LINE` to follow. A reference
+between lines snaps to the next existing line, just as the ROM would have
+jumped, and a reference past the last line (the `GO TO 9999` stop idiom)
+is left alone. Computed targets (`GO TO n*100`), strings and `REM`
+comments are never touched. The change lands in the editor as one undoable
+edit, and nothing is saved until you press Save.
+
 ### Additional files
 
 Most languages accept extra files beside the main source, organised into

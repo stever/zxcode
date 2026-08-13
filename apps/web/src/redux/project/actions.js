@@ -24,6 +24,7 @@ export const actionTypes = {
     setBuildOutput: 'project/setBuildOutput',
     setBuildOutputVisible: 'project/setBuildOutputVisible',
     downloadProjectZip: 'project/downloadProjectZip',
+    renumberBasic: 'project/renumberBasic',
 };
 
 export const reset = () => ({
@@ -176,4 +177,11 @@ export const setBuildOutputVisible = (visible) => ({
 
 export const downloadProjectZip = () => ({
     type: actionTypes.downloadProjectZip
+});
+
+// Renumber the main source's BASIC lines (interpreted dialects only) —
+// see lib/basicRenumber.js. Applies to the draft in the store; saving
+// stays the user's explicit act.
+export const renumberBasic = () => ({
+    type: actionTypes.renumberBasic
 });

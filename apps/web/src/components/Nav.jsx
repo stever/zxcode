@@ -8,6 +8,7 @@ import {
   viewFullScreen,
 } from "../redux/jsspeccy/actions";
 import { downloadProjectTap } from "../redux/eightbit/actions";
+import { renumberBasic } from "../redux/project/actions";
 import { getUserInfo } from "../redux/identity/actions";
 import { login, logout } from "../auth";
 import {
@@ -221,6 +222,20 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
           dispatch(downloadProjectTap());
         },
       },
+      // Renumbering only means something in the dialects the ROM
+      // interpreter runs (numbered lines); Boriel is compiled and jumps by
+      // label, so the entry hides rather than sits disabled.
+      ...(isBasicLang(lang)
+        ? [
+            {
+              label: t("nav.renumber"),
+              icon: "pi pi-fw pi-sort-numeric-down",
+              command: () => {
+                dispatch(renumberBasic());
+              },
+            },
+          ]
+        : []),
     ],
   };
 

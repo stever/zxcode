@@ -141,6 +141,24 @@ export function ProjectEditor() {
     }
   }, [activeFileId, activeIsBinary]);
 
+  // External edits to the main source (e.g. BASIC line renumbering) land in
+  // the store without passing through the editor; mirror them into the
+  // buffer. Editor-originated changes are already equal by the time this
+  // runs, so only genuine external rewrites get here. setValue is filtered
+  // out of onChange but IS recorded in the undo history, so Ctrl+Z reverts
+  // the external edit (and that undo propagates back to the store).
+  useEffect(() => {
+    const cm = cmRef.current?.getCodeMirror();
+    if (!cm || activeIsBinary || activeFileId !== null) return;
+    if (cm.getValue() !== (code || "")) {
+      const scroll = cm.getScrollInfo();
+      const cursor = cm.getCursor();
+      cm.setValue(code || "");
+      cm.setCursor(cursor);
+      cm.scrollTo(scroll.left, scroll.top);
+    }
+  }, [code]);
+
   // Keep the mode in step when the buffer swaps to a file of a different
   // syntax without a remount.
   useEffect(() => {

@@ -4,6 +4,7 @@
     "newProject": "Новый проект",
     "openProject": "Открыть проект",
     "download": "Скачать {{ext}}",
+    "renumber": "Перенумеровать строки BASIC",
     "fullScreen": "Полный экран",
     "yourProfile": "Ваш профиль",
     "profileSettings": "Настройки профиля",
