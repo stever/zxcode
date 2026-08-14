@@ -291,6 +291,18 @@ type ULA struct {
 	// reference timeline (refNow); audio/tape event offsets are measured
 	// against it so mid-frame turbo changes can't misplace them.
 	frameStartRefTstate uint64
+	// lastFlushRefTstate is the MONOTONIC-clock instant (tapeRefNow) of the
+	// last audio flush — flushAudioFrame's idempotence stamp. It cannot ride
+	// refNow like the frame-local offsets above: on classic models that is
+	// the raw counter ExecuteFrame wraps to its per-frame residue, and two
+	// consecutive frames ending on the same residue compared equal — the
+	// guard then read "no CPU time has passed" and dropped the whole frame's
+	// audio, cramming its speaker events into the next flush. Deterministic
+	// beeper loops (BEEP runs with interrupts disabled) repeat residues
+	// constantly: a measured 555 Hz beep lost 17% of its frames on the 48K
+	// and 2% on the 128K, while the Next (monotonic mem.RefTstates) was
+	// clean — "why does the same beep sound worse on the 48K?".
+	lastFlushRefTstate uint64
 	// LastAudioEventCount is how many speaker toggles the previous frame
 	// recorded — a diagnostic for audio-silence investigations.
 	LastAudioEventCount    int
@@ -4051,6 +4063,10 @@ func (u *ULA) SetTapePlayer(tp *TapePlayer) {
 // polls the tape continuously loses ~1%; one that polls sparsely (Exolon's
 // custom loader waiting out an inter-block pause, #192) had its tape crawl at
 // ~2% of real speed and never finished loading.
+//
+// The audio-flush idempotence guard rides this clock too (see
+// lastFlushRefTstate): on the wrapping fallback, equal consecutive frame
+// residues made it drop whole frames of beeper audio on classic models.
 func (u *ULA) SetTapeRefClock(fn func() uint64) {
 	u.tapeRefClock = fn
 }
@@ -4258,6 +4274,7 @@ func (u *ULA) Reset() {
 	if u.mem.TStates != nil {
 		u.frameStartTstate = *u.mem.TStates
 		u.frameStartRefTstate = u.refNow()
+		u.lastFlushRefTstate = u.tapeRefNow()
 	}
 }
 
@@ -4284,9 +4301,13 @@ func (u *ULA) flushAudioFrame() {
 	// is no new frame to synthesise (a second Render() on the same
 	// frame, or a flush racing a stale screenshot render). Without this
 	// guard a duplicate flush pushed a spurious frame of silence.
-	if u.mem != nil && u.mem.TStates != nil && u.refNow() == u.frameStartRefTstate {
+	// Compared on the MONOTONIC clock, never the wrapped raw counter —
+	// see lastFlushRefTstate for the frame-dropping bug that fixes.
+	flushNow := u.tapeRefNow()
+	if u.mem != nil && u.mem.TStates != nil && flushNow == u.lastFlushRefTstate {
 		return
 	}
+	u.lastFlushRefTstate = flushNow
 	// During fast-tape turbo, many emulated frames collapse into this single
 	// audio frame, so the reconstructed waveform is garbled. Emit silence and
 	// re-arm the DC blocker so normal audio resumes cleanly once loading ends.

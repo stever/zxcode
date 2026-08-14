@@ -120,6 +120,12 @@ func New(model roms.SpectrumModel) (*Harness, error) {
 		cpu.IntAssertTstate = uint64(assert)
 		cpu.IntPulseTstates = uint64(pulse)
 	}
+	// Tape timing AND the audio-flush guard ride the CPU's monotonic
+	// reference clock, same as cmd/zxplay_go's newEmulator (#192; the raw
+	// counter wraps to its frame residue every ExecuteFrame, which loses
+	// tape time and false-fires the flush guard's "no time has passed"
+	// check — dropping whole frames of beeper audio on classic models).
+	u.SetTapeRefClock(cpu.RefTstates)
 	pm := peripherals.NewPeripheralManager(mem, "")
 	u.SetPeripherals(pm)
 	mem.PeripheralRead = pm.HandleMemoryRead

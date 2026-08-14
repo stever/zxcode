@@ -108,7 +108,13 @@ LD-BYTES trap provides fast loading; the $FE-read rate detects active
 loading for the tape-turbo mode. Tape time rides the MONOTONIC
 reference clock (`SetTapeRefClock` → `cpu.RefTstates`, not the
 frame-wrapping raw counter), so the lazy per-read catch-up never drops
-the inter-frame gap for sparse-polling loaders; inter-block pause
+the inter-frame gap for sparse-polling loaders — and the audio flush's
+once-per-frame idempotence guard rides the same clock: compared on the
+wrapping raw counter, two frames ending on the same residue read as
+"no CPU time has passed" and a whole frame of beeper audio was
+silently dropped (deterministic beeper loops repeat residues
+constantly — a sustained BEEP lost 17% of its frames on the 48K, 2% on
+the 128K; the Next's monotonic `mem.RefTstates` was never affected); inter-block pause
 chunks consume time WITHOUT toggling EAR (silence has no edges); and
 the loader-activity auto-pause (`tapeFrameHook`, shared by desktop /
 wasm / headless loops) parks an unpolled deck within 1.5 s — wider

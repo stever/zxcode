@@ -107,7 +107,11 @@ Timing subtleties worth knowing early:
   (`SetTStatePtr`), so contention and beam position read the same clock.
 - The Next's turbo (NR$07: 3.5/7/14/28 MHz) scales the frame budget. A
   3.5 MHz reference clock (`RefTstates`) keeps audio and tape event
-  placement stable across mid-frame speed changes.
+  placement stable across mid-frame speed changes. Tape time and the
+  audio flush's once-per-frame guard ride this monotonic clock on EVERY
+  model (`SetTapeRefClock`): the raw counter wraps to its frame residue
+  each `ExecuteFrame`, and cross-frame equal residues once read as "no
+  time passed" — dropping whole frames of classic-model beeper audio.
 - Rendering is per-frame, not beam-chasing. Mid-frame effects that matter
   (border stripes, beeper edges, DAC writes) are recorded with T-state
   positions during execution and reconstructed at render time. The Next
