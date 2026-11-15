@@ -203,6 +203,10 @@ function* handleWorkerMessageActions(action) {
 }
 
 function* handleRunProjectCodeActions(_) {
+    // A project still stored for the ZX Spectrum Next has no emulator on the
+    // site until it is retargeted (the toolbar disables Play too).
+    const projectMachine = yield select((state) => state.project.machine);
+    if (projectMachine === 'next') return;
     yield put(setFollowTapAction(runTap));
     yield put(getProjectTap());
 

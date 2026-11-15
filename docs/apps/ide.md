@@ -31,9 +31,12 @@ whether the code you wrote actually works on both. The IDE does not support
 the ZX Spectrum Next: a build that produces a Next program (a `.nex` from
 sjasmplus `SAVENEX`, say) is refused by the emulator with "ZX Spectrum Next
 programs are not supported." Projects saved for the Next before support was
-withdrawn are kept as they were, but the IDE no longer opens them — "This
-project was made for the ZX Spectrum Next, which is no longer supported, so
-it can't be opened." — and they cannot be copied.
+withdrawn are kept as they were and still open, so you can read their code,
+but the emulator panel is replaced by a notice ("This project was made for
+the ZX Spectrum Next, which is no longer supported…"), Play and Debug are
+disabled, and they cannot be copied. If it is your project, pick **48K** or
+**128K** in its target-machine toggle (which shows neither selected until
+then): that saves the new target and brings the emulator back.
 
 Your main source file has a fixed name per language (`program.asm`,
 `program.bas`, `program.c`, `program.pas`). That is deliberate: it is the name

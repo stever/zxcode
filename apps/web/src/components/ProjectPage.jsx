@@ -3,10 +3,9 @@ import { useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Titled } from "react-titled";
 import { Toast } from "primereact/toast";
-import { Card } from "primereact/card";
-import { Message } from "primereact/message";
 import clsx from "clsx";
 import { Emulator } from "./Emulator";
+import NextUnsupportedPanel from "./NextUnsupportedPanel";
 import { ProjectFileTabView } from "./ProjectFileTabView";
 import { ProjectToolbar } from "./ProjectToolbar";
 import { DebuggerDock } from "./debugger/DebuggerDock";
@@ -17,6 +16,7 @@ import {
   setSelectedTabIndex,
   setErrorItems,
 } from "../redux/project/actions";
+import { pause } from "../redux/jsspeccy/actions";
 import { showToastsForErrorItems } from "../errors";
 import { useTranslation } from "@zxplay/i18n";
 import { sep } from "../constants";
@@ -52,8 +52,11 @@ export default function ProjectPage({ projectId }) {
     (state) => state?.project.selectedTabIndex
   );
   const lang = useSelector((state) => state?.project.lang);
-  const unsupportedTitle = useSelector(
-    (state) => state?.project.unsupportedTitle
+  // A project stored for the ZX Spectrum Next (no longer run by the site)
+  // shows its code but no emulator until it is retargeted to 48K/128K.
+  const nextBlocked = useSelector((state) => state?.project.machine === "next");
+  const isOwner = useSelector(
+    (state) => !!userId && state?.project.ownerId === userId
   );
   let title = useSelector((state) => state?.project.title);
   const errorItems = useSelector((state) => state?.project.errorItems);
@@ -120,15 +123,11 @@ export default function ProjectPage({ projectId }) {
     }
   }, [debugActive]);
 
-  if (effectiveId && unsupportedTitle !== null && unsupportedTitle !== undefined) {
-    return (
-      <Titled title={(s) => `${unsupportedTitle} ${sep} ${t("nav.project")} ${sep} ${s}`}>
-        <Card className="m-2">
-          <Message severity="warn" text={t("editor.nextUnsupported")} />
-        </Card>
-      </Titled>
-    );
-  }
+  // Nothing should keep running (or sounding) behind the notice that
+  // replaces the emulator.
+  useEffect(() => {
+    if (nextBlocked) dispatch(pause());
+  }, [nextBlocked]);
 
   if (!effectiveId || !lang) {
     return <></>;
@@ -206,8 +205,12 @@ export default function ProjectPage({ projectId }) {
                 header: t("home.tabEmulator"),
                 content: (
                   <div className="flex justify-content-center" ref={emuRef}>
-                    <Emulator zoom={zoom} width={emuW} keyboardWidth={kbW}
-                              hideKeyboard={kbHidden} />
+                    {nextBlocked ? (
+                      <NextUnsupportedPanel width={emuW} height={emuH} isOwner={isOwner} />
+                    ) : (
+                      <Emulator zoom={zoom} width={emuW} keyboardWidth={kbW}
+                                hideKeyboard={kbHidden} />
+                    )}
                   </div>
                 ),
               },
@@ -261,8 +264,12 @@ export default function ProjectPage({ projectId }) {
                   {effectiveId && <StarButton projectId={effectiveId} />}
                 </div>
                 <div ref={emuRef}>
-                  <Emulator zoom={zoom} width={emuW} keyboardWidth={kbW}
+                  {nextBlocked ? (
+                    <NextUnsupportedPanel width={emuW} height={emuH} isOwner={isOwner} />
+                  ) : (
+                    <Emulator zoom={zoom} width={emuW} keyboardWidth={kbW}
                               hideKeyboard={kbHidden} />
+                  )}
                 </div>
               </div>
             </div>

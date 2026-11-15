@@ -274,7 +274,8 @@
       "pickHint": "Right-click the map to pick up a tile.",
       "tileLabel": "Tile {{index}} of {{count}}"
     },
-    "nextUnsupported": "This project was made for the ZX Spectrum Next, which is no longer supported, so it can't be opened."
+    "nextUnsupported": "This project was made for the ZX Spectrum Next, which is no longer supported, so it can't be run here.",
+    "nextUnsupportedOwner": "This project was made for the ZX Spectrum Next, which is no longer supported. Choose 48K or 128K for its target machine in the toolbar to run it here."
   },
   "projectList": {
     "title": "Project Title",

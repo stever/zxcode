@@ -48,6 +48,9 @@ export function ProjectToolbar({ rootRef = null }) {
   const projectId = useSelector((state) => state?.project.id);
   const isPublic = useSelector((state) => state?.project.isPublic);
   const projectMachine = useSelector((state) => state?.project.machine);
+  // A ZX Spectrum Next project has no emulator on the site until it is
+  // retargeted, so there is nothing to play or debug.
+  const nextBlocked = projectMachine === "next";
   const projectSlug = useSelector((state) => state?.project.slug);
   const userId = useSelector((state) => state?.identity.userId);
   const ownerId = useSelector((state) => state?.project.ownerId);
@@ -107,6 +110,7 @@ export function ProjectToolbar({ rootRef = null }) {
             label={t("actions.play")}
             icon="pi pi-play"
             className={clsx("zx-run", isMobile && "ml-2")}
+            disabled={nextBlocked}
             onClick={() => {
               dashboardLock();
               showLoading();
@@ -122,6 +126,7 @@ export function ProjectToolbar({ rootRef = null }) {
               debugActive ? "active" : "p-button-outlined"
             )}
             aria-pressed={debugActive ? "true" : "false"}
+            disabled={nextBlocked && !debugActive}
             onClick={() => {
               dispatch(debugActive ? closeDebugger() : openDebugger());
             }}

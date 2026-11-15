@@ -6,7 +6,6 @@ import {
     actionTypes,
     reset,
     receiveLoadedProject,
-    receiveUnsupportedProject,
     setCode,
     setSavedCode,
     setSelectedTabIndex,
@@ -244,15 +243,11 @@ function* handleLoadProjectActions(action) {
         const ownerName = proj.user?.greeting_name;
         const ownerProfileIsPublic = proj.user?.profile_is_public || false;
 
-        // ZX Spectrum Next projects stay stored as 'next' but the site no
-        // longer opens them: refuse before anything loads, switches the
-        // machine or could write the project back with a different machine.
-        if (proj.machine === 'next') {
-            yield put(receiveUnsupportedProject(action.id, proj.title));
-            return;
-        }
-
-        const machine = proj.machine === '128' ? '128' : '48';
+        // A ZX Spectrum Next project keeps its stored 'next': the page shows
+        // its code but no emulator (the site no longer runs the Next), and
+        // the owner can retarget it to the 48K or 128K from the toolbar.
+        const machine = proj.machine === 'next' ? 'next'
+            : proj.machine === '128' ? '128' : '48';
 
         yield put(receiveLoadedProject(
             action.id,
@@ -277,7 +272,7 @@ function* handleLoadProjectActions(action) {
         const machineLocked = yield select((state) => state.app.machineLocked);
         const currentMachine = yield select((state) => state.app.machine);
         const target = machine === '128' ? 128 : 48;
-        if (!machineLocked && target !== currentMachine) {
+        if (machine !== 'next' && !machineLocked && target !== currentMachine) {
             yield put(setMachine(target));
         }
 
