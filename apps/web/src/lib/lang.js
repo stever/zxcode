@@ -7,7 +7,7 @@ export function getLanguageLabel(lang) {
     // 'bas2tap' keep their own source conventions as standalone tools
     // under the Other menu.
     basic: "zmakebas",
-    nextbas: "Sinclair/NextBASIC",
+    nextbas: "Sinclair BASIC",
     bas2tap: "bas2tap",
     c: "z88dk C",
     forth: "zenv Forth",

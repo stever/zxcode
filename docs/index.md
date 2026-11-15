@@ -4,8 +4,8 @@ ZX Play is three things built on one emulation core:
 
 - **[zxplay.org](https://zxplay.org)** — a mobile-friendly ZX Spectrum player.
   Open a program and play it, on a phone or a desktop.
-- **[code.zxplay.org](https://code.zxplay.org)** — a browser IDE for Spectrum
-  and Spectrum Next development. Eleven toolchains compile in the browser or on
+- **[code.zxplay.org](https://code.zxplay.org)** — a browser IDE for ZX
+  Spectrum development. Eleven toolchains compile in the browser or on
   the server, and the result runs immediately in an emulator that sits beside
   the editor, with source-line breakpoints.
 - **[zxplay_go](emulator.html)** — the emulator itself: a Go emulator for the
@@ -13,12 +13,16 @@ ZX Play is three things built on one emulation core:
   as a desktop application, as WebAssembly inside the two sites, and as a
   scriptable headless harness you can point at your own game.
 
+The two websites emulate the 48K and 128K Spectrum only; they do not support
+the ZX Spectrum Next. The Next emulation lives in the desktop zxplay_go
+build, which runs it from ROMs and SD-card content you install yourself.
+
 All three come out of one repository,
 [stever/zxcode](https://github.com/stever/zxcode).
 
 ## Which part do you want?
 
-**I want to write a Spectrum or Next program without installing anything.**
+**I want to write a Spectrum program without installing anything.**
 Start with [Using the IDE](ide.html), then pick a toolchain from
 [Languages and toolchains](languages.html).
 
@@ -49,9 +53,9 @@ The classic line — ZX80, ZX81, Spectrum 48K/128K/+2/+2A/+3, Pentagon, SAM
 Coupé — is mature: cycle-accurate, contended, and stable enough for
 day-to-day work.
 
-The Spectrum Next **boots real NextZXOS through the authentic FPGA chain**
-and its individual hardware blocks are extensively tested against the FPGA
-VHDL, but **running arbitrary `.nex` games is the newest and least-finished
+In the desktop emulator, the Spectrum Next **boots real NextZXOS through the
+authentic FPGA chain** and its
+individual hardware blocks are extensively tested against the FPGA VHDL, but **running arbitrary `.nex` games is the newest and least-finished
 area**. Some titles are playable, several render with bugs, and many are
 unverified. If a Next game misbehaves, that is expected at this stage —
 [open an issue](https://github.com/stever/zxcode/issues), because a

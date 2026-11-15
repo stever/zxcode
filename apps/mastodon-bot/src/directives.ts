@@ -1,12 +1,11 @@
-// The machine a program targets: 48 / 128 as numbers, or the Next. Mirrors
-// gif-service's MachineType; the render query serialises 'next' verbatim and a
-// number as its digits.
-export type MachineType = number | 'next';
+// The machine a program targets: 48 / 128. Mirrors gif-service's
+// MachineType; the render query serialises it as its digits.
+export type MachineType = number;
 
-// Hashtag directives a user can add to a toot to steer rendering.
-// #next selects the Spectrum Next; it is independent of language, so it pairs
-// with any #lang tag (e.g. #zxbasic #next renders Boriel on the Next).
-const MACHINE_TAGS: Record<string, MachineType> = { '128': 128, '48': 48, next: 'next' };
+// Hashtag directives a user can add to a toot to steer rendering. The
+// machine tags are independent of language, so they pair with any #lang tag
+// (e.g. #zxbasic #128 renders Boriel on the 128K).
+const MACHINE_TAGS: Record<string, MachineType> = { '128': 128, '48': 48 };
 // #c → z88dk C, #sdcc → SDCC; plus the assemblers and the alt BASIC. (Inline
 // source with no language tag defaults to Sinclair BASIC / zmakebas.)
 const LANG_TAGS: Record<string, string> = {
@@ -22,7 +21,7 @@ const LANG_TAGS: Record<string, string> = {
 };
 
 export interface Directives {
-    machineType?: MachineType; // from #128 / #48 / #next
+    machineType?: MachineType; // from #128 / #48
     lang?: string; // from #asm
     code: string; // source with recognised directive tags removed
 }
@@ -31,7 +30,7 @@ export interface Directives {
  * Pull rendering directives out of plain-text toot content (the output of
  * htmlToBasic) and return the remaining source.
  *
- * Only the exact recognised tags (#128, #48, #next, and the language tags
+ * Only the exact recognised tags (#128, #48, and the language tags
  * below) are stripped; every other `#token` is left in place — Sinclair BASIC
  * uses # for stream numbers (PRINT #2) and Boriel/C use #include / #define, so
  * blanket stripping would corrupt valid programs.

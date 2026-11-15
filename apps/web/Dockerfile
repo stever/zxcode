@@ -15,6 +15,9 @@ COPY . .
 COPY --from=wasmbuild /out/ packages/emulator-core/dist/
 RUN npm install --legacy-peer-deps
 RUN npm run build
+# Spectrum Next support was withdrawn: whatever slipped past
+# Dockerfile.dockerignore, no NextZXOS ROM / SD image may reach /srv.
+RUN rm -rf apps/web/public/next
 
 FROM base AS final
 COPY --from=npmbuild /project/apps/web/public /srv

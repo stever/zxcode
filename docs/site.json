@@ -49,7 +49,7 @@
           "page": "player.html",
           "title": "The player",
           "source": "docs/apps/player.md",
-          "summary": "Loading programs, the URL parameters, and how Next games are distributed."
+          "summary": "Loading programs, the URL parameters, and the on-screen keyboards."
         }
       ]
     },
@@ -91,7 +91,7 @@
           "page": "next.html",
           "title": "The Spectrum Next",
           "source": "packages/emulator-core/zxplay_go/docs/spectrum-next.md",
-          "summary": "ROM install, SD-card setup, boot modes, .nex loading, licensing."
+          "summary": "Desktop zxplay_go only: ROM install, SD-card setup, boot modes, .nex loading, licensing."
         },
         {
           "page": "hardware-debug.html",

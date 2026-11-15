@@ -48,7 +48,7 @@ export default function AboutPage() {
                 </p>
                 <ul>
                     <li>
-                        zxplay_go — the ZX Spectrum 48K/128K and Spectrum Next emulator core,
+                        zxplay_go — the ZX Spectrum 48K/128K emulator core,
                         compiled to WebAssembly; this site{"'"}s fork of{' '}
                         <a href="https://github.com/conorarmstrong/zx_go" target="_blank">zx_go</a> by
                         Conor Armstrong. Upstream is licensed under terms of The MIT License; the
@@ -64,15 +64,6 @@ export default function AboutPage() {
                         (the emulation core itself is now zxplay_go). Licensed under terms of
                         The GPL version 3 - see{' '}
                         <a href="https://github.com/gasman/jsspeccy3/blob/main/COPYING" target="_blank">COPYING</a>.
-                    </li>
-                    <li>
-                        <a href="https://gitlab.com/thesmog358/tbblue" target="_blank">NextZXOS</a> — the
-                        Spectrum Next machine boots the real NextZXOS system software,
-                        copyright Garry Lancaster / SpecNext Ltd (Spectrum ROMs copyright
-                        Amstrad plc), distributed free of charge under{' '}
-                        <a href="/next/licenses/THE-NEXT-LICENSE.txt" target="_blank">The Next License</a>
-                        {' '}(served with the assets, alongside the{' '}
-                        <a href="/next/licenses/NOTICES.txt" target="_blank">constituent-part notices</a>).
                     </li>
                     <li>
                         <a href="https://pasmo.speccy.org/" target="_blank">Pasmo</a> by Julián Albo García, alias "NotFound".
@@ -112,7 +103,7 @@ export default function AboutPage() {
                     </li>
                     <li>
                         <a href="https://github.com/remy/txt2bas" target="_blank">txt2bas</a> by Remy Sharp,
-                        the in-browser NextBASIC tokeniser. Licensed under terms of{' '}
+                        the in-browser Sinclair BASIC tokeniser. Licensed under terms of{' '}
                         <a href="https://github.com/remy/txt2bas/blob/main/package.json" target="_blank">The MIT License</a>.
                     </li>
                     <li>

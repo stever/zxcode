@@ -1,7 +1,7 @@
 # Using the IDE
 
-[code.zxplay.org](https://code.zxplay.org) is a Spectrum and Spectrum Next
-development environment that runs entirely in a browser. You write code on
+[code.zxplay.org](https://code.zxplay.org) is a ZX Spectrum development
+environment that runs entirely in a browser. You write code on
 the left, and the emulator that runs it sits on the right — the same
 emulation core that runs on the desktop, compiled to WebAssembly.
 
@@ -26,9 +26,14 @@ Project** presents the same choice grouped by language family — BASIC,
 Assembly, C, Pascal, Forth — with the toolchains inside each group.
 
 It does **not** fix the machine. Every project carries a target-machine
-toggle — **48K**, **128K** or **Next** — that you can change at any time. The
-same source can be built for a 48K tape one minute and a Next `.nex` the
-next, subject to whether the code you wrote actually works on both.
+toggle — **48K** or **128K** — that you can change at any time, subject to
+whether the code you wrote actually works on both. The IDE does not support
+the ZX Spectrum Next: a build that produces a Next program (a `.nex` from
+sjasmplus `SAVENEX`, say) is refused by the emulator with "ZX Spectrum Next
+programs are not supported." Projects saved for the Next before support was
+withdrawn are kept as they were, but the IDE no longer opens them — "This
+project was made for the ZX Spectrum Next, which is no longer supported, so
+it can't be opened." — and they cannot be copied.
 
 Your main source file has a fixed name per language (`program.asm`,
 `program.bas`, `program.c`, `program.pas`). That is deliberate: it is the name
@@ -45,7 +50,7 @@ Pascal-style `{$i file.inc}` includes still read as Pascal.
 
 ### Renumbering BASIC lines
 
-In the line-numbered BASIC dialects (Sinclair/NextBASIC, zmakebas and
+In the line-numbered BASIC dialects (Sinclair BASIC, zmakebas and
 bas2tap), **Project → Renumber BASIC Lines** renumbers the program to 10,
 20, 30… — tightening the step automatically when the program wouldn't fit
 under 9999 — and rewrites the line references after `GO TO`, `GO SUB`,
@@ -65,9 +70,7 @@ path is used consistently everywhere:
 - it is what `INCLUDE` / `INCBIN` resolves,
 - it is what compiler diagnostics name,
 - it is what breakpoints key against,
-- it is the path in the project download ZIP,
-- and on the Next it is the path the file is staged to on the SD card, so
-  your program can `LOAD` it at runtime by the same name.
+- and it is the path in the project download ZIP.
 
 Limits are 32 files per project and 256 KB per file. Names stemmed `program`
 are reserved for the main source and compiler output.
@@ -91,9 +94,8 @@ tools and key bindings follow it, so assets move between the two.
 ## Running and debugging
 
 **Play** compiles the project and runs the result in the emulator beside the
-editor. What that means depends on the target machine: a tape on 48K/128K, a
-PLUS3DOS file or a real `.nex` on the Next, launched through NextZXOS's own
-loader.
+editor: the compiler's tape is loaded into the 48K or 128K, whichever the
+project targets.
 
 **Debug** does the same but with the debugger dock open — registers,
 disassembly, memory, paging, and a console. You can set breakpoints by
@@ -150,16 +152,14 @@ to hold a large whole multiple in a short window.
 
 The emulator has the on-screen Spectrum keyboard available, so you can drive
 programs that expect specific keys on a machine with no such keys. It matches
-the machine you are building for: the 48K's rubber keys, the 128K's Spectrum+
-/ toastrack keyboard, or the Next's own — the last two carrying the dedicated
-EDIT, DELETE, GRAPH, EXTEND MODE, TRUE/INV VIDEO, BREAK and cursor keys that
-the 128K menus and the NextZXOS Browser expect.
+the machine you are building for: the 48K's rubber keys, or the 128K's
+Spectrum+ / toastrack keyboard, with the dedicated EDIT, DELETE, GRAPH,
+EXTEND MODE, TRUE/INV VIDEO, BREAK and cursor keys the 128K menus expect.
 
 The **Keyboard** menu overrides that when the machine you are building for is
-not the keyboard you want in front of you — a Next program running in 48K
-mode, or a 48K one you would rather type into with the dedicated EDIT and
-cursor keys. The keys are matrix positions, so any keyboard drives any
-machine, and the choice is remembered.
+not the keyboard you want in front of you — a 48K program you would rather
+type into with the dedicated EDIT and cursor keys. The keys are matrix
+positions, so either keyboard drives either machine, and the choice is remembered.
 
 **No Keyboard** is also on that menu, for when you are working with your own
 keyboard and would rather have the screen. The emulator then takes the room
@@ -192,8 +192,7 @@ something to read. It saves on its own, independent of the source code's
 Save button.
 
 **Download ZIP** gives you the whole project as files, in the same folder
-layout the IDE shows and the Next's SD card uses. Unzipped onto a real Next's
-card, the relative paths your program loads still resolve.
+layout the IDE shows.
 
 ## When you outgrow the browser
 

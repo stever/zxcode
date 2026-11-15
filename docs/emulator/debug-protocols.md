@@ -103,4 +103,6 @@ FPGA source is [published and measured](conformance.html).
 dispatch* in a console beside the editor, with source-line breakpoints
 mapped from each compiler's output. If your project is small enough to live
 in the IDE, that is the fastest path to a debugger with no local setup at
-all — see [Debugging in the browser](ide-debugging.html).
+all — see [Debugging in the browser](ide-debugging.html). The IDE targets the 48K
+and 128K only: it does not support the Spectrum Next, so Next development
+with zxplay_go means the desktop build.

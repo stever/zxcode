@@ -1,7 +1,8 @@
 # gif-service
 
 Generates an animated GIF from a ZX Spectrum `.tap` file. It loads the tape in
-a headless zxplay_go WASM core (the same engine the sites run — 48K, 128K and Spectrum Next), runs the program, and encodes the frames.
+a headless zxplay_go WASM core (the same engine the sites run — 48K and 128K; the core also has a Spectrum
+Next render path), runs the program, and encodes the frames.
 
 ## Run the service
 
@@ -51,3 +52,8 @@ Works for standard, self-running programs. It does not handle:
   the run).
 - Non-auto-running tapes, which load and drop back to BASIC without running.
 - 48K machines (the boot/menu flow assumes the 128K start-up menu).
+- Spectrum Next renders in production. The Next path needs the licensed
+  NextZXOS ROMs + SD image (`./next-assets/`, `apps/play/public/next` or
+  `$NEXT_ASSETS_DIR`), and the official deployment mounts none, so a Next
+  render fails there and the card falls back to the cartridge image. The
+  websites do not support the Next.

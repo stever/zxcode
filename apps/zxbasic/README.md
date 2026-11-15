@@ -4,7 +4,9 @@
 
 Programs target the classic 48K Spectrum by default. See [NEXT.md](NEXT.md)
 for writing ZX Spectrum Next programs (Z80N, Layer 2, hardware sprites) and
-how the service selects the zxnext architecture.
+how the service selects the zxnext architecture. The service still compiles
+Next programs, but the official websites run with the ZX Spectrum Next
+disabled, so a Next build cannot be run there.
 
 ## Development start
 

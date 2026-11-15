@@ -28,7 +28,7 @@ export const setMachine = (machine) => ({
 });
 
 // State-only mirror of an engine-initiated machine switch (e.g. opening a
-// .tap on the Next auto-switches to the 128K): updates the menu checkmark
+// 128K snapshot on the 48K): updates the menu checkmark
 // and persisted choice WITHOUT re-triggering the boot saga.
 export const machineChanged = (machine) => ({
     type: actionTypes.machineChanged,

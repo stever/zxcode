@@ -398,15 +398,6 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
           dispatch(setMachine(128));
         },
       },
-      {
-        // zxgo engine only: the JSSpeccy3 engine has no Next.
-        label: "ZX Spectrum Next",
-        icon: machine === "next" ? "pi pi-fw pi-check" : "pi pi-fw",
-        disabled: machineLocked,
-        command: () => {
-          dispatch(setMachine("next"));
-        },
-      },
     ],
   };
 
@@ -423,7 +414,6 @@ function getMenuItems(t, navigate, userId, userSlug, dispatch, lang, emuVisible,
       ["auto", t("nav.keyboardAuto", "Match Machine")],
       ["rubber", t("nav.keyboardRubber", "Spectrum 48K")],
       ["plus", t("nav.keyboardPlus", "Spectrum 128K")],
-      ["next", t("nav.keyboardNext", "ZX Spectrum Next")],
       ["none", t("nav.keyboardNone", "No Keyboard")],
     ].map(([value, label]) => ({
       label,

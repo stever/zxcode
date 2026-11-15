@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Titled } from "react-titled";
 import { Toast } from "primereact/toast";
+import { Card } from "primereact/card";
+import { Message } from "primereact/message";
 import clsx from "clsx";
 import { Emulator } from "./Emulator";
 import { ProjectFileTabView } from "./ProjectFileTabView";
@@ -50,6 +52,9 @@ export default function ProjectPage({ projectId }) {
     (state) => state?.project.selectedTabIndex
   );
   const lang = useSelector((state) => state?.project.lang);
+  const unsupportedTitle = useSelector(
+    (state) => state?.project.unsupportedTitle
+  );
   let title = useSelector((state) => state?.project.title);
   const errorItems = useSelector((state) => state?.project.errorItems);
   const windowWidth = useSelector((state) => state?.window.width);
@@ -114,6 +119,16 @@ export default function ProjectPage({ projectId }) {
       dispatch(setSelectedTabIndex(PROJECT_TAB.editor));
     }
   }, [debugActive]);
+
+  if (effectiveId && unsupportedTitle !== null && unsupportedTitle !== undefined) {
+    return (
+      <Titled title={(s) => `${unsupportedTitle} ${sep} ${t("nav.project")} ${sep} ${s}`}>
+        <Card className="m-2">
+          <Message severity="warn" text={t("editor.nextUnsupported")} />
+        </Card>
+      </Titled>
+    );
+  }
 
   if (!effectiveId || !lang) {
     return <></>;

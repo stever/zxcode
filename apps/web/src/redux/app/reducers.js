@@ -1,5 +1,10 @@
 import queryString from "query-string";
 import {KEYBOARD_CHOICES} from "@zxplay/ui/keyboard";
+
+// The keyboards the IDE offers: every shared choice except the ZX Spectrum
+// Next's, which the site no longer exposes. A stale saved 'next' falls back
+// to following the machine.
+const OFFERED_KEYBOARD_CHOICES = KEYBOARD_CHOICES.filter((c) => c !== 'next');
 import {actionTypes} from "./actions";
 
 // -----------------------------------------------------------------------------
@@ -47,7 +52,7 @@ const JOYSTICK_TYPES = ['Kempston', 'Sinclair1', 'Sinclair2', 'Cursor'];
 const loadKeyboardLayout = () => {
     try {
         const saved = localStorage.getItem(KEYBOARD_LAYOUT_KEY);
-        if (KEYBOARD_CHOICES.includes(saved)) return saved;
+        if (OFFERED_KEYBOARD_CHOICES.includes(saved)) return saved;
     } catch (e) {
         console.error('Failed to load keyboard layout preference:', e);
     }
@@ -78,10 +83,12 @@ const loadJoystick = () => {
 
 const parseMachine = (value) => {
     if (value === '128' || value === 128) return 128;
-    if (value === 'next') return 'next';
     // Pentagon (5) support was dropped with the JSSpeccy3 engine; treat old
     // saved/linked values as the closest supported machine.
     if (value === '5' || value === 5) return 128;
+    // The ZX Spectrum Next is no longer offered; old ?m=next links and saved
+    // choices get the 128K too.
+    if (value === 'next') return 128;
     if (value === '48' || value === 48) return 48;
     return undefined;
 };
@@ -182,7 +189,7 @@ function setMachine(state, action) {
 // -----------------------------------------------------------------------------
 
 function setKeyboardLayout(state, action) {
-    if (!KEYBOARD_CHOICES.includes(action.layout)) return state;
+    if (!OFFERED_KEYBOARD_CHOICES.includes(action.layout)) return state;
     try {
         localStorage.setItem(KEYBOARD_LAYOUT_KEY, action.layout);
     } catch (e) {

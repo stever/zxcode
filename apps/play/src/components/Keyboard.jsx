@@ -10,7 +10,7 @@ Keyboard.propTypes = {
     cssWidth: PropTypes.number,
     cssHeight: PropTypes.number,
     keystr: PropTypes.string,
-    layout: PropTypes.oneOf(['rubber', 'plus', 'next']),
+    layout: PropTypes.oneOf(['rubber', 'plus']),
     rounded: PropTypes.bool
 }
 
@@ -104,7 +104,7 @@ function simulateKey(keyCode, type) {
 }
 
 // Press (and release) every code a key stands for. Single-code keys are the
-// letters and digits; the dedicated keys of the Spectrum+ / Next keyboards name
+// letters and digits; the dedicated keys of the Spectrum+ keyboard name
 // two, a shift and a key, which is exactly what a physical keyboard sends when
 // you hold Shift and press 1 for EDIT. Releasing in reverse order leaves the
 // shift down until its partner has lifted, as a real hand would.

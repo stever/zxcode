@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Generate <publicDir>/asset-manifest.json: maps each servable /dist and /next
-// asset to a short content hash, consumed at runtime for ?v=<hash> cache-
-// busting (see packages/emulator/src/zxgo/assetManifest.js). Run as a late
+// Generate <publicDir>/asset-manifest.json: maps each servable /dist asset
+// to a short content hash, consumed at runtime for ?v=<hash> cache-busting
+// (see packages/emulator/src/zxgo/assetManifest.js). Run as a late
 // build step, after webpack, the emulator copy, and the 8bitworker build have
-// populated public/dist, and with public/next staged.
+// populated public/dist.
 //
 // Usage: node scripts/gen-asset-manifest.mjs <publicDir>
 
@@ -26,7 +26,7 @@ function walk(dir, out) {
     try {
         entries = readdirSync(dir);
     } catch {
-        return out; // dir absent (e.g. no /next staged) — fine
+        return out; // dir absent — fine
     }
     for (const name of entries) {
         const full = join(dir, name);
@@ -42,7 +42,6 @@ function walk(dir, out) {
 
 const manifest = {};
 walk(join(publicDir, 'dist'), manifest);
-walk(join(publicDir, 'next'), manifest);
 
 // Stable key order keeps the file diff-friendly.
 const sorted = Object.fromEntries(Object.keys(manifest).sort().map((k) => [k, manifest[k]]));

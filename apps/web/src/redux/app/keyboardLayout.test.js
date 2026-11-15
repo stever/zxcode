@@ -35,14 +35,14 @@ describe("keyboard layout preference", () => {
     });
 
     it("restores a persisted choice", () => {
-        localStorage.setItem("keyboardLayout", "next");
+        localStorage.setItem("keyboardLayout", "plus");
         const reducer = freshReducer();
-        expect(stateAfter(reducer, {type: "@@INIT"}).keyboardLayout).toBe("next");
+        expect(stateAfter(reducer, {type: "@@INIT"}).keyboardLayout).toBe("plus");
     });
 
     it("persists a new choice", () => {
         const reducer = freshReducer();
-        for (const choice of ["rubber", "plus", "next", "none", "auto"]) {
+        for (const choice of ["rubber", "plus", "none", "auto"]) {
             expect(stateAfter(reducer, setKeyboardLayout(choice)).keyboardLayout).toBe(choice);
             expect(localStorage.getItem("keyboardLayout")).toBe(choice);
         }
@@ -64,6 +64,15 @@ describe("keyboard layout preference", () => {
         for (const bad of ["toastrack", "", null, "48", "RUBBER"]) {
             expect(stateAfter(reducer, setKeyboardLayout(bad)).keyboardLayout).toBe(before);
         }
+    });
+
+    // The ZX Spectrum Next keyboard is no longer offered: a saved choice of
+    // it falls back to following the machine, and it cannot be picked.
+    it("does not offer the Next keyboard", () => {
+        localStorage.setItem("keyboardLayout", "next");
+        const reducer = freshReducer();
+        expect(stateAfter(reducer, {type: "@@INIT"}).keyboardLayout).toBe("auto");
+        expect(stateAfter(reducer, setKeyboardLayout("next")).keyboardLayout).toBe("auto");
     });
 
     it("falls back to following the machine when storage holds junk", () => {

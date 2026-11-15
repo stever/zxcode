@@ -58,8 +58,8 @@ async function requestMedia(
     }
 }
 
-// Serialise the machine into the gif-service query. String(128) → "128",
-// String('next') → "next" — exactly the values the render routes expect.
+// Serialise the machine into the gif-service query. String(128) → "128" —
+// exactly the values the render routes expect.
 function machineParam(machineType?: MachineType): Record<string, string> {
     return machineType ? { machineType: String(machineType) } : {};
 }

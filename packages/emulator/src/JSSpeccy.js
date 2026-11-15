@@ -28,6 +28,8 @@ export const JSSpeccy = (container, opts) => {
         tapeTrapsEnabled: ('tapeTrapsEnabled' in opts) ? opts.tapeTrapsEnabled : true,
         // IDE mode: translate compiled TAPs to run ON the Next.
         tapToNext: opts.tapToNext || false,
+        // Off on the websites (see NEXT_UNSUPPORTED in GoEmulator.js).
+        nextEnabled: opts.nextEnabled || false,
         // Joystick interface the host gamepad drives (see the Joystick
         // menu below). Apps pass their persisted choice here.
         joystick: opts.joystick || 'None',
@@ -85,9 +87,11 @@ export const JSSpeccy = (container, opts) => {
         emu.setMachine(128);
     });
 
-    const machineNextItem = machineMenu.addItem('ZX Spectrum Next', () => {
-        emu.setMachine('next');
-    });
+    const machineNextItem = opts.nextEnabled
+        ? machineMenu.addItem('ZX Spectrum Next', () => {
+            emu.setMachine('next');
+        })
+        : null;
 
     // No Joystick menu here: both apps call hideUI() the moment they
     // mount, so anything added to this menu bar is unreachable. The
@@ -131,15 +135,15 @@ export const JSSpeccy = (container, opts) => {
         if (type == 48) {
             machine48Item.setBullet();
             machine128Item.unsetBullet();
-            machineNextItem.unsetBullet();
+            if (machineNextItem) machineNextItem.unsetBullet();
         } else if (type == 128) {
             machine48Item.unsetBullet();
             machine128Item.setBullet();
-            machineNextItem.unsetBullet();
+            if (machineNextItem) machineNextItem.unsetBullet();
         } else { // next
             machine48Item.unsetBullet();
             machine128Item.unsetBullet();
-            machineNextItem.setBullet();
+            if (machineNextItem) machineNextItem.setBullet();
         }
     });
 

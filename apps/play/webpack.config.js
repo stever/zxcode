@@ -122,19 +122,20 @@ module.exports = (env, _) => {
                 devMiddleware: {
                     writeToDisk: true
                 },
-                // The official SpecNext distro route, mirroring the Caddy
-                // proxy's /specnext/distro/* pass-through: this dev server is
-                // reached directly (the dev Caddyfile's catch-all serves the
-                // web IDE), so without this the emulator always falls back to
-                // the staged /next/ assets in dev.
-                proxy: [
-                    {
-                        context: ["/specnext"],
-                        target: "https://www.specnext.com",
-                        changeOrigin: true,
-                        pathRewrite: {"^/specnext": ""}
-                    }
-                ]
+                // Spectrum Next support was withdrawn: mirror the Caddyfile's
+                // /next 404 so locally staged NextZXOS ROMs / SD images left in
+                // public/next are never served, even in dev.
+                setupMiddlewares: (middlewares) => {
+                    middlewares.unshift({
+                        name: "no-next-assets",
+                        path: "/next",
+                        middleware: (req, res) => {
+                            res.statusCode = 404;
+                            res.end();
+                        }
+                    });
+                    return middlewares;
+                }
             },
             module: {
                 rules: loaders

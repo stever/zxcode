@@ -5,14 +5,13 @@
 
 import {computeLayout, computeMode, parseKeyConfig, resolveKeyboard} from "./layout";
 
-const KB_ASPECT = 0.4; // all three machine keyboards draw in the same box
+const KB_ASPECT = 0.4; // both machine keyboards draw in the same box
 const NO_KEYS = {keystr: '', rowCount: 0, maxCols: 0, aspect: 0, override: false};
 
 describe("resolveKeyboard", () => {
     it("follows the machine, and the player's choice over it", () => {
         expect(resolveKeyboard(NO_KEYS, 48).layout).toBe('rubber');
         expect(resolveKeyboard(NO_KEYS, 128).layout).toBe('plus');
-        expect(resolveKeyboard(NO_KEYS, 'next').layout).toBe('next');
         expect(resolveKeyboard(NO_KEYS, 48, 'plus').layout).toBe('plus');
         expect(resolveKeyboard(NO_KEYS, 48, 'plus').hidden).toBe(false);
     });
@@ -20,7 +19,7 @@ describe("resolveKeyboard", () => {
     // The shape is still reported while the keyboard is hidden: it is what keeps
     // the page's layout the same, so hiding one only frees the room it had.
     it("reports no keyboard as hidden, keeping the shape it would have drawn", () => {
-        for (const machine of [48, 128, 'next']) {
+        for (const machine of [48, 128]) {
             const resolved = resolveKeyboard(NO_KEYS, machine, 'none');
             expect(resolved.hidden).toBe(true);
             expect(resolved.aspect).toBe(resolveKeyboard(NO_KEYS, machine).aspect);

@@ -4,6 +4,7 @@ export const actionTypes = {
     createNewProject: 'project/createNewProject',
     loadProject: 'project/loadProject',
     receiveLoadedProject: 'project/receiveLoadedProject',
+    receiveUnsupportedProject: 'project/receiveUnsupportedProject',
     setCode: 'project/setCode',
     setSavedCode: 'project/setSavedCode',
     saveCodeChanges: 'project/saveCodeChanges',
@@ -52,6 +53,13 @@ export const loadProject = (id, ownerSlug = null) => ({
 export const receiveLoadedProject = (id, title, lang, code, isPublic = false, slug = null, ownerSlug = null, ownerId = null, ownerName = null, ownerProfileIsPublic = false, machine = '48', files = [], instructions = '') => ({
     type: actionTypes.receiveLoadedProject,
     id, title, lang, code, isPublic, slug, ownerSlug, ownerId, ownerName, ownerProfileIsPublic, machine, files, instructions
+});
+
+// A project stored for a machine the IDE no longer supports (the ZX Spectrum
+// Next): it is refused rather than loaded, so nothing can run or save it.
+export const receiveUnsupportedProject = (id, title) => ({
+    type: actionTypes.receiveUnsupportedProject,
+    id, title
 });
 
 export const setCode = (code) => ({

@@ -310,6 +310,12 @@ function* handleCopyListProjectActions(action) {
             console.error('Failed to load project to copy:', sourceResponse);
             return;
         }
+        // New projects can only target the 48K or 128K; a ZX Spectrum Next
+        // project is not copied (the list disables the menu entry too).
+        if (source.machine === 'next') {
+            console.error('Refusing to copy a ZX Spectrum Next project:', action.projectId);
+            return;
+        }
 
         const slug = yield* findUniqueSlug(userId, generateSlug(action.title), NIL_UUID);
 

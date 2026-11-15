@@ -76,7 +76,7 @@ async function handleMention(self: MastodonAccount, n: MastodonNotification): Pr
     const lang = directives.lang ?? 'basic';
     const projectPath = projectRef ? `${projectRef.userSlug}/${projectRef.projectSlug}` : '';
     const machineNote = machineType
-        ? ` @${machineType === 'next' ? 'Next' : `${machineType}K`}`
+        ? ` @${machineType}K`
         : '';
     console.log(
         projectRef

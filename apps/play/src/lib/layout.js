@@ -56,7 +56,7 @@ export function parseKeyConfig(keystr) {
  * machine — a five-key play surface is the point, and it stays the same size on
  * a phone, so it outranks both of the choices below. Otherwise the player's own
  * choice wins, and failing that the keyboard matches the machine: the 48K's
- * rubber keys, the 128K's Spectrum+ / toastrack layout, or the Next's own.
+ * rubber keys or the 128K's Spectrum+ / toastrack layout.
  *
  * That holds for asking for no keyboard as well: a game's named keys may be the
  * only controls a phone has, so the choice comes back on the next game rather

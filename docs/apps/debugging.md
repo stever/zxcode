@@ -14,10 +14,9 @@ continue) and panels for:
 - **Disassembly** — around the current PC, with a marker column you click to
   toggle breakpoints.
 - **Memory** — a hex view of memory as the CPU currently sees it.
-- **Paging** — which banks are where, which matters constantly on the Next.
+- **Paging** — which banks are where, which matters on the 128K.
 - **Watches** — active register watches.
 - **History** — the recent instruction ring, once you arm it.
-- **Next State** — the decoded NextReg dashboard, on Next projects.
 - **Console** — the command line, which is where the real power is.
 
 The console is English-only: the commands, their arguments and the engine's
@@ -70,11 +69,10 @@ attribute exactly.
 
 ### The interpreted BASICs
 
-**Sinclair/NextBASIC**, **zmakebas** and **bas2tap** produce a tokenised
+**Sinclair BASIC**, **zmakebas** and **bas2tap** produce a tokenised
 program that the ROM interpreter runs — there is no address for a line to
 have. So the engine watches the interpreter itself: a hook on the `PPC`
-system variable (`$5C45`, bank 5 — the same on every classic machine *and*
-the Next) fires when the interpreter enters an armed line, edge-triggered so
+system variable (`$5C45`, bank 5 — the same on the 48K and the 128K) fires when the interpreter enters an armed line, edge-triggered so
 a loop does not re-trigger on the same entry.
 
 Two consequences worth knowing. The paused line is resolved from `PPC`, not
@@ -159,16 +157,10 @@ instruction. `history-on 4096` arms the ring (the History panel's button
 sends exactly that), `prev N` dumps the last N instructions with registers,
 `history-off` disarms.
 
-**Spectrum Next** — `nr-panel` for the decoded NextReg summary,
-`get-mmu` / `get-divmmc` / `list-banks` for paging,
-`bank-peek KIND BANK OFF [LEN]` to read a bank the CPU has *not* paged in,
-`nextreg-read` / `nextreg-write`, and `sprite-list`, `palette-dump`,
-`layer-state`, `copper-disasm` for video state.
-
 ## A note about banks
 
-On the Spectrum Next, an address alone does not identify code — the same
-address is different code under different paging. A breakpoint set without a
+On the 128K, an address alone does not identify code — the same address in
+the top 16 KB is different code under different paging. A breakpoint set without a
 bank filter defaults to whatever ROM bank is mapped at the time, and
 `list-breakpoints` flags a bank-less breakpoint as `[any bank!]` precisely
 because it is a trap for the unwary. If a breakpoint fires somewhere

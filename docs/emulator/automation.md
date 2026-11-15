@@ -29,8 +29,10 @@ go build -o bin/zxplay_go ./cmd/zxplay_go
 
 Building needs Go 1.25+ and a C toolchain, because the GUI layer uses cgo.
 The classic ROMs are embedded in the binary. The Next needs licensed
-NextZXOS ROMs plus SD-card content, which the emulator offers to install for
-you on first use — see [The Spectrum Next](next.html).
+NextZXOS ROMs plus SD-card content, which the desktop emulator offers to
+install for you from the official SpecNext distribution on first use — see
+[The Spectrum Next](next.html).
+This is the desktop build only: the websites do not support the Next.
 
 ## The shape of a headless run
 
@@ -318,8 +320,8 @@ ZX_GO_NEXT_SD_IMG=/path/to/tbblue.mmc zxplay_go --next --headless --frames=3000
 
 Two things to know about Next automation:
 
-- **Headless boots skip the NextZXOS welcome screen** that the browser build
-  shows. Frame counts from a headless run do not transfer to the browser.
+- **Headless boots skip the NextZXOS welcome screen** that the GUI build
+  shows. Frame counts from a headless run do not transfer to a windowed one.
 - **An `autoexec.bas` with an autostart line does run from a cold headless
   boot** — `10 .nexload /zx.nex` launches a game with no keypresses at all,
   which is by far the most reliable way to get a `.nex` running under

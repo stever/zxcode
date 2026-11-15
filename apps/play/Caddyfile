@@ -11,17 +11,14 @@
         @immutable path /dist/*
         header @immutable Cache-Control "public, max-age=31536000, immutable"
 
+        # Spectrum Next support was withdrawn: never serve NextZXOS ROMs or
+        # SD-card images, even if stale copies are still bind-mounted or
+        # baked into /srv/next on a host.
+        respond /next/* 404
+
         # Everything else must revalidate so clients always pick up the
         # current asset URLs: index.html, /style.css, /assets,
-        # asset-manifest.json — and /next, which despite the manifest is NOT
-        # versioned in practice. Its manifest entries are written at
-        # image-build time from public/next, but the assets that matter (the
-        # card, its zip, the ROMs) are licensed content staged onto the DEPLOY
-        # HOST afterwards and bind-mounted in, so they are absent when the
-        # manifest is built and assetUrl() falls back to a bare path. Cached
-        # hard, that path pinned one card in every browser that had ever booted
-        # the Next, and restaging the host reached nobody. ETag keeps the
-        # revalidation a 304 for the 2.7 MB zip.
+        # asset-manifest.json.
         @revalidate {
             not path /dist/*
         }

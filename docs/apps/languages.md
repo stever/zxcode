@@ -3,7 +3,8 @@
 [code.zxplay.org](https://code.zxplay.org) ships eleven toolchains. You pick one
 when you create a project, at `/new/<language>`, and it fixes the language
 for that project — but **not** the target machine: every project can switch
-between 48K, 128K and Spectrum Next freely.
+between the 48K and the 128K freely. The IDE does not support the ZX Spectrum
+Next.
 
 Some toolchains run entirely in your browser (WebAssembly or a web worker),
 so compiling costs nothing but your own CPU and works with no round trip.
@@ -15,14 +16,14 @@ except that the in-browser ones keep working if the network hiccups.
 | Language | Project | Main file | Compiles | Extra files |
 | --- | --- | --- | --- | :---: |
 | **Pasmo** — Z80 assembly | `/new/asm` | `program.asm` | In browser (wasm) | ✓ |
-| **sjasmplus** — Z80/Z80N assembly | `/new/sjasmplus` | `program.asm` | Server | ✓ |
+| **sjasmplus** — Z80 assembly | `/new/sjasmplus` | `program.asm` | Server | ✓ |
 | **zmac** — Z80 assembly | `/new/zmac` | `program.asm` | In browser (worker) | ✓ |
 | **z88dk C** | `/new/c` | `program.c` | Server | ✓ |
 | **SDCC** — C | `/new/sdcc` | `program.c` | In browser (worker) | ✓ |
 | **Pasta80 Pascal** | `/new/pascal` | `program.pas` | Server | ✓ |
 | **zenv Forth** | `/new/forth` | `program.f` | Server | — |
 | **Boriel ZX BASIC** — compiled | `/new/zxbasic` | `program.bas` | Server | ✓ |
-| **Sinclair / NextBASIC** — interpreted | `/new/nextbas` | `program.bas` | In browser (txt2bas) | ✓ |
+| **Sinclair BASIC** — interpreted | `/new/nextbas` | `program.bas` | In browser (txt2bas) | ✓ |
 | **zmakebas** — Sinclair BASIC | `/new/basic` | `program.bas` | In browser | — |
 | **bas2tap** — Sinclair BASIC | `/new/bas2tap` | `program.bas` | In browser | — |
 
@@ -37,10 +38,10 @@ service call, `INCLUDE` and `INCBIN` resolve against your project's files at
 their real `folder/name` paths, and diagnostics carry each file's own name
 and line numbers.
 
-**sjasmplus** is the assembler most Spectrum Next projects actually use, with
-full Z80N support. It is the best-supported language in the IDE's debugger
-because it emits an SLD file — a proper line→address map — so breakpoints
-land exactly.
+**sjasmplus** is the most capable of the three assemblers. It is the
+best-supported language in the IDE's debugger because it emits an SLD file —
+a proper line→address map — so breakpoints land exactly. A `SAVENEX`
+build produces a Next program, which the IDE's emulator refuses.
 
 **zmac** compiles in a web worker and carries per-file listings in its build
 result, so its includes get source-line debugging too.
@@ -89,15 +90,11 @@ the `ok` prompt have no line numbers and stay unmapped.
 
 Four dialects, and the difference between them matters more than it looks.
 
-**Sinclair / NextBASIC** (`nextbas`) is the consolidated one, and the one to
-choose unless you have a reason not to. A single tokeniser (txt2bas) handles
-the same source for every machine: on 48K/128K it produces a program tape, on
-the Next a PLUS3DOS file NextZXOS loads directly. Next-only keywords used on
-a 48K project fail the compile with a named error rather than producing
-something that dies on the machine. It is also the only BASIC that can carry
-extra project files, because the Next has an SD card to stage them onto —
-your program can `LOAD` a sprite sheet at runtime by the same relative path
-it has in the project.
+**Sinclair BASIC** (`nextbas`) is the consolidated one, and the one to
+choose unless you have a reason not to. The txt2bas tokeniser turns the
+source into a program tape for the 48K or 128K. NextBASIC-only keywords fail
+the compile with a named error rather than producing something that dies on
+the machine.
 
 **Boriel ZX BASIC** (`zxbasic`) is a different proposition: a *compiled*
 BASIC producing real machine code, so it is dramatically faster than anything
@@ -112,19 +109,8 @@ add-file interface for them rather than offering you dead weight.
 
 ## Choosing a target machine
 
-The machine is a per-project toggle — 48K, 128K or Next — and no language
-pins it. What changes is how the compiled program is delivered:
-
-- On **48K and 128K**, everything arrives as a tape and loads the classic
-  way.
-- On the **Next**, the BASICs arrive as a PLUS3DOS file that NextZXOS
-  `LOAD`s, while the machine-code languages are packaged as a real `.nex`
-  file and launched through NextZXOS's genuine `.nexload`.
-
-There is one constraint worth knowing before you name your files: the Next's
-SD card is FAT, so **every path segment must fit 8.3**. The IDE rejects
-names that do not fit before compiling rather than letting them fail on the
-card.
+The machine is a per-project toggle — 48K or 128K — and no language pins it.
+Either way the compiled program arrives as a tape and loads the classic way.
 
 ## Extra project files
 
@@ -133,12 +119,6 @@ alongside the main source, in folders if you want them. A file's identity is
 its `folder/name` — that same path is what `INCLUDE`/`INCBIN` resolves,
 what the compiler diagnostics name, what breakpoints key against, and what
 the file gets in the project download ZIP.
-
-On the Next those files are also staged onto the SD card at the same
-relative path before your program runs, with folders created to match. So
-the layout in your project, the layout in the ZIP, and the layout on a real
-Next's card are the same layout — a `LOAD "gfx/sprites.spr"` works
-identically in all three.
 
 Limits: 32 files per project, 256 KB each. Names stemmed `program` are
 reserved for the main source and the compiler's own output.
@@ -164,7 +144,7 @@ browser](ide-debugging.html)).
 | zmac | ✓ | Worker build listings, keyed by listing banners. |
 | Pasmo | ✓ | A second, best-effort debug build with injected labels. The map is discarded unless that build is byte-identical to the real one. |
 | Boriel ZX BASIC | ✓ | Compiled with `--enable-break`; a hit means "line N *just executed*". |
-| Sinclair/NextBASIC, zmakebas, bas2tap | ✓ | The engine watches the interpreter's own `PPC` variable — no dependence on ROM addresses, so it works identically on every machine including the Next. |
+| Sinclair BASIC, zmakebas, bas2tap | ✓ | The engine watches the interpreter's own `PPC` variable — no dependence on ROM addresses, so it works identically on both machines. |
 | zenv Forth | ✓ | Per-line runtime marker embedded with the program (Boriel's mechanism, but firing *before* the line); prompt-defined words are unmapped. |
 
 The practical upshot: **you get source-line breakpoints in all eleven**.

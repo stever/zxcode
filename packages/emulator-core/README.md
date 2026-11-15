@@ -41,10 +41,20 @@ the wasm port is gated behind `//go:build js` / `!js` tags.
 ## Machines
 
 48K and 128K boot from ROMs embedded in the binary. The Spectrum Next boots
-real NextZXOS. The BROWSER's primary source is currently the staged
-`/next/` assets (ROMs + the small prepared `tbblue.mmc.zip` staged by
-`scripts/`, served by the deployment under the self-hosting conditions in
-`LICENSES.md`): `SPECNEXT_DISTRO_PATH` in `GoEmulator.js` is null while
+real NextZXOS.
+
+**The official websites do not support the Next.** `@zxplay/emulator` gates
+every Next route behind `opts.nextEnabled` (default false; neither app sets
+it): with it off, `setMachine('next')` falls back to the 128K and Next
+programs reject with `NEXT_UNSUPPORTED` ("ZX Spectrum Next programs are not
+supported.") instead of fetching `/next/` assets. The sites serve and proxy
+no NextZXOS/SpecNext content (the app Caddyfiles answer 404 on `/next/*`,
+the `/specnext/` proxy route is gone, and `public/next` is kept out of the
+images). The rest of this section describes the code path for local
+development with `nextEnabled` set; the official deployment does not use it.
+
+When enabled, the browser's primary source is the staged `/next/` assets
+(ROMs + the small prepared `tbblue.mmc.zip` staged locally by `scripts/`): `SPECNEXT_DISTRO_PATH` in `GoEmulator.js` is null while
 SpecNext have no small emulator-targeted image hosted. When one lands,
 point the pin at its path to restore the r60 distro flow — the official
 zip fetched through the same-origin `/specnext/` Caddy proxy route
@@ -59,9 +69,7 @@ when absent — the shape a once-configured card has on real hardware.
 
 The staged assets are also the only source for offline dev, CI, and
 gif-service's Node harness — licensed content, gitignored, never
-committed. See `LICENSES.md` for the distribution policy and the
-conditions that apply to hosting a staged copy (the deployment serving
-`/next/` must satisfy them).
+committed, and never served by the official deployment. See `LICENSES.md`.
 
 The staged card is BUILT FROM the official distro card by
 `scripts/trim-distro-card.sh`: the distro's full capacity (1 GB for
@@ -84,7 +92,8 @@ paths.
 ## Next boot modes — MAINTENANCE GOTCHA
 
 The core's default Next boot is the hardware-faithful path: FPGA bootrom →
-TBBLUE.FW → NextZXOS. The BROWSER opts out of it for speed:
+TBBLUE.FW → NextZXOS. The browser engine (when `nextEnabled` is set) opts
+out of it for speed:
 `@zxplay/emulator` sets `ZX_GO_NO_FPGA_BOOTROM=1` +
 `ZX_GO_NEXT_DIRECT_BOOT=1` via `go.env` in `GoEmulator.js` (loadGoRuntime),
 which resets the CPU straight into the NextZXOS ROM with the post-firmware

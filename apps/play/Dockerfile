@@ -19,6 +19,9 @@ COPY --from=wasmbuild /out/ packages/emulator-core/dist/
 RUN npm install --legacy-peer-deps
 # Builds @zxplay/emulator then apps/play (its build script chains both).
 RUN npm run build -w play
+# Spectrum Next support was withdrawn: whatever slipped past
+# Dockerfile.dockerignore, no NextZXOS ROM / SD image may reach /srv.
+RUN rm -rf apps/play/public/next
 
 FROM base AS final
 COPY --from=npmbuild /project/apps/play/public /srv

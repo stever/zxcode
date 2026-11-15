@@ -20,8 +20,8 @@ export default function HomePage() {
 
     const [navHeight, setNavHeight] = useState(0);
 
-    // The 128K and the Next draw their own keyboards, which are a different
-    // shape from the 48K's rubber grid, so the machine — or the player's own
+    // The 128K draws its own keyboard, which is a different shape from the
+    // 48K's rubber grid, so the machine — or the player's own
     // choice of keyboard — feeds the layout maths. Asking for no keyboard hands
     // its space to the screen instead of leaving it blank.
     const keyboard = resolveKeyboard(keyConfig, machine, keyboardLayout);

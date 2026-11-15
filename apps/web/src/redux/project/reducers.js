@@ -30,6 +30,10 @@ const initialState = {
     ownerName: undefined,
     ownerProfileIsPublic: false,
     machine: '48',
+    // Set (to the project's title) when the requested project targets a
+    // machine that is no longer supported; the page shows a refusal instead
+    // of the editor. lang stays undefined, so nothing else renders or saves.
+    unsupportedTitle: null,
     // "About this program" (markdown): saved value only — the About dialog
     // edits a local draft and writes back through its own mutation.
     instructions: ''
@@ -100,6 +104,13 @@ function receiveLoadedProject(state, action) {
         ownerProfileIsPublic: action.ownerProfileIsPublic,
         machine: action.machine,
         instructions: action.instructions || ''
+    };
+}
+
+function receiveUnsupportedProject(_state, action) {
+    return {
+        ...initialState,
+        unsupportedTitle: action.title || '',
     };
 }
 
@@ -237,6 +248,7 @@ const actionsMap = {
     [actionTypes.setSelectedTabIndex]: setSelectedTabIndex,
     [actionTypes.createNewProject]: createNewProject,
     [actionTypes.receiveLoadedProject]: receiveLoadedProject,
+    [actionTypes.receiveUnsupportedProject]: receiveUnsupportedProject,
     [actionTypes.setCode]: setCode,
     [actionTypes.setSavedCode]: setSavedCode,
     [actionTypes.setErrorItems]: setErrorItems,

@@ -1,0 +1,10 @@
+# Build context is the repo root (see the Dockerfile), so the per-app
+# .dockerignore never applies; BuildKit reads this Dockerfile-specific file
+# instead. Patterns are relative to the repo root.
+#
+# Locally staged Spectrum Next assets (NextZXOS ROMs, SD-card images) must
+# never be sent to the daemon or shipped in an image.
+**/public/next/
+apps/gif-service/next-assets/
+*.mmc
+*.mmc.zip

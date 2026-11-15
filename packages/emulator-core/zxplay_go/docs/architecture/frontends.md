@@ -51,6 +51,15 @@ screenshot oracles and soak tests all run through it.
 
 ## The wasm surface
 
+> **Web apps no longer expose the Next.** zxplay.org and code.zxplay.org
+> offer only the 48K and 128K and serve or proxy no NextZXOS assets.
+> GoEmulator.js keeps all the Next machinery described below, gated behind
+> `opts.nextEnabled` (default false; neither app sets it): with it off,
+> `setMachine('next')` falls back to the 128K and every Next boot route
+> rejects with `NEXT_UNSUPPORTED`. The Next exports and behaviours below
+> apply to local development with the gate on, and to the Go core's
+> headless/desktop builds.
+
 Build: `GOOS=js GOARCH=wasm go build ./cmd/zxplay_go` via
 `scripts/build-wasm.sh` → `dist/zx.wasm` + `wasm_exec.js`. The Go wasm
 module runs on the browser MAIN thread. There is no Go-side loop: the

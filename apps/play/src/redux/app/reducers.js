@@ -1,5 +1,9 @@
 import queryString from "query-string";
-import {KEYBOARD_CHOICES} from "@zxplay/ui/keyboard";
+import {KEYBOARD_CHOICES as ALL_KEYBOARD_CHOICES} from "@zxplay/ui/keyboard";
+
+// The Spectrum Next is not offered on the site; a stale saved 'next'
+// keyboard falls back to 'auto'.
+const KEYBOARD_CHOICES = ALL_KEYBOARD_CHOICES.filter((c) => c !== 'next');
 import {actionTypes} from "./actions";
 import {parseKeyConfig} from "../../lib/layout";
 
@@ -87,10 +91,12 @@ const loadJoystick = () => {
 
 const parseMachine = (value) => {
     if (value === '128' || value === 128) return 128;
-    if (value === 'next') return 'next';
     // Pentagon (5) support was dropped with the JSSpeccy3 engine; treat old
     // saved/linked values as the closest supported machine.
     if (value === '5' || value === 5) return 128;
+    // The ZX Spectrum Next is no longer offered; old ?m=next links and saved
+    // choices get the 128K too.
+    if (value === 'next') return 128;
     if (value === '48' || value === 48) return 48;
     return undefined;
 };

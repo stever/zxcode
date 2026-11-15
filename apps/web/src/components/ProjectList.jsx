@@ -304,6 +304,9 @@ export default function ProjectList() {
     {
       label: t("actions.copy"),
       icon: "pi pi-copy",
+      // ZX Spectrum Next projects can't be opened any more, nor copied into
+      // a new project (new projects are 48K/128K only).
+      disabled: menuProject?.machine === "next",
       command: () => {
         setCopyName(`${menuProject?.title} (Copy)`);
         setCopyTarget(menuProject);

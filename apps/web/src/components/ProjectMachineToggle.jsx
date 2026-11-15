@@ -54,7 +54,6 @@ export default function ProjectMachineToggle({ project, userId }) {
   const options = [
     { label: t("machine.short48"), value: "48" },
     { label: t("machine.short128"), value: "128" },
-    { label: t("machine.shortNext"), value: "next" },
   ];
 
   // Route changes reuse this mounted component: re-seed against the new

@@ -9,3 +9,5 @@
 /public/dist/
 /schema.graphql
 /typedocs/
+# Staged Spectrum Next assets (licensed) never go into an image.
+/public/next/

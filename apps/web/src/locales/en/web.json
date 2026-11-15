@@ -36,15 +36,13 @@
     "keyboardAuto": "Match Machine",
     "keyboardRubber": "Spectrum 48K",
     "keyboardPlus": "Spectrum 128K",
-    "keyboardNext": "ZX Spectrum Next",
     "keyboardNone": "No Keyboard"
   },
   "machine": {
     "label": "Target machine",
     "next": "ZX Spectrum Next",
     "short48": "48K",
-    "short128": "128K",
-    "shortNext": "Next"
+    "short128": "128K"
   },
   "errorPage": {
     "errorTitle": "Error",
@@ -275,7 +273,8 @@
       "tilesHint": "Project file the tile graphics come from",
       "pickHint": "Right-click the map to pick up a tile.",
       "tileLabel": "Tile {{index}} of {{count}}"
-    }
+    },
+    "nextUnsupported": "This project was made for the ZX Spectrum Next, which is no longer supported, so it can't be opened."
   },
   "projectList": {
     "title": "Project Title",

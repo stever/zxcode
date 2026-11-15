@@ -138,15 +138,6 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
                     dispatch(setMachine(128));
                 }
             },
-            {
-                // zxgo engine only: the JSSpeccy3 engine has no Next.
-                label: 'ZX Spectrum Next',
-                icon: machine === 'next' ? 'pi pi-fw pi-check' : 'pi pi-fw',
-                disabled: machineLocked,
-                command: () => {
-                    dispatch(setMachine('next'));
-                }
-            },
         ]
     };
 
@@ -170,7 +161,7 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
 
     // Which keyboard is drawn. It follows the machine unless the player says
     // otherwise, which is worth being able to say: a machine can be running
-    // something its own keyboard does not suit — a Next in 48K mode wanting the
+    // something its own keyboard does not suit — a 128K in 48K BASIC wanting the
     // rubber keys, or a 48K program being typed in with the Spectrum+'s
     // dedicated EDIT and cursor keys. Or none of them: with a real keyboard in
     // front of you the drawn one is a third of the height the screen could have.
@@ -181,7 +172,6 @@ function getMenuItems(t, navigate, dispatch, emuVisible, machine, machineLocked,
             ['auto', t('nav.keyboardAuto', 'Match Machine')],
             ['rubber', t('nav.keyboardRubber', 'Spectrum 48K')],
             ['plus', t('nav.keyboardPlus', 'Spectrum 128K')],
-            ['next', t('nav.keyboardNext', 'ZX Spectrum Next')],
             ['none', t('nav.keyboardNone', 'No Keyboard')],
         ].map(([value, label]) => ({
             label,

@@ -114,7 +114,7 @@ function* handleRenderEmulatorActions(action) {
 
         const emuParams = {
             zoom,
-            machine: machine || 48, // 48, 128 or 'next'
+            machine: machine || 48, // 48 or 128
             autoLoadTapes: true,
             // Which interface the gamepad drives. Passed at construction so
             // the choice is live before any program runs.
@@ -141,9 +141,8 @@ function* handleRenderEmulatorActions(action) {
         jsspeccy = JSSpeccy(target, emuParams);
         jsspeccy.hideUI();
         // Keep the menu checkmark honest: the engine switches machine on its
-        // own (a .tap on the Next moves to the 128K, a .nex moves to the
-        // Next), and this mirrors those switches into app state without
-        // re-triggering the boot saga.
+        // own (e.g. a 128K snapshot opened on the 48K), and this mirrors those
+        // switches into app state without re-triggering the boot saga.
         jsspeccy.onMachineChange((m) => store.dispatch(machineChanged(m)));
         jsspeccy.onJoystickChange((j) => store.dispatch(joystickChanged(j)));
 
@@ -252,8 +251,8 @@ function* handleViewFullScreenActions(_) {
 function* handleOpenTAPFileActions(action) {
     try {
         jsspeccy.openTAPFile(action.buffer).catch((err) => {
-            // e.g. a program the Next translator cannot convert — surface it
-            // instead of silently doing nothing.
+            // A tape the engine cannot open — surface it instead of silently
+            // doing nothing.
             alert(err && err.message ? err.message : String(err));
         });
     } catch (e) {
@@ -291,11 +290,9 @@ function* handleSetMachineActions(action) {
         // jsspeccy may not be rendered yet; the redux state still records the
         // choice so the menu reflects it and the emulator boots with it later.
         if (!jsspeccy) return;
-        // setMachine cold-boots on every zxgo path (zxBoot for the classics,
-        // a fresh-card bootNext for the Next), so no reset() follow-up: the
-        // Next boot is async and a reset would land on the OLD machine,
-        // visibly booting NextZXOS twice back to back. start() alone keeps
-        // the old behaviour of a paused emulator waking to show the boot.
+        // setMachine cold-boots the new machine (zxBoot), so no reset()
+        // follow-up is needed. start() alone keeps the old behaviour of a
+        // paused emulator waking to show the boot.
         jsspeccy.setMachine(action.machine);
         yield put(start());
     } catch (e) {

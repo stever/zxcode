@@ -13,7 +13,7 @@ Emulator.propTypes = {
     colW: PropTypes.number,
     side: PropTypes.oneOf(['left', 'right']),
     keystr: PropTypes.string,
-    kbLayout: PropTypes.oneOf(['rubber', 'plus', 'next']),
+    kbLayout: PropTypes.oneOf(['rubber', 'plus']),
     kbHidden: PropTypes.bool
 }
 

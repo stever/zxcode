@@ -198,6 +198,9 @@ Upstream zxplay_go is a desktop emulator. This repo vendors it and adds:
 - IDE debugger integration (source-line breakpoints for the zxcode web
   IDE) over the same shared debugger backend.
 
-The maintenance gotchas for the browser boot path are documented in
-`packages/emulator-core/README.md` (seed-table and menu-index coupling to
-the SD distro version).
+The web apps no longer expose the ZX Spectrum Next (48K and 128K only; no
+NextZXOS content is served): GoEmulator.js gates its Next paths behind
+`opts.nextEnabled`, which neither app sets. The browser boot accelerators
+above apply when that gate is on in local development. Their maintenance
+gotchas (seed-table and menu-index coupling to the SD distro
+version) are in `packages/emulator-core/README.md`.

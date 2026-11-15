@@ -38,12 +38,12 @@ export default function AboutPage() {
                 </p>
                 <ul>
                     <li>
-                        zxplay_go — the ZX Spectrum 48K/128K and Spectrum Next emulator core,
+                        zxplay_go — the ZX Spectrum 48K/128K emulator core,
                         compiled to WebAssembly; this site{"'"}s fork of{' '}
                         <a href="https://github.com/conorarmstrong/zx_go" target="_blank">zx_go</a> by
                         Conor Armstrong. Upstream is licensed under terms of The MIT License; the
                         fork{"'"}s modifications are licensed under The GPL version 3, making the
-                        built core GPLv3 as a whole (it also embeds the Spectrum Next{"'"}s GPLv3
+                        built core GPLv3 as a whole (it also embeds the GPLv3 TBBlue
                         FPGA loader) - see{' '}
                         <a href="https://github.com/stever/zxcode/blob/main/packages/emulator-core/zxplay_go/LICENSE" target="_blank">LICENSE</a>.
                     </li>
@@ -54,15 +54,6 @@ export default function AboutPage() {
                         (the emulation core itself is now zxplay_go). Licensed under terms of
                         The GPL version 3 - see{' '}
                         <a href="https://github.com/gasman/jsspeccy3/blob/main/COPYING" target="_blank">COPYING</a>.
-                    </li>
-                    <li>
-                        <a href="https://gitlab.com/thesmog358/tbblue" target="_blank">NextZXOS</a> — the
-                        Spectrum Next machine boots the real NextZXOS system software,
-                        copyright Garry Lancaster / SpecNext Ltd (Spectrum ROMs copyright
-                        Amstrad plc), distributed free of charge under{' '}
-                        <a href="/next/licenses/THE-NEXT-LICENSE.txt" target="_blank">The Next License</a>
-                        {' '}(served with the assets, alongside the{' '}
-                        <a href="/next/licenses/NOTICES.txt" target="_blank">constituent-part notices</a>).
                     </li>
                     <li>
                         <a href="https://github.com/Stuk/jszip" target="_blank">JSZip</a> by

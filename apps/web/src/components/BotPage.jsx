@@ -64,7 +64,6 @@ export default function BotPage() {
                 <ul>
                     <li><code>#48</code> — ZX Spectrum 48K</li>
                     <li><code>#128</code> — ZX Spectrum 128K</li>
-                    <li><code>#next</code> — ZX Spectrum Next</li>
                 </ul>
                 <h2>{t("bot.languagesHeading")}</h2>
                 <p>
@@ -82,7 +81,7 @@ export default function BotPage() {
                     <li><code>#forth</code> — Forth (zenv)</li>
                 </ul>
                 <ExampleToot>
-                    {'@bot@zxplay.org #pascal #next\n' +
+                    {'@bot@zxplay.org #pascal #128\n' +
                      'program Hi;\n' +
                      'begin\n' +
                      "  WriteLn('Hello!')\n" +
@@ -96,7 +95,7 @@ export default function BotPage() {
                     {t("bot.projectsText")}
                 </p>
                 <ExampleToot>
-                    {'@bot@zxplay.org https://code.zxplay.org/u/steve/my-demo #next'}
+                    {'@bot@zxplay.org https://code.zxplay.org/u/steve/my-demo #128'}
                 </ExampleToot>
                 <h2>{t("bot.limitsHeading")}</h2>
                 <ul>

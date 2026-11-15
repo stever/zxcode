@@ -6,6 +6,7 @@ import {
     actionTypes,
     reset,
     receiveLoadedProject,
+    receiveUnsupportedProject,
     setCode,
     setSavedCode,
     setSelectedTabIndex,
@@ -129,7 +130,8 @@ function* handleCreateNewProjectActions(action) {
 
         slug = finalSlug;
 
-        const machine = yield select((state) => state.app.machine);
+        // New projects target the 48K or 128K only.
+        const machine = (yield select((state) => state.app.machine)) === 128 ? 128 : 48;
 
         const query = gql`
             mutation ($title: String!, $lang: String!, $slug: String!, $machine: String!) {
@@ -242,7 +244,15 @@ function* handleLoadProjectActions(action) {
         const ownerName = proj.user?.greeting_name;
         const ownerProfileIsPublic = proj.user?.profile_is_public || false;
 
-        const machine = proj.machine || '48';
+        // ZX Spectrum Next projects stay stored as 'next' but the site no
+        // longer opens them: refuse before anything loads, switches the
+        // machine or could write the project back with a different machine.
+        if (proj.machine === 'next') {
+            yield put(receiveUnsupportedProject(action.id, proj.title));
+            return;
+        }
+
+        const machine = proj.machine === '128' ? '128' : '48';
 
         yield put(receiveLoadedProject(
             action.id,
@@ -260,13 +270,13 @@ function* handleLoadProjectActions(action) {
             proj.instructions || ''
         ));
 
-        // Boot the emulator to the machine the project targets, so a Next
+        // Boot the emulator to the machine the project targets, so a 128K
         // program actually runs (and its screenshot matches the editor). The
         // "m" query param locks the machine; respect that. Skip when already
         // correct to avoid a needless cold-boot on the common 48K case.
         const machineLocked = yield select((state) => state.app.machineLocked);
         const currentMachine = yield select((state) => state.app.machine);
-        const target = machine === 'next' ? 'next' : machine === '128' ? 128 : 48;
+        const target = machine === '128' ? 128 : 48;
         if (!machineLocked && target !== currentMachine) {
             yield put(setMachine(target));
         }

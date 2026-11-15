@@ -39,7 +39,16 @@ const scriptUrl = document.currentScript.src;
 // carries it as a cache-buster so a rev bump always forces the browser
 // to refetch the core (the JS tag and a cached zx.wasm can otherwise
 // silently diverge).
-const ENGINE_REV = 'r104-classic-audio-flush';
+const ENGINE_REV = 'r105-next-gated';
+
+// The ZX Spectrum Next is withdrawn from the websites: they must not serve
+// NextZXOS content, so the Next path is OFF unless a host opts in with
+// opts.nextEnabled (neither app does). With it off, setMachine('next')
+// falls back to the 128K like any other unsupported model, and every
+// route into a Next boot (.nex files, zips holding one, PLUS3DOS/NEX
+// tapes) rejects with this message instead of fetching /next/ assets.
+// The Next code stays so the feature can return.
+export const NEXT_UNSUPPORTED = 'ZX Spectrum Next programs are not supported.';
 
 // The official SpecNext distro the Next boots from, fetched through the
 // same-origin /specnext/ Caddy proxy route (specnext.com sends no CORS
@@ -245,6 +254,7 @@ export class GoEmulator extends EventEmitter {
         // (tapToNext.js). Without it, tapes are treated as classic media —
         // opening one while the Next is selected switches to the 128K.
         this.tapToNextEnabled = !!opts.tapToNext;
+        this.nextEnabled = !!opts.nextEnabled; // see NEXT_UNSUPPORTED
         this.machineType = null;
         // Promise for an in-flight machine boot (currently only the Next, whose
         // boot is async: it fetches the ~64MB SD image and constructs in a Go
@@ -765,7 +775,7 @@ export class GoEmulator extends EventEmitter {
         // A machine switch replaces the core emulator instance; any debug
         // session would be left bound to the dead one.
         this.debugDetach();
-        if (type === 'next') {
+        if (type === 'next' && this.nextEnabled) {
             // Record the boot promise so run/tape/nex calls can await it.
             this.pendingBoot = this.bootNext();
             this.pendingBoot.catch(err => {
@@ -955,6 +965,7 @@ export class GoEmulator extends EventEmitter {
     // thread). A call arriving AFTER the boot settled starts a fresh boot —
     // that is the reboot semantics of re-selecting the machine.
     bootNext() {
+        if (!this.nextEnabled) return Promise.reject(NEXT_UNSUPPORTED);
         if (this.bootNextInFlight) return this.bootNextInFlight;
         this.bootNextInFlight = this.bootNextNow().finally(() => {
             this.bootNextInFlight = null;

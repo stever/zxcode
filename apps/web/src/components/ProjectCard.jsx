@@ -28,7 +28,8 @@ function getLanguageColor(lang) {
 // get a badge — a plain 48K card stays as it was — so the label is a short
 // model name rather than the full selector labels ("Spectrum 128K"), which
 // would crowd the tag row. Machine names are proper nouns; like the language
-// labels above they aren't translated.
+// labels above they aren't translated. "Next" marks a stored ZX Spectrum Next
+// project, which is no longer supported: opening it shows a refusal.
 function getMachineBadge(machine) {
   const badges = {
     128: "128K",
